@@ -1,0 +1,22 @@
+# Node / build artefacts
+frontend/node_modules
+frontend/dist
+**/node_modules
+dist
+build
+
+# Python env / caches
+backend/.venv
+*.pyc
+__pycache__
+
+# Git / misc
+.git
+.gitignore
+.env*
+.vscode
+.DS_Store
+
+# Data / mounts (ne doivent PAS être inclus dans l'image)
+data
+config

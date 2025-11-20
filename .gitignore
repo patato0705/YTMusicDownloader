@@ -1,0 +1,85 @@
+# =========================
+# GLOBAL / SYSTEM
+# =========================
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.log
+
+# =========================
+# FRONTEND (React / Vite)
+# =========================
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+frontend/.eslintcache
+frontend/.turbo/
+
+# Build output
+frontend/build/
+frontend/coverage/
+frontend/temp/
+
+# npm / yarn / pnpm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# BACKEND (Python / FastAPI)
+# =========================
+backend/__pycache__
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/coverage.xml
+backend/venv/
+backend/env/
+backend/.python-version
+
+# =========================
+# DOCKER
+# =========================
+# Local volumes, caches, etc.
+config/
+data/
+docker-compose.override.yml
+.env
+.env.local
+.env.*.local
+
+# =========================
+# MISC / TEMP
+# =========================
+*.bak
+*.tmp
+*.temp
+*.orig
+*.rej
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# =========================
+# DIST / EXPORTS
+# =========================
+# If you export builds manually
+exports/
+output/
+builds/
+archives/
