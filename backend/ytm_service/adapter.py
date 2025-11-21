@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Iterable
 
-from .client import call  # wrapper qui exécute les méthodes ytmusic (ex: call("get_artist", ...))
+from .client import call  # wrapper executing ytmusic methods (ex: call("get_artist", ...))
 from . import normalizers as N
 from backend.schemas import (
     AlbumSchema,
@@ -19,7 +19,7 @@ logger = logging.getLogger("ytm_service.adapter")
 
 def _safe_call(name: str, *args, **kwargs) -> Any:
     """
-    Appel centralisé vers client.call — journalise et remonte exceptions.
+    Centralized call to client.call — Log and escalate exceptions.
     """
     try:
         return call(name, *args, **kwargs)
@@ -30,8 +30,8 @@ def _safe_call(name: str, *args, **kwargs) -> Any:
 
 def _ensure_track_payload(nt: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Garantit que le dict renvoyé par normalize_track_item contient
-    les champs nécessaires au TrackSchema attendu par TrackSchema.
+    Guarantees that the returned dict by normalize_track_item has
+    necessary fields at TrackSchema expected by TrackSchema.
     """
     if not isinstance(nt, dict):
         raise TypeError("normalize_track_item must return a dict")
@@ -264,7 +264,6 @@ def get_album(browse_id: str) -> Dict[str, Any]:
     # Extract artists
     artists_raw = raw.get("artists", [])
     artists_models = []
-    artist_id = None  # For backward compatibility
     for a in artists_raw:
         if isinstance(a, dict):
             artists_models.append(
@@ -406,39 +405,6 @@ def get_playlist(playlist_id: str) -> Dict[str, Any]:
     # Return the model's data as a dictionary
     return model.model_dump()
 
-
-def get_song(video_id: str) -> Dict[str, Any]:
-    try:
-        raw = _safe_call("get_song", videoId=video_id)
-    except Exception:
-        model = SongSchema(videoId=str(video_id), title=None, videoDetails=None, thumbnails=[], raw=None)
-        return model.model_dump()
-
-    if not isinstance(raw, dict):
-        model = SongSchema(videoId=str(video_id), title=None, videoDetails=None, thumbnails=[], raw=raw)
-        return model.model_dump()
-
-    vd = raw.get("videoDetails") if isinstance(raw.get("videoDetails"), dict) else {}
-    title = (vd.get("title") if isinstance(vd, dict) else None) or raw.get("title") or None
-
-    thumbs_src: List[Any] = []
-    if isinstance(vd, dict):
-        if vd.get("thumbnail"):
-            thumbs_src = (vd.get("thumbnail") or {}).get("thumbnails") or []
-        else:
-            thumbs_src = vd.get("thumbnails") or []
-    if not thumbs_src:
-        thumbs_src = raw.get("thumbnails") or []
-
-    thumbs_models = N._build_thumbnails(thumbs_src)
-    model = SongSchema(
-        videoId=str(video_id),
-        title=str(title) if title is not None else None,
-        videoDetails=vd,
-        thumbnails=thumbs_models,  # instances
-        raw=raw,
-    )
-    return model.model_dump()
 
 def get_charts(country: str = "US") -> Dict[str, Any]:
     try:

@@ -87,6 +87,7 @@ __all__ = [
     # YTMusic
     "Thumbnail",
     "ArtistRefSchema",
+    "AlbumRefSchema",
     "TrackSchema",
     "PlaylistSchema",
     "AlbumItemSchema",
