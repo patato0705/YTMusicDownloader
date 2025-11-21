@@ -73,11 +73,7 @@ def _generate_and_save_secrets() -> Dict[str, Any]:
         except Exception:
             pass  # Windows doesn't support this
         
-        logger.info("Generated and saved new secrets to %s", SECRETS_FILE)
-        logger.warning(
-            "⚠️  IMPORTANT: Backup %s - losing this file will invalidate all JWT tokens!",
-            SECRETS_FILE
-        )
+        logger.info("Generated and saved new secrets to %s - losing this file will invalidate all JWT tokens!", SECRETS_FILE)
         
         return secrets_data
     

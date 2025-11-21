@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 from .db import SessionLocal
 from .jobs.jobqueue import enqueue_job, cleanup_old_jobs
 from .services import subscriptions as subs_svc, auth as auth_svc
-from .time_utils import now_utc
 
 logger = logging.getLogger("scheduler")
 
@@ -105,6 +104,13 @@ class Scheduler:
 
     def _run_loop(self) -> None:
         """Internal loop running until _stopped is set."""
+        from .deps import wait_for_db
+        try:
+            wait_for_db()
+        except Exception:
+            logger.exception("Database failed to become ready, scheduler exiting")
+            return
+        
         try:
             time.sleep(0.1)
         except Exception:
@@ -129,7 +135,7 @@ class Scheduler:
                 except Exception:
                     logger.exception("Unexpected error in cleanup_old_jobs")
             
-            # Check if token cleanup is due - NEW
+            # Check if token cleanup is due
             if now - self._last_token_cleanup >= self.token_cleanup_interval_seconds:
                 try:
                     self.cleanup_expired_tokens()

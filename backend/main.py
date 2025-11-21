@@ -53,7 +53,7 @@ def create_app() -> FastAPI:
     log_local = os.environ.get("LOG_LOCAL_TIME", "1") not in ("0", "false", "False")
     configure_logging(level=logging.INFO, use_local_time=log_local)
 
-    version = "0.0.1"
+    version = "0.1"
     try:
         # try to read ytm_service version if available
         from .ytm_service import __version__ as ytm_version  # type: ignore
