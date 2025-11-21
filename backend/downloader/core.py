@@ -78,10 +78,10 @@ def download_track_by_videoid(
     cover_path_override: Optional[Union[str, Path]] = None,
 ) -> str:
     """
-    Télécharge la piste (yt-dlp), place le fichier final sous MUSIC_DIR/{artist}/{album}/
-    et retourne le chemin complet (str).
+    Downloads track (yt-dlp),puts final file under MUSIC_DIR/{artist}/{album}/
+    and returns full path (str).
 
-    cover_path_override: chemin vers une jaquette déjà présente (sera utilisée si valide).
+    cover_path_override: path to already existing cover (used if valid).
     """
     _ensure_dirs()
     _cleanup_partial_files(DOWNLOAD_DIR)
@@ -147,7 +147,7 @@ def download_track_by_videoid(
         thumb_candidates: List[Union[str, Dict[str, Any]]] = []
         if isinstance(info_dict, dict):
             t = info_dict.get("thumbnails")
-            # 'thumbnails' peut être une liste ou un dict contenant 'thumbnails'
+            # 'thumbnails' can be list or dict containing 'thumbnails'
             if isinstance(t, list):
                 thumb_candidates = [x for x in t if x is not None]
             elif isinstance(t, dict):

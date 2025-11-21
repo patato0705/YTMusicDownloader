@@ -25,7 +25,7 @@ _BACKOFF_MAX = float(YTM_BACKOFF_MAX)
 
 def _init_client() -> YTMusic:
     """
-    Initialise l'instance YTMusic une seule fois.
+    Initialize YTMusic instance once.
     HEADERS_AUTH can be:
       - None: no headers file (anonymous)
       - Path to headers_auth.json to re-use an authenticated session

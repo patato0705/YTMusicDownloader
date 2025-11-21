@@ -2,28 +2,28 @@
 from __future__ import annotations
 
 """
-Package downloader: réexporte les sous-modules et quelques fonctions utilitaires
-pour permettre des accès comme:
+Downloader package: reexports submodules and some utilities functions
+to allow access like:
 
     import backend.downloader as downloader
     downloader.core.download_track_by_videoid(...)
     downloader.lyrics.get_synced_lyrics(...)
 
-Réexporter des fonctions courantes (niveaux package) est optionnel mais pratique.
+Reexport common functions (package level) is optional but practical.
 """
 
-# import des sous-modules (les rendre accessibles via `downloader.core`, etc.)
+# submodules import (make accessible via `downloader.core`, etc.)
 from . import core
 from . import cover
 from . import metadata
 from . import embed
 
-# fonctions utilitaires fréquemment utilisées — expose-les au niveau du package
-# (optionnel mais pratique pour tasks.py et autres)
+# commonly used utilities functions — expose at package level
+# (optional but practical for tasks.py and others)
 try:
     download_track_by_videoid = core.download_track_by_videoid
 except Exception:
-    # si la fonction est manquante, on évite l'import au moment du chargement
+    # if function is missing, avoid import at load
     download_track_by_videoid = None
 
 try:
@@ -31,7 +31,7 @@ try:
 except Exception:
     select_best_thumbnail_url = None
 
-# contrôle public du package
+# public package control
 __all__ = [
     "core",
     "cover",

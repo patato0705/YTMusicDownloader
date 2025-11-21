@@ -9,7 +9,7 @@ logger = logging.getLogger("ytm_service.normalizers")
 
 def normalize_thumbnails(raw: Any) -> List[Dict[str, Optional[Any]]]:
     """
-    Renvoie une liste de dicts {'url': str, 'width': Optional[int], 'height': Optional[int]}
+    Outputs a list of dicts {'url': str, 'width': Optional[int], 'height': Optional[int]}
     Accepts:
       - list of dicts like {'url':..., 'width':..., 'height':...}
       - list of dicts nested as {'thumbnail': {'thumbnails': [...]}} (we flatten)
@@ -62,7 +62,7 @@ def normalize_thumbnails(raw: Any) -> List[Dict[str, Optional[Any]]]:
 
 def pick_best_thumbnail_url(ths: List[Dict[str, Optional[Any]]]) -> Optional[str]:
     """
-    Tentative simple heuristics:
+    Try simple heuristics:
     - prefer the thumbnail with largest width
     - fallback to the last url available
     Accepts list of thumbnails as dicts (url,width,height).
@@ -92,8 +92,8 @@ def pick_best_thumbnail_url(ths: List[Dict[str, Optional[Any]]]) -> Optional[str
 
 def _build_thumbnails(thumbs_raw: Any) -> List[ThumbnailSchema]:
     """
-    Normalise la liste de thumbs (via normalizers) et retourne une liste
-    d'instances S.Thumbnail valides (filtre les entrées sans url).
+    Normalize thumbs list (via normalizers) and returns a list
+    of valid S.Thumbnail instances (filter input with no URL).
     """
     out: List[ThumbnailSchema] = []
     th_list = normalize_thumbnails(thumbs_raw)
@@ -126,8 +126,8 @@ def _build_thumbnails(thumbs_raw: Any) -> List[ThumbnailSchema]:
 
 def _extract_first_nested_artist(item: dict) -> dict | None:
     """
-    Retourne le premier objet 'artist' imbriqué si présent (dict), sinon None.
-    Gère différentes clés possibles ('artists', 'artist').
+    Returns first nested 'artist' object if present (dict), or None.
+    Handles different possible keys ('artists', 'artist').
     """
     for key in ("artists", "artist"):
         val = item.get(key)
@@ -139,7 +139,7 @@ def _extract_first_nested_artist(item: dict) -> dict | None:
 
 def _normalize_search_item(it: dict, include_raw: bool, allowed_set: Optional[set], default_exclude: set): # Used in search function
     """
-    Retourne un dict normalisé ou None si filtré.
+    Returns normalized dict or None if filtered.
     """
     if not isinstance(it, dict):
         return None

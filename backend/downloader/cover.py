@@ -25,11 +25,11 @@ except Exception:
 
 def select_best_thumbnail_url(candidates: Iterable[Union[str, Dict[str, Any]]]) -> Optional[str]:
     """
-    Choisit une URL 'meilleure' parmi candidates.
-    candidates: iterable de str ou dict (avec clé 'url' ou 'thumbnail' ou nested thumbnail).
-    Stratégie:
-      - si dicts avec width/height, choisir le plus grand width
-      - sinon, retourner la dernière url plausible trouvée
+    Picks the "best" URL from candidates.
+    candidates: iterable of str or dict with 'url' key or 'thumbnail' or nested thumbnail).
+    Strategy:
+      - if dicts with width/height, pick biggest width
+      - else, return last plausible url found
     """
     thumbs: List[Dict[str, Optional[Any]]] = []
     last_url: Optional[str] = None
@@ -38,13 +38,13 @@ def select_best_thumbnail_url(candidates: Iterable[Union[str, Dict[str, Any]]]) 
         if it is None:
             continue
 
-        # cas simple : string
+        # simple case : string
         if isinstance(it, str):
             last_url = it
             thumbs.append({"url": it, "width": None, "height": None})
             continue
 
-        # cas dict : essayer d'extraire url,width,height
+        # dict case : try to extract url,width,height
         if isinstance(it, dict):
             url = it.get("url") or it.get("thumbnail") or None
             if isinstance(url, dict):
@@ -72,7 +72,7 @@ def select_best_thumbnail_url(candidates: Iterable[Union[str, Dict[str, Any]]]) 
                 last_url = url
                 thumbs.append({"url": url, "width": width, "height": height})
 
-    # préférer la plus grande width connue
+    # prefer biggest known width
     best: Optional[str] = None
     best_w = -1
     for t in thumbs:
@@ -98,8 +98,8 @@ def _write_bytes_to_path(content: bytes, dest: Union[str, Path]) -> Path:
 
 def save_cover_from_url(url: str, dest: Union[str, Path], timeout: float = 12.0) -> Optional[Path]:
     """
-    Télécharge l'image depuis url et la convertit en JPEG si nécessaire.
-    Retourne Path vers le fichier créé ou None en cas d'échec.
+    Downloads image from URL and converts to JPEG if necessary.
+    Returns Path to created file or None if fail.
     """
     try:
         r = requests.get(url, timeout=timeout)
@@ -189,7 +189,7 @@ def _move_file(src: Union[str, Path], dst: Union[str, Path]) -> Optional[Path]:
 
 def move_cover_if_exists(src: Union[str, Path], dst: Union[str, Path]) -> Optional[Path]:
     """
-    Déplace (ou copie) src vers dst si src existe. Retourne le Path de dst ou None.
+    Move (ou copy) src to dst if src exists. Returns dst Path or None.
     """
     try:
         return _move_file(src, dst)

@@ -4,7 +4,7 @@ import logging
 import importlib
 from typing import Generator, Any, Optional
 
-from sqlalchemy.orm import Session  # <--- import nécessaire pour les annotations de type
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger("backend.deps")
 

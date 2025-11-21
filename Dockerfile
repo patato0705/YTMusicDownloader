@@ -6,7 +6,7 @@ FROM node:20 AS frontend-builder
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
-RUN test -s package.json || (echo "Erreur: package.json vide ou manquant" && exit 1)
+RUN test -s package.json || (echo "Error: package.json empty or missing" && exit 1)
 RUN npm ci --prefer-offline --no-audit --progress=false
 
 COPY frontend/ .
@@ -17,7 +17,7 @@ RUN npm run build
 # -------------------------
 FROM python:3.11-slim
 
-# packages système nécessaires (ffmpeg, libmagic, libs pour Pillow, build tools, supervisor)
+# necessary system packages (ffmpeg, libmagic, libs for Pillow, build tools, supervisor)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tzdata \
