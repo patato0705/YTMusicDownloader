@@ -57,32 +57,22 @@ def get_settings() -> Any:
 
 
 def get_ytm_adapter() -> Optional[Any]:
-    """
-    Return the ytm_service.adapter module (or None if not available).
-    Use this when you want to call the adapter helpers (get_artist, get_album, ...).
-    """
+    """Return the ytm_service.adapter module."""
     try:
-        import backend.ytm_service as ytm_pkg  # uses lazy loader in ytm_service.__init__
-        return ytm_pkg.adapter()
+        from backend.ytm_service import adapter
+        return adapter
     except Exception:
         logger.debug("ytm_service.adapter not available", exc_info=True)
         return None
 
 
 def get_ytm_client() -> Optional[Any]:
-    """
-    Return the YTMusic client instance (via backend.ytm_service.client.get_client()) or None.
-
-    Note: returns the client object (YTMusic) or None if the client cannot be initialized.
-    """
+    """Return the YTMusic client instance."""
     try:
-        import backend.ytm_service as ytm_pkg
-        client_mod = ytm_pkg.client()
-        if hasattr(client_mod, "get_client"):
-            return getattr(client_mod, "get_client")()
-        if hasattr(client_mod, "get_ytm"):
-            return getattr(client_mod, "get_ytm")()
-        logger.debug("ytm_service.client module present but no get_client()/get_ytm() found")
+        from backend.ytm_service import client
+        if hasattr(client, "get_client"):
+            return client.get_client()
+        logger.debug("ytm_service.client has no get_client()/get_ytm()")
         return None
     except Exception:
         logger.debug("ytm_service.client not available", exc_info=True)

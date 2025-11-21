@@ -128,24 +128,18 @@ def update_track_status(
     track_id: str,
     status: str,
     file_path: Optional[str] = None,
-) -> bool:
+) -> Optional[Track]:
     """
     Update track status and optionally file_path.
     
-    Args:
-        session: SQLAlchemy session
-        track_id: Track ID
-        status: New status ("new", "downloading", "done", "failed", etc.)
-        file_path: Optional file path to set
-    
     Returns:
-        True if track was found and updated, False otherwise
+        Track instance if found and updated, None otherwise
     """
     try:
         track = session.get(Track, track_id)
         if not track:
             logger.warning(f"Track {track_id} not found for status update")
-            return False
+            return None
         
         track.status = status
         if file_path is not None:
@@ -153,10 +147,10 @@ def update_track_status(
         
         session.add(track)
         logger.debug(f"Updated track {track_id} status to {status}")
-        return True
+        return track
     except Exception as e:
         logger.exception(f"Failed to update track status for {track_id}: {e}")
-        return False
+        return None
 
 
 def get_tracks_by_status(
