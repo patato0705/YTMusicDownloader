@@ -41,6 +41,7 @@ from .models import (
 from .ytmusic import (
     Thumbnail,
     ArtistRefSchema,
+    AlbumRefSchema,
     TrackSchema,
     PlaylistSchema,
     AlbumItemSchema,

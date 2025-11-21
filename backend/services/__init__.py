@@ -10,7 +10,6 @@ from typing import Any
 from . import albums
 from . import artists
 from . import normalizers
-from . import playlists
 from . import search
 from . import subscriptions
 from . import tracks
