@@ -1,9 +1,9 @@
 # backend/ytm_service/__init__.py
 from __future__ import annotations
 """
-Interface légère pour le package ytm_service.
+Light interface for ytm_service package.
 
-Expose paresseusement (lazy) les sous-modules :
+Lazily exposes submodules :
  - adapter, client, normalizers, schemas
 
 Usage:
@@ -20,16 +20,16 @@ __all__ = ["adapter", "client", "normalizers", "__version__"]
 
 __version__ = "0.1.0"
 
-# cache des modules chargés
+# loaded modules cache
 _modules: dict[str, Any] = {}
 
-# liste des noms autorisés
+# authorized names list
 _ALLOWED = {"adapter", "client", "normalizers"}
 
 
 def _load(name: str) -> Any:
     """
-    Charge et met en cache backend.ytm_service.<name>.
+    Loads and caches backend.ytm_service.<name>.
     """
     if name not in _modules:
         _modules[name] = importlib.import_module(f"{__name__}.{name}")
@@ -38,9 +38,9 @@ def _load(name: str) -> Any:
 
 def __getattr__(name: str) -> Any:
     """
-    Module-level getattr pour permettre:
+    Module-level getattr to allow:
         from backend.ytm_service import adapter
-    et charger paresseusement backend.ytm_service.adapter.
+    and load lazily backend.ytm_service.adapter.
     """
     if name in _ALLOWED:
         return _load(name)

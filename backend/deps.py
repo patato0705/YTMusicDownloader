@@ -2,9 +2,11 @@
 from __future__ import annotations
 import logging
 import importlib
+import time
 from typing import Generator, Any, Optional
 
-from sqlalchemy.orm import Session  # <--- import nécessaire pour les annotations de type
+from sqlalchemy.orm import Session
+from .db import SessionLocal
 
 logger = logging.getLogger("backend.deps")
 
@@ -40,6 +42,43 @@ def get_engine() -> Any:
         logger.exception("Failed to import/get engine from backend.db")
         raise RuntimeError("Database engine not available")
 
+def wait_for_db(max_retries=30, delay=1):
+    """Wait for database to be initialized with required tables."""
+    import logging
+    from sqlalchemy import inspect
+    
+    logger = logging.getLogger("backend.deps")
+    logger.info("Waiting for database to be ready...")
+    
+    for attempt in range(max_retries):
+        try:
+            with SessionLocal() as session:
+                # Check if required tables exist
+                engine = session.get_bind()
+                inspector = inspect(engine)
+                tables = inspector.get_table_names()
+                required_tables = ['artists', 'jobs', 'refresh_tokens']
+                
+                if all(table in tables for table in required_tables):
+                    logger.info("Database is ready")
+                    return True
+                else:
+                    # Tables don't exist yet, keep waiting
+                    missing = [t for t in required_tables if t not in tables]
+                    logger.debug(f"Database not ready - missing tables: {missing} (attempt {attempt + 1}/{max_retries})")
+                    
+        except Exception as e:
+            # Any exception means DB is not ready yet
+            logger.debug(f"Database not ready (attempt {attempt + 1}/{max_retries}): {e}")
+        
+        # Always sleep between attempts (except on last attempt)
+        if attempt < max_retries - 1:
+            time.sleep(delay)
+        else:
+            logger.error("Database failed to become ready after %s attempts", max_retries)
+            raise Exception(f"Database not ready after {max_retries} attempts")
+    
+    return False
 
 def get_settings() -> Any:
     """
@@ -57,32 +96,22 @@ def get_settings() -> Any:
 
 
 def get_ytm_adapter() -> Optional[Any]:
-    """
-    Return the ytm_service.adapter module (or None if not available).
-    Use this when you want to call the adapter helpers (get_artist, get_album, ...).
-    """
+    """Return the ytm_service.adapter module."""
     try:
-        import backend.ytm_service as ytm_pkg  # uses lazy loader in ytm_service.__init__
-        return ytm_pkg.adapter()
+        from backend.ytm_service import adapter
+        return adapter
     except Exception:
         logger.debug("ytm_service.adapter not available", exc_info=True)
         return None
 
 
 def get_ytm_client() -> Optional[Any]:
-    """
-    Return the YTMusic client instance (via backend.ytm_service.client.get_client()) or None.
-
-    Note: returns the client object (YTMusic) or None if the client cannot be initialized.
-    """
+    """Return the YTMusic client instance."""
     try:
-        import backend.ytm_service as ytm_pkg
-        client_mod = ytm_pkg.client()
-        if hasattr(client_mod, "get_client"):
-            return getattr(client_mod, "get_client")()
-        if hasattr(client_mod, "get_ytm"):
-            return getattr(client_mod, "get_ytm")()
-        logger.debug("ytm_service.client module present but no get_client()/get_ytm() found")
+        from backend.ytm_service import client
+        if hasattr(client, "get_client"):
+            return client.get_client()
+        logger.debug("ytm_service.client has no get_client()/get_ytm()")
         return None
     except Exception:
         logger.debug("ytm_service.client not available", exc_info=True)

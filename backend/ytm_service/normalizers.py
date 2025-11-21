@@ -9,7 +9,7 @@ logger = logging.getLogger("ytm_service.normalizers")
 
 def normalize_thumbnails(raw: Any) -> List[Dict[str, Optional[Any]]]:
     """
-    Renvoie une liste de dicts {'url': str, 'width': Optional[int], 'height': Optional[int]}
+    Outputs a list of dicts {'url': str, 'width': Optional[int], 'height': Optional[int]}
     Accepts:
       - list of dicts like {'url':..., 'width':..., 'height':...}
       - list of dicts nested as {'thumbnail': {'thumbnails': [...]}} (we flatten)
@@ -62,7 +62,7 @@ def normalize_thumbnails(raw: Any) -> List[Dict[str, Optional[Any]]]:
 
 def pick_best_thumbnail_url(ths: List[Dict[str, Optional[Any]]]) -> Optional[str]:
     """
-    Tentative simple heuristics:
+    Try simple heuristics:
     - prefer the thumbnail with largest width
     - fallback to the last url available
     Accepts list of thumbnails as dicts (url,width,height).
@@ -92,8 +92,8 @@ def pick_best_thumbnail_url(ths: List[Dict[str, Optional[Any]]]) -> Optional[str
 
 def _build_thumbnails(thumbs_raw: Any) -> List[ThumbnailSchema]:
     """
-    Normalise la liste de thumbs (via normalizers) et retourne une liste
-    d'instances S.Thumbnail valides (filtre les entrées sans url).
+    Normalize thumbs list (via normalizers) and returns a list
+    of valid S.Thumbnail instances (filter input with no URL).
     """
     out: List[ThumbnailSchema] = []
     th_list = normalize_thumbnails(thumbs_raw)
@@ -126,8 +126,8 @@ def _build_thumbnails(thumbs_raw: Any) -> List[ThumbnailSchema]:
 
 def _extract_first_nested_artist(item: dict) -> dict | None:
     """
-    Retourne le premier objet 'artist' imbriqué si présent (dict), sinon None.
-    Gère différentes clés possibles ('artists', 'artist').
+    Returns first nested 'artist' object if present (dict), or None.
+    Handles different possible keys ('artists', 'artist').
     """
     for key in ("artists", "artist"):
         val = item.get(key)
@@ -139,7 +139,7 @@ def _extract_first_nested_artist(item: dict) -> dict | None:
 
 def _normalize_search_item(it: dict, include_raw: bool, allowed_set: Optional[set], default_exclude: set): # Used in search function
     """
-    Retourne un dict normalisé ou None si filtré.
+    Returns normalized dict or None if filtered.
     """
     if not isinstance(it, dict):
         return None
@@ -316,16 +316,7 @@ def normalize_artist_entry(raw: Any) -> Dict[str, Optional[str]]:
 
 def normalize_track_item(raw: Any) -> Dict[str, Optional[Any]]:
     """
-    Convertit un item de piste (issu de playlist/album/watch) en dict standardisé
-    attendu par TrackSchema:
-      {
-        "id": Optional[str],
-        "title": Optional[str],
-        "artists": [ { "id": Optional[str], "name": Optional[str] }, ... ],
-        "duration_seconds": Optional[int],
-        "track_number": Optional[int],
-        "raw": raw
-      }
+    Standardizes different YT Music track objects into a consistent schema
     """
     out: Dict[str, Optional[Any]] = {
         "id": None,
@@ -333,52 +324,63 @@ def normalize_track_item(raw: Any) -> Dict[str, Optional[Any]]:
         "artists": [],
         "duration_seconds": None,
         "track_number": None,
+        "album": {},
+        "thumbnails": [],  # Add this line
         "raw": raw,
     }
     try:
         if raw is None:
             return out
-        # if raw is a dict: attempt to find common fields
         if isinstance(raw, dict):
-            vid = raw.get("videoId") or raw.get("id") or raw.get("video_id") or None
+            # ID
+            vid = raw.get("videoId") or raw.get("id") or raw.get("video_id")
             out["id"] = str(vid) if vid is not None else None
-            title = raw.get("title") or raw.get("name") or None
+            # TITLE
+            title = raw.get("title") or raw.get("name")
             out["title"] = str(title) if title is not None else None
-
-            # artists: may be list of dicts or a string
-            artists_src = raw.get("artists") or raw.get("artist") or raw.get("artistsList") or []
+            # ARTISTS
+            artists_src = (
+                raw.get("artists")
+                or raw.get("artist")
+                or raw.get("artistsList")
+                or []
+            )
             artists_list = []
             if isinstance(artists_src, list):
                 for a in artists_src:
                     artists_list.append(normalize_artist_entry(a))
             elif isinstance(artists_src, dict):
-                # sometimes a single dict
                 artists_list.append(normalize_artist_entry(artists_src))
             elif isinstance(artists_src, str):
                 artists_list.append({"id": None, "name": artists_src})
             out["artists"] = artists_list
-
-            # duration
-            dur = raw.get("duration_seconds") or None
+            # ALBUM
+            album_raw = raw.get("album")
+            if isinstance(album_raw, dict):
+                out["album"] = {
+                    "id": album_raw.get("id"),
+                    "name": album_raw.get("name")
+                }
+            # THUMBNAILS - Add this section
+            out["thumbnails"] = raw.get("thumbnails", [])
+            
+            # DURATION
+            dur = raw.get("duration_seconds")
             try:
                 out["duration_seconds"] = int(dur) if dur is not None else None
             except Exception:
                 out["duration_seconds"] = None
-
-            # track number / index
-            tn = raw.get("trackNumber") or None
+            # TRACK NUMBER
+            tn = raw.get("trackNumber")
             try:
                 out["track_number"] = int(tn) if tn is not None else None
             except Exception:
                 out["track_number"] = None
-
             return out
-
-        # if raw is a string, use as title
+        # string fallback
         if isinstance(raw, str):
             out["title"] = raw
             return out
-
     except Exception:
         logger.exception("normalize_track_item failed for %r", raw)
     return out

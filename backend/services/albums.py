@@ -1,20 +1,21 @@
 # backend/services/albums.py
 """
 Album entity CRUD operations and album-specific business logic.
-Handles album fetching, cover management, and track relationships.
 """
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from pathlib import Path
 
 import requests
 from sqlalchemy.orm import Session
 
-from ..models import Album, Track
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
 from .. import config
+
+if TYPE_CHECKING:
+    from ..models import Album, Track
 
 logger = logging.getLogger("services.albums")
 
@@ -38,6 +39,8 @@ def upsert_album(
     album_type: "Album", "Single", "EP", etc.
     Returns the Album instance (not committed).
     """
+    from ..models import Album  # Import here to avoid circular dependency
+    
     if not album_id:
         raise ValueError("album_id required")
 
@@ -98,6 +101,8 @@ def get_album_from_db(
     Returns:
         Dict with album data, or None if not found
     """
+    from ..models import Album, Track
+    
     try:
         album = session.get(Album, album_id)
         if not album:
@@ -140,6 +145,8 @@ def list_albums_for_artist_from_db(
     Returns:
         List of dicts with: id, title, thumbnail, image_local, year, type
     """
+    from ..models import Album
+    
     result: List[Dict[str, Any]] = []
     try:
         query = (
@@ -186,6 +193,8 @@ def ensure_album_cover(
     Returns:
         Path to the saved cover (string) or None if failed
     """
+    from ..models import Album  # For type checking
+    
     if not album_obj:
         return None
 
@@ -260,17 +269,19 @@ def fetch_and_upsert_album(
     
     Note: Does NOT commit the session - caller controls transaction.
     """
+    from ..models import Track
+    
     if not browse_id:
         raise ValueError("browse_id required")
 
-    # Fetch album data from YTMusic adapter
+    # Fetch album data
     try:
         album_data = ytm_adapter.get_album(browse_id=browse_id)
     except Exception as e:
         logger.exception(f"ytm_adapter.get_album failed for browse_id={browse_id}")
         raise RuntimeError(f"Failed to fetch album from YTMusic: {e}")
 
-    # Extract album metadata
+    # Extract metadata
     album_id = album_data.get("id") or browse_id
     album_title = album_data.get("title") or "Unknown Album"
     thumbnails = album_data.get("thumbnails") or []
@@ -301,7 +312,7 @@ def fetch_and_upsert_album(
         playlist_id=playlist_id,
     )
 
-    # Ensure cover in filesystem and update album.image_local
+    # Ensure cover
     cover_path = None
     try:
         dest_dir = str(config.COVERS_DIR) if config.COVERS_DIR else None
@@ -314,7 +325,7 @@ def fetch_and_upsert_album(
     except Exception as e:
         logger.exception(f"ensure_album_cover failed for {album_id}: {e}")
 
-    # CRITICAL: Get playlist data to replace video IDs with audio IDs BEFORE inserting
+    # Get playlist data for audio IDs
     playlist_tracks = []
     if playlist_id:
         try:
@@ -323,9 +334,8 @@ def fetch_and_upsert_album(
             logger.info(f"Fetched playlist {playlist_id}: {len(playlist_tracks)} tracks")
         except Exception as e:
             logger.warning(f"Failed to fetch playlist {playlist_id}: {e}")
-            playlist_tracks = []
-    
-    # Build track ID mapping: position -> audio_id
+
+    # Build audio ID map
     audio_id_map = {}
     if playlist_tracks:
         for idx, pl_track in enumerate(playlist_tracks):
@@ -337,7 +347,7 @@ def fetch_and_upsert_album(
                     "duration": pl_track.get("duration_seconds"),
                 }
     
-    # Upsert tracks using AUDIO IDs from playlist
+    # Upsert tracks
     from .tracks import upsert_track
     
     inserted = 0
@@ -348,13 +358,12 @@ def fetch_and_upsert_album(
         try:
             video_id = track_data.get("id") or track_data.get("videoId")
             if not video_id:
-                logger.debug(f"Skipping track without id in album {album_id}: {track_data}")
                 continue
 
             title = track_data.get("title") or "Unknown Track"
             duration = track_data.get("duration_seconds") or track_data.get("duration")
             
-            # Normalize artists for DB storage
+            # Normalize artists
             artists_raw = track_data.get("artists", [])
             artists_for_db = []
             if isinstance(artists_raw, list):
@@ -365,18 +374,15 @@ def fetch_and_upsert_album(
                             "name": a.get("name"),
                         })
             
-            # Get track number
             track_number = track_data.get("track_number") or idx + 1
             
-            # CRITICAL: Use audio ID from playlist if available and different
+            # Use audio ID from playlist if available
             final_track_id = video_id
             if idx in audio_id_map:
                 audio_info = audio_id_map[idx]
                 audio_id = audio_info["audio_id"]
                 
-                # Check if IDs differ
                 if audio_id != video_id:
-                    # Verify this is the right track by comparing titles
                     album_title_lower = title.lower().strip()
                     playlist_title_lower = audio_info["title"]
                     
@@ -384,28 +390,18 @@ def fetch_and_upsert_album(
                         album_title_lower == playlist_title_lower or
                         album_title_lower in playlist_title_lower or
                         playlist_title_lower in album_title_lower or
-                        # Handle featuring variations
                         album_title_lower.split("(")[0].strip() == playlist_title_lower.split("(")[0].strip()
                     )
                     
                     if title_match:
-                        logger.info(
-                            f"Using audio ID for '{title}': {video_id} → {audio_id}"
-                        )
+                        logger.info(f"Using audio ID for '{title}': {video_id} → {audio_id}")
                         final_track_id = audio_id
                         replaced += 1
-                    else:
-                        logger.warning(
-                            f"Title mismatch at position {idx + 1}: "
-                            f"album='{album_title_lower}' vs playlist='{playlist_title_lower}' - "
-                            f"using video ID"
-                        )
 
-            # Check if track already exists
-            from ..models import Track
+            # Check if track exists
             pre_existing = session.get(Track, str(final_track_id))
             
-            # Determine status: keep existing status if track has a file, otherwise "new"
+            # Preserve status if track has file
             if pre_existing and pre_existing.file_path:
                 status = pre_existing.status or "done"
                 file_path = pre_existing.file_path
@@ -413,7 +409,7 @@ def fetch_and_upsert_album(
                 status = "new"
                 file_path = None
 
-            # Upsert track with correct ID
+            # Upsert track
             upsert_track(
                 session=session,
                 track_id=str(final_track_id),
@@ -433,19 +429,14 @@ def fetch_and_upsert_album(
                 updated += 1
 
         except Exception as e:
-            logger.exception(f"Error processing track {track_data.get('id', 'unknown')} for album {album_id}: {e}")
+            logger.exception(f"Error processing track for album {album_id}: {e}")
             continue
 
     logger.info(
-        f"Album {album_id} upserted: {inserted} new tracks, {updated} updated tracks, "
-        f"{replaced} IDs replaced with audio versions"
+        f"Album {album_id} upserted: {inserted} new, {updated} updated, {replaced} IDs replaced"
     )
 
-    # Flush so caller can commit if desired
-    try:
-        session.flush()
-    except Exception as e:
-        logger.debug(f"session.flush() failed after upsert album {album_id}: {e}", exc_info=True)
+    session.flush()
 
     return {
         "album_id": str(album_id),
@@ -489,16 +480,13 @@ def fetch_and_upsert_albums_for_artist(
 
     for item in all_items:
         try:
-            # Items from adapter are already normalized with 'id' field
             browse_id = item.get("id") or item.get("browseId")
             
             if not browse_id:
-                logger.debug(f"Skipping artist album item without id: {item}")
                 continue
 
             logger.info(f"Processing album {browse_id} for artist {artist_id}")
 
-            # Fetch and upsert the album and its tracks
             result = fetch_and_upsert_album(
                 session=session,
                 browse_id=browse_id,
@@ -511,14 +499,10 @@ def fetch_and_upsert_albums_for_artist(
             details.append(result)
 
         except Exception as e:
-            logger.exception(f"Failed to process album {item.get('id', 'unknown')} for artist {artist_id}: {e}")
+            logger.exception(f"Failed to process album for artist {artist_id}: {e}")
             continue
 
-    # Flush for caller
-    try:
-        session.flush()
-    except Exception as e:
-        logger.debug(f"session.flush() failed after processing albums for artist {artist_id}: {e}", exc_info=True)
+    session.flush()
 
     return {
         "artist_id": artist_id,

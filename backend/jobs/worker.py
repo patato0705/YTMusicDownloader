@@ -9,10 +9,10 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
+from ..deps import wait_for_db
 from .jobqueue import reserve_job, mark_job_done, mark_job_failed
 from .tasks import run_job_task
 from ..logging_config import configure_logging
-from ..time_utils import now_utc
 
 logger = logging.getLogger("jobs.worker")
 
@@ -149,6 +149,10 @@ def _env_get(name: str, default: Optional[str] = None) -> Optional[str]:
 
 def main() -> None:
     configure_logging()  # basic logging; caller can configure differently before import if needed
+
+    # Wait for database to be ready
+    wait_for_db()
+
     worker_name = _env_get("WORKER_NAME") or f"worker-{os.getpid()}"
     poll_interval = float(_env_get("WORKER_POLL_INTERVAL") or 2.0)
     idle_sleep = float(_env_get("WORKER_IDLE_SLEEP_SEC") or 3.0)

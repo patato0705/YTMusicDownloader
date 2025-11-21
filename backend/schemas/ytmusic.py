@@ -24,12 +24,21 @@ class ArtistRefSchema(BaseModel):
     
     model_config = {"extra": "ignore"}
 
+class AlbumRefSchema(BaseModel):
+    """Lightweight album reference (used in tracks, albums, etc.)"""
+    id: Optional[str] = None
+    name: Optional[str] = None
+    
+    model_config = {"extra": "ignore"}
+
 
 class TrackSchema(BaseModel):
     """Track/song from YTMusic"""
     id: str
     title: str
     artists: List[ArtistRefSchema] = Field(default_factory=list)
+    album: Optional[AlbumRefSchema] = None  # Changed from List to Optional single object
+    cover: Optional[str] = None
     duration_seconds: int
     track_number: Optional[int] = None
     isExplicit: bool = False

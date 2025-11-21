@@ -3,12 +3,13 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Iterable
 
-from .client import call  # wrapper qui exécute les méthodes ytmusic (ex: call("get_artist", ...))
+from .client import call  # wrapper executing ytmusic methods (ex: call("get_artist", ...))
 from . import normalizers as N
 from backend.schemas import (
     AlbumSchema,
     TrackSchema,
     ArtistRefSchema,
+    AlbumRefSchema,
     PlaylistSchema,
     SongSchema
 )
@@ -18,7 +19,7 @@ logger = logging.getLogger("ytm_service.adapter")
 
 def _safe_call(name: str, *args, **kwargs) -> Any:
     """
-    Appel centralisé vers client.call — journalise et remonte exceptions.
+    Centralized call to client.call — Log and escalate exceptions.
     """
     try:
         return call(name, *args, **kwargs)
@@ -29,16 +30,14 @@ def _safe_call(name: str, *args, **kwargs) -> Any:
 
 def _ensure_track_payload(nt: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Garantit que le dict renvoyé par normalize_track_item contient
-    les champs nécessaires au TrackSchema attendu par TrackSchema.
+    Guarantees that the returned dict by normalize_track_item has
+    necessary fields at TrackSchema expected by TrackSchema.
     """
     if not isinstance(nt, dict):
         raise TypeError("normalize_track_item must return a dict")
-
     title = nt.get("title") or nt.get("name") or ""
     track_id = nt.get("id") or nt.get("videoId") or ""
     track_id = str(track_id)
-
     artists_raw = nt.get("artists") or []
     if not isinstance(artists_raw, Sequence):
         artists_raw = []
@@ -52,36 +51,45 @@ def _ensure_track_payload(nt: Dict[str, Any]) -> Dict[str, Any]:
             artists_out.append({"id": None, "name": a})
         else:
             continue
-
     duration_seconds = nt.get("duration_seconds")
     try:
         duration_int = int(duration_seconds) if duration_seconds is not None else None
     except Exception:
         duration_int = None
-
-    album = nt.get("album") or {}
+    
+    # Handle album as dict (from normalize_track_item)
+    album_raw = nt.get("album") or {}
     album_id = None
-    album_title = None
-    if isinstance(album, dict):
-        album_id = album.get("id") or album.get("browseId") or album.get("playlistId") or None
-        if album.get("name"):
-            album_title = str(album.get("name"))
-    elif isinstance(album, str):
-        album_title = album
-
-    track_number = nt.get("trackNumber") or nt.get("index") or None
+    album_name = None
+    if isinstance(album_raw, dict):
+        album_id = album_raw.get("id") or None
+        album_name = album_raw.get("name") or None
+        if album_name:
+            album_name = str(album_name)
+    elif isinstance(album_raw, str):
+        album_name = album_raw
+    
+    # Handle thumbnails - Add this section
+    thumbnail_url = None
+    track_thumbs = nt.get("thumbnails", [])
+    if track_thumbs:
+        thumbs_models = N._build_thumbnails(track_thumbs)
+        thumbs_dicts = [t.model_dump() for t in thumbs_models]
+        thumbnail_url = N.pick_best_thumbnail_url(thumbs_dicts) if thumbs_models else None
+    
+    track_number = nt.get("trackNumber") or nt.get("track_number") or nt.get("index") or None
     try:
         track_number_int = int(track_number) if track_number is not None else None
     except Exception:
         track_number_int = None
-
     return {
         "id": track_id,
         "title": str(title),
         "artists": artists_out,
         "duration": duration_int,
         "album_id": str(album_id) if album_id is not None else None,
-        "album_title": album_title,
+        "album_name": album_name,
+        "thumbnail": thumbnail_url,  # Add this line
         "track_number": track_number_int,
         "raw": nt,
     }
@@ -256,7 +264,6 @@ def get_album(browse_id: str) -> Dict[str, Any]:
     # Extract artists
     artists_raw = raw.get("artists", [])
     artists_models = []
-    artist_id = None  # For backward compatibility
     for a in artists_raw:
         if isinstance(a, dict):
             artists_models.append(
@@ -336,26 +343,32 @@ def get_playlist(playlist_id: str) -> Dict[str, Any]:
     except Exception:
         model = PlaylistSchema(id=str(playlist_id), title=None, thumbnails=[], tracks=[], raw=None)
         return model.model_dump()
-
     if not isinstance(raw, dict):
         model = PlaylistSchema(id=str(playlist_id), title=None, thumbnails=[], tracks=[], raw=raw)
         return model.model_dump()
-
     # Extract playlist title and thumbnails
     title = raw.get("title") or None
     thumbs_models = N._build_thumbnails(raw.get("thumbnails") or [])
-
     # Process tracks
     tracks_raw = raw.get("tracks") or []
     tracks_models_objects: List[TrackSchema] = []
-
+    
+    logger.debug("Processing %d tracks from playlist", len(tracks_raw))
+    
     if isinstance(tracks_raw, list):
-        for t in tracks_raw:
+        for idx, t in enumerate(tracks_raw):
             try:
-                # Normalize the track data (make sure normalize_track_item is working correctly)
+                # Normalize the track data
                 nt_raw = N.normalize_track_item(t)
                 nt = _ensure_track_payload(nt_raw)
                 
+                # Build album - TrackSchema expects Optional[AlbumRefSchema]
+                album_id = nt.get("album_id")
+                album_name = nt.get("album_name")
+                album_obj = None
+                if album_id or album_name:
+                    album_obj = AlbumRefSchema(id=album_id, name=album_name)
+
                 # Map the normalized data to the TrackSchema fields
                 track_data = {
                     "id": nt.get("id") or "",
@@ -364,63 +377,34 @@ def get_playlist(playlist_id: str) -> Dict[str, Any]:
                         ArtistRefSchema(id=a.get("id"), name=a.get("name"))
                         for a in nt.get("artists", [])
                     ],
-                    "duration_seconds": nt.get("duration") or 0,  # Mapping "duration" to "duration_seconds"
-                    "track_number": nt.get("track_number") or None,  # Mapping track number
-                    "isExplicit": t.get("isExplicit", False),  # Assuming `isExplicit` is a field in the raw track
+                    "album": album_obj,  # Pass single AlbumRefSchema or None
+                    "cover": nt.get("thumbnail"),
+                    "duration_seconds": nt.get("duration") or 0,
+                    "track_number": nt.get("track_number") or None,
+                    "isExplicit": t.get("isExplicit", False),
                     "raw": t
                 }
-
                 # Create the TrackSchema instance
                 ts = TrackSchema(**track_data)
                 tracks_models_objects.append(ts)
-            except Exception:
-                logger.debug("Skipping invalid track entry in playlist %r", t, exc_info=True)
+                logger.debug("Successfully processed track %d: %s", idx, nt.get("title"))
+            except Exception as e:
+                logger.error("Failed to process track %d: %s", idx, str(e), exc_info=True)
                 continue
-
+    
+    logger.debug("Successfully processed %d out of %d tracks", len(tracks_models_objects), len(tracks_raw))
+    
     # Create the final PlaylistSchema model with the processed data
     model = PlaylistSchema(
         id=str(playlist_id),
         title=str(title) if title is not None else None,
-        thumbnails=thumbs_models,  # instances of thumbnails
-        tracks=tracks_models_objects,  # instances of tracks
+        thumbnails=thumbs_models,
+        tracks=tracks_models_objects,
     )
     
     # Return the model's data as a dictionary
     return model.model_dump()
 
-
-def get_song(video_id: str) -> Dict[str, Any]:
-    try:
-        raw = _safe_call("get_song", videoId=video_id)
-    except Exception:
-        model = SongSchema(videoId=str(video_id), title=None, videoDetails=None, thumbnails=[], raw=None)
-        return model.model_dump()
-
-    if not isinstance(raw, dict):
-        model = SongSchema(videoId=str(video_id), title=None, videoDetails=None, thumbnails=[], raw=raw)
-        return model.model_dump()
-
-    vd = raw.get("videoDetails") if isinstance(raw.get("videoDetails"), dict) else {}
-    title = (vd.get("title") if isinstance(vd, dict) else None) or raw.get("title") or None
-
-    thumbs_src: List[Any] = []
-    if isinstance(vd, dict):
-        if vd.get("thumbnail"):
-            thumbs_src = (vd.get("thumbnail") or {}).get("thumbnails") or []
-        else:
-            thumbs_src = vd.get("thumbnails") or []
-    if not thumbs_src:
-        thumbs_src = raw.get("thumbnails") or []
-
-    thumbs_models = N._build_thumbnails(thumbs_src)
-    model = SongSchema(
-        videoId=str(video_id),
-        title=str(title) if title is not None else None,
-        videoDetails=vd,
-        thumbnails=thumbs_models,  # instances
-        raw=raw,
-    )
-    return model.model_dump()
 
 def get_charts(country: str = "US") -> Dict[str, Any]:
     try:

@@ -9,14 +9,14 @@ except Exception:
 
 
 def now_utc() -> datetime:
-    """Datetime timezone-aware en UTC (à stocker en BDD)."""
+    """Datetime timezone-aware in UTC (to store in DB)."""
     return datetime.now(timezone.utc)
 
 
 def get_local_zone() -> tzinfo:
     """
-    Retourne un tzinfo local basé sur TZ env var (ex: "Europe/Paris").
-    Si impossible, retourne timezone.utc.
+    Returns a local tzinfo based on TZ env var (ex: "Europe/Paris").
+    If not possible, returns timezone.utc.
     """
     tzname = os.environ.get("TZ")
     if tzname and ZoneInfo is not None:
@@ -29,5 +29,5 @@ def get_local_zone() -> tzinfo:
 
 
 def now_local() -> datetime:
-    """Datetime aware dans le fuseau local (selon TZ)."""
+    """Datetime aware in local timezone (according to TZ)."""
     return now_utc().astimezone(get_local_zone())

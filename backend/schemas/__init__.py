@@ -41,6 +41,7 @@ from .models import (
 from .ytmusic import (
     Thumbnail,
     ArtistRefSchema,
+    AlbumRefSchema,
     TrackSchema,
     PlaylistSchema,
     AlbumItemSchema,
@@ -86,6 +87,7 @@ __all__ = [
     # YTMusic
     "Thumbnail",
     "ArtistRefSchema",
+    "AlbumRefSchema",
     "TrackSchema",
     "PlaylistSchema",
     "AlbumItemSchema",

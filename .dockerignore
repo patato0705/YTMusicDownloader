@@ -17,6 +17,6 @@ __pycache__
 .vscode
 .DS_Store
 
-# Data / mounts (ne doivent PAS être inclus dans l'image)
+# Data / mounts (must NOT be included in image)
 data
 config

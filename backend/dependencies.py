@@ -39,7 +39,7 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Get user from database - FIX: cast user_id to int
+    # Get user from database
     user_id = payload.get("user_id")
     if user_id is None:
         raise HTTPException(
