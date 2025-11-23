@@ -1,0 +1,143 @@
+{
+  "common": {
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign In",
+      "subtitle": "Sign in to your account",
+      "username": "Username",
+      "password": "Password",
+      "button": "Sign in",
+      "loading": "Signing in...",
+      "noAccount": "Don't have an account?",
+      "register": "Register here"
+    },
+    "register": {
+      "title": "Create Account",
+      "subtitle": "Join the music library",
+      "username": "Username",
+      "email": "Email",
+      "password": "Password",
+      "confirmPassword": "Confirm Password",
+      "button": "Create account",
+      "loading": "Creating account...",
+      "hasAccount": "Already have an account?",
+      "login": "Sign in here"
+    },
+    "logout": "Logout",
+    "changePassword": {
+      "title": "Change Password",
+      "current": "Current Password",
+      "new": "New Password",
+      "confirm": "Confirm New Password",
+      "button": "Change Password",
+      "success": "Password changed successfully"
+    },
+    "errors": {
+      "invalidCredentials": "Invalid username or password",
+      "passwordMismatch": "Passwords do not match",
+      "passwordTooShort": "Password must be at least 8 characters",
+      "usernameRequired": "Username is required",
+      "sessionExpired": "Session expired. Please login again."
+    }
+  },
+  "nav": {
+    "home": "Home",
+    "browse": "Browse",
+    "library": "Library",
+    "settings": "Settings",
+    "admin": "Admin Panel"
+  },
+  "browse": {
+    "title": "Browse",
+    "searchPlaceholder": "Search artists, albums, tracks...",
+    "searching": "Searching...",
+    "noQuery": "Type something to search",
+    "noResults": "No results found",
+    "sections": {
+      "artists": "Artists",
+      "albums": "Albums",
+      "tracks": "Tracks"
+    }
+  },
+  "artist": {
+    "albums": "Albums",
+    "singles": "Singles & EPs",
+    "follow": "Follow",
+    "unfollow": "Unfollow",
+    "following": "Following",
+    "sync": "Sync",
+    "syncing": "Syncing..."
+  },
+  "album": {
+    "tracks": "Tracks",
+    "year": "Year",
+    "type": "Type",
+    "follow": "Follow",
+    "unfollow": "Unfollow",
+    "download": "Download",
+    "downloading": "Downloading..."
+  },
+  "library": {
+    "title": "Library",
+    "artists": "Followed Artists",
+    "albums": "Followed Albums",
+    "tracks": "Downloaded Tracks",
+    "stats": {
+      "title": "Statistics",
+      "artists": "Artists",
+      "albums": "Albums",
+      "tracks": "Tracks",
+      "diskUsage": "Disk Usage"
+    },
+    "empty": {
+      "artists": "No followed artists yet",
+      "albums": "No followed albums yet",
+      "tracks": "No downloaded tracks yet"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": "Profile",
+    "appearance": "Appearance",
+    "language": "Language",
+    "theme": {
+      "title": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "account": {
+      "username": "Username",
+      "email": "Email",
+      "role": "Role",
+      "changePassword": "Change Password"
+    }
+  },
+  "jobs": {
+    "title": "Jobs",
+    "status": {
+      "queued": "Queued",
+      "reserved": "Reserved",
+      "done": "Done",
+      "failed": "Failed"
+    },
+    "cancel": "Cancel Job",
+    "retry": "Retry",
+    "view": "View Details"
+  }
+}

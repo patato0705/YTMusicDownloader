@@ -1,6 +1,6 @@
 // frontend/src/components/SearchBar.tsx
 import React, { useState, useEffect, useRef } from "react";
-import { search } from "../lib/api";
+import { search } from "../api/index";
 import { Link, useNavigate } from "react-router-dom";
 
 type ResultSet = {

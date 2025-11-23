@@ -5,6 +5,7 @@
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Node",
+    "types": ["vite/client"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

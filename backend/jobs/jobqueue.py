@@ -34,7 +34,8 @@ def enqueue_job(
     scheduled_at: Optional[datetime] = None,
     priority: int = 0,
     max_attempts: int = 5,
-    commit: bool = True,  # ← NEW parameter
+    user_id: Optional[int] = None,  # NEW parameter
+    commit: bool = True,
 ) -> Job:
     """
     Create a new Job row and commit. Returns the Job instance.
@@ -46,6 +47,8 @@ def enqueue_job(
         scheduled_at: Optional datetime to schedule job for future execution
         priority: Job priority (higher = more important, default 0)
         max_attempts: Maximum retry attempts (default 5)
+        user_id: Optional user ID who initiated the job (for tracking)
+        commit: Whether to commit immediately (default True)
     
     Returns:
         Job instance with ID populated
@@ -62,6 +65,7 @@ def enqueue_job(
         priority=priority,
         scheduled_at=scheduled_at,
         created_at=now_utc(),
+        user_id=user_id,  # NEW: Store user_id on Job model
     )
     session.add(job)
     
@@ -69,7 +73,7 @@ def enqueue_job(
         session.commit()
         session.refresh(job)
     
-    logger.debug(f"Enqueued job (commit={commit}): type={job_type}, priority={priority}")
+    logger.debug(f"Enqueued job (commit={commit}): type={job_type}, priority={priority}, user_id={user_id}")
     return job
 
 

@@ -1,132 +1,105 @@
-import React, { useState, KeyboardEvent, useEffect, useRef } from "react";
+// src/components/MediaCard.tsx
+import React from 'react';
 
 interface MediaCardProps {
   id: string;
   title: string;
   subtitle?: string;
-  thumbnail?: string | null;
-  type?: "artist" | "album" | "track";
+  thumbnail?: string;
+  type?: 'artist' | 'album' | 'track';
+  year?: string;
   onClick?: () => void;
   className?: string;
-  size?: "sm" | "md" | "lg";
-  showType?: boolean;
 }
 
-export default function MediaCard({
+const MediaCard: React.FC<MediaCardProps> = ({
   id,
   title,
   subtitle,
   thumbnail,
-  type = "album",
+  type = 'album',
+  year,
   onClick,
-  className = "",
-  size = "md",
-  showType = false,
-}: MediaCardProps) {
-  const [imgError, setImgError] = useState(false);
-  const [shouldLoad, setShouldLoad] = useState(false);
-  const imgRef = useRef<HTMLImageElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Proxy external URLs through backend cache
+  className = '',
+}) => {
+  // Proxy external thumbnails through backend cache
   const displayUrl = (() => {
-    if (!thumbnail || imgError) return "/assets/placeholder-music.png";
+    if (!thumbnail) return '/assets/placeholder-music.png';
     
-    // If it's a Googleusercontent URL, proxy it through our backend
-    if (thumbnail.includes("googleusercontent.com") || thumbnail.includes("ytimg.com")) {
+    // If it's a Googleusercontent or YouTube thumbnail, proxy it
+    if (thumbnail.includes('googleusercontent.com') || thumbnail.includes('ytimg.com')) {
       return `/api/media/thumbnail?url=${encodeURIComponent(thumbnail)}`;
     }
     
     return thumbnail;
   })();
 
-  const cardHeight = size === "sm" ? "h-32" : size === "lg" ? "h-56" : "h-40";
-  const imgClass = `w-full h-full object-cover transition-transform duration-200 ease-in-out ${
-    imgError ? "opacity-40" : "opacity-100"
-  }`;
-
-  const ariaLabel = title + (subtitle ? ` — ${subtitle}` : "");
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (!onClick) return;
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onClick();
-    }
-  };
-
-  // Intersection Observer for lazy loading
-  useEffect(() => {
-    if (!containerRef.current || !thumbnail) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const delay = Math.random() * 200;
-            setTimeout(() => setShouldLoad(true), delay);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      {
-        rootMargin: "50px",
-      }
-    );
-
-    observer.observe(containerRef.current);
-
-    return () => observer.disconnect();
-  }, [thumbnail]);
+  // Different styling for artists (circular) vs albums/tracks (square)
+  const imageStyle = type === 'artist' ? 'rounded-full' : 'rounded-md';
 
   return (
     <div
-      ref={containerRef}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={handleKeyDown}
       onClick={onClick}
-      className={`w-40 flex-shrink-0 bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer ${className}`}
-      aria-label={ariaLabel}
-      title={ariaLabel}
+      className={`group cursor-pointer flex-shrink-0 ${className}`}
+      style={{ width: '180px' }}
     >
-      <div
-        className={`w-full ${cardHeight} bg-gray-100 flex items-center justify-center overflow-hidden relative`}
-      >
-        {thumbnail && shouldLoad ? (
-          <img
-            ref={imgRef}
-            src={displayUrl}
-            alt={title}
-            loading="lazy"
-            className={imgClass}
-            onError={() => setImgError(true)}
-          />
-        ) : thumbnail ? (
-          <div className="w-full h-full bg-gray-200 animate-pulse" />
-        ) : (
-          <div className="text-sm text-gray-400 px-3 text-center">
-            {title.length > 20 ? `${title.slice(0, 20)}…` : title}
-          </div>
-        )}
-
-        {showType && type && (
-          <div className="absolute left-2 top-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wide">
-            {type === "track" ? "song" : type}
-          </div>
-        )}
+      {/* Image container */}
+      <div className="relative mb-3 aspect-square">
+        <img
+          src={displayUrl}
+          alt={title}
+          className={`w-full h-full object-cover ${imageStyle} bg-secondary transition-opacity group-hover:opacity-75`}
+          onError={(e) => {
+            // Fallback to placeholder on error
+            e.currentTarget.src = '/assets/placeholder-music.png';
+          }}
+        />
+        
+        {/* Hover overlay with play/info icon */}
+        <div className={`absolute inset-0 ${imageStyle} bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center`}>
+          <svg
+            className="w-12 h-12 text-white"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
+            {type === 'track' ? (
+              // Play icon for tracks
+              <path d="M8 5v14l11-7z" />
+            ) : (
+              // Info/expand icon for artists/albums
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+            )}
+          </svg>
+        </div>
       </div>
 
-      <div className="p-3">
-        <div className="text-sm font-medium text-gray-900 truncate" title={title}>
+      {/* Text content */}
+      <div className="space-y-1">
+        <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
           {title}
-        </div>
+        </h3>
+        
         {subtitle && (
-          <div className="text-xs text-gray-500 truncate mt-1" title={subtitle}>
+          <p className="text-xs text-muted-foreground truncate">
             {subtitle}
-          </div>
+          </p>
+        )}
+        
+        {year && (
+          <p className="text-xs text-muted-foreground">
+            {year}
+          </p>
+        )}
+        
+        {/* Type badge (optional) */}
+        {type && (
+          <span className="inline-block px-2 py-0.5 text-xs rounded bg-secondary text-secondary-foreground capitalize">
+            {type}
+          </span>
         )}
       </div>
     </div>
   );
-}
+};
+
+export default MediaCard;

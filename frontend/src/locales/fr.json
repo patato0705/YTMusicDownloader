@@ -1,0 +1,143 @@
+{
+  "common": {
+    "search": "Rechercher",
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "close": "Fermer",
+    "back": "Retour",
+    "next": "Suivant",
+    "submit": "Soumettre",
+    "yes": "Oui",
+    "no": "Non"
+  },
+  "auth": {
+    "login": {
+      "title": "Connexion",
+      "subtitle": "Connectez-vous à votre compte",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "button": "Se connecter",
+      "loading": "Connexion...",
+      "noAccount": "Pas de compte ?",
+      "register": "S'inscrire ici"
+    },
+    "register": {
+      "title": "Créer un compte",
+      "subtitle": "Rejoignez la bibliothèque musicale",
+      "username": "Nom d'utilisateur",
+      "email": "Email",
+      "password": "Mot de passe",
+      "confirmPassword": "Confirmer le mot de passe",
+      "button": "Créer un compte",
+      "loading": "Création...",
+      "hasAccount": "Vous avez déjà un compte ?",
+      "login": "Se connecter ici"
+    },
+    "logout": "Déconnexion",
+    "changePassword": {
+      "title": "Changer le mot de passe",
+      "current": "Mot de passe actuel",
+      "new": "Nouveau mot de passe",
+      "confirm": "Confirmer le nouveau mot de passe",
+      "button": "Changer le mot de passe",
+      "success": "Mot de passe modifié avec succès"
+    },
+    "errors": {
+      "invalidCredentials": "Nom d'utilisateur ou mot de passe invalide",
+      "passwordMismatch": "Les mots de passe ne correspondent pas",
+      "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
+      "usernameRequired": "Le nom d'utilisateur est requis",
+      "sessionExpired": "Session expirée. Veuillez vous reconnecter."
+    }
+  },
+  "nav": {
+    "home": "Accueil",
+    "browse": "Explorer",
+    "library": "Bibliothèque",
+    "settings": "Paramètres",
+    "admin": "Administration"
+  },
+  "browse": {
+    "title": "Explorer",
+    "searchPlaceholder": "Rechercher artistes, albums, titres...",
+    "searching": "Recherche...",
+    "noQuery": "Tapez quelque chose pour rechercher",
+    "noResults": "Aucun résultat trouvé",
+    "sections": {
+      "artists": "Artistes",
+      "albums": "Albums",
+      "tracks": "Titres"
+    }
+  },
+  "artist": {
+    "albums": "Albums",
+    "singles": "Singles & EPs",
+    "follow": "Suivre",
+    "unfollow": "Ne plus suivre",
+    "following": "Suivi",
+    "sync": "Synchroniser",
+    "syncing": "Synchronisation..."
+  },
+  "album": {
+    "tracks": "Titres",
+    "year": "Année",
+    "type": "Type",
+    "follow": "Suivre",
+    "unfollow": "Ne plus suivre",
+    "download": "Télécharger",
+    "downloading": "Téléchargement..."
+  },
+  "library": {
+    "title": "Bibliothèque",
+    "artists": "Artistes suivis",
+    "albums": "Albums suivis",
+    "tracks": "Titres téléchargés",
+    "stats": {
+      "title": "Statistiques",
+      "artists": "Artistes",
+      "albums": "Albums",
+      "tracks": "Titres",
+      "diskUsage": "Espace disque"
+    },
+    "empty": {
+      "artists": "Aucun artiste suivi",
+      "albums": "Aucun album suivi",
+      "tracks": "Aucun titre téléchargé"
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "profile": "Profil",
+    "appearance": "Apparence",
+    "language": "Langue",
+    "theme": {
+      "title": "Thème",
+      "light": "Clair",
+      "dark": "Sombre",
+      "system": "Système"
+    },
+    "account": {
+      "username": "Nom d'utilisateur",
+      "email": "Email",
+      "role": "Rôle",
+      "changePassword": "Changer le mot de passe"
+    }
+  },
+  "jobs": {
+    "title": "Tâches",
+    "status": {
+      "queued": "En attente",
+      "reserved": "Réservé",
+      "done": "Terminé",
+      "failed": "Échoué"
+    },
+    "cancel": "Annuler la tâche",
+    "retry": "Réessayer",
+    "view": "Voir les détails"
+  }
+}

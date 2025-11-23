@@ -1,105 +1,187 @@
-// frontend/src/pages/Library.tsx
-import React, { useEffect, useState } from "react";
-import { getArtists, getArtist } from "../lib/api";
-
-function pickThumbnailFrom(thumbs: any): string | null {
-  if (!thumbs) return null;
-  if (Array.isArray(thumbs)) {
-    for (let i = thumbs.length - 1; i >= 0; i--) {
-      const t = thumbs[i];
-      if (!t) continue;
-      if (typeof t === "string") return t;
-      if (typeof t === "object") {
-        if (t.url) return t.url;
-        if (t.thumbnailUrl) return t.thumbnailUrl;
-      }
-    }
-    return null;
-  }
-  if (typeof thumbs === "string") return thumbs;
-  if (typeof thumbs === "object" && thumbs.url) return thumbs.url;
-  return null;
-}
+// src/pages/Library.tsx
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useI18n } from '../contexts/I18nContext';
+import { getLibraryArtists, getLibraryAlbums, getLibraryStats } from '../api/library';
+import MediaCard from '../components/MediaCard';
+import { Spinner } from '../components/ui/Spinner';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
+import { getBestThumbnail, formatNumber } from '../utils';
 
 export default function Library(): JSX.Element {
+  const [artists, setArtists] = useState<any[]>([]);
   const [albums, setAlbums] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { t } = useI18n();
 
   useEffect(() => {
-    let mounted = true;
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const artists = (await getArtists()) || [];
-        // récupérer albums pour chaque artiste (en parallèle)
-        const prom = artists.map(async (a: any) => {
-          try {
-            const res = await getArtist(String(a.id));
-            // res = { artist: {...}, albums: [...] }
-            const artistName = res?.artist?.name ?? a.name ?? "unknown";
-            const albumList: any[] = res?.albums ?? [];
-            return albumList.map((al: any) => ({
-              id: al.id,
-              title: al.title,
-              artist: artistName,
-              thumbnails: al.thumbnails,
-              playlist_id: al.playlist_id,
-              year: al.year,
-            }));
-          } catch (e) {
-            // ignore single-artist failure
-            return [];
-          }
-        });
-
-        const nested = await Promise.all(prom);
-        const flat = nested.flat();
-        if (mounted) {
-          setAlbums(flat);
-        }
-      } catch (e: any) {
-        console.error(e);
-        if (mounted) setError(String(e?.message ?? e));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      mounted = false;
-    };
+    loadLibrary();
   }, []);
 
-  if (loading) return <div>Chargement…</div>;
-  if (error) return <div className="text-red-600">Erreur: {error}</div>;
+  const loadLibrary = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [artistsData, albumsData, statsData] = await Promise.all([
+        getLibraryArtists(),
+        getLibraryAlbums(),
+        getLibraryStats(),
+      ]);
+
+      setArtists(artistsData || []);
+      setAlbums(albumsData || []);
+      setStats(statsData || {});
+    } catch (err: any) {
+      console.error('Failed to load library:', err);
+      setError(err.message || 'Failed to load library');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <Spinner size="lg" className="mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground">{t('common.loading')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-500/10 border border-red-500 text-red-600 dark:text-red-400 rounded-lg">
+        {t('common.error')}: {error}
+      </div>
+    );
+  }
+
+  const hasContent = artists.length > 0 || albums.length > 0;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Bibliothèque</h1>
-
-      {albums.length === 0 && <div>Aucun album trouvé.</div>}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {albums.map((a) => {
-          const thumb = pickThumbnailFrom(a.thumbnails) ?? "/assets/placeholder-album.png";
-          return (
-            <div key={String(a.id)} className="bg-white rounded shadow p-3">
-              <img
-                src={thumb}
-                alt={a.title}
-                className="w-full h-40 object-cover rounded"
-              />
-              <h3 className="mt-2 font-semibold">{a.title}</h3>
-              <p className="text-sm text-gray-600">{a.artist}</p>
-              {a.year && <div className="text-xs text-gray-400">{a.year}</div>}
-            </div>
-          );
-        })}
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground mb-2">
+          {t('library.title')}
+        </h1>
+        <p className="text-muted-foreground">
+          Your followed artists and albums
+        </p>
       </div>
+
+      {/* Stats */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader>
+              <CardDescription>{t('library.stats.artists')}</CardDescription>
+              <CardTitle className="text-3xl">
+                {formatNumber(stats.followed_artists || 0)}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardDescription>{t('library.stats.albums')}</CardDescription>
+              <CardTitle className="text-3xl">
+                {formatNumber(stats.followed_albums || 0)}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardDescription>{t('library.stats.tracks')}</CardDescription>
+              <CardTitle className="text-3xl">
+                {formatNumber(stats.total_tracks || 0)}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardDescription>Downloaded</CardDescription>
+              <CardTitle className="text-3xl">
+                {formatNumber(stats.downloaded_tracks || 0)}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!hasContent && (
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center">
+              <div className="text-6xl mb-4">📚</div>
+              <h3 className="text-xl font-semibold text-foreground mb-2">
+                Your library is empty
+              </h3>
+              <p className="text-muted-foreground mb-6">
+                Start by browsing and following some artists!
+              </p>
+              <button
+                onClick={() => navigate('/browse')}
+                className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg transition"
+              >
+                {t('nav.browse')}
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Followed Artists */}
+      {artists.length > 0 && (
+        <section>
+          <h2 className="text-2xl font-semibold text-foreground mb-4">
+            {t('library.artists')}
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {artists.map((artist) => (
+              <MediaCard
+                key={artist.id}
+                id={artist.id}
+                title={artist.name}
+                thumbnail={getBestThumbnail(artist, 'medium')}
+                type="artist"
+                onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Followed Albums */}
+      {albums.length > 0 && (
+        <section>
+          <h2 className="text-2xl font-semibold text-foreground mb-4">
+            {t('library.albums')}
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {albums.map((album) => (
+              <MediaCard
+                key={album.id}
+                id={album.id}
+                title={album.title}
+                subtitle={album.artist_name}
+                thumbnail={getBestThumbnail(album, 'medium')}
+                type="album"
+                year={album.year}
+                onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
