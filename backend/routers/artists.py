@@ -193,7 +193,6 @@ def follow_artist(
         
         # Step 6: Queue download jobs for all tracks
         queued_count = 0
-        jobs_to_create = []  # ← Collect all jobs first
 
         for album_detail in albums_result.get("details", []):
             album_id = album_detail.get("album_id")
@@ -210,26 +209,23 @@ def follow_artist(
                 
                 # Only queue if track needs downloading
                 if track.get("status") in ["new", "failed"]:
-                    jobs_to_create.append({
-                        "track_id": track_id,
-                        "album_id": album_id,
-                        "artist_id": artist_id,
-                        "user_id": current_user.id
-                    })
-
-        # Now create all jobs in batch WITHOUT committing each one
-        for payload in jobs_to_create:
-            try:
-                enqueue_job(
-                    db,
-                    job_type="download_track",
-                    payload=payload,
-                    priority=0,
-                    commit=False,  # ← DON'T commit yet
-                )
-                queued_count += 1
-            except Exception as e:
-                logger.exception(f"Failed to enqueue job for track {payload.get('track_id')}")
+                    try:
+                        enqueue_job(
+                            db,
+                            job_type="download_track",
+                            payload={
+                                "track_id": track_id,
+                                "album_id": album_id,
+                                "artist_id": artist_id,
+                                # user_id is NOT in payload - it goes as a separate parameter
+                            },
+                            priority=0,
+                            user_id=current_user.id,  # ← Store on Job model, not in payload
+                            commit=False,  # ← DON'T commit yet
+                        )
+                        queued_count += 1
+                    except Exception as e:
+                        logger.exception(f"Failed to enqueue job for track {track_id}")
 
         # Commit everything once at the end
         db.commit()

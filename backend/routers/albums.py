@@ -200,7 +200,7 @@ def follow_album(
             artist_id=album.get("artist_id"),
             mode="download"
         )
-        logger.info(f"Created album subscription for {album_id}")
+        logger.info(f"Created album subscription for {album_id} (user_id={current_user.id})")
         
         # Queue download jobs for all tracks
         tracks = album.get("tracks", [])
@@ -217,9 +217,13 @@ def follow_album(
                     enqueue_job(
                         db,
                         job_type="download_track",
-                        payload={"track_id": track_id, "album_id": album_id, "user_id": current_user.id},
+                        payload={
+                            "track_id": track_id,
+                            "album_id": album_id,
+                        },
                         priority=0,
-                        commit=False,  # ← DON'T commit yet
+                        user_id=current_user.id,
+                        commit=False,  # Don't commit yet
                     )
                     queued_count += 1
                 except Exception as e:
@@ -228,7 +232,7 @@ def follow_album(
         # Commit everything once
         db.commit()
         
-        logger.info(f"Album {album_id} followed: {queued_count} tracks queued for download")
+        logger.info(f"Album {album_id} followed by user {current_user.id}: {queued_count} tracks queued for download")
         
         return {
             "source": "database",
