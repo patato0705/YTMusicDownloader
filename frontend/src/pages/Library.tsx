@@ -26,14 +26,15 @@ export default function Library(): JSX.Element {
     setError(null);
 
     try {
-      const [artistsData, albumsData, statsData] = await Promise.all([
+      const [artistsResponse, albumsResponse, statsData] = await Promise.all([
         getLibraryArtists(),
         getLibraryAlbums(),
         getLibraryStats(),
       ]);
 
-      setArtists(artistsData || []);
-      setAlbums(albumsData || []);
+      // API returns { artists: [...], total: n } structure
+      setArtists(artistsResponse.artists || []);
+      setAlbums(albumsResponse.albums || []);
       setStats(statsData || {});
     } catch (err: any) {
       console.error('Failed to load library:', err);
@@ -82,7 +83,7 @@ export default function Library(): JSX.Element {
             <CardHeader>
               <CardDescription>{t('library.stats.artists')}</CardDescription>
               <CardTitle className="text-3xl">
-                {formatNumber(stats.followed_artists || 0)}
+                {formatNumber(stats.artists?.total || 0)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -91,7 +92,7 @@ export default function Library(): JSX.Element {
             <CardHeader>
               <CardDescription>{t('library.stats.albums')}</CardDescription>
               <CardTitle className="text-3xl">
-                {formatNumber(stats.followed_albums || 0)}
+                {formatNumber(stats.albums?.total || 0)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -100,7 +101,7 @@ export default function Library(): JSX.Element {
             <CardHeader>
               <CardDescription>{t('library.stats.tracks')}</CardDescription>
               <CardTitle className="text-3xl">
-                {formatNumber(stats.total_tracks || 0)}
+                {formatNumber(stats.tracks?.total || 0)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -109,7 +110,7 @@ export default function Library(): JSX.Element {
             <CardHeader>
               <CardDescription>Downloaded</CardDescription>
               <CardTitle className="text-3xl">
-                {formatNumber(stats.downloaded_tracks || 0)}
+                {formatNumber(stats.tracks?.downloaded || 0)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -172,7 +173,7 @@ export default function Library(): JSX.Element {
                 key={album.id}
                 id={album.id}
                 title={album.title}
-                subtitle={album.artist_name}
+                subtitle={album.artist?.name}
                 thumbnail={getBestThumbnail(album, 'medium')}
                 type="album"
                 year={album.year}
