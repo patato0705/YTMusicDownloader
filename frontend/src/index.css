@@ -1,0 +1,78 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme colors */
+    --color-background: 249 250 251;       /* gray-50 */
+    --color-foreground: 17 24 39;          /* gray-900 */
+    --color-card: 255 255 255;             /* white */
+    --color-card-foreground: 17 24 39;     /* gray-900 */
+    --color-primary: 37 99 235;            /* blue-600 */
+    --color-primary-foreground: 255 255 255; /* white */
+    --color-secondary: 243 244 246;        /* gray-100 */
+    --color-secondary-foreground: 17 24 39; /* gray-900 */
+    --color-muted: 243 244 246;            /* gray-100 */
+    --color-muted-foreground: 107 114 128; /* gray-500 */
+    --color-accent: 243 244 246;           /* gray-100 */
+    --color-accent-foreground: 17 24 39;   /* gray-900 */
+    --color-border: 229 231 235;           /* gray-200 */
+    --color-input: 229 231 235;            /* gray-200 */
+    --color-ring: 37 99 235;               /* blue-600 */
+  }
+
+  .dark {
+    /* Dark theme colors */
+    --color-background: 17 24 39;          /* gray-900 */
+    --color-foreground: 249 250 251;       /* gray-50 */
+    --color-card: 31 41 55;                /* gray-800 */
+    --color-card-foreground: 249 250 251;  /* gray-50 */
+    --color-primary: 59 130 246;           /* blue-500 */
+    --color-primary-foreground: 255 255 255; /* white */
+    --color-secondary: 55 65 81;           /* gray-700 */
+    --color-secondary-foreground: 249 250 251; /* gray-50 */
+    --color-muted: 55 65 81;               /* gray-700 */
+    --color-muted-foreground: 156 163 175; /* gray-400 */
+    --color-accent: 55 65 81;              /* gray-700 */
+    --color-accent-foreground: 249 250 251; /* gray-50 */
+    --color-border: 55 65 81;              /* gray-700 */
+    --color-input: 55 65 81;               /* gray-700 */
+    --color-ring: 59 130 246;              /* blue-500 */
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  /* Custom utility classes */
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-secondary;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-foreground/60;
+}

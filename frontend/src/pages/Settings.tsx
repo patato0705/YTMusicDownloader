@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { importCharts } from "../lib/api";
+import { importCharts } from "../api/api";
 
 export default function Settings(): JSX.Element {
   const [busy, setBusy] = useState(false);
