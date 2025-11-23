@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, case
 
 from ..deps import get_db
 from ..models import Artist, Album, Track, AlbumSubscription, ArtistSubscription
@@ -72,8 +72,8 @@ def list_followed_artists(
             tracks_query = (
                 db.query(
                     func.count(Track.id).label("total"),
-                    func.sum(func.case((Track.status == "done", 1), else_=0)).label("downloaded"),
-                    func.sum(func.case((Track.status == "failed", 1), else_=0)).label("failed"),
+                    func.sum(case((Track.status == "done", 1), else_=0)).label("downloaded"),
+                    func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
                 )
                 .join(Album, Track.album_id == Album.id)
                 .filter(Album.artist_id == artist.id)
@@ -171,9 +171,9 @@ def list_followed_albums(
             tracks_query = (
                 db.query(
                     func.count(Track.id).label("total"),
-                    func.sum(func.case((Track.status == "done", 1), else_=0)).label("downloaded"),
-                    func.sum(func.case((Track.status == "failed", 1), else_=0)).label("failed"),
-                    func.sum(func.case((Track.has_lyrics == True, 1), else_=0)).label("with_lyrics"),
+                    func.sum(case((Track.status == "done", 1), else_=0)).label("downloaded"),
+                    func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
+                    func.sum(case((Track.has_lyrics == True, 1), else_=0)).label("with_lyrics"),
                 )
                 .filter(Track.album_id == album.id)
             )
@@ -333,8 +333,6 @@ def get_library_stats(
     Get overall library statistics.
     """
     try:
-        from sqlalchemy import case
-        
         # Artists stats
         artists_total = db.query(func.count(Artist.id)).filter(Artist.followed == True).scalar() or 0
         
