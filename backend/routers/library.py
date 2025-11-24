@@ -125,7 +125,7 @@ def list_followed_albums(
     current_user: User = Depends(require_auth),
     artist_id: Optional[str] = Query(None, description="Filter by artist ID"),
     status_filter: Optional[str] = Query(None, regex="^(completed|downloading|pending|failed)$", description="Filter by download status"),
-    sort_by: str = Query("title", regex="^(title|year|download_progress)$"),
+    sort_by: str = Query("title", regex="^(title|year|followed_at|download_progress)$"),
     order: str = Query("asc", regex="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
@@ -221,6 +221,8 @@ def list_followed_albums(
             result.sort(key=lambda x: (x["title"] or "").lower(), reverse=(order == "desc"))
         elif sort_by == "year":
             result.sort(key=lambda x: x["year"] or "", reverse=(order == "desc"))
+        elif sort_by == "followed_at":
+            result.sort(key=lambda x: x["followed_at"] or "", reverse=(order == "desc"))
         elif sort_by == "download_progress":
             result.sort(key=lambda x: x["download_progress"], reverse=(order == "desc"))
         
