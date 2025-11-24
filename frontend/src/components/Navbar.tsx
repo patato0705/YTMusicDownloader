@@ -51,9 +51,6 @@ export default function Navbar(): JSX.Element {
                 <Link to="/library" className={navLinkClass('/library')}>
                   {t('nav.library')}
                 </Link>
-                <Link to="/settings" className={navLinkClass('/settings')}>
-                  {t('nav.settings')}
-                </Link>
               </div>
             )}
           </div>
