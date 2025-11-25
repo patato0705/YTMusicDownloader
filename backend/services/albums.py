@@ -30,6 +30,7 @@ def upsert_album(
     title: Optional[str],
     artist_id: Optional[str] = None,
     thumbnails: Optional[List[Any]] = None,
+    image_local: Optional[str] = None,
     year: Optional[str] = None,
     album_type: Optional[str] = None,
     playlist_id: Optional[str] = None,
@@ -52,6 +53,7 @@ def upsert_album(
             title=str(title) if title is not None else "",
             artist_id=str(artist_id) if artist_id is not None else None,
             thumbnails=thumbnails or None,
+            image_local=str(image_local) if image_local else None,
             year=str(year) if year is not None else None,
             type=str(album_type) if album_type is not None else "Album",
             playlist_id=str(playlist_id) if playlist_id is not None else None,
@@ -68,6 +70,9 @@ def upsert_album(
             changed = True
         if thumbnails and obj.thumbnails != thumbnails:
             obj.thumbnails = thumbnails
+            changed = True
+        if image_local and obj.image_local != image_local:
+            obj.image_local = image_local
             changed = True
         if year is not None and obj.year != year:
             obj.year = str(year)
@@ -114,7 +119,7 @@ def get_album_from_db(
             "artist_id": album.artist_id,
             "year": album.year,
             "type": album.type or "Album",
-            "thumbnail": album.image_local,
+            "thumbnails": album.thumbnails,
             "image_local": album.image_local,
             "playlist_id": album.playlist_id,
         }
@@ -161,7 +166,7 @@ def list_albums_for_artist_from_db(
             result.append({
                 "id": album.id,
                 "title": album.title,
-                "thumbnail": album.image_local,
+                "thumbnails": album.thumbnails,
                 "image_local": album.image_local,
                 "year": album.year,
                 "type": album_type,
@@ -181,6 +186,7 @@ def ensure_album_cover(
     album_obj: Album,
     thumbnails: Optional[List[Any]] = None,
     dest_dir: Optional[str] = None,
+    final_cover_path: Optional[str] = None,
 ) -> Optional[str]:
     """
     Ensure the album has a local cover image. Downloads the best thumbnail if needed.
@@ -189,14 +195,24 @@ def ensure_album_cover(
         album_obj: Album model instance (should be attached to session)
         thumbnails: raw thumbnails (list[dict]) - optional, prefer these over album_obj.thumbnails
         dest_dir: override directory to save the cover. If None, uses COVERS_DIR from config
+        final_cover_path: If provided from downloader, use this path directly
     
     Returns:
         Path to the saved cover (string) or None if failed
     """
-    from ..models import Album  # For type checking
+    from ..models import Album
     
     if not album_obj:
         return None
+
+    # If final path provided from downloader, use it directly
+    if final_cover_path:
+        p = Path(final_cover_path)
+        if p.exists():
+            album_obj.image_local = final_cover_path
+            session.add(album_obj)
+            logger.info(f"Updated album {album_obj.id} cover to {final_cover_path}")
+            return final_cover_path
 
     # If album already has image_local and file exists -> return it
     cur_path = album_obj.image_local

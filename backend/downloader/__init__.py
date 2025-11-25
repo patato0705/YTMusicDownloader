@@ -20,11 +20,7 @@ from . import embed
 
 # commonly used utilities functions — expose at package level
 # (optional but practical for tasks.py and others)
-try:
-    download_track_by_videoid = core.download_track_by_videoid
-except Exception:
-    # if function is missing, avoid import at load
-    download_track_by_videoid = None
+download_track_by_videoid = core.download_track_by_videoid
 
 try:
     select_best_thumbnail_url = cover.select_best_thumbnail_url
