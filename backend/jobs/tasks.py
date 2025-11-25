@@ -47,6 +47,7 @@ def download_track(
     2. Get album/artist info for metadata
     3. Call downloader.core.download_track_by_videoid()
     4. Update Track table with file_path and status
+    5. Update Album cover if new cover path returned
     
     Args:
         session: SQLAlchemy session
@@ -113,13 +114,17 @@ def download_track(
                 cover_path_override=cover_path,
             )
             
-            # Handle both string (file path) and dict return types
+            # Handle tuple return (file_path, cover_path)
             file_path = None
-            if isinstance(result, str):
-                # Downloader returned just the file path
+            new_cover_path = None
+            
+            if isinstance(result, tuple) and len(result) == 2:
+                file_path, new_cover_path = result
+            elif isinstance(result, str):
+                # Backwards compatibility: old version returned just file path
                 file_path = result
             elif isinstance(result, dict):
-                # Downloader returned dict with file_path
+                # Backwards compatibility: dict with file_path
                 file_path = result.get("file_path")
             else:
                 raise ValueError(f"Downloader returned unexpected type: {type(result)}")
@@ -134,6 +139,20 @@ def download_track(
             session.flush()
             
             logger.info(f"Successfully downloaded track {track_id} to {file_path}")
+            
+            # Update album cover if we got a new one
+            if new_cover_path and album:
+                try:
+                    from ..services.albums import ensure_album_cover
+                    ensure_album_cover(
+                        session=session,
+                        album_obj=album,
+                        final_cover_path=new_cover_path
+                    )
+                    session.flush()
+                    logger.info(f"Updated album {album.id} cover to {new_cover_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to update album cover: {e}")
 
             # Update album download status
             if track.album_id:
@@ -164,6 +183,7 @@ def download_track(
                 "ok": True,
                 "file_path": str(file_path),
                 "track_id": track_id,
+                "cover_path": new_cover_path,
             }
             
         except Exception as e:
@@ -177,7 +197,7 @@ def download_track(
             return {
                 "ok": False,
                 "error": f"Download failed: {str(e)}",
-                "retry_delay_seconds": 300,  # Retry in 5 minutes
+                "retry_delay_seconds": 300,
             }
     
     except Exception as e:
@@ -185,7 +205,7 @@ def download_track(
         return {
             "ok": False,
             "error": str(e),
-            "retry_delay_seconds": 60,  # Retry in 1 minute for unexpected errors
+            "retry_delay_seconds": 60,
         }
 
 

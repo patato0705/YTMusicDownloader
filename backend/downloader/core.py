@@ -76,12 +76,22 @@ def download_track_by_videoid(
     track_number: Optional[int] = None,
     year: Optional[Union[str, int]] = None,
     cover_path_override: Optional[Union[str, Path]] = None,
-) -> str:
+) -> tuple[str, Optional[str]]:
     """
-    Downloads track (yt-dlp),puts final file under MUSIC_DIR/{artist}/{album}/
-    and returns full path (str).
+    Downloads track (yt-dlp), puts final file under MUSIC_DIR/{artist}/{album}/
+    and returns (file_path, cover_path).
 
-    cover_path_override: path to already existing cover (used if valid).
+    Args:
+        video_id: YouTube video ID
+        artist_name: Artist name for metadata
+        album_name: Album name for metadata
+        track_title: Track title for metadata
+        track_number: Track number for metadata
+        year: Release year for metadata
+        cover_path_override: Path to already existing cover (used if valid)
+
+    Returns:
+        tuple: (final_track_path, final_cover_path or None)
     """
     _ensure_dirs()
     _cleanup_partial_files(DOWNLOAD_DIR)
@@ -107,11 +117,10 @@ def download_track_by_videoid(
 
     # probe + download
     try:
-        with YoutubeDL(cast(Dict[str, Any], ydl_opts)) as ydl:  # type: ignore[arg-type]
+        with YoutubeDL(ydl_opts) as ydl:  # type: ignore
             tmp_info = ydl.extract_info(url, download=False)
             if isinstance(tmp_info, dict):
                 info_dict = cast(Dict[str, Any], tmp_info)
-                # try durations from common keys
                 dval = info_dict.get("duration") or info_dict.get("duration_seconds") or info_dict.get("lengthSeconds")
                 try:
                     duration_sec = int(dval) if dval is not None else None
@@ -126,13 +135,13 @@ def download_track_by_videoid(
     if not downloaded_file:
         raise FileNotFoundError("Downloaded file not found in downloads directory")
 
-    # metadata fallback: prefer provided values, else inspect info_dict
+    # metadata fallback
     final_title = track_title or (info_dict.get("title") if isinstance(info_dict, dict) else None) or f"track_{video_id}"
     final_artist = artist_name or (info_dict.get("uploader") if isinstance(info_dict, dict) else None) or "Unknown"
     final_album = album_name or (info_dict.get("album") if isinstance(info_dict, dict) else "Unknown Album")
     artists_list: List[str] = [final_artist] if final_artist else []
 
-    # cover handling: either given override or try to get from info_dict thumbnails
+    # cover handling
     cover_path_file: Optional[Path] = None
     if cover_path_override:
         try:
@@ -143,11 +152,9 @@ def download_track_by_videoid(
             cover_path_file = None
 
     if not cover_path_file:
-    # try to extract thumbnail urls from info_dict (yt-dlp often exposes 'thumbnails')
         thumb_candidates: List[Union[str, Dict[str, Any]]] = []
         if isinstance(info_dict, dict):
             t = info_dict.get("thumbnails")
-            # 'thumbnails' can be list or dict containing 'thumbnails'
             if isinstance(t, list):
                 thumb_candidates = [x for x in t if x is not None]
             elif isinstance(t, dict):
@@ -155,7 +162,6 @@ def download_track_by_videoid(
                 if isinstance(inner, list):
                     thumb_candidates = [x for x in inner if x is not None]
             else:
-                # fallback: info_dict may have 'thumbnail' (dict or string or list)
                 th = info_dict.get("thumbnail")
                 if isinstance(th, list):
                     thumb_candidates = [x for x in th if x is not None]
@@ -163,14 +169,12 @@ def download_track_by_videoid(
                     thumb_candidates = [th]
                 else:
                     thumb_candidates = []
-        # pick best: if cover_mod provides a helper, use it; else naive pick last string url
+        
         thumb_url: Optional[str] = None
         try:
-            # cover_mod may provide select_thumbnail helper
             if hasattr(cover_mod, "select_best_thumbnail_url"):
-                thumb_url = cover_mod.select_best_thumbnail_url(thumb_candidates)  # type: ignore
+                thumb_url = cover_mod.select_best_thumbnail_url(thumb_candidates)
             else:
-                # fallback heuristic: look for dicts with 'url' or last string
                 for item in reversed(thumb_candidates):
                     if isinstance(item, dict) and item.get("url"):
                         thumb_url = item.get("url")
@@ -184,12 +188,11 @@ def download_track_by_videoid(
 
         if thumb_url:
             try:
-                # expected API: cover_mod.save_cover_from_url(url,dest) -> Path|None
                 dest_cover = Path(str(COVERS_DIR)) / f"{video_id}.jpg"
                 if hasattr(cover_mod, "save_cover_from_url"):
-                    got = cover_mod.save_cover_from_url(thumb_url, dest_cover)  # type: ignore
+                    got = cover_mod.save_cover_from_url(thumb_url, dest_cover)
                 elif hasattr(cover_mod, "save_and_convert_cover"):
-                    got = cover_mod.save_and_convert_cover(thumb_url, dest_cover)  # type: ignore
+                    got = cover_mod.save_and_convert_cover(thumb_url, dest_cover)
                 else:
                     got = None
                 if isinstance(got, Path):
@@ -229,18 +232,17 @@ def download_track_by_videoid(
         except Exception:
             pass
 
-    # lyrics: try to fetch and move into album folder if fetch_lyrics exists
+    # lyrics
     lyrics_lrc_path: Optional[Path] = None
     try:
         if fetch_lyrics and artists_list and final_title and final_album and isinstance(duration_sec, int) and duration_sec > 0:
             temp_lrc = fetch_lyrics(artists_list, final_title, final_album, duration_sec)
             if temp_lrc:
                 dest_lyrics = dest_dir / Path(str(temp_lrc)).name
-                # use cover_mod.move_cover_if_exists as generic mover if available, else simple move
                 try:
                     moved = None
                     if hasattr(cover_mod, "move_if_exists"):
-                        moved = cover_mod.move_if_exists(temp_lrc, dest_lyrics)  # type: ignore
+                        moved = cover_mod.move_if_exists(temp_lrc, dest_lyrics)
                     else:
                         moved = shutil.move(str(temp_lrc), str(dest_lyrics))
                         moved = Path(str(moved))
@@ -252,26 +254,29 @@ def download_track_by_videoid(
         logger.exception("Lyrics fetch failed")
 
     # move cover into album folder as cover.jpg if present
+    final_cover_path: Optional[str] = None
     try:
         if cover_path_file and cover_path_file.exists():
             album_cover = dest_dir / "cover.jpg"
             try:
                 moved_cover = None
                 if hasattr(cover_mod, "move_cover_if_exists"):
-                    moved_cover = cover_mod.move_cover_if_exists(cover_path_file, album_cover)  # type: ignore
+                    moved_cover = cover_mod.move_cover_if_exists(cover_path_file, album_cover)
                 elif hasattr(cover_mod, "move_if_exists"):
-                    moved_cover = cover_mod.move_if_exists(cover_path_file, album_cover)  # type: ignore
+                    moved_cover = cover_mod.move_if_exists(cover_path_file, album_cover)
                 else:
                     moved_cover = shutil.move(str(cover_path_file), str(album_cover))
                     moved_cover = Path(str(moved_cover))
-                if isinstance(moved_cover, Path):
+                if isinstance(moved_cover, Path) and moved_cover.exists():
                     cover_path_file = moved_cover
+                    final_cover_path = str(moved_cover)
+                    logger.info(f"Moved cover to album folder: {final_cover_path}")
             except Exception:
                 logger.exception("Failed to move cover to album folder")
     except Exception:
         logger.exception("Cover placement error")
 
-    # embed tags if embed_mod provides embed_tags
+    # embed tags
     try:
         if hasattr(embed_mod, "embed_tags"):
             embed_mod.embed_tags(
@@ -290,7 +295,7 @@ def download_track_by_videoid(
     except Exception:
         logger.exception("Failed embedding tags for %s", dest_path)
 
-    # set permisssions
+    # set permissions
     try:
         dest_path.chmod(0o644)
         if cover_path_file and cover_path_file.exists():
@@ -300,4 +305,4 @@ def download_track_by_videoid(
     except Exception:
         pass
 
-    return str(dest_path)
+    return str(dest_path), final_cover_path
