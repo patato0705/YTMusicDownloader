@@ -6,7 +6,7 @@ import { getLibraryArtists, getLibraryAlbums, getLibraryStats } from '../api/lib
 import MediaCard from '../components/MediaCard';
 import { Spinner } from '../components/ui/Spinner';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
-import { getBestThumbnail, formatNumber } from '../utils';
+import { formatNumber } from '../utils';
 
 export default function Library(): JSX.Element {
   const [artists, setArtists] = useState<any[]>([]);
@@ -26,16 +26,26 @@ export default function Library(): JSX.Element {
     setError(null);
 
     try {
-      const [artistsResponse, albumsResponse, statsData] = await Promise.all([
+      const [artistsResponse, albumsResponse, statsResponse] = await Promise.all([
         getLibraryArtists(),
         getLibraryAlbums(),
         getLibraryStats(),
       ]);
 
-      // API returns { artists: [...], total: n } structure
-      setArtists(artistsResponse.artists || []);
-      setAlbums(albumsResponse.albums || []);
-      setStats(statsData || {});
+      // Process data and compute thumbnails once
+      const processedArtists = ((artistsResponse as any)?.artists || artistsResponse || []).map((artist: any) => ({
+        ...artist,
+        computedThumbnail: artist.image_local || artist.thumbnail || ''
+      }));
+
+      const processedAlbums = ((albumsResponse as any)?.albums || albumsResponse || []).map((album: any) => ({
+        ...album,
+        computedThumbnail: album.image_local || album.thumbnail || ''
+      }));
+
+      setArtists(processedArtists);
+      setAlbums(processedAlbums);
+      setStats(statsResponse || {});
     } catch (err: any) {
       console.error('Failed to load library:', err);
       setError(err.message || 'Failed to load library');
@@ -83,7 +93,7 @@ export default function Library(): JSX.Element {
             <CardHeader>
               <CardDescription>{t('library.stats.artists')}</CardDescription>
               <CardTitle className="text-3xl">
-                {formatNumber(stats.artists?.total || 0)}
+                {formatNumber(stats.followed_artists || 0)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -92,7 +102,7 @@ export default function Library(): JSX.Element {
             <CardHeader>
               <CardDescription>{t('library.stats.albums')}</CardDescription>
               <CardTitle className="text-3xl">
-                {formatNumber(stats.albums?.total || 0)}
+                {formatNumber(stats.followed_albums || 0)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -101,7 +111,7 @@ export default function Library(): JSX.Element {
             <CardHeader>
               <CardDescription>{t('library.stats.tracks')}</CardDescription>
               <CardTitle className="text-3xl">
-                {formatNumber(stats.tracks?.total || 0)}
+                {formatNumber(stats.total_tracks || 0)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -110,7 +120,7 @@ export default function Library(): JSX.Element {
             <CardHeader>
               <CardDescription>Downloaded</CardDescription>
               <CardTitle className="text-3xl">
-                {formatNumber(stats.tracks?.downloaded || 0)}
+                {formatNumber(stats.downloaded_tracks || 0)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -152,7 +162,7 @@ export default function Library(): JSX.Element {
                 key={artist.id}
                 id={artist.id}
                 title={artist.name}
-                thumbnail={getBestThumbnail(artist, 'medium')}
+                thumbnail={artist.computedThumbnail}
                 type="artist"
                 onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
               />
@@ -173,8 +183,8 @@ export default function Library(): JSX.Element {
                 key={album.id}
                 id={album.id}
                 title={album.title}
-                subtitle={album.artist?.name}
-                thumbnail={getBestThumbnail(album, 'medium')}
+                subtitle={album.artist_name}
+                thumbnail={album.computedThumbnail}
                 type="album"
                 year={album.year}
                 onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
