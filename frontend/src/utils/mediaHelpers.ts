@@ -8,23 +8,25 @@ export function getBestThumbnail(
   item: any,
   preferredSize: 'small' | 'medium' | 'large' = 'medium'
 ): string {
-  // Check for direct thumbnail URL
-  if (typeof item.thumbnail === 'string' && item.thumbnail) {
-    return item.thumbnail;
-  }
+  if (!item) return '';
 
-  // Check for image_local (locally cached image)
-  if (item.image_local) {
+  // Check for image_local first (locally cached image - best quality)
+  if (item.image_local && typeof item.image_local === 'string') {
     return item.image_local;
   }
 
+  // Check for direct thumbnail URL
+  if (item.thumbnail && typeof item.thumbnail === 'string') {
+    return item.thumbnail;
+  }
+
   // Check for direct image property
-  if (item.image) {
+  if (item.image && typeof item.image === 'string') {
     return item.image;
   }
 
   // Check for cover property (used in some track responses)
-  if (item.cover) {
+  if (item.cover && typeof item.cover === 'string') {
     return item.cover;
   }
 
@@ -46,8 +48,8 @@ export function getBestThumbnail(
     }
   }
 
-  // Fallback to placeholder
-  return '/assets/placeholder-music.png';
+  // No thumbnail found - return empty string (let image onError handle it)
+  return '';
 }
 
 /**

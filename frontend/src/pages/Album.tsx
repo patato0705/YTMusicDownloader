@@ -5,7 +5,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { getAlbum, followAlbum } from '../api/albums';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
-import { formatDuration, getBestThumbnail, getPrimaryArtist } from '../utils';
+import { formatDuration, getPrimaryArtist } from '../utils';
 import type { Track } from '../types';
 
 export default function Album(): JSX.Element {
@@ -32,7 +32,14 @@ export default function Album(): JSX.Element {
 
     try {
       const data = await getAlbum(albumId);
-      setAlbum(data.album || data);
+      const albumData = data.album || data;
+      
+      // Compute thumbnail once
+      setAlbum({
+        ...albumData,
+        computedThumbnail: albumData.image_local || albumData.thumbnail || ''
+      });
+      
       setTracks(data.tracks || []);
     } catch (err: any) {
       console.error('Failed to load album:', err);
@@ -99,7 +106,7 @@ export default function Album(): JSX.Element {
       {/* Album header */}
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <img
-          src={getBestThumbnail(album, 'large')}
+          src={album.computedThumbnail || '/assets/placeholder-music.png'}
           alt={album.title}
           className="w-64 h-64 rounded-lg object-cover bg-secondary shadow-xl"
           onError={(e) => {
