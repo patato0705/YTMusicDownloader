@@ -1,5 +1,5 @@
 // src/components/MediaCard.tsx
-import React from 'react';
+import React, { useState } from 'react';
 
 interface MediaCardProps {
   id: string;
@@ -22,17 +22,11 @@ const MediaCard: React.FC<MediaCardProps> = ({
   onClick,
   className = '',
 }) => {
-  // Proxy external thumbnails through backend cache
-  const displayUrl = (() => {
-    if (!thumbnail) return '/assets/placeholder-music.png';
-    
-    // If it's a Googleusercontent or YouTube thumbnail, proxy it
-    if (thumbnail.includes('googleusercontent.com') || thumbnail.includes('ytimg.com')) {
-      return `/api/media/thumbnail?url=${encodeURIComponent(thumbnail)}`;
-    }
-    
-    return thumbnail;
-  })();
+  const [imageError, setImageError] = useState(false);
+
+  // The thumbnail prop is already processed by the parent component
+  // Just use it directly with a fallback
+  const displayUrl = thumbnail || '/assets/placeholder-music.png';
 
   // Different styling for artists (circular) vs albums/tracks (square)
   const imageStyle = type === 'artist' ? 'rounded-full' : 'rounded-md';
@@ -46,12 +40,13 @@ const MediaCard: React.FC<MediaCardProps> = ({
       {/* Image container */}
       <div className="relative mb-3 aspect-square">
         <img
-          src={displayUrl}
+          src={imageError ? '/assets/placeholder-music.png' : displayUrl}
           alt={title}
           className={`w-full h-full object-cover ${imageStyle} bg-secondary transition-opacity group-hover:opacity-75`}
-          onError={(e) => {
-            // Fallback to placeholder on error
-            e.currentTarget.src = '/assets/placeholder-music.png';
+          onError={() => {
+            if (!imageError) {
+              setImageError(true);
+            }
           }}
         />
       </div>

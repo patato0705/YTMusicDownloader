@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { getAlbum, followAlbum } from '../api/albums';
+import { getImageUrl } from '../api/media';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
 import { formatDuration, getPrimaryArtist } from '../utils';
@@ -15,6 +16,7 @@ export default function Album(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
 
@@ -29,17 +31,11 @@ export default function Album(): JSX.Element {
 
     setLoading(true);
     setError(null);
+    setImageError(false);
 
     try {
       const data = await getAlbum(albumId);
-      const albumData = data.album || data;
-      
-      // Compute thumbnail once
-      setAlbum({
-        ...albumData,
-        computedThumbnail: albumData.image_local || albumData.thumbnail || ''
-      });
-      
+      setAlbum(data.album || data);
       setTracks(data.tracks || []);
     } catch (err: any) {
       console.error('Failed to load album:', err);
@@ -101,16 +97,20 @@ export default function Album(): JSX.Element {
     );
   }
 
+  const thumbnailUrl = getImageUrl(album.image_local || album.thumbnail);
+
   return (
     <div className="space-y-8">
       {/* Album header */}
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <img
-          src={album.computedThumbnail || '/assets/placeholder-music.png'}
+          src={imageError ? '/assets/placeholder-music.png' : thumbnailUrl}
           alt={album.title}
           className="w-64 h-64 rounded-lg object-cover bg-secondary shadow-xl"
-          onError={(e) => {
-            e.currentTarget.src = '/assets/placeholder-music.png';
+          onError={() => {
+            if (!imageError) {
+              setImageError(true);
+            }
           }}
         />
 
