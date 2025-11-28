@@ -362,7 +362,7 @@ def get_library_stats(
         tracks_with_lyrics = db.query(func.count(Track.id)).filter(Track.has_lyrics == True).scalar() or 0
         
         # Calculate storage
-        estimated_size_mb = int(tracks_downloaded) * 8
+        estimated_size_mb = int(tracks_downloaded) * 3
         estimated_size_gb = round(estimated_size_mb / 1024, 2)
         
         return {
