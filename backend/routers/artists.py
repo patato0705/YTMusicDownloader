@@ -94,16 +94,14 @@ def follow_artist(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Follow an artist:
-    1. Fetch artist data from YTMusic (includes albums/singles list)
-    2. Fetch and upsert ALL albums/singles with their tracks
-    3. Mark artist as followed
-    4. Create artist subscription
-    5. Create album subscriptions for all albums
-    6. Queue download jobs for all tracks
+    Follow an artist - FAST version:
+    1. Fetch artist data from YTMusic (just metadata + album list)
+    2. Mark artist as followed and create subscriptions
+    3. Queue an import_artist job to handle the heavy lifting
+    4. Return immediately with artist info
     
-    This can take 15-35 seconds depending on number of albums.
-    Returns summary with counts.
+    The actual album/track fetching happens asynchronously via worker.
+    Response time: ~2-3 seconds instead of 15-35 seconds.
     """
     if not artist_id:
         raise HTTPException(status_code=400, detail="artist_id required")
@@ -111,8 +109,7 @@ def follow_artist(
     try:
         logger.info(f"Following artist {artist_id}")
         
-        # Step 1: Fetch artist data from YTMusic
-        # This returns: {artist_id, name, description, thumbnails, albums: [...], singles: [...]}
+        # Step 1: Fetch basic artist data from YTMusic (fast - just metadata)
         artist_data = artists_svc.fetch_and_upsert_artist(db, artist_id)
         
         artist_name = artist_data.get("name", "Unknown Artist")
@@ -122,9 +119,12 @@ def follow_artist(
         
         logger.info(f"Fetched artist {artist_name}: {len(albums_list)} albums, {len(singles_list)} singles")
         
-        # Check if already followed
-        artist_obj = artists_svc.get_artist_from_db(db, artist_id)
-        if artist_obj and artist_obj.followed:
+        # Step 2: Get artist object and check if already followed
+        artist_obj = db.get(Artist, artist_id)
+        if not artist_obj:
+            raise HTTPException(status_code=404, detail="Artist not found after fetch")
+        
+        if artist_obj.followed:
             existing_sub = subs_svc.get_artist_subscription(db, artist_id)
             if existing_sub:
                 return {
@@ -136,114 +136,52 @@ def follow_artist(
                         "name": artist_name,
                     },
                     "albums_count": total_releases,
-                    "tracks_queued": 0,
                 }
         
-        # Step 2: Fetch and upsert ALL albums/singles with their tracks
-        # This is the slow part - fetches full data for each album
-        logger.info(f"Fetching {total_releases} releases for artist {artist_id}...")
+        # Step 3: Mark artist as followed and create artist subscription
+        artist_obj.followed = True
+        db.add(artist_obj)
         
-        albums_result = albums_svc.fetch_and_upsert_albums_for_artist(
-            db,
-            artist_id=artist_id,
-            albums=albums_list,
-            singles=singles_list,
-        )
-        
-        albums_processed = albums_result["albums_processed"]
-        tracks_inserted = albums_result["tracks_inserted"]
-        tracks_updated = albums_result["tracks_updated"]
-        total_tracks = tracks_inserted + tracks_updated
-        
-        logger.info(f"Processed {albums_processed} albums with {total_tracks} total tracks")
-        
-        # Step 3: Mark artist as followed
-        if artist_obj:
-            artist_obj.followed = True
-            db.add(artist_obj)
-        
-        # Step 4: Create artist subscription
         artist_subscription = subs_svc.subscribe_to_artist(
             db,
             artist_id=artist_id,
             mode="full",
             sync_interval_hours=24,
         )
-        logger.info(f"Created artist subscription for {artist_id}")
         
-        # Step 5: Create album subscriptions for all albums
-        album_sub_count = 0
-        for album_detail in albums_result.get("details", []):
-            album_id = album_detail.get("album_id")
-            if not album_id:
-                continue
-            
-            try:
-                subs_svc.subscribe_to_album(
-                    db,
-                    album_id=album_id,
-                    artist_id=artist_id,
-                    mode="download"
-                )
-                album_sub_count += 1
-            except Exception as e:
-                logger.exception(f"Failed to create album subscription for {album_id}")
-        
-        logger.info(f"Created {album_sub_count} album subscriptions")
-        
-        # Step 6: Queue download jobs for all tracks
-        queued_count = 0
-
-        for album_detail in albums_result.get("details", []):
-            album_id = album_detail.get("album_id")
-            if not album_id:
-                continue
-            
-            # Get tracks for this album
-            tracks = tracks_svc.list_tracks_for_album_from_db(db, album_id)
-            
-            for track in tracks:
-                track_id = track.get("id")
-                if not track_id:
-                    continue
-                
-                # Only queue if track needs downloading
-                if track.get("status") in ["new", "failed"]:
-                    try:
-                        enqueue_job(
-                            db,
-                            job_type="download_track",
-                            payload={
-                                "track_id": track_id,
-                                "album_id": album_id,
-                                "artist_id": artist_id,
-                                # user_id is NOT in payload - it goes as a separate parameter
-                            },
-                            priority=0,
-                            user_id=current_user.id,  # ← Store on Job model, not in payload
-                            commit=False,  # ← DON'T commit yet
-                        )
-                        queued_count += 1
-                    except Exception as e:
-                        logger.exception(f"Failed to enqueue job for track {track_id}")
-
-        # Commit everything once at the end
+        # Commit artist follow status and subscription
         db.commit()
+        logger.info(f"Marked artist {artist_id} as followed")
         
-        logger.info(f"Artist {artist_id} followed: {queued_count} tracks queued for download")
+        # Step 4: Queue a sync_artist job to import all albums/tracks asynchronously
+        try:
+            job = enqueue_job(
+                db,
+                job_type="sync_artist",
+                payload={
+                    "artist_id": artist_id,
+                },
+                priority=5,  # Higher priority for new follows
+                user_id=current_user.id,
+                commit=True,
+            )
+            logger.info(f"Queued sync_artist job {job.id} for artist {artist_id}")
+        except Exception as e:
+            logger.exception(f"Failed to queue sync_artist job for {artist_id}")
+            # Don't fail the request if job queueing fails
         
+        # Return immediately - user doesn't have to wait
         return {
             "source": "ytmusic",
             "followed": True,
-            "message": f"Artist followed successfully. {queued_count} tracks queued for download.",
+            "message": f"Artist followed successfully. Importing {total_releases} releases in the background.",
             "artist": {
                 "id": artist_id,
                 "name": artist_name,
             },
-            "albums_processed": albums_processed,
-            "tracks_total": total_tracks,
-            "tracks_queued": queued_count,
-            "estimated_download_time": f"~{queued_count * 10} seconds",  # Rough estimate: 10 sec per track
+            "albums_count": total_releases,
+            "status": "importing",
+            "note": "Albums and tracks are being imported in the background. Check back in a few minutes.",
         }
         
     except HTTPException:
