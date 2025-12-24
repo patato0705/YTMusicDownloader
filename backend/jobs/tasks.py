@@ -5,11 +5,12 @@ Job task handlers called by the worker.
 Each task function:
 - Takes (session: Session, **payload) as arguments
 - Returns dict with {"ok": bool, "error": str (optional), ...}
-- Does NOT commit the session (worker handles that via jobqueue)
+- COMMITS at strategic points to avoid long-running transactions
 - Updates database state (Track status, file paths, etc.)
 
 Task types:
 - download_track: Download a single track using yt-dlp
+- download_lyrics: Download synced lyrics from LRCLIB
 - import_album: Fetch and upsert album from YTMusic
 - sync_artist: Check artist for new releases
 """
@@ -18,6 +19,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError
 
 from ..models import Job, Track, Album, Artist
 from ..services import albums as albums_svc
@@ -27,6 +29,40 @@ from .. import downloader
 from .. import config
 
 logger = logging.getLogger("jobs.tasks")
+
+
+# ============================================================================
+# HELPER: DATABASE OPERATION WITH RETRY
+# ============================================================================
+
+def _db_operation_with_retry(operation, max_retries=3, delay=0.1):
+    """
+    Execute a database operation with automatic retry on lock errors.
+    
+    Args:
+        operation: Callable that performs the database operation
+        max_retries: Maximum number of retry attempts
+        delay: Base delay between retries (exponential backoff)
+    
+    Returns:
+        Result from the operation
+    
+    Raises:
+        OperationalError: If operation fails after all retries
+    """
+    import time
+    
+    for attempt in range(max_retries):
+        try:
+            return operation()
+        except OperationalError as e:
+            if "database is locked" in str(e).lower():
+                if attempt < max_retries - 1:
+                    sleep_time = delay * (2 ** attempt)
+                    logger.warning(f"Database locked, retry {attempt + 1}/{max_retries} after {sleep_time}s")
+                    time.sleep(sleep_time)
+                    continue
+            raise
 
 
 # ============================================================================
@@ -45,9 +81,10 @@ def download_track(
     Flow:
     1. Get track info from DB
     2. Get album/artist info for metadata
-    3. Call downloader.core.download_track_by_videoid()
-    4. Update Track table with file_path and status
-    5. Update Album cover if new cover path returned
+    3. Update status to "downloading" and COMMIT
+    4. Call downloader.core.download_track_by_videoid() (no transaction held)
+    5. Update Track table with file_path and status, COMMIT
+    6. Update Album cover if new cover path returned, COMMIT
     
     Args:
         session: SQLAlchemy session
@@ -62,17 +99,10 @@ def download_track(
         return {"ok": False, "error": "track_id required"}
     
     try:
-        # Get track from DB
+        # ===== TRANSACTION 1: Get track info and update status =====
         track = session.get(Track, str(track_id))
         if not track:
             return {"ok": False, "error": f"Track {track_id} not found in database"}
-        
-        # Update status to "downloading"
-        track.status = "downloading"
-        session.add(track)
-        session.flush()
-        
-        logger.info(f"Downloading track {track_id}: {track.title}")
         
         # Get album info for metadata
         album = None
@@ -88,17 +118,29 @@ def download_track(
         elif artist_id:
             artist = session.get(Artist, artist_id)
         
-        # Extract metadata
+        # Extract metadata (before we detach objects)
         artist_name = artist.name if artist else None
         album_name = album.title if album else None
         track_title = track.title
         track_number = track.track_number
         year = int(album.year) if album and album.year else None
-        
-        # Get cover path if album has one
         cover_path = album.image_local if album else None
+        album_id_final = album.id if album else None
+        track_album_id = track.album_id
         
-        # Call downloader
+        # Update status to "downloading"
+        track.status = "downloading"
+        session.add(track)
+        
+        def commit_status():
+            session.commit()
+        
+        _db_operation_with_retry(commit_status)
+        
+        logger.info(f"Downloading track {track_id}: {track_title}")
+        
+        # ===== NO TRANSACTION: Perform actual download =====
+        # This can take 10-60 seconds, no database locks held
         try:
             dl_func = getattr(downloader.core, "download_track_by_videoid", None)
             if dl_func is None:
@@ -121,10 +163,8 @@ def download_track(
             if isinstance(result, tuple) and len(result) == 2:
                 file_path, new_cover_path = result
             elif isinstance(result, str):
-                # Backwards compatibility: old version returned just file path
                 file_path = result
             elif isinstance(result, dict):
-                # Backwards compatibility: dict with file_path
                 file_path = result.get("file_path")
             else:
                 raise ValueError(f"Downloader returned unexpected type: {type(result)}")
@@ -132,41 +172,61 @@ def download_track(
             if not file_path:
                 raise ValueError("Downloader did not return a valid file_path")
             
-            # Update track in DB
+            # ===== TRANSACTION 2: Update track with success =====
+            track = session.get(Track, str(track_id))  # Re-fetch after commit
+            if not track:
+                raise RuntimeError(f"Track {track_id} disappeared after commit")
             track.status = "done"
             track.file_path = str(file_path)
             session.add(track)
-            session.flush()
+            
+            def commit_track_update():
+                session.commit()
+            
+            _db_operation_with_retry(commit_track_update)
             
             logger.info(f"Successfully downloaded track {track_id} to {file_path}")
             
-            # Update album cover if we got a new one
-            if new_cover_path and album:
+            # ===== TRANSACTION 3: Update album cover (separate transaction) =====
+            if new_cover_path and album_id_final:
                 try:
-                    from ..services.albums import ensure_album_cover
-                    ensure_album_cover(
-                        session=session,
-                        album_obj=album,
-                        final_cover_path=new_cover_path
-                    )
-                    session.flush()
-                    logger.info(f"Updated album {album.id} cover to {new_cover_path}")
+                    album = session.get(Album, album_id_final)  # Re-fetch
+                    if album:
+                        from ..services.albums import ensure_album_cover
+                        ensure_album_cover(
+                            session=session,
+                            album_obj=album,
+                            final_cover_path=new_cover_path
+                        )
+                        
+                        def commit_cover():
+                            session.commit()
+                        
+                        _db_operation_with_retry(commit_cover)
+                        logger.info(f"Updated album {album_id_final} cover to {new_cover_path}")
                 except Exception as e:
+                    session.rollback()
                     logger.warning(f"Failed to update album cover: {e}")
 
-            # Update album download status
-            if track.album_id:
+            # ===== TRANSACTION 4: Update album download status =====
+            if track_album_id:
                 try:
                     from ..services import subscriptions as subs_svc
                     new_status = subs_svc.check_and_update_album_download_status(
                         session,
-                        track.album_id
+                        track_album_id
                     )
-                    logger.debug(f"Album {track.album_id} download status updated to: {new_status}")
+                    
+                    def commit_album_status():
+                        session.commit()
+                    
+                    _db_operation_with_retry(commit_album_status)
+                    logger.debug(f"Album {track_album_id} download status updated to: {new_status}")
                 except Exception as e:
+                    session.rollback()
                     logger.warning(f"Failed to update album download status: {e}")
             
-            # Queue lyrics download job (separate task)
+            # ===== TRANSACTION 5: Queue lyrics download job =====
             try:
                 from .jobqueue import enqueue_job
                 enqueue_job(
@@ -174,6 +234,7 @@ def download_track(
                     job_type="download_lyrics",
                     payload={"track_id": track_id},
                     priority=0,
+                    commit=True,  # enqueue_job handles its own commit
                 )
                 logger.debug(f"Queued lyrics download for track {track_id}")
             except Exception as e:
@@ -189,10 +250,22 @@ def download_track(
         except Exception as e:
             logger.exception(f"Download failed for track {track_id}")
             
-            # Update track status to failed
-            track.status = "failed"
-            session.add(track)
-            session.flush()
+            # ===== TRANSACTION: Update track status to failed =====
+            try:
+                track = session.get(Track, str(track_id))  # Re-fetch
+                if not track:
+                    logger.error(f"Track {track_id} not found when marking failed")
+                else:
+                    track.status = "failed"
+                    session.add(track)
+                    
+                    def commit_failed_status():
+                        session.commit()
+                    
+                    _db_operation_with_retry(commit_failed_status)
+            except Exception as commit_error:
+                logger.exception(f"Failed to update track status to failed: {commit_error}")
+                session.rollback()
             
             return {
                 "ok": False,
@@ -202,6 +275,10 @@ def download_track(
     
     except Exception as e:
         logger.exception(f"download_track failed for {track_id}")
+        try:
+            session.rollback()
+        except Exception:
+            pass
         return {
             "ok": False,
             "error": str(e),
@@ -243,7 +320,7 @@ def download_lyrics(
         from pathlib import Path
         from urllib.parse import urlencode
         
-        # Get track from DB
+        # ===== TRANSACTION 1: Get track info =====
         track = session.get(Track, str(track_id))
         if not track:
             return {"ok": False, "error": f"Track {track_id} not found in database"}
@@ -280,6 +357,7 @@ def download_lyrics(
         
         logger.info(f"Fetching lyrics for: {artist_name} - {track_name}")
         
+        # ===== NO TRANSACTION: Fetch lyrics from API =====
         # Build query parameters
         params = {
             "track_name": track_name,
@@ -354,11 +432,18 @@ def download_lyrics(
                 "retry_delay_seconds": 300,  # Retry in 5 minutes
             }
         
-        # Update track in DB
+        # ===== TRANSACTION 2: Update track with lyrics info =====
+        track = session.get(Track, str(track_id))  # Re-fetch to be safe
+        if not track:
+            raise RuntimeError(f"Track {track_id} disappeared after lyrics fetch")
         track.has_lyrics = True
         track.lyrics_local = str(lrc_path)
         session.add(track)
-        session.flush()
+        
+        def commit_lyrics():
+            session.commit()
+        
+        _db_operation_with_retry(commit_lyrics)
         
         logger.info(f"Successfully downloaded lyrics for track {track_id}")
         
@@ -370,6 +455,10 @@ def download_lyrics(
     
     except Exception as e:
         logger.exception(f"download_lyrics failed for {track_id}")
+        try:
+            session.rollback()
+        except Exception:
+            pass
         return {
             "ok": False,
             "error": str(e),
@@ -407,13 +496,17 @@ def import_album(
     try:
         logger.info(f"Importing album {browse_id}")
         
+        # ===== TRANSACTION: Fetch and upsert album =====
         result = albums_svc.fetch_and_upsert_album(
             session=session,
             browse_id=browse_id,
             artist_id=artist_id,
         )
         
-        session.flush()
+        def commit_album():
+            session.commit()
+        
+        _db_operation_with_retry(commit_album)
         
         logger.info(
             f"Imported album {result['album_id']}: "
@@ -430,6 +523,10 @@ def import_album(
     
     except Exception as e:
         logger.exception(f"import_album failed for {browse_id}")
+        try:
+            session.rollback()
+        except Exception:
+            pass
         return {
             "ok": False,
             "error": str(e),
@@ -467,10 +564,15 @@ def sync_artist(
     try:
         logger.info(f"Syncing artist {artist_id}")
         
-        # Fetch latest artist data
+        # ===== TRANSACTION 1: Fetch and upsert artist =====
         artist_data = artists_svc.fetch_and_upsert_artist(session, artist_id)
         
-        # Get current albums in DB
+        def commit_artist():
+            session.commit()
+        
+        _db_operation_with_retry(commit_artist)
+        
+        # ===== TRANSACTION 2: Get current albums from DB =====
         existing_albums = albums_svc.list_albums_for_artist_from_db(session, artist_id)
         existing_album_ids = {a["id"] for a in existing_albums}
         
@@ -484,7 +586,11 @@ def sync_artist(
             # Update sync timestamp
             from ..services import subscriptions as subs_svc
             subs_svc.mark_artist_synced(session, artist_id)
-            session.flush()
+            
+            def commit_sync():
+                session.commit()
+            
+            _db_operation_with_retry(commit_sync)
             
             return {
                 "ok": True,
@@ -492,7 +598,7 @@ def sync_artist(
                 "new_tracks": 0,
             }
         
-        # Import new albums
+        # ===== TRANSACTION 3: Import new albums =====
         logger.info(f"Found {len(new_albums)} new albums for artist {artist_id}")
         
         result = albums_svc.fetch_and_upsert_albums_for_artist(
@@ -502,22 +608,33 @@ def sync_artist(
             singles=[a for a in new_albums if a.get("type", "").lower() in ("single", "ep")],
         )
         
-        # Create album subscriptions for new albums
+        def commit_new_albums():
+            session.commit()
+        
+        _db_operation_with_retry(commit_new_albums)
+        
+        # ===== TRANSACTION 4: Create album subscriptions =====
         from ..services import subscriptions as subs_svc
         for album_detail in result.get("details", []):
-            album_id = album_detail.get("album_id")
-            if album_id:
+            album_id_to_sub = album_detail.get("album_id")
+            if album_id_to_sub:
                 try:
-                    subs_svc.subscribe_to_album(session, album_id=album_id, artist_id=artist_id)
+                    subs_svc.subscribe_to_album(session, album_id=album_id_to_sub, artist_id=artist_id)
+                    
+                    def commit_subscription():
+                        session.commit()
+                    
+                    _db_operation_with_retry(commit_subscription)
                 except Exception as e:
-                    logger.exception(f"Failed to subscribe to new album {album_id}")
+                    logger.exception(f"Failed to subscribe to new album {album_id_to_sub}")
+                    session.rollback()
         
-        # Queue download jobs for new tracks
+        # ===== TRANSACTION 5: Queue download jobs =====
         from .jobqueue import enqueue_job
         queued = 0
         for album_detail in result.get("details", []):
-            album_id = album_detail.get("album_id")
-            tracks = tracks_svc.list_tracks_for_album_from_db(session, album_id)
+            album_id_for_tracks = album_detail.get("album_id")
+            tracks = tracks_svc.list_tracks_for_album_from_db(session, album_id_for_tracks)
             
             for track in tracks:
                 if track.get("status") in ["new", "failed"]:
@@ -527,18 +644,23 @@ def sync_artist(
                             job_type="download_track",
                             payload={
                                 "track_id": track["id"],
-                                "album_id": album_id,
+                                "album_id": album_id_for_tracks,
                                 "artist_id": artist_id,
                             },
                             priority=0,
+                            commit=True,  # Each job commits separately
                         )
                         queued += 1
                     except Exception as e:
                         logger.exception(f"Failed to queue download for track {track['id']}")
         
-        # Update sync timestamp
+        # ===== TRANSACTION 6: Update sync timestamp =====
         subs_svc.mark_artist_synced(session, artist_id)
-        session.flush()
+        
+        def commit_final_sync():
+            session.commit()
+        
+        _db_operation_with_retry(commit_final_sync)
         
         logger.info(
             f"Synced artist {artist_id}: {result['albums_processed']} new albums, "
@@ -559,9 +681,13 @@ def sync_artist(
         try:
             from ..services import subscriptions as subs_svc
             subs_svc.mark_artist_synced(session, artist_id, error=str(e))
-            session.flush()
+            
+            def commit_sync_error():
+                session.commit()
+            
+            _db_operation_with_retry(commit_sync_error)
         except Exception:
-            pass
+            session.rollback()
         
         return {
             "ok": False,
@@ -612,7 +738,7 @@ def run_job_task(session: Session, job: Job) -> Dict[str, Any]:
             logger.error(f"Unknown job type: {job_type}")
             return {"ok": False, "error": f"Unknown job type: {job_type}"}
         
-        # Execute task
+        # Execute task (task handles its own commits)
         logger.debug(f"Executing task {job_type} with payload: {payload}")
         result = handler(session, **payload)
         
@@ -628,6 +754,10 @@ def run_job_task(session: Session, job: Job) -> Dict[str, Any]:
     
     except Exception as e:
         logger.exception(f"Unexpected error in run_job_task for job {job.id}")
+        try:
+            session.rollback()
+        except Exception:
+            pass
         return {
             "ok": False,
             "error": f"Unexpected error: {str(e)}",
