@@ -58,6 +58,7 @@ VALID_ROLES = [ROLE_ADMINISTRATOR, ROLE_MEMBER, ROLE_VISITOR]
 # yt-dlp
 YDL_FORMAT = "m4a/bestaudio/best"
 YDL_PREFERRED_CODEC = "m4a"
+YDL_COOKIEFILE = Path("/config/ytcookies.txt")
 
 # Server / docker
 PORT = int(os.environ.get("PORT", 8000))

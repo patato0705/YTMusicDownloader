@@ -26,7 +26,8 @@ from ..services import albums as albums_svc
 from ..services import artists as artists_svc
 from ..services import tracks as tracks_svc
 from .. import downloader
-from .. import config
+
+from ..config import YDL_COOKIEFILE
 
 logger = logging.getLogger("jobs.tasks")
 
@@ -64,7 +65,43 @@ def _db_operation_with_retry(operation, max_retries=3, delay=0.1):
                     continue
             raise
 
+# ============================================================================
+# HELPER: YTCOOKIES MANAGEMENT FOR RATE LIMITING
+# ============================================================================
 
+def _is_youtube_rate_limit_error(error_msg: str) -> bool:
+    """
+    Check if the error is YouTube's rate limit error.
+    """
+    if not error_msg:
+        return False
+    
+    error_lower = str(error_msg).lower()
+    return (
+        "rate-limited by youtube" in error_lower or
+        "current session has been rate-limited" in error_lower or
+        ("this content isn't available" in error_lower and "try again later" in error_lower)
+    )
+
+
+def _reset_youtube_cookies() -> bool:
+    """
+    Delete the YouTube cookies file to reset the rate limit session.
+    
+    Returns:
+        True if cookies were deleted, False otherwise
+    """
+    try:
+        if YDL_COOKIEFILE.exists():
+            YDL_COOKIEFILE.unlink()
+            logger.info(f"Deleted YouTube cookies at {YDL_COOKIEFILE} to reset rate limit")
+            return True
+        else:
+            logger.warning(f"YouTube cookies file not found at {YDL_COOKIEFILE}")
+            return False
+    except Exception as e:
+        logger.exception(f"Failed to delete YouTube cookies: {e}")
+        return False
 # ============================================================================
 # TASK: DOWNLOAD TRACK
 # ============================================================================
@@ -83,8 +120,9 @@ def download_track(
     2. Get album/artist info for metadata
     3. Update status to "downloading" and COMMIT
     4. Call downloader.core.download_track_by_videoid() (no transaction held)
-    5. Update Track table with file_path and status, COMMIT
-    6. Update Album cover if new cover path returned, COMMIT
+    5. If rate-limited, delete cookies and retry
+    6. Update Track table with file_path and status, COMMIT
+    7. Update Album cover if new cover path returned, COMMIT
     
     Args:
         session: SQLAlchemy session
@@ -99,7 +137,7 @@ def download_track(
         return {"ok": False, "error": "track_id required"}
     
     try:
-        # ===== TRANSACTION 1: Get track info and update status =====
+        # Get track info and update status
         track = session.get(Track, str(track_id))
         if not track:
             return {"ok": False, "error": f"Track {track_id} not found in database"}
@@ -139,151 +177,188 @@ def download_track(
         
         logger.info(f"Downloading track {track_id}: {track_title}")
         
-        # ===== NO TRANSACTION: Perform actual download =====
-        # This can take 10-60 seconds, no database locks held
-        try:
-            dl_func = getattr(downloader.core, "download_track_by_videoid", None)
-            if dl_func is None:
-                raise AttributeError("downloader.core.download_track_by_videoid not found")
-            
-            result = dl_func(
-                video_id=track_id,
-                artist_name=artist_name,
-                album_name=album_name,
-                track_title=track_title,
-                track_number=track_number,
-                year=year,
-                cover_path_override=cover_path,
-            )
-            
-            # Handle tuple return (file_path, cover_path)
-            file_path = None
-            new_cover_path = None
-            
-            if isinstance(result, tuple) and len(result) == 2:
-                file_path, new_cover_path = result
-            elif isinstance(result, str):
-                file_path = result
-            elif isinstance(result, dict):
-                file_path = result.get("file_path")
-            else:
-                raise ValueError(f"Downloader returned unexpected type: {type(result)}")
-            
-            if not file_path:
-                raise ValueError("Downloader did not return a valid file_path")
-            
-            # ===== TRANSACTION 2: Update track with success =====
-            track = session.get(Track, str(track_id))  # Re-fetch after commit
-            if not track:
-                raise RuntimeError(f"Track {track_id} disappeared after commit")
-            track.status = "done"
-            track.file_path = str(file_path)
-            session.add(track)
-            
-            def commit_track_update():
-                session.commit()
-            
-            _db_operation_with_retry(commit_track_update)
-            
-            logger.info(f"Successfully downloaded track {track_id} to {file_path}")
-            
-            # ===== TRANSACTION 3: Update album cover (separate transaction) =====
-            if new_cover_path and album_id_final:
-                try:
-                    album = session.get(Album, album_id_final)  # Re-fetch
-                    if album:
-                        from ..services.albums import ensure_album_cover
-                        ensure_album_cover(
-                            session=session,
-                            album_obj=album,
-                            final_cover_path=new_cover_path
-                        )
-                        
-                        def commit_cover():
-                            session.commit()
-                        
-                        _db_operation_with_retry(commit_cover)
-                        logger.info(f"Updated album {album_id_final} cover to {new_cover_path}")
-                except Exception as e:
-                    session.rollback()
-                    logger.warning(f"Failed to update album cover: {e}")
-
-            # ===== TRANSACTION 4: Update album download status =====
-            if track_album_id:
-                try:
-                    from ..services import subscriptions as subs_svc
-                    new_status = subs_svc.check_and_update_album_download_status(
-                        session,
-                        track_album_id
+        # Perform download with retry on rate limit
+        max_download_attempts = 2  # Try once, if rate-limited reset cookies and try once more
+        last_error = None
+        result = None
+        
+        for attempt in range(max_download_attempts):
+            try:
+                dl_func = getattr(downloader.core, "download_track_by_videoid", None)
+                if dl_func is None:
+                    raise AttributeError("downloader.core.download_track_by_videoid not found")
+                
+                result = dl_func(
+                    video_id=track_id,
+                    artist_name=artist_name,
+                    album_name=album_name,
+                    track_title=track_title,
+                    track_number=track_number,
+                    year=year,
+                    cover_path_override=cover_path,
+                    skip_metadata=True,
+                )
+                
+                # Success! Break out of retry loop
+                break
+                
+            except Exception as download_error:
+                last_error = download_error
+                error_msg = str(download_error)
+                
+                # Check if this is a YouTube rate limit error
+                if _is_youtube_rate_limit_error(error_msg):
+                    logger.warning(
+                        f"YouTube rate limit detected on attempt {attempt + 1}/{max_download_attempts} "
+                        f"for track {track_id}"
                     )
                     
-                    def commit_album_status():
+                    # If this is not the last attempt, reset cookies and retry
+                    if attempt < max_download_attempts - 1:
+                        cookies_deleted = _reset_youtube_cookies()
+                        
+                        if cookies_deleted:
+                            logger.info(f"Retrying download for track {track_id} after cookie reset")
+                            import time
+                            time.sleep(2)  # Brief pause before retry
+                            continue
+                        else:
+                            logger.error("Failed to reset cookies, not retrying")
+                            # Fall through to raise below
+                    
+                    # Last attempt or cookie deletion failed
+                    logger.error(
+                        f"YouTube rate limit persists for track {track_id}"
+                    )
+                
+                # Re-raise the error (either not a rate limit, or exhausted retries)
+                raise
+        
+        # Handle tuple return (file_path, cover_path)
+        file_path = None
+        new_cover_path = None
+        
+        if isinstance(result, tuple) and len(result) == 2:
+            file_path, new_cover_path = result
+        elif isinstance(result, str):
+            file_path = result
+        elif isinstance(result, dict):
+            file_path = result.get("file_path")
+        else:
+            raise ValueError(f"Downloader returned unexpected type: {type(result)}")
+        
+        if not file_path:
+            raise ValueError("Downloader did not return a valid file_path")
+        
+        # Update track with success
+        track = session.get(Track, str(track_id))  # Re-fetch after commit
+        if not track:
+            raise RuntimeError(f"Track {track_id} disappeared after commit")
+        track.status = "done"
+        track.file_path = str(file_path)
+        session.add(track)
+        
+        def commit_track_update():
+            session.commit()
+        
+        _db_operation_with_retry(commit_track_update)
+        
+        logger.info(f"Successfully downloaded track {track_id} to {file_path}")
+        
+        # Update album cover
+        if new_cover_path and album_id_final:
+            try:
+                album = session.get(Album, album_id_final)  # Re-fetch
+                if album:
+                    from ..services.albums import ensure_album_cover
+                    ensure_album_cover(
+                        session=session,
+                        album_obj=album,
+                        final_cover_path=new_cover_path
+                    )
+                    
+                    def commit_cover():
                         session.commit()
                     
-                    _db_operation_with_retry(commit_album_status)
-                    logger.debug(f"Album {track_album_id} download status updated to: {new_status}")
-                except Exception as e:
-                    session.rollback()
-                    logger.warning(f"Failed to update album download status: {e}")
-            
-            # ===== TRANSACTION 5: Queue lyrics download job =====
-            try:
-                from .jobqueue import enqueue_job
-                enqueue_job(
-                    session,
-                    job_type="download_lyrics",
-                    payload={"track_id": track_id},
-                    priority=0,
-                    commit=True,  # enqueue_job handles its own commit
-                )
-                logger.debug(f"Queued lyrics download for track {track_id}")
+                    _db_operation_with_retry(commit_cover)
+                    logger.info(f"Updated album {album_id_final} cover to {new_cover_path}")
             except Exception as e:
-                logger.warning(f"Failed to queue lyrics job for track {track_id}: {e}")
-            
-            return {
-                "ok": True,
-                "file_path": str(file_path),
-                "track_id": track_id,
-                "cover_path": new_cover_path,
-            }
-            
-        except Exception as e:
-            logger.exception(f"Download failed for track {track_id}")
-            
-            # ===== TRANSACTION: Update track status to failed =====
-            try:
-                track = session.get(Track, str(track_id))  # Re-fetch
-                if not track:
-                    logger.error(f"Track {track_id} not found when marking failed")
-                else:
-                    track.status = "failed"
-                    session.add(track)
-                    
-                    def commit_failed_status():
-                        session.commit()
-                    
-                    _db_operation_with_retry(commit_failed_status)
-            except Exception as commit_error:
-                logger.exception(f"Failed to update track status to failed: {commit_error}")
                 session.rollback()
-            
+                logger.warning(f"Failed to update album cover: {e}")
+
+        # Update album download status
+        if track_album_id:
+            try:
+                from ..services import subscriptions as subs_svc
+                new_status = subs_svc.check_and_update_album_download_status(
+                    session,
+                    track_album_id
+                )
+                
+                def commit_album_status():
+                    session.commit()
+                
+                _db_operation_with_retry(commit_album_status)
+                logger.debug(f"Album {track_album_id} download status updated to: {new_status}")
+            except Exception as e:
+                session.rollback()
+                logger.warning(f"Failed to update album download status: {e}")
+        
+        # Queue lyrics download job
+        try:
+            from .jobqueue import enqueue_job
+            enqueue_job(
+                session,
+                job_type="download_lyrics",
+                payload={"track_id": track_id},
+                priority=0,
+                commit=True,  # enqueue_job handles its own commit
+            )
+            logger.debug(f"Queued lyrics download for track {track_id}")
+        except Exception as e:
+            logger.warning(f"Failed to queue lyrics job for track {track_id}: {e}")
+        
+        return {
+            "ok": True,
+            "file_path": str(file_path),
+            "track_id": track_id,
+            "cover_path": new_cover_path,
+        }
+        
+    except Exception as e:
+        logger.exception(f"Download failed for track {track_id}")
+        
+        # Update track status to failed
+        try:
+            track = session.get(Track, str(track_id))  # Re-fetch
+            if not track:
+                logger.error(f"Track {track_id} not found when marking failed")
+            else:
+                track.status = "failed"
+                session.add(track)
+                
+                def commit_failed_status():
+                    session.commit()
+                
+                _db_operation_with_retry(commit_failed_status)
+        except Exception as commit_error:
+            logger.exception(f"Failed to update track status to failed: {commit_error}")
+            session.rollback()
+        
+        # Check if this is a rate limit error for retry logic
+        error_msg = str(e)
+        if _is_youtube_rate_limit_error(error_msg):
             return {
                 "ok": False,
-                "error": f"Download failed: {str(e)}",
-                "retry_delay_seconds": 300,
+                "error": f"Download failed: {error_msg}",
+                "retry_delay_seconds": 600,  # Retry in 10 minutes if still rate-limited
             }
-    
-    except Exception as e:
-        logger.exception(f"download_track failed for {track_id}")
-        try:
-            session.rollback()
-        except Exception:
-            pass
-        return {
-            "ok": False,
-            "error": str(e),
-            "retry_delay_seconds": 60,
-        }
+        else:
+            return {
+                "ok": False,
+                "error": f"Download failed: {error_msg}",
+                "retry_delay_seconds": 300,  # Standard retry delay
+            }
 
 
 # ============================================================================

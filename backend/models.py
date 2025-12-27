@@ -164,7 +164,6 @@ class Job(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     reserved_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     
-    # NEW: Track which user created the job
     user_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -173,7 +172,6 @@ class Job(Base):
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        # ... existing fields ...
         return {
             "id": getattr(self, "id", None),
             "type": getattr(self, "type", None),

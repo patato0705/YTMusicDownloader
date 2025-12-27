@@ -9,7 +9,7 @@ from pathlib import Path
 
 from yt_dlp import YoutubeDL
 
-from ..config import DOWNLOAD_DIR, COVERS_DIR, MUSIC_DIR, LYRICS_DIR, YDL_FORMAT, YDL_PREFERRED_CODEC
+from ..config import DOWNLOAD_DIR, COVERS_DIR, MUSIC_DIR, LYRICS_DIR, YDL_FORMAT, YDL_PREFERRED_CODEC, YDL_COOKIEFILE
 
 # relative package imports (downloader.cover, downloader.embed expected)
 from . import cover as cover_mod  # type: ignore
@@ -76,6 +76,7 @@ def download_track_by_videoid(
     track_number: Optional[int] = None,
     year: Optional[Union[str, int]] = None,
     cover_path_override: Optional[Union[str, Path]] = None,
+    skip_metadata: bool = True,  # NEW: Skip metadata extraction
 ) -> tuple[str, Optional[str]]:
     """
     Downloads track (yt-dlp), puts final file under MUSIC_DIR/{artist}/{album}/
@@ -89,6 +90,7 @@ def download_track_by_videoid(
         track_number: Track number for metadata
         year: Release year for metadata
         cover_path_override: Path to already existing cover (used if valid)
+        skip_metadata: If True, skip metadata extraction (faster, fewer requests)
 
     Returns:
         tuple: (final_track_path, final_cover_path or None)
@@ -100,9 +102,9 @@ def download_track_by_videoid(
     outtmpl = str(Path(str(DOWNLOAD_DIR)) / "song.%(ext)s")
     ydl_opts: Dict[str, Any] = {
         "format": YDL_FORMAT or "bestaudio/best",
-        'cookiefile': '/config/ytcookies.txt',
+        'cookiefile': YDL_COOKIEFILE,
         "outtmpl": outtmpl,
-        "quiet": True,
+        "quiet": False,
         "no_warnings": True,
         "noplaylist": True,
         "postprocessors": [
@@ -115,18 +117,25 @@ def download_track_by_videoid(
     info_dict: Dict[str, Any] = {}
     duration_sec: Optional[int] = None
 
-    # probe + download
+    # Download with or without metadata extraction
     try:
         with YoutubeDL(ydl_opts) as ydl:  # type: ignore
-            tmp_info = ydl.extract_info(url, download=False)
-            if isinstance(tmp_info, dict):
-                info_dict = cast(Dict[str, Any], tmp_info)
-                dval = info_dict.get("duration") or info_dict.get("duration_seconds") or info_dict.get("lengthSeconds")
-                try:
-                    duration_sec = int(dval) if dval is not None else None
-                except Exception:
-                    duration_sec = None
-            ydl.download([url])
+            if skip_metadata:
+                # FAST MODE: Download directly without metadata extraction
+                logger.info(f"Downloading {video_id} (no metadata)")
+                ydl.download([url])
+            else:
+                # SLOW MODE: Extract metadata first (original behavior)
+                logger.info(f"Downloading {video_id} (with metadata)")
+                tmp_info = ydl.extract_info(url, download=False)
+                if isinstance(tmp_info, dict):
+                    info_dict = cast(Dict[str, Any], tmp_info)
+                    dval = info_dict.get("duration") or info_dict.get("duration_seconds") or info_dict.get("lengthSeconds")
+                    try:
+                        duration_sec = int(dval) if dval is not None else None
+                    except Exception:
+                        duration_sec = None
+                ydl.download([url])
     except Exception:
         logger.exception("yt-dlp failed for %s", url)
         raise
@@ -135,13 +144,13 @@ def download_track_by_videoid(
     if not downloaded_file:
         raise FileNotFoundError("Downloaded file not found in downloads directory")
 
-    # metadata fallback
-    final_title = track_title or (info_dict.get("title") if isinstance(info_dict, dict) else None) or f"track_{video_id}"
-    final_artist = artist_name or (info_dict.get("uploader") if isinstance(info_dict, dict) else None) or "Unknown"
-    final_album = album_name or (info_dict.get("album") if isinstance(info_dict, dict) else "Unknown Album")
+    # metadata fallback - use provided metadata since we skipped extraction
+    final_title = track_title or f"track_{video_id}"
+    final_artist = artist_name or "Unknown"
+    final_album = album_name or "Unknown Album"
     artists_list: List[str] = [final_artist] if final_artist else []
 
-    # cover handling
+    # Cover handling - use provided cover since we skipped thumbnail extraction
     cover_path_file: Optional[Path] = None
     if cover_path_override:
         try:
@@ -151,24 +160,22 @@ def download_track_by_videoid(
         except Exception:
             cover_path_file = None
 
-    if not cover_path_file:
+    # If no cover provided and we didn't skip metadata, try to get thumbnail
+    if not cover_path_file and not skip_metadata and info_dict:
         thumb_candidates: List[Union[str, Dict[str, Any]]] = []
-        if isinstance(info_dict, dict):
-            t = info_dict.get("thumbnails")
-            if isinstance(t, list):
-                thumb_candidates = [x for x in t if x is not None]
-            elif isinstance(t, dict):
-                inner = t.get("thumbnails")
-                if isinstance(inner, list):
-                    thumb_candidates = [x for x in inner if x is not None]
-            else:
-                th = info_dict.get("thumbnail")
-                if isinstance(th, list):
-                    thumb_candidates = [x for x in th if x is not None]
-                elif isinstance(th, (str, dict)):
-                    thumb_candidates = [th]
-                else:
-                    thumb_candidates = []
+        t = info_dict.get("thumbnails")
+        if isinstance(t, list):
+            thumb_candidates = [x for x in t if x is not None]
+        elif isinstance(t, dict):
+            inner = t.get("thumbnails")
+            if isinstance(inner, list):
+                thumb_candidates = [x for x in inner if x is not None]
+        else:
+            th = info_dict.get("thumbnail")
+            if isinstance(th, list):
+                thumb_candidates = [x for x in th if x is not None]
+            elif isinstance(th, (str, dict)):
+                thumb_candidates = [th]
         
         thumb_url: Optional[str] = None
         try:
@@ -184,7 +191,6 @@ def download_track_by_videoid(
                         break
         except Exception:
             logger.debug("Thumbnail selection failed", exc_info=True)
-            thumb_url = None
 
         if thumb_url:
             try:
@@ -232,26 +238,27 @@ def download_track_by_videoid(
         except Exception:
             pass
 
-    # lyrics
+    # lyrics - skip if we don't have duration (which we won't in skip_metadata mode)
     lyrics_lrc_path: Optional[Path] = None
-    try:
-        if fetch_lyrics and artists_list and final_title and final_album and isinstance(duration_sec, int) and duration_sec > 0:
-            temp_lrc = fetch_lyrics(artists_list, final_title, final_album, duration_sec)
-            if temp_lrc:
-                dest_lyrics = dest_dir / Path(str(temp_lrc)).name
-                try:
-                    moved = None
-                    if hasattr(cover_mod, "move_if_exists"):
-                        moved = cover_mod.move_if_exists(temp_lrc, dest_lyrics)
-                    else:
-                        moved = shutil.move(str(temp_lrc), str(dest_lyrics))
-                        moved = Path(str(moved))
-                    if isinstance(moved, Path):
-                        lyrics_lrc_path = moved
-                except Exception:
-                    logger.exception("Failed to move lyrics file")
-    except Exception:
-        logger.exception("Lyrics fetch failed")
+    if not skip_metadata:  # Only try lyrics if we have metadata
+        try:
+            if fetch_lyrics and artists_list and final_title and final_album and isinstance(duration_sec, int) and duration_sec > 0:
+                temp_lrc = fetch_lyrics(artists_list, final_title, final_album, duration_sec)
+                if temp_lrc:
+                    dest_lyrics = dest_dir / Path(str(temp_lrc)).name
+                    try:
+                        moved = None
+                        if hasattr(cover_mod, "move_if_exists"):
+                            moved = cover_mod.move_if_exists(temp_lrc, dest_lyrics)
+                        else:
+                            moved = shutil.move(str(temp_lrc), str(dest_lyrics))
+                            moved = Path(str(moved))
+                        if isinstance(moved, Path):
+                            lyrics_lrc_path = moved
+                    except Exception:
+                        logger.exception("Failed to move lyrics file")
+        except Exception:
+            logger.exception("Lyrics fetch failed")
 
     # move cover into album folder as cover.jpg if present
     final_cover_path: Optional[str] = None
