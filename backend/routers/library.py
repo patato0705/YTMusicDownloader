@@ -37,8 +37,8 @@ def _safe_stats(stats_obj, fields):
 @router.get("/artists", status_code=status.HTTP_200_OK)
 def list_followed_artists(
     current_user: User = Depends(require_auth),
-    sort_by: str = Query("name", regex="^(name|followed_at|albums_count)$"),
-    order: str = Query("asc", regex="^(asc|desc)$"),
+    sort_by: str = Query("name", pattern="^(name|followed_at|albums_count)$"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -124,9 +124,9 @@ def list_followed_artists(
 def list_followed_albums(
     current_user: User = Depends(require_auth),
     artist_id: Optional[str] = Query(None, description="Filter by artist ID"),
-    status_filter: Optional[str] = Query(None, regex="^(completed|downloading|pending|failed)$", description="Filter by download status"),
-    sort_by: str = Query("title", regex="^(title|year|followed_at|download_progress)$"),
-    order: str = Query("asc", regex="^(asc|desc)$"),
+    status_filter: Optional[str] = Query(None, pattern="^(completed|downloading|pending|failed)$", description="Filter by download status"),
+    sort_by: str = Query("title", pattern="^(title|year|followed_at|download_progress)$"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -241,7 +241,7 @@ def list_tracks(
     current_user: User = Depends(require_auth),
     artist_id: Optional[str] = Query(None, description="Filter by artist ID"),
     album_id: Optional[str] = Query(None, description="Filter by album ID"),
-    status_filter: Optional[str] = Query(None, regex="^(done|failed|downloading|new)$", description="Filter by track status"),
+    status_filter: Optional[str] = Query(None, pattern="^(done|failed|downloading|new)$", description="Filter by track status"),
     has_lyrics: Optional[bool] = Query(None, description="Filter by lyrics availability"),
     limit: int = Query(100, ge=1, le=1000, description="Max results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
