@@ -154,7 +154,6 @@ def follow_artist(
             db,
             artist_id=artist_id,
             mode="full",
-            sync_interval_hours=24,
         )
         
         # Commit artist follow status and subscription

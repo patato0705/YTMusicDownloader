@@ -25,7 +25,7 @@ DEFAULT_SETTINGS = {
         "description": "Hours between artist sync checks",
     },
     "scheduler.job_cleanup_days": {
-        "value": 7,
+        "value": 3,
         "type": "int",
         "description": "Days to keep completed jobs",
     },
@@ -176,20 +176,3 @@ def delete_setting(session: Session, key: str) -> bool:
     
     logger.info(f"Setting deleted: {key}")
     return True
-
-
-# Convenience functions for specific settings
-
-def is_registration_enabled(session: Session) -> bool:
-    """Check if public registration is enabled"""
-    return get_setting(session, "auth.registration_enabled", False)
-
-
-def get_sync_interval_hours(session: Session) -> int:
-    """Get artist sync interval in hours"""
-    return get_setting(session, "scheduler.sync_interval_hours", 6)
-
-
-def get_job_cleanup_days(session: Session) -> int:
-    """Get job cleanup retention in days"""
-    return get_setting(session, "scheduler.job_cleanup_days", 7)

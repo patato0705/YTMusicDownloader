@@ -28,7 +28,7 @@ class Artist(Base):
     thumbnails: Mapped[Optional[List[Any]]] = mapped_column(JSONCol, nullable=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     followed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # CHANGED from monitored
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
     # relationship: Artist -> Album
     albums: Mapped[List["Album"]] = relationship(
@@ -119,7 +119,7 @@ class Track(Base):
     file_path: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
     status: Mapped[str] = mapped_column(String(64), default="new", nullable=False)
     artist_valid: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
     album: Mapped[Optional[Album]] = relationship("Album", back_populates="tracks")
 
@@ -156,12 +156,12 @@ class Job(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    scheduled_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True, index=True)
-    started_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    finished_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    scheduled_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    started_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     result: Mapped[Optional[Any]] = mapped_column(JSONCol, nullable=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     reserved_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     
     user_id: Mapped[Optional[int]] = mapped_column(
@@ -199,9 +199,8 @@ class ArtistSubscription(Base):
     artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), nullable=False, index=True)
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="full")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
-    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    sync_interval_hours: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
@@ -212,8 +211,8 @@ class AlbumSubscription(Base):
     album_id: Mapped[str] = mapped_column(String(64), ForeignKey("albums.id", ondelete="CASCADE"), nullable=False, index=True)
     artist_id: Mapped[Optional[str]] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), nullable=True, index=True)
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="download")
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
-    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     download_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default="idle")
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -229,8 +228,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")  # administrator, member, visitor
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
-    last_login_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    last_login_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """Return user data (excluding password)"""
@@ -262,8 +261,8 @@ class RefreshToken(Base):
         nullable=False,
         index=True
     )
-    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, index=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     def is_valid(self) -> bool:
@@ -289,7 +288,7 @@ class Setting(Base):
     value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     type: Mapped[str] = mapped_column(String(32), nullable=False, default="string")  # string, int, bool, json
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc, nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
     updated_by: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
