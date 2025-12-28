@@ -1,7 +1,12 @@
 # backend/routers/media.py
 """
-Media router for serving and caching thumbnails from external sources.
-Prevents 429 errors from Google's servers by caching images locally.
+Media endpoints for serving and caching thumbnails from external sources.
+
+Endpoints:
+- GET /api/media/images/{full_path:path} - Serve images from /config/temp/covers or /data directories.
+- GET /api/media/thumbnail/debug - Cache status debug endpoint (admin only).
+- GET /api/media/thumbnail - Proxy and cache thumbnail images from external sources.
+- GET /api/media/cache/clear - Clear thumbnail cache (admin only).
 """
 import hashlib
 import logging

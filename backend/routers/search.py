@@ -1,9 +1,14 @@
 # backend/routers/search.py
 """
-Search router - handles HTTP requests and delegates to service layer.
+Search endpoints.
 
-Architecture:
-HTTP Request → Router (this file) → Service → Adapter → YTMusic API
+Endpoints:
+- GET /api/search - Search all types (artists, albums, songs)
+- GET /api/search/artists - Search for artists only.
+- GET /api/search/albums - Search for albums only.
+- GET /api/search/songs - Search for songs only.
+- GET /api/search/charts - Get music charts for a country.
+- DELETE /api/search/cache - Clear the search cache. (Admin only)
 """
 from __future__ import annotations
 import logging

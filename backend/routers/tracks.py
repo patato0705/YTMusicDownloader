@@ -1,4 +1,15 @@
 # backend/routers/tracks.py
+"""
+Track endpoints.
+
+Endpoints:
+- GET /api/tracks/{track_id} - Return track info from DB
+- GET /api/tracks/album/{album_id} - Return a lightweight list of tracks for the given album_id.
+- POST /api/tracks/{track_id}/download - Enqueue a download job for the given track
+- GET /api/tracks/{track_id}/ensure_lyrics - Enqueue a job to fetch synchronized lyrics for the track.
+- GET /api/tracks/{track_id}/mark_done - Mark a track as done and optionally provide file_path.
+- DELETE /api/tracks/{track_id}/mark_failed - Mark a track as failed and optionally include an error message.
+"""
 from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional

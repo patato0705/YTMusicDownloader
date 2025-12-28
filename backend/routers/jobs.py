@@ -1,4 +1,15 @@
 # backend/routers/jobs.py
+"""
+Job endpoints.
+
+Endpoints:
+- GET /api/jobs - List jobs.
+- POST /api/jobs/enqueue - Enqueue a new job.
+- GET /api/jobs/{job_id} - Get a single job by ID.
+- POST /api/jobs/{job_id}/cancel - Cancel a job.
+- POST /api/jobs/{job_id}/requeue - Requeue a failed job.
+- GET /api/jobs/stats/summary - Get job statistics.
+"""
 from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
@@ -65,6 +76,52 @@ def _user_can_access_job(user: User, job: Job) -> bool:
 # ROUTES
 # ============================================================================
 
+
+@router.get("", response_model=List[JobOut])
+def list_jobs(
+    job_status: Optional[str] = Query(
+        None,
+        alias="status",
+        description="Filter by status (queued, reserved, done, failed)"
+    ),
+    limit: int = Query(100, ge=1, le=1000, description="Max results"),
+    current_user: User = Depends(require_auth),
+    session: Session = Depends(get_session),
+) -> List[JobOut]:
+    """
+    List jobs.
+    
+    Permissions:
+    - Admins see all jobs
+    - Users see only their own jobs
+    
+    Results ordered by created_at desc (newest first).
+    """
+    try:
+        query = session.query(Job)
+        
+        # Filter by user (non-admins see only their jobs)
+        if current_user.role != config.ROLE_ADMINISTRATOR:
+            query = query.filter(Job.user_id == current_user.id)
+        
+        # Filter by status if provided
+        if job_status:
+            query = query.filter(Job.status == job_status)
+        
+        # Order and limit
+        query = query.order_by(Job.created_at.desc()).limit(limit)
+        
+        jobs = query.all()
+        return [JobOut(**_job_to_dict(job)) for job in jobs]
+    
+    except Exception as e:
+        logger.exception("list_jobs failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
 @router.post("/enqueue", response_model=EnqueueResponse, status_code=status.HTTP_201_CREATED)
 def enqueue_job_endpoint(
     req: EnqueueRequest,
@@ -107,51 +164,6 @@ def enqueue_job_endpoint(
     
     except Exception as e:
         logger.exception(f"Failed to enqueue job {req.type}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.get("", response_model=List[JobOut])
-def list_jobs(
-    job_status: Optional[str] = Query(
-        None,
-        alias="status",
-        description="Filter by status (queued, reserved, done, failed)"
-    ),
-    limit: int = Query(100, ge=1, le=1000, description="Max results"),
-    current_user: User = Depends(require_auth),
-    session: Session = Depends(get_session),
-) -> List[JobOut]:
-    """
-    List jobs.
-    
-    Permissions:
-    - Admins see all jobs
-    - Users see only their own jobs
-    
-    Results ordered by created_at desc (newest first).
-    """
-    try:
-        query = session.query(Job)
-        
-        # Filter by user (non-admins see only their jobs)
-        if current_user.role != config.ROLE_ADMINISTRATOR:
-            query = query.filter(Job.user_id == current_user.id)
-        
-        # Filter by status if provided
-        if job_status:
-            query = query.filter(Job.status == job_status)
-        
-        # Order and limit
-        query = query.order_by(Job.created_at.desc()).limit(limit)
-        
-        jobs = query.all()
-        return [JobOut(**_job_to_dict(job)) for job in jobs]
-    
-    except Exception as e:
-        logger.exception("list_jobs failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

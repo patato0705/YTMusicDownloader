@@ -1,4 +1,10 @@
 # backend/routers/health.py
+"""
+Health endpoints.
+
+Endpoints:
+- GET /api/health - Get app state
+"""
 from __future__ import annotations
 import logging
 import shutil

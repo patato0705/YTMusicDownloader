@@ -1,6 +1,8 @@
 # backend/routers/albums.py
 """
-Album endpoints:
+Album endpoints.
+
+Endpoints :
 - GET /api/albums/{album_id} - Get album details
 - POST /api/albums/{album_id}/follow - Follow album (queue downloads)
 - DELETE /api/albums/{album_id}/follow - Unfollow album

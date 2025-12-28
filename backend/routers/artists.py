@@ -1,4 +1,12 @@
 # backend/routers/artists.py
+"""
+Artist endpoints.
+
+Endpoints :
+- GET /api/artists/{artist_id} - Get artist details
+- POST /api/artists/{artist_id}/follow - Follow artist (follow all albums + queue downloads)
+- DELETE /api/artists/{artist_id}/follow - Unfollow artist
+"""
 from __future__ import annotations
 import logging
 from typing import Any, Dict
