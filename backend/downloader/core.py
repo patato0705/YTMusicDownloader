@@ -25,19 +25,6 @@ logger = logging.getLogger("downloader.core")
 if not logging.getLogger().handlers:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 
-
-# --- helpers ---
-def _ensure_dirs() -> None:
-    for p in (DOWNLOAD_DIR, COVERS_DIR, MUSIC_DIR, LYRICS_DIR):
-        try:
-            Path(str(p)).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            try:
-                os.makedirs(str(p), exist_ok=True)
-            except Exception:
-                logger.exception("Failed to ensure directory %r", p)
-
-
 def _cleanup_partial_files(directory: Union[str, Path]) -> None:
     d = Path(str(directory))
     if not d.exists() or not d.is_dir():
@@ -95,7 +82,6 @@ def download_track_by_videoid(
     Returns:
         tuple: (final_track_path, final_cover_path or None)
     """
-    _ensure_dirs()
     _cleanup_partial_files(DOWNLOAD_DIR)
 
     url = f"https://www.youtube.com/watch?v={video_id}"

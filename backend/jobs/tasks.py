@@ -17,6 +17,7 @@ Task types:
 from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
@@ -663,24 +664,26 @@ def sync_artist(
     NEW BEHAVIOR:
     Instead of importing all albums synchronously, this now:
     1. Fetches artist data from YTMusic (just metadata + album list)
-    2. Compares with existing albums in DB
-    3. Creates album subscriptions for new albums
-    4. Queues separate import_album jobs for each new album
-    5. Returns quickly (3-5 seconds instead of 2+ minutes)
+    2. Checks and updates artist banner if thumbnails changed
+    3. Compares with existing albums in DB
+    4. Creates album subscriptions for new albums
+    5. Queues separate import_album jobs for each new album
+    6. Returns quickly (3-5 seconds instead of 2+ minutes)
     
     Flow:
     1. Fetch artist data from YTMusic
-    2. Compare albums with DB
-    3. Create album subscriptions for new albums
-    4. Queue import_album job for each new album
-    5. Update last_synced_at timestamp
+    2. Check if thumbnails changed and update banner if needed
+    3. Compare albums with DB
+    4. Create album subscriptions for new albums
+    5. Queue import_album job for each new album
+    6. Update last_synced_at timestamp
     
     Args:
         session: SQLAlchemy session
         artist_id: Artist channel ID
     
     Returns:
-        {"ok": bool, "new_albums": int, "jobs_queued": int}
+        {"ok": bool, "new_albums": int, "jobs_queued": int, "banner_updated": bool}
     """
     if not artist_id:
         return {"ok": False, "error": "artist_id required"}
@@ -690,6 +693,63 @@ def sync_artist(
         
         # ===== TRANSACTION 1: Fetch and upsert artist =====
         artist_data = artists_svc.fetch_and_upsert_artist(session, artist_id)
+        
+        # Check if banner needs updating
+        banner_updated = False
+        try:
+            artist_obj = session.get(Artist, artist_id)
+            if artist_obj:
+                # Get thumbnails from API response
+                new_thumbnails = artist_data.get("thumbnails") or []
+                
+                # Normalize both thumbnail lists for comparison
+                from ..ytm_service import normalizers as N
+                new_thumbs_normalized = N.normalize_thumbnails(new_thumbnails)
+                old_thumbs_normalized = N.normalize_thumbnails(artist_obj.thumbnails or [])
+                
+                # Check if thumbnails changed OR if banner doesn't exist
+                thumbnails_changed = new_thumbs_normalized != old_thumbs_normalized
+                banner_missing = not artist_obj.image_local or not Path(str(artist_obj.image_local)).exists()
+                
+                if thumbnails_changed or banner_missing:
+                    if thumbnails_changed:
+                        logger.info(f"Thumbnails changed for artist {artist_id}, updating banner")
+                    if banner_missing:
+                        logger.info(f"Banner missing for artist {artist_id}, downloading banner")
+                    
+                    # Update thumbnails in database if they changed
+                    if thumbnails_changed:
+                        artist_obj.thumbnails = new_thumbnails
+                        session.add(artist_obj)
+                    
+                    # Download and update banner
+                    banner_path = artists_svc.ensure_artist_banner(
+                        session=session,
+                        artist_obj=artist_obj,
+                        thumbnails=new_thumbnails,
+                    )
+                    
+                    if banner_path:
+                        logger.info(f"Updated banner for artist {artist_id}: {banner_path}")
+                        banner_updated = True
+                    else:
+                        logger.error(f"Failed to update banner for artist {artist_id}")
+                        # Fail the task if banner download fails
+                        return {
+                            "ok": False,
+                            "error": "Failed to download artist banner",
+                            "retry_delay_seconds": 300,  # Retry in 5 minutes
+                        }
+                else:
+                    logger.debug(f"Thumbnails unchanged and banner exists for artist {artist_id}, skipping banner update")
+        except Exception as e:
+            logger.exception(f"Failed to check/update banner for artist {artist_id}")
+            # Fail the task if banner check fails
+            return {
+                "ok": False,
+                "error": f"Failed to check/update artist banner: {e}",
+                "retry_delay_seconds": 300,  # Retry in 5 minutes
+            }
         
         def commit_artist():
             session.commit()
@@ -720,6 +780,7 @@ def sync_artist(
                 "ok": True,
                 "new_albums": 0,
                 "jobs_queued": 0,
+                "banner_updated": banner_updated,
             }
         
         logger.info(f"Found {len(new_albums)} new albums for artist {artist_id}")
@@ -788,7 +849,8 @@ def sync_artist(
         
         logger.info(
             f"Synced artist {artist_id}: {len(new_albums)} new albums, "
-            f"{subscriptions_created} subscriptions created, {jobs_queued} import jobs queued"
+            f"{subscriptions_created} subscriptions created, {jobs_queued} import jobs queued, "
+            f"banner {'updated' if banner_updated else 'unchanged'}"
         )
         
         return {
@@ -796,6 +858,7 @@ def sync_artist(
             "new_albums": len(new_albums),
             "subscriptions_created": subscriptions_created,
             "jobs_queued": jobs_queued,
+            "banner_updated": banner_updated,
         }
     
     except Exception as e:
