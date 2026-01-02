@@ -551,11 +551,13 @@ def import_album(
     artist_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Fetch and import an album from YTMusic.
+    Fetch and import an album from YTMusic, then queue download jobs.
     
     Flow:
-    1. Call albums_svc.fetch_and_upsert_album()
-    2. Return summary
+    1. Fetch album data from YTMusic (includes full track list)
+    2. Upsert album and tracks to database
+    3. Queue download_track jobs for all new tracks
+    4. Return summary
     
     Args:
         session: SQLAlchemy session
@@ -563,7 +565,7 @@ def import_album(
         artist_id: Optional artist ID to link album to
     
     Returns:
-        {"ok": bool, "album_id": str, "tracks_inserted": int}
+        {"ok": bool, "album_id": str, "tracks_inserted": int, "downloads_queued": int}
     """
     if not browse_id:
         return {"ok": False, "error": "browse_id required"}
@@ -571,7 +573,10 @@ def import_album(
     try:
         logger.info(f"Importing album {browse_id}")
         
-        # ===== TRANSACTION: Fetch and upsert album =====
+        # ===== NO TRANSACTION: Fetch from YTMusic API =====
+        # This is an external API call, no database locks needed
+        
+        # ===== TRANSACTION 1: Upsert album and tracks =====
         result = albums_svc.fetch_and_upsert_album(
             session=session,
             browse_id=browse_id,
@@ -583,17 +588,52 @@ def import_album(
         
         _db_operation_with_retry(commit_album)
         
+        album_id = result["album_id"]
+        
         logger.info(
-            f"Imported album {result['album_id']}: "
+            f"Imported album {album_id}: "
             f"{result['inserted_tracks']} new tracks, "
             f"{result['updated_tracks']} updated tracks"
         )
         
+        # ===== TRANSACTION 2: Queue download jobs for new tracks =====
+        try:
+            from .jobqueue import enqueue_job
+            
+            # Get tracks for this album
+            tracks = tracks_svc.list_tracks_for_album_from_db(session, album_id)
+            
+            queued = 0
+            for track in tracks:
+                if track.get("status") in ["new", "failed"]:
+                    try:
+                        enqueue_job(
+                            session,
+                            job_type="download_track",
+                            payload={
+                                "track_id": track["id"],
+                                "album_id": album_id,
+                                "artist_id": artist_id,
+                            },
+                            priority=0,  # Low priority - background downloads
+                            commit=True,  # Each job commits separately
+                        )
+                        queued += 1
+                    except Exception as e:
+                        logger.exception(f"Failed to queue download for track {track['id']}")
+            
+            logger.info(f"Queued {queued} download jobs for album {album_id}")
+        
+        except Exception as e:
+            logger.warning(f"Failed to queue download jobs for album {album_id}: {e}")
+            queued = 0
+        
         return {
             "ok": True,
-            "album_id": result["album_id"],
+            "album_id": album_id,
             "tracks_inserted": result["inserted_tracks"],
             "tracks_updated": result["updated_tracks"],
+            "downloads_queued": queued,
         }
     
     except Exception as e:
@@ -618,20 +658,29 @@ def sync_artist(
     artist_id: str,
 ) -> Dict[str, Any]:
     """
-    Check an artist for new releases and import them.
+    Check an artist for new releases and queue import jobs.
+    
+    NEW BEHAVIOR:
+    Instead of importing all albums synchronously, this now:
+    1. Fetches artist data from YTMusic (just metadata + album list)
+    2. Compares with existing albums in DB
+    3. Creates album subscriptions for new albums
+    4. Queues separate import_album jobs for each new album
+    5. Returns quickly (3-5 seconds instead of 2+ minutes)
     
     Flow:
     1. Fetch artist data from YTMusic
     2. Compare albums with DB
-    3. Import new albums
-    4. Update last_synced_at timestamp
+    3. Create album subscriptions for new albums
+    4. Queue import_album job for each new album
+    5. Update last_synced_at timestamp
     
     Args:
         session: SQLAlchemy session
         artist_id: Artist channel ID
     
     Returns:
-        {"ok": bool, "new_albums": int, "new_tracks": int}
+        {"ok": bool, "new_albums": int, "jobs_queued": int}
     """
     if not artist_id:
         return {"ok": False, "error": "artist_id required"}
@@ -651,14 +700,14 @@ def sync_artist(
         existing_albums = albums_svc.list_albums_for_artist_from_db(session, artist_id)
         existing_album_ids = {a["id"] for a in existing_albums}
         
-        # Find new albums
+        # Find new albums (no database operation)
         ytm_albums = artist_data.get("albums", []) + artist_data.get("singles", [])
         new_albums = [a for a in ytm_albums if a.get("id") not in existing_album_ids]
         
         if not new_albums:
             logger.info(f"No new albums found for artist {artist_id}")
             
-            # Update sync timestamp
+            # ===== TRANSACTION 3: Update sync timestamp =====
             from ..services import subscriptions as subs_svc
             subs_svc.mark_artist_synced(session, artist_id)
             
@@ -670,66 +719,66 @@ def sync_artist(
             return {
                 "ok": True,
                 "new_albums": 0,
-                "new_tracks": 0,
+                "jobs_queued": 0,
             }
         
-        # ===== TRANSACTION 3: Import new albums =====
         logger.info(f"Found {len(new_albums)} new albums for artist {artist_id}")
         
-        result = albums_svc.fetch_and_upsert_albums_for_artist(
-            session=session,
-            artist_id=artist_id,
-            albums=[a for a in new_albums if a.get("type", "").lower() == "album"],
-            singles=[a for a in new_albums if a.get("type", "").lower() in ("single", "ep")],
-        )
+        # ===== TRANSACTION 3: Create album subscriptions for new albums =====
+        from ..services import subscriptions as subs_svc
+        subscriptions_created = 0
         
-        def commit_new_albums():
+        for album_item in new_albums:
+            album_id = album_item.get("id") or album_item.get("browseId")
+            if not album_id:
+                continue
+            
+            try:
+                subs_svc.subscribe_to_album(
+                    session,
+                    album_id=album_id,
+                    artist_id=artist_id,
+                    mode="download"
+                )
+                subscriptions_created += 1
+            except Exception as e:
+                logger.exception(f"Failed to create album subscription for {album_id}")
+        
+        def commit_subscriptions():
             session.commit()
         
-        _db_operation_with_retry(commit_new_albums)
+        _db_operation_with_retry(commit_subscriptions)
         
-        # ===== TRANSACTION 4: Create album subscriptions =====
-        from ..services import subscriptions as subs_svc
-        for album_detail in result.get("details", []):
-            album_id_to_sub = album_detail.get("album_id")
-            if album_id_to_sub:
-                try:
-                    subs_svc.subscribe_to_album(session, album_id=album_id_to_sub, artist_id=artist_id)
-                    
-                    def commit_subscription():
-                        session.commit()
-                    
-                    _db_operation_with_retry(commit_subscription)
-                except Exception as e:
-                    logger.exception(f"Failed to subscribe to new album {album_id_to_sub}")
-                    session.rollback()
+        logger.info(f"Created {subscriptions_created} album subscriptions for artist {artist_id}")
         
-        # ===== TRANSACTION 5: Queue download jobs =====
+        # ===== TRANSACTION 4: Queue import_album jobs =====
         from .jobqueue import enqueue_job
-        queued = 0
-        for album_detail in result.get("details", []):
-            album_id_for_tracks = album_detail.get("album_id")
-            tracks = tracks_svc.list_tracks_for_album_from_db(session, album_id_for_tracks)
-            
-            for track in tracks:
-                if track.get("status") in ["new", "failed"]:
-                    try:
-                        enqueue_job(
-                            session,
-                            job_type="download_track",
-                            payload={
-                                "track_id": track["id"],
-                                "album_id": album_id_for_tracks,
-                                "artist_id": artist_id,
-                            },
-                            priority=0,
-                            commit=True,  # Each job commits separately
-                        )
-                        queued += 1
-                    except Exception as e:
-                        logger.exception(f"Failed to queue download for track {track['id']}")
+        jobs_queued = 0
         
-        # ===== TRANSACTION 6: Update sync timestamp =====
+        for album_item in new_albums:
+            browse_id = album_item.get("id") or album_item.get("browseId")
+            if not browse_id:
+                continue
+            
+            try:
+                enqueue_job(
+                    session,
+                    job_type="import_album",
+                    payload={
+                        "browse_id": browse_id,
+                        "artist_id": artist_id,
+                    },
+                    priority=3,  # Medium priority (higher than downloads, lower than sync_artist)
+                    commit=True,  # Each job commits separately
+                )
+                jobs_queued += 1
+                logger.debug(f"Queued import_album job for {browse_id}")
+            except Exception as e:
+                logger.exception(f"Failed to queue import_album job for {browse_id}")
+        
+        logger.info(f"Queued {jobs_queued} import_album jobs for artist {artist_id}")
+        
+        # ===== TRANSACTION 5: Update sync timestamp =====
         subs_svc.mark_artist_synced(session, artist_id)
         
         def commit_final_sync():
@@ -738,15 +787,15 @@ def sync_artist(
         _db_operation_with_retry(commit_final_sync)
         
         logger.info(
-            f"Synced artist {artist_id}: {result['albums_processed']} new albums, "
-            f"{result['tracks_inserted']} new tracks, {queued} downloads queued"
+            f"Synced artist {artist_id}: {len(new_albums)} new albums, "
+            f"{subscriptions_created} subscriptions created, {jobs_queued} import jobs queued"
         )
         
         return {
             "ok": True,
-            "new_albums": result["albums_processed"],
-            "new_tracks": result["tracks_inserted"],
-            "downloads_queued": queued,
+            "new_albums": len(new_albums),
+            "subscriptions_created": subscriptions_created,
+            "jobs_queued": jobs_queued,
         }
     
     except Exception as e:
