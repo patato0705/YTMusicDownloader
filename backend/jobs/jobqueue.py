@@ -204,6 +204,7 @@ def mark_job_failed(
     if retry_delay_seconds and (job.attempts or 0) < (job.max_attempts or 1):
         # Requeue with backoff
         job.status = "queued"
+        job.priority = job.priority - job.attempts
         job.scheduled_at = now + timedelta(seconds=retry_delay_seconds)
         job.reserved_by = None  # Clear reservation
         session.add(job)

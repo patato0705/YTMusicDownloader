@@ -168,9 +168,8 @@ def follow_artist(
                 payload={
                     "artist_id": artist_id,
                 },
-                priority=5,  # Higher priority for new follows
-                user_id=current_user.id,
-                commit=True,
+                priority=30,  # Higher priority for new follows
+                user_id=current_user.id
             )
             logger.info(f"Queued sync_artist job {job.id} for artist {artist_id}")
         except Exception as e:

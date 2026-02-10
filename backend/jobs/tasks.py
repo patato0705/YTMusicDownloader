@@ -312,8 +312,7 @@ def download_track(
                 session,
                 job_type="download_lyrics",
                 payload={"track_id": track_id},
-                priority=0,
-                commit=True,  # enqueue_job handles its own commit
+                priority=5
             )
             logger.debug(f"Queued lyrics download for track {track_id}")
         except Exception as e:
@@ -616,8 +615,7 @@ def import_album(
                                 "album_id": album_id,
                                 "artist_id": artist_id,
                             },
-                            priority=0,  # Low priority - background downloads
-                            commit=True,  # Each job commits separately
+                            priority=10
                         )
                         queued += 1
                     except Exception as e:
@@ -829,8 +827,7 @@ def sync_artist(
                         "browse_id": browse_id,
                         "artist_id": artist_id,
                     },
-                    priority=3,  # Medium priority (higher than downloads, lower than sync_artist)
-                    commit=True,  # Each job commits separately
+                    priority=20  # Medium priority (higher than downloads, lower than sync_artist)
                 )
                 jobs_queued += 1
                 logger.debug(f"Queued import_album job for {browse_id}")

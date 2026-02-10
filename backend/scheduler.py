@@ -255,7 +255,7 @@ class Scheduler:
                             session=session,
                             job_type="sync_artist",
                             payload=payload,
-                            priority=5,  # Higher priority for syncs
+                            priority=25,  # Higher priority for syncs
                         )
                         logger.info(f"Enqueued sync_artist job {job.id} for artist {artist_id}")
                         enqueued_count += 1
