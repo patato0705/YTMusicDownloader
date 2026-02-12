@@ -1,7 +1,7 @@
-// frontend/src/components/SearchBar.tsx
+// src/components/SearchBar.tsx
 import React, { useState, useEffect, useRef } from "react";
 import { search } from "../api/index";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 type ResultSet = {
   artists?: any[];
@@ -18,19 +18,21 @@ function useDebounce<T>(value: T, delay = 300) {
   return v;
 }
 
-export default function SearchBar({ placeholder = "Rechercher..." }: { placeholder?: string }) {
+export default function SearchBar({ placeholder = "Search music..." }: { placeholder?: string }) {
   const [q, setQ] = useState("");
   const debouncedQ = useDebounce(q, 400);
   const [results, setResults] = useState<ResultSet>({});
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
-  const nav = useNavigate();
 
   useEffect(() => {
     if (!debouncedQ || debouncedQ.trim().length < 2) {
       setResults({});
+      setLoading(false);
       return;
     }
+    setLoading(true);
     let cancelled = false;
     (async () => {
       try {
@@ -38,9 +40,13 @@ export default function SearchBar({ placeholder = "Rechercher..." }: { placehold
         if (!cancelled) {
           setResults(r || {});
           setOpen(true);
+          setLoading(false);
         }
       } catch (e) {
         console.error("Search error", e);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     })();
     return () => {
@@ -60,77 +66,150 @@ export default function SearchBar({ placeholder = "Rechercher..." }: { placehold
   const anyResults = (results.artists?.length || 0) + (results.albums?.length || 0) + (results.tracks?.length || 0);
 
   return (
-    <div className="relative" ref={ref}>
-      <input
-        value={q}
-        onChange={(e) => { setQ(e.target.value); }}
-        onFocus={() => debouncedQ && setOpen(true)}
-        placeholder={placeholder}
-        className="rounded-md border px-3 py-2 w-80"
-        aria-label="search"
-      />
+    <div className="relative w-full max-w-2xl" ref={ref}>
+      {/* Search input */}
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+          <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); }}
+          onFocus={() => debouncedQ && setOpen(true)}
+          placeholder={placeholder}
+          className="w-full pl-12 pr-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+          aria-label="search"
+        />
+        {loading && (
+          <div className="absolute inset-y-0 right-0 pr-4 flex items-center">
+            <svg className="animate-spin w-5 h-5 text-blue-600 dark:text-red-500" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          </div>
+        )}
+      </div>
+
+      {/* Results dropdown */}
       {open && debouncedQ && (
-        <div className="absolute z-50 mt-1 w-96 bg-white border shadow-lg rounded-md max-h-96 overflow-auto">
+        <div className="absolute z-50 mt-2 w-full glass rounded-2xl shadow-2xl border-slate-200 dark:border-white/10 max-h-[32rem] overflow-auto">
           {anyResults ? (
-            <div className="divide-y">
+            <div className="divide-y divide-slate-200 dark:divide-white/10">
               {/* Artists */}
               {results.artists && results.artists.length > 0 && (
-                <div className="p-2">
-                  <div className="text-xs text-gray-500 uppercase font-semibold px-1">Artistes</div>
-                  {results.artists.slice(0,6).map((a: any) => (
-                    <div key={a.id || a.name} className="p-1 hover:bg-gray-50">
-                      <Link to={`/artists/${encodeURIComponent(String(a.id || a.browseId || a.name))}`} onClick={() => setOpen(false)}>
-                        <div className="flex items-center gap-2">
-                          {a.thumbnails?.[0]?.url ? (
-                            <img src={a.thumbnails[0].url} className="w-8 h-8 object-cover rounded" alt={a.name}/>
-                          ) : null}
-                          <div className="text-sm">{a.name || a.title}</div>
-                        </div>
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-2xl">🎤</span>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Artists</h3>
+                  </div>
+                  <div className="space-y-1">
+                    {results.artists.slice(0, 6).map((a: any) => (
+                      <Link
+                        key={a.id || a.name}
+                        to={`/artists/${encodeURIComponent(String(a.id || a.browseId || a.name))}`}
+                        onClick={() => setOpen(false)}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-200 group"
+                      >
+                        {a.thumbnails?.[0]?.url ? (
+                          <img 
+                            src={a.thumbnails[0].url} 
+                            className="w-12 h-12 rounded-full object-cover bg-slate-200 dark:bg-zinc-800 group-hover:scale-105 transition-transform" 
+                            alt={a.name}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-red-600 dark:to-red-800 flex items-center justify-center text-white font-bold">
+                            {a.name?.[0]?.toUpperCase()}
+                          </div>
+                        )}
+                        <span className="text-sm font-medium text-foreground group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors">
+                          {a.name || a.title}
+                        </span>
                       </Link>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
 
               {/* Albums */}
               {results.albums && results.albums.length > 0 && (
-                <div className="p-2">
-                  <div className="text-xs text-gray-500 uppercase font-semibold px-1">Albums</div>
-                  {results.albums.slice(0,8).map((al: any) => (
-                    <div key={al.id || al.playlistId || al.title} className="p-1 hover:bg-gray-50">
-                      <Link to={`/albums/${encodeURIComponent(String(al.id || al.playlistId || al.title))}`} onClick={() => setOpen(false)}>
-                        <div className="flex items-center gap-2">
-                          {al.thumbnails?.[0]?.url ? <img src={al.thumbnails[0].url} className="w-8 h-8 object-cover rounded" alt={al.title}/> : null}
-                          <div className="text-sm">{al.title}</div>
-                        </div>
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-2xl">💿</span>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Albums</h3>
+                  </div>
+                  <div className="space-y-1">
+                    {results.albums.slice(0, 8).map((al: any) => (
+                      <Link
+                        key={al.id || al.playlistId || al.title}
+                        to={`/albums/${encodeURIComponent(String(al.id || al.playlistId || al.title))}`}
+                        onClick={() => setOpen(false)}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-200 group"
+                      >
+                        {al.thumbnails?.[0]?.url ? (
+                          <img 
+                            src={al.thumbnails[0].url} 
+                            className="w-12 h-12 rounded-lg object-cover bg-slate-200 dark:bg-zinc-800 group-hover:scale-105 transition-transform" 
+                            alt={al.title}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-slate-200 to-slate-300 dark:from-zinc-800 dark:to-zinc-900" />
+                        )}
+                        <span className="text-sm font-medium text-foreground group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors">
+                          {al.title}
+                        </span>
                       </Link>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
 
               {/* Tracks */}
               {results.tracks && results.tracks.length > 0 && (
-                <div className="p-2">
-                  <div className="text-xs text-gray-500 uppercase font-semibold px-1">Titres</div>
-                  {results.tracks.slice(0,10).map((t: any) => (
-                    <div key={t.id || t.videoId || t.title} className="p-1 hover:bg-gray-50">
-                      <Link to={`/tracks/${encodeURIComponent(String(t.id || t.videoId))}`} onClick={() => setOpen(false)}>
-                        <div className="flex items-center gap-2">
-                          {t.thumbnails?.[0]?.url ? <img src={t.thumbnails[0].url} className="w-8 h-8 object-cover rounded" alt={t.title}/> : null}
-                          <div className="text-sm">
-                            <div>{t.title}</div>
-                            {t.artists && <div className="text-xs text-gray-500">{(t.artists || []).join(", ")}</div>}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-2xl">🎵</span>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tracks</h3>
+                  </div>
+                  <div className="space-y-1">
+                    {results.tracks.slice(0, 10).map((t: any) => (
+                      <Link
+                        key={t.id || t.videoId || t.title}
+                        to={`/tracks/${encodeURIComponent(String(t.id || t.videoId))}`}
+                        onClick={() => setOpen(false)}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-200 group"
+                      >
+                        {t.thumbnails?.[0]?.url ? (
+                          <img 
+                            src={t.thumbnails[0].url} 
+                            className="w-12 h-12 rounded-lg object-cover bg-slate-200 dark:bg-zinc-800 group-hover:scale-105 transition-transform" 
+                            alt={t.title}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-slate-200 to-slate-300 dark:from-zinc-800 dark:to-zinc-900" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-foreground group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors truncate">
+                            {t.title}
                           </div>
+                          {t.artists && (
+                            <div className="text-xs text-muted-foreground truncate">
+                              {(t.artists || []).join(", ")}
+                            </div>
+                          )}
                         </div>
                       </Link>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="p-3 text-sm text-gray-500">Aucun résultat</div>
+            <div className="p-8 text-center">
+              <div className="text-4xl mb-3">🔍</div>
+              <p className="text-sm text-muted-foreground">No results found</p>
+            </div>
           )}
         </div>
       )}

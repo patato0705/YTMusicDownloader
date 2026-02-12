@@ -5,41 +5,61 @@
 
 @layer base {
   :root {
-    /* Light theme colors */
-    --color-background: 249 250 251;       /* gray-50 */
-    --color-foreground: 17 24 39;          /* gray-900 */
-    --color-card: 255 255 255;             /* white */
-    --color-card-foreground: 17 24 39;     /* gray-900 */
-    --color-primary: 37 99 235;            /* blue-600 */
+    /* Light theme colors - Clean blue professional theme */
+    --color-background: 248 250 252;         /* slate-50 - Very light gray-blue */
+    --color-foreground: 15 23 42;            /* slate-900 - Almost black */
+    --color-card: 255 255 255;               /* white - Clean cards */
+    --color-card-foreground: 15 23 42;       /* slate-900 */
+    
+    /* Blue primary for light mode */
+    --color-primary: 37 99 235;              /* blue-600 - Professional blue */
     --color-primary-foreground: 255 255 255; /* white */
-    --color-secondary: 243 244 246;        /* gray-100 */
-    --color-secondary-foreground: 17 24 39; /* gray-900 */
-    --color-muted: 243 244 246;            /* gray-100 */
-    --color-muted-foreground: 107 114 128; /* gray-500 */
-    --color-accent: 243 244 246;           /* gray-100 */
-    --color-accent-foreground: 17 24 39;   /* gray-900 */
-    --color-border: 229 231 235;           /* gray-200 */
-    --color-input: 229 231 235;            /* gray-200 */
-    --color-ring: 37 99 235;               /* blue-600 */
+    
+    /* Lighter blue secondary */
+    --color-secondary: 59 130 246;           /* blue-500 - Bright blue */
+    --color-secondary-foreground: 255 255 255;
+    
+    --color-muted: 241 245 249;              /* slate-100 */
+    --color-muted-foreground: 100 116 139;   /* slate-500 */
+    --color-accent: 241 245 249;             /* slate-100 */
+    --color-accent-foreground: 15 23 42;     /* slate-900 */
+    --color-border: 226 232 240;             /* slate-200 - Soft borders */
+    --color-input: 226 232 240;              /* slate-200 */
+    --color-ring: 37 99 235;                 /* blue-600 */
+    
+    /* Custom gradient colors for light mode */
+    --gradient-from: 59 130 246;             /* blue-500 */
+    --gradient-via: 99 102 241;              /* indigo-500 */
+    --gradient-to: 139 92 246;               /* violet-500 */
   }
 
   .dark {
-    /* Dark theme colors */
-    --color-background: 17 24 39;          /* gray-900 */
-    --color-foreground: 249 250 251;       /* gray-50 */
-    --color-card: 31 41 55;                /* gray-800 */
-    --color-card-foreground: 249 250 251;  /* gray-50 */
-    --color-primary: 59 130 246;           /* blue-500 */
-    --color-primary-foreground: 255 255 255; /* white */
-    --color-secondary: 55 65 81;           /* gray-700 */
-    --color-secondary-foreground: 249 250 251; /* gray-50 */
-    --color-muted: 55 65 81;               /* gray-700 */
-    --color-muted-foreground: 156 163 175; /* gray-400 */
-    --color-accent: 55 65 81;              /* gray-700 */
-    --color-accent-foreground: 249 250 251; /* gray-50 */
-    --color-border: 55 65 81;              /* gray-700 */
-    --color-input: 55 65 81;               /* gray-700 */
-    --color-ring: 59 130 246;              /* blue-500 */
+    /* Dark SaaS/Tech theme - Deep blacks with dark red/crimson neon accents */
+    --color-background: 9 9 11;              /* zinc-950 - Almost black */
+    --color-foreground: 250 250 250;         /* zinc-50 - Bright white */
+    --color-card: 24 24 27;                  /* zinc-900 - Dark card */
+    --color-card-foreground: 250 250 250;    /* zinc-50 */
+    
+    /* Deep red/crimson primary */
+    --color-primary: 220 38 38;              /* red-700 - Deep crimson */
+    --color-primary-foreground: 250 250 250; /* white */
+    
+    /* Dark purple accent */
+    --color-secondary: 126 34 206;           /* purple-700 - Dark purple */
+    --color-secondary-foreground: 250 250 250;
+    
+    --color-muted: 39 39 42;                 /* zinc-800 */
+    --color-muted-foreground: 161 161 170;   /* zinc-400 */
+    --color-accent: 39 39 42;                /* zinc-800 */
+    --color-accent-foreground: 250 250 250;
+    --color-border: 39 39 42;                /* zinc-800 - Subtle borders */
+    --color-input: 39 39 42;
+    --color-ring: 220 38 38;                 /* red-700 */
+    
+    /* Custom gradient colors */
+    --gradient-from: 185 28 28;              /* red-800 - Dark burgundy */
+    --gradient-via: 126 34 206;              /* purple-700 - Dark purple */
+    --gradient-to: 220 38 38;                /* red-700 - Crimson */
   }
 
   * {
@@ -47,32 +67,264 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
 @layer utilities {
-  /* Custom utility classes */
+  /* Text utilities */
   .text-balance {
     text-wrap: balance;
   }
+  
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600;
+  }
+  
+  .text-gradient-blue {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-500;
+  }
+  
+  /* Dark mode gradient text */
+  .dark .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-red-500 via-red-600 to-red-700;
+  }
+  
+  .dark .text-gradient-red {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-red-700 to-red-500;
+  }
+  
+  /* Light mode glow effects - softer blue glows (default) */
+  .glow-blue {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3),
+                0 0 40px rgba(59, 130, 246, 0.15);
+  }
+  
+  .glow-blue-sm {
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+  }
+  
+  .glow-indigo {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3),
+                0 0 40px rgba(99, 102, 241, 0.15);
+  }
+  
+  .glow-hover:hover {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4),
+                0 0 40px rgba(59, 130, 246, 0.2);
+    transition: box-shadow 0.3s ease;
+  }
+  
+  /* Dark mode glow effects - red glows */
+  .dark .glow-red {
+    box-shadow: 0 0 20px rgba(220, 38, 38, 0.4),
+                0 0 40px rgba(220, 38, 38, 0.2);
+  }
+  
+  .dark .glow-red-sm {
+    box-shadow: 0 0 10px rgba(220, 38, 38, 0.3);
+  }
+  
+  .dark .glow-purple {
+    box-shadow: 0 0 20px rgba(126, 34, 206, 0.4),
+                0 0 40px rgba(126, 34, 206, 0.2);
+  }
+  
+  .dark .glow-hover:hover {
+    box-shadow: 0 0 20px rgba(220, 38, 38, 0.5),
+                0 0 40px rgba(220, 38, 38, 0.3);
+    transition: box-shadow 0.3s ease;
+  }
+  
+  /* Glassmorphism - Light mode defaults */
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-sm;
+  }
+  
+  .glass-strong {
+    @apply bg-white/95 backdrop-blur-xl border border-slate-300/60 shadow-md;
+  }
+  
+  /* Dark mode glass - darker, subtle */
+  .dark .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-none;
+  }
+  
+  .dark .glass-strong {
+    @apply bg-white/10 backdrop-blur-xl border border-white/20 shadow-none;
+  }
+  
+  /* Gradient backgrounds - Light mode defaults */
+  .bg-gradient-tech {
+    background: linear-gradient(135deg, 
+      rgba(59, 130, 246, 0.08) 0%, 
+      rgba(99, 102, 241, 0.06) 50%, 
+      rgba(139, 92, 246, 0.08) 100%
+    );
+  }
+  
+  .bg-gradient-radial {
+    background: radial-gradient(
+      circle at top right,
+      rgba(59, 130, 246, 0.1) 0%,
+      transparent 50%
+    );
+  }
+  
+  .bg-grid {
+    background-image: 
+      linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+  
+  .border-gradient {
+    border: 1px solid transparent;
+    background: 
+      linear-gradient(rgb(255, 255, 255), rgb(255, 255, 255)) padding-box,
+      linear-gradient(135deg, rgb(59, 130, 246), rgb(99, 102, 241), rgb(139, 92, 246)) border-box;
+  }
+  
+  /* Dark mode gradient backgrounds */
+  .dark .bg-gradient-tech {
+    background: linear-gradient(135deg, 
+      rgba(185, 28, 28, 0.15) 0%, 
+      rgba(153, 27, 27, 0.12) 50%, 
+      rgba(220, 38, 38, 0.15) 100%
+    );
+  }
+  
+  .dark .bg-gradient-radial {
+    background: radial-gradient(
+      circle at top right,
+      rgba(220, 38, 38, 0.2) 0%,
+      transparent 50%
+    );
+  }
+  
+  .dark .bg-grid {
+    background-image: 
+      linear-gradient(rgba(220, 38, 38, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(220, 38, 38, 0.05) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+  
+  .dark .border-gradient {
+    border: 1px solid transparent;
+    background: 
+      linear-gradient(rgb(24, 24, 27), rgb(24, 24, 27)) padding-box,
+      linear-gradient(135deg, rgb(185, 28, 28), rgb(220, 38, 38), rgb(239, 68, 68)) border-box;
+  }
+  
+  /* Hover lift effect */
+  .hover-lift {
+    @apply transition-all duration-300;
+  }
+  
+  .hover-lift:hover {
+    @apply -translate-y-1;
+  }
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling - Light mode default */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-secondary;
+  @apply bg-slate-100;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground rounded;
+  @apply bg-slate-300 rounded-full;
+  border: 2px solid rgb(248, 250, 252);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-foreground/60;
+  @apply bg-blue-500/60;
+}
+
+/* Dark mode scrollbar */
+.dark::-webkit-scrollbar-track {
+  @apply bg-zinc-900;
+}
+
+.dark::-webkit-scrollbar-thumb {
+  @apply bg-zinc-700 rounded-full;
+  border: 2px solid rgb(24, 24, 27);
+}
+
+.dark::-webkit-scrollbar-thumb:hover {
+  @apply bg-red-600/60;
+}
+
+/* Selection styling - Light mode default */
+::selection {
+  @apply bg-blue-500/30 text-blue-900;
+}
+
+.dark ::selection {
+  @apply bg-red-700/40 text-red-100;
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s infinite linear;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(59, 130, 246, 0.1),
+    transparent
+  );
+  background-size: 1000px 100%;
+}
+
+.dark .animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(220, 38, 38, 0.15),
+    transparent
+  );
+  background-size: 1000px 100%;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.4),
+                0 0 50px rgba(59, 130, 246, 0.2);
+  }
+}
+
+@keyframes pulse-glow-dark {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(220, 38, 38, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(220, 38, 38, 0.5),
+                0 0 50px rgba(220, 38, 38, 0.3);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.dark .animate-pulse-glow {
+  animation: pulse-glow-dark 3s ease-in-out infinite;
 }
