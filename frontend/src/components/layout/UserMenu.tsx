@@ -1,19 +1,56 @@
 // src/components/layout/UserMenu.tsx
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
+import { LanguageSelector } from '../ui/LanguageSelector';
 
-export const UserMenu: React.FC = () => {
+// Define Locale type to match i18n
+type Locale = 'en' | 'fr';
+
+export const UserMenu: React.FC<{
+  onThemeToggle?: () => void;
+  onLanguageToggle?: (locale: Locale) => void;
+  currentTheme?: string;
+  currentLocale?: Locale;
+}> = ({ onThemeToggle, onLanguageToggle, currentTheme, currentLocale }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const { user, logout } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
 
+  // Handle scroll to update dropdown position
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleScroll = () => {
+      updateDropdownPosition();
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isOpen]);
+
+  // Handle click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const targetElement = target as Element;
+      
+      // Check if click is inside a language dropdown
+      const isLanguageDropdown = targetElement.closest ? targetElement.closest('[data-language-dropdown="true"]') : null;
+      
+      if (
+        menuRef.current && 
+        !menuRef.current.contains(target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(target) &&
+        !isLanguageDropdown
+      ) {
         setIsOpen(false);
       }
     };
@@ -21,6 +58,23 @@ export const UserMenu: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const updateDropdownPosition = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 12,
+        right: window.innerWidth - rect.right
+      });
+    }
+  };
+
+  const handleToggle = () => {
+    if (!isOpen) {
+      updateDropdownPosition();
+    }
+    setIsOpen(!isOpen);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -42,9 +96,10 @@ export const UserMenu: React.FC = () => {
   };
 
   return (
-    <div className="relative" ref={menuRef}>
+    <>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={buttonRef}
+        onClick={handleToggle}
         className="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-300 group"
       >
         <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${roleGradients[user.role]} flex items-center justify-center text-white font-semibold shadow-lg group-hover:scale-110 transition-transform`}>
@@ -64,8 +119,15 @@ export const UserMenu: React.FC = () => {
         </svg>
       </button>
 
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 glass rounded-2xl shadow-2xl border-slate-200 dark:border-white/10 py-3 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+      {isOpen && createPortal(
+        <div 
+          ref={menuRef}
+          className="fixed w-80 glass rounded-2xl shadow-2xl py-3 z-50 animate-in fade-in slide-in-from-top-2 duration-200"
+          style={{
+            top: `${dropdownPosition.top}px`,
+            right: `${dropdownPosition.right}px`
+          }}
+        >
           {/* User info */}
           <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10">
             <div className="flex items-center space-x-3 mb-3">
@@ -85,6 +147,42 @@ export const UserMenu: React.FC = () => {
 
           {/* Menu items */}
           <div className="py-2">
+            {/* Theme and Language - Mobile only */}
+            {onThemeToggle && onLanguageToggle && (
+              <div className="md:hidden px-4 py-2 border-b border-slate-200 dark:border-white/10 mb-2">
+                <div className="flex items-center justify-between gap-3">
+                  {/* Theme toggle */}
+                  <button
+                    onClick={onThemeToggle}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 transition-all text-slate-700 dark:text-zinc-200"
+                  >
+                    {currentTheme === 'dark' ? (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                        <span className="text-sm font-medium">Light</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                        </svg>
+                        <span className="text-sm font-medium">Dark</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Language selector */}
+                  <LanguageSelector
+                    currentLocale={currentLocale || 'en'}
+                    onLanguageChange={onLanguageToggle}
+                    variant="mobile"
+                  />
+                </div>
+              </div>
+            )}
+            
             <button
               onClick={() => {
                 navigate('/settings');
@@ -137,7 +235,7 @@ export const UserMenu: React.FC = () => {
 
             <button
               onClick={handleLogout}
-              className="w-full text-left px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all duration-200 flex items-center space-x-3 group rounded-lg mx-2"
+              className="w-full text-left px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all duration-200 flex items-center space-x-3 group rounded-xl mx-2"
             >
               <div className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-950/50 flex items-center justify-center group-hover:bg-red-600 transition-colors">
                 <svg className="w-4 h-4 text-red-600 dark:text-red-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -147,8 +245,9 @@ export const UserMenu: React.FC = () => {
               <span className="font-medium">{t('auth.logout')}</span>
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 };

@@ -21,6 +21,9 @@ import Library from './pages/Library';
 import Artist from './pages/Artist';
 import Album from './pages/Album';
 
+// Test pages
+import ComponentShowcase from './pages/ComponentShowcase';
+
 export default function App(): JSX.Element {
   const { isLoading } = useAuth();
 
@@ -59,6 +62,8 @@ export default function App(): JSX.Element {
                     {/* <Route path="/settings" element={<Settings />} /> */}
                     <Route path="/artists/:artistId" element={<Artist />} />
                     <Route path="/albums/:albumId" element={<Album />} />
+
+                    <Route path="/showcase" element={<ComponentShowcase />} />
                     
                     {/* Catch-all redirect */}
                     <Route path="*" element={<Navigate to="/" replace />} />

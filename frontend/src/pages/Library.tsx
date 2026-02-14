@@ -10,6 +10,7 @@ import { Button } from '../components/ui/Button';
 import { StatCard } from '../components/ui/StatCard';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
+import { SearchInput } from '../components/ui/SearchInput';
 import { formatNumber } from '../utils';
 
 // Icon components
@@ -27,6 +28,7 @@ export default function Library(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'artists' | 'albums'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
   const { t } = useI18n();
 
@@ -99,9 +101,19 @@ export default function Library(): JSX.Element {
 
   const hasContent = artists.length > 0 || albums.length > 0;
 
-  // Filter content based on active tab
-  const displayedArtists = activeTab === 'albums' ? [] : artists;
-  const displayedAlbums = activeTab === 'artists' ? [] : albums;
+  // Filter content based on active tab and search query
+  const filteredArtists = activeTab === 'albums' ? [] : artists.filter(artist =>
+    artist.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  
+  const filteredAlbums = activeTab === 'artists' ? [] : albums.filter(album =>
+    album.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    album.artist_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Update display logic
+  const displayedArtists = filteredArtists;
+  const displayedAlbums = filteredAlbums;
 
   return (
     <div className="relative min-h-screen">
@@ -174,38 +186,52 @@ export default function Library(): JSX.Element {
           </div>
         ) : (
           <>
-            {/* Filter tabs */}
-            <div className="flex items-center gap-2 glass rounded-xl p-2 w-fit">
-              <button
-                onClick={() => setActiveTab('all')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
-                  activeTab === 'all'
-                    ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setActiveTab('artists')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
-                  activeTab === 'artists'
-                    ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-                }`}
-              >
-                Artists ({artists.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('albums')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
-                  activeTab === 'albums'
-                    ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-                }`}
-              >
-                Albums ({albums.length})
-              </button>
+            {/* Filter tabs and search */}
+            <div className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
+              {/* Filter tabs */}
+              <div className="flex items-center gap-2 glass rounded-2xl p-2">
+                <button
+                  onClick={() => setActiveTab('all')}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                    activeTab === 'all'
+                      ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setActiveTab('artists')}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                    activeTab === 'artists'
+                      ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
+                  }`}
+                >
+                  Artists ({artists.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('albums')}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                    activeTab === 'albums'
+                      ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
+                  }`}
+                >
+                  Albums ({albums.length})
+                </button>
+              </div>
+
+              {/* Search bar */}
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search your library..."
+                size="md"
+                showClearButton
+                onClear={() => setSearchQuery('')}
+                className="w-full md:w-96"
+              />
             </div>
 
             {/* Followed Artists */}
@@ -250,6 +276,19 @@ export default function Library(): JSX.Element {
                   ))}
                 </div>
               </section>
+            )}
+
+            {/* No results from search */}
+            {searchQuery && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
+              <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-12 border border-slate-200/50 dark:border-white/10 text-center">
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4">
+                  <span className="text-4xl">🔍</span>
+                </div>
+                <h3 className="text-xl font-semibold mb-2">No matches found</h3>
+                <p className="text-muted-foreground">
+                  No items in your library match <span className="font-semibold text-foreground">"{searchQuery}"</span>
+                </p>
+              </div>
             )}
           </>
         )}

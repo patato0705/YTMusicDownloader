@@ -183,7 +183,7 @@ export default function Home(): JSX.Element {
                         
                         {/* Progress indicator */}
                         {progress < 100 && (
-                          <div className="absolute top-2 right-2 px-2 py-1 rounded-full glass-strong text-xs font-medium text-blue-600 dark:text-red-400">
+                          <div className="absolute top-2 right-2 px-2 py-1 rounded-full glass text-xs font-medium text-blue-600 dark:text-red-400">
                             {Math.round(progress)}%
                           </div>
                         )}

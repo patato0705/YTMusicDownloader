@@ -143,17 +143,9 @@
     @apply bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-sm;
   }
   
-  .glass-strong {
-    @apply bg-white/95 backdrop-blur-xl border border-slate-300/60 shadow-md;
-  }
-  
   /* Dark mode glass - darker, subtle */
   .dark .glass {
     @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-none;
-  }
-  
-  .dark .glass-strong {
-    @apply bg-white/10 backdrop-blur-xl border border-white/20 shadow-none;
   }
   
   /* Gradient backgrounds - Light mode defaults */

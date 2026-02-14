@@ -4,8 +4,7 @@
  * All API calls go through this client.
  */
 
-const VITE_API_BASE = "http://localhost:8000/api"
-const API_BASE = (VITE_API_BASE ?? "/api").replace(/\/+$/, "");
+const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
 
 /**
  * Get auth token from localStorage

@@ -75,22 +75,34 @@
     }
   },
   "artist": {
+    "title": "Artist",
+    "release": "release",
+    "releases": "releases",
+    "follow": "Follow",
+    "following": "Following",
     "albums": "Albums",
     "singles": "Singles & EPs",
-    "follow": "Follow",
-    "unfollow": "Unfollow",
-    "following": "Following",
-    "sync": "Sync",
-    "syncing": "Syncing..."
+    "noAlbums": "No Albums Yet",
+    "noAlbumsDescription": "This artist doesn't have any albums in our database yet.",
+    "notFound": "Artist not found"
   },
   "album": {
-    "tracks": "Tracks",
-    "year": "Year",
+    "album": "Album",
     "type": "Type",
-    "follow": "Follow",
-    "unfollow": "Unfollow",
-    "download": "Download",
-    "downloading": "Downloading..."
+    "unknownArtist": "Unknown Artist",
+    "track": "track",
+    "tracks": "tracks",
+    "download": "Download Album",
+    "downloadQueued": "Album download queued successfully",
+    "downloadFailed": "Download failed",
+    "trackList": "Track List",
+    "title": "Title",
+    "artist": "Artist",
+    "duration": "Duration",
+    "status": "Status",
+    "noTracks": "No Tracks",
+    "noTracksDescription": "This album doesn't have any tracks available yet.",
+    "notFound": "Album not found"
   },
   "library": {
     "title": "Library",
