@@ -1,4 +1,11 @@
 # backend/routers/playlists.py
+"""
+Playlist endpoints.
+
+Endpoints :
+- GET /api/playlist/{playlist_id} - Get playlist details with track/album info.
+- GET /api/playlist/{playlist_id}/albums - Extract unique album IDs from a playlist.
+"""
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 

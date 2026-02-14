@@ -1,14 +1,6 @@
 # backend/db.py
 """
 SQLAlchemy engine & session management for the application.
-
-Usage:
-    from backend.db import get_session, init_db
-    with get_session() as session:
-        ...
-or as dependency in FastAPI:
-    from backend.db import get_session
-    db: Session = Depends(get_session)
 """
 
 from __future__ import annotations
@@ -17,6 +9,7 @@ from typing import Generator, Optional
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
 
 from .config import DB_PATH, ensure_dirs
 from .models import Base  # requires backend/models.py to define Base
@@ -27,22 +20,38 @@ ensure_dirs()
 # SQLite URL
 sqlite_url = f"sqlite:///{str(DB_PATH)}"
 
-# create engine with check_same_thread for multithreaded apps/workers
+# create engine with optimized settings for SQLite concurrency
 engine = create_engine(
     sqlite_url,
-    connect_args={"timeout": 30,"check_same_thread": False, "timeout": 30},
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 30.0,  # 30 second timeout for lock acquisition
+    },
+    poolclass=StaticPool,  # Single connection pool (optimal for SQLite)
+    pool_pre_ping=True,    # Verify connections before using
     future=True,
 )
 
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
     cursor = dbapi_conn.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=30000")  # 30 seconds
+    cursor.execute("PRAGMA journal_mode=WAL")          # Enable WAL mode
+    cursor.execute("PRAGMA synchronous=NORMAL")        # Faster writes, still safe
+    cursor.execute("PRAGMA cache_size=-64000")         # 64MB cache
+    cursor.execute("PRAGMA busy_timeout=30000")        # 30 seconds in milliseconds
+    cursor.execute("PRAGMA temp_store=MEMORY")         # Store temp tables in memory
+    cursor.execute("PRAGMA mmap_size=268435456")       # 256MB memory-mapped I/O
+    cursor.execute("PRAGMA page_size=4096")            # 4KB pages
     cursor.close()
 
 # Session factory
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False, class_=Session)
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+    expire_on_commit=False,  # Important for SQLite
+    class_=Session
+)
 
 def init_db() -> None:
     """

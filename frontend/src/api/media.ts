@@ -3,38 +3,67 @@
  * Media/thumbnail API endpoints
  */
 
-import { api, apiFetch } from './client';
+import { api } from './client';
 
 /**
- * Get thumbnail image (proxied and cached)
- * No authentication required - thumbnails are public
+ * Get local image URL (no auth required)
+ * For images stored in /data directory (cover.jpg files)
  * 
- * Flow:
- * 1. Check memory cache
- * 2. Check disk cache
- * 3. Fetch from source and cache
+ * @param imagePath - Path like "/data/kroh/BUTTERFLY/cover.jpg" or "/config/temp/covers/albumid.jpg"
+ * @returns URL that can be used in <img src="">
  */
-export async function getThumbnail(url: string): Promise<Blob> {
-  const response = await apiFetch(`/media/thumbnail?url=${encodeURIComponent(url)}`, {
-    method: 'GET',
-  });
-  
-  // If response is already a Blob, return it
-  if (response instanceof Blob) {
-    return response;
+export function getLocalImageUrl(imagePath: string | null | undefined): string {
+  if (!imagePath) {
+    return '/assets/placeholder-music.png';
   }
   
-  // Otherwise, it might be a JSON error or we need to fetch as blob
-  throw new Error('Invalid thumbnail response');
+  const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+  
+  // Clean the path - remove leading slash if present
+  let cleanPath = imagePath;
+  if (cleanPath.startsWith('/')) {
+    cleanPath = cleanPath.substring(1);
+  }
+  
+  // Path is already clean, just prepend API endpoint
+  return `${API_BASE}/api/media/images/${cleanPath}`;
 }
 
 /**
- * Get thumbnail URL for use in img src
- * Returns a proxied URL that goes through the cache
+ * Get thumbnail URL for external images (YouTube, Google, etc.)
+ * Goes through proxy/cache, no auth required
  */
 export function getThumbnailUrl(url: string): string {
-  const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
-  return `${API_BASE}/media/thumbnail?url=${encodeURIComponent(url)}`;
+  const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+  return `${API_BASE}/api/media/thumbnail?url=${encodeURIComponent(url)}`;
+}
+
+/**
+ * Smart image URL getter - automatically handles both local and external images
+ * Use this for all image sources
+ * 
+ * @param imagePath - Can be local path ("/data/...") or external URL ("https://...")
+ * @returns Appropriate URL for the image
+ */
+export function getImageUrl(imagePath: string | null | undefined): string {
+  if (!imagePath) {
+    return '/assets/placeholder-music.png';
+  }
+  
+  // Check if it's an external URL (YouTube, Google, etc.)
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    // Only proxy if it's actually an external domain
+    if (imagePath.includes('googleusercontent.com') || 
+        imagePath.includes('ytimg.com') ||
+        imagePath.includes('ggpht.com')) {
+      return getThumbnailUrl(imagePath);
+    }
+    // If it's already pointing to our API, use it directly
+    return imagePath;
+  }
+  
+  // It's a local path like "/data/artist/album/cover.jpg"
+  return getLocalImageUrl(imagePath);
 }
 
 /**

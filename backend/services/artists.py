@@ -6,12 +6,15 @@ Business logic for fetching artist data from YTMusic lives here.
 from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 
+import requests
 from sqlalchemy.orm import Session
 
 from ..models import Artist
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
+from .. import config
 
 logger = logging.getLogger("services.artists")
 
@@ -68,6 +71,130 @@ def upsert_artist(
 def get_artist_from_db(session: Session, artist_id: str) -> Optional[Artist]:
     """Get artist from database by ID."""
     return session.get(Artist, artist_id)
+
+
+# ============================================================================
+# ARTIST BANNER MANAGEMENT
+# ============================================================================
+
+def ensure_artist_banner(
+    session: Session,
+    artist_obj: Artist,
+    thumbnails: Optional[List[Any]] = None,
+) -> Optional[str]:
+    """
+    Ensure the artist has a local banner image. Downloads the best thumbnail if needed.
+    
+    Args:
+        session: SQLAlchemy session
+        artist_obj: Artist model instance (should be attached to session)
+        thumbnails: raw thumbnails (list[dict]) - optional, prefer these over artist_obj.thumbnails
+    
+    Returns:
+        Path to the saved banner (string) or None if failed
+    """
+    if not artist_obj:
+        return None
+
+    # Get artist name for folder path
+    artist_name = artist_obj.name or "Unknown Artist"
+    safe_artist_name = _safe_name(artist_name)
+    
+    # Artist folder: /data/{artist}/
+    artist_folder = Path(str(config.MUSIC_DIR)) / safe_artist_name
+    
+    # Final banner path: /data/{artist}/backdrop.jpg
+    final_banner_path = artist_folder / "backdrop.jpg"
+
+    # Pick thumbnails list to use
+    thumbs_src = thumbnails or artist_obj.thumbnails or []
+    
+    logger.debug(f"Artist {artist_obj.id} has {len(thumbs_src)} thumbnails")
+    
+    # Normalize and pick best thumbnail
+    norm_thumbs = N.normalize_thumbnails(thumbs_src)
+    logger.debug(f"Normalized to {len(norm_thumbs) if norm_thumbs else 0} thumbnails")
+    
+    best_url = N.pick_best_thumbnail_url(norm_thumbs) if norm_thumbs else None
+    if not best_url:
+        logger.warning(f"No thumbnail URL found for artist {artist_obj.id}")
+        return None
+    
+    logger.info(f"Selected best thumbnail URL: {best_url[:100]}..." if len(best_url) > 100 else f"Selected best thumbnail URL: {best_url}")
+
+    # Download to temp location first
+    temp_banner_path = Path(str(config.COVERS_DIR)) / f"artist_{artist_obj.id}_backdrop.jpg"
+    
+    try:
+        # Ensure temp directory exists
+        Path(str(config.COVERS_DIR)).mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Downloading banner for artist {artist_obj.id} from {best_url}")
+        response = requests.get(best_url, timeout=30)
+        response.raise_for_status()
+        
+        # Save to temp location
+        temp_banner_path.write_bytes(response.content)
+        logger.debug(f"Downloaded banner to temp: {temp_banner_path}")
+        
+        # Create artist folder if it doesn't exist
+        artist_folder.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Ensured artist folder exists: {artist_folder}")
+        
+        # Move to final location
+        if final_banner_path.exists():
+            # Backup old banner before replacing
+            try:
+                final_banner_path.unlink()
+                logger.debug(f"Removed old banner: {final_banner_path}")
+            except Exception as e:
+                logger.warning(f"Failed to remove old banner: {e}")
+        
+        # Move temp file to final location
+        import shutil
+        shutil.move(str(temp_banner_path), str(final_banner_path))
+        logger.info(f"Moved banner to: {final_banner_path}")
+        
+        # Set permissions
+        try:
+            final_banner_path.chmod(0o644)
+        except Exception as e:
+            logger.debug(f"Failed to set banner permissions: {e}")
+        
+        # Update database
+        artist_obj.image_local = str(final_banner_path)
+        session.add(artist_obj)
+        
+        return str(final_banner_path)
+        
+    except requests.RequestException as e:
+        logger.error(f"Failed to download banner for artist {artist_obj.id}: {e}")
+        # Clean up temp file if it exists
+        if temp_banner_path.exists():
+            try:
+                temp_banner_path.unlink()
+            except Exception:
+                pass
+        return None
+    except Exception as e:
+        logger.exception(f"Unexpected error ensuring banner for artist {artist_obj.id}: {e}")
+        # Clean up temp file if it exists
+        if temp_banner_path.exists():
+            try:
+                temp_banner_path.unlink()
+            except Exception:
+                pass
+        return None
+
+
+def _safe_name(s: Optional[str]) -> str:
+    """
+    Convert a string to a safe filename/directory name.
+    Removes or replaces problematic characters.
+    """
+    if not s:
+        return "Unknown"
+    return "".join(c for c in s if c.isalnum() or c in " .-_()").strip() or "Unknown"
 
 
 # ============================================================================

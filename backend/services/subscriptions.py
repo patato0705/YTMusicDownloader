@@ -10,7 +10,7 @@ from sqlalchemy import select
 from . import normalizers as N
 
 from ..models import ArtistSubscription, AlbumSubscription, Artist, Album
-from ..time_utils import now_utc
+from ..time_utils import now_utc, ensure_timezone_aware
 
 logger = logging.getLogger("services.subscriptions")
 
@@ -19,7 +19,6 @@ def subscribe_to_artist(
     session: Session,
     artist_id: str,
     mode: str = "full",
-    sync_interval_hours: Optional[int] = 24,
 ) -> ArtistSubscription:
     """
     Create or update an artist subscription.
@@ -33,7 +32,6 @@ def subscribe_to_artist(
         # Update existing subscription
         existing.enabled = True
         existing.mode = mode
-        existing.sync_interval_hours = sync_interval_hours
         session.add(existing)
         logger.info(f"Updated artist subscription for {artist_id}")
         return existing
@@ -43,7 +41,6 @@ def subscribe_to_artist(
         artist_id=artist_id,
         mode=mode,
         enabled=True,
-        sync_interval_hours=sync_interval_hours,
         created_at=now_utc(),
     )
     session.add(subscription)
@@ -157,7 +154,7 @@ def get_due_album_subscriptions(session: Session) -> List[AlbumSubscription]:
 
 def get_monitored_artists_needing_sync(
     session: Session,
-    sync_interval_hours: int = 24
+    sync_interval_hours: int
 ) -> List[Artist]:
     """
     Get artists that are followed and need syncing.
@@ -184,9 +181,12 @@ def get_monitored_artists_needing_sync(
         if not sub:
             # No subscription but followed - needs sync
             due_artists.append(artist)
-        elif not sub.last_synced_at or sub.last_synced_at < cutoff:
-            # Subscription exists but hasn't been synced recently
-            due_artists.append(artist)
+        else:
+            # Ensure last_synced_at is timezone-aware for comparison
+            last_synced = ensure_timezone_aware(sub.last_synced_at)
+            if not last_synced or last_synced < cutoff:
+                # Subscription exists but hasn't been synced recently
+                due_artists.append(artist)
     
     return due_artists
 

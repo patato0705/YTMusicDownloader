@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { getLibraryArtists, getLibraryAlbums, getLibraryStats } from '../api/library';
+import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
 import { Spinner } from '../components/ui/Spinner';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
@@ -32,19 +33,8 @@ export default function Library(): JSX.Element {
         getLibraryStats(),
       ]);
 
-      // Process data and compute thumbnails once
-      const processedArtists = ((artistsResponse as any)?.artists || artistsResponse || []).map((artist: any) => ({
-        ...artist,
-        computedThumbnail: artist.image_local || artist.thumbnail || ''
-      }));
-
-      const processedAlbums = ((albumsResponse as any)?.albums || albumsResponse || []).map((album: any) => ({
-        ...album,
-        computedThumbnail: album.image_local || album.thumbnail || ''
-      }));
-
-      setArtists(processedArtists);
-      setAlbums(processedAlbums);
+      setArtists((artistsResponse as any)?.artists || artistsResponse || []);
+      setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
       setStats(statsResponse || {});
     } catch (err: any) {
       console.error('Failed to load library:', err);
@@ -162,7 +152,7 @@ export default function Library(): JSX.Element {
                 key={artist.id}
                 id={artist.id}
                 title={artist.name}
-                thumbnail={artist.computedThumbnail}
+                thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
                 type="artist"
                 onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
               />
@@ -184,7 +174,7 @@ export default function Library(): JSX.Element {
                 id={album.id}
                 title={album.title}
                 subtitle={album.artist_name}
-                thumbnail={album.computedThumbnail}
+                thumbnail={getImageUrl(album.image_local || album.thumbnail)}
                 type="album"
                 year={album.year}
                 onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}

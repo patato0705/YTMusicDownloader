@@ -119,10 +119,9 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
             "thumbnails": [],
             "thumbnail": None,
             "description": None,
-            "albums": {"results": [], "browseId": None, "params": None},
-            "singles": {"results": [], "browseId": None, "params": None},
+            "albums": [],
+            "singles": [],
         }
-
     if not isinstance(raw, dict):
         return {
             "id": str(channel_id),
@@ -130,40 +129,43 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
             "thumbnails": [],
             "thumbnail": None,
             "description": None,
-            "albums": {"results": [], "browseId": None, "params": None},
-            "singles": {"results": [], "browseId": None, "params": None},
+            "albums": [],
+            "singles": [],
         }
-
+    
     # Extract basic artist info
     name = raw.get("name")
     description = raw.get("description") or ""
     thumbs_models = N._build_thumbnails(raw.get("thumbnails", []))
     thumbs_dicts = [t.model_dump() for t in thumbs_models]
     thumbnail = N.pick_best_thumbnail_url(thumbs_dicts) if thumbs_models else None
-
-    # Get artist's albums/singles
-    if raw.get("albums") and raw["albums"].get("params") is not None:
-        albums_browseId = str(raw["albums"].get("browseId"))
-        albums_params = str(raw["albums"].get("params"))
-        albums_data = get_artist_albums(browseId=albums_browseId, params=albums_params)
-    else:
-        albums_data = []
-        raw_album_data = raw["albums"].get("results")
-        for item in raw_album_data:
-            if isinstance(item, dict):
-                albums_data.append(N._normalize_album_item(item))
-
-    if raw.get("singles") and raw["singles"].get("params") is not None:
-        singles_browseId = str(raw["singles"].get("browseId"))
-        singles_params = str(raw["singles"].get("params"))
-        singles_data = get_artist_albums(browseId=singles_browseId, params=singles_params)
-    else:
-        singles_data = []
-        raw_singles_data = raw["singles"].get("results")
-        for item in raw_singles_data:
-            if isinstance(item, dict):
-                singles_data.append(N._normalize_album_item(item))
-
+    
+    # Get artist's albums - handle missing 'albums' key
+    albums_data = []
+    if raw.get("albums"):
+        if raw["albums"].get("params") is not None:
+            albums_browseId = str(raw["albums"].get("browseId"))
+            albums_params = str(raw["albums"].get("params"))
+            albums_data = get_artist_albums(browseId=albums_browseId, params=albums_params)
+        else:
+            raw_album_data = raw["albums"].get("results", [])
+            for item in raw_album_data:
+                if isinstance(item, dict):
+                    albums_data.append(N._normalize_album_item(item))
+    
+    # Get artist's singles - handle missing 'singles' key
+    singles_data = []
+    if raw.get("singles"):
+        if raw["singles"].get("params") is not None:
+            singles_browseId = str(raw["singles"].get("browseId"))
+            singles_params = str(raw["singles"].get("params"))
+            singles_data = get_artist_albums(browseId=singles_browseId, params=singles_params)
+        else:
+            raw_singles_data = raw["singles"].get("results", [])
+            for item in raw_singles_data:
+                if isinstance(item, dict):
+                    singles_data.append(N._normalize_album_item(item))
+    
     return {
         "id": str(channel_id),
         "name": str(name) if name is not None else None,

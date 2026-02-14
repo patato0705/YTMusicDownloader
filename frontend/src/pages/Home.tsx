@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/I18nContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { getLibraryStats, getLibraryAlbums } from '../api/library';
+import { getImageUrl } from '../api/media';
 import { Spinner } from '../components/ui/Spinner';
 import { formatNumber } from '../utils';
 
@@ -14,6 +15,7 @@ export default function Home(): JSX.Element {
   const [stats, setStats] = useState<any>(null);
   const [recentAlbums, setRecentAlbums] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadHomeData();
@@ -35,12 +37,16 @@ export default function Home(): JSX.Element {
     }
   };
 
+  const handleImageError = (albumId: string) => {
+    setImageErrors(prev => new Set(prev).add(albumId));
+  };
+
   return (
     <div className="space-y-8">
       {/* Welcome section */}
       <div>
         <h1 className="text-4xl font-bold text-foreground mb-2">
-          {t('common.search')} {user?.username}! 👋
+          Welcome {user?.username}! 👋
         </h1>
         <p className="text-lg text-muted-foreground">
           Welcome to your music library
@@ -99,28 +105,38 @@ export default function Home(): JSX.Element {
             </div>
           ) : recentAlbums.length > 0 ? (
             <div className="space-y-3">
-              {recentAlbums.map((album) => (
-                <Link
-                  key={album.id}
-                  to={`/albums/${encodeURIComponent(album.id)}`}
-                  className="flex items-center gap-4 p-3 rounded-lg hover:bg-accent transition-colors"
-                >
-                  {album.thumbnail && (
-                    <img
-                      src={album.thumbnail}
-                      alt={album.title}
-                      className="w-12 h-12 rounded object-cover"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">{album.title}</p>
-                    <p className="text-sm text-muted-foreground truncate">{album.artist?.name}</p>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {album.tracks_downloaded}/{album.tracks_total} tracks
-                  </div>
-                </Link>
-              ))}
+              {recentAlbums.map((album) => {
+                const thumbnailUrl = getImageUrl(album.image_local || album.thumbnail);
+                const showImage = thumbnailUrl && !imageErrors.has(album.id);
+                
+                return (
+                  <Link
+                    key={album.id}
+                    to={`/albums/${encodeURIComponent(album.id)}`}
+                    className="flex items-center gap-4 p-3 rounded-lg hover:bg-accent transition-colors"
+                  >
+                    {showImage ? (
+                      <img
+                        src={thumbnailUrl}
+                        alt={album.title}
+                        className="w-12 h-12 rounded object-cover"
+                        onError={() => handleImageError(album.id)}
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded bg-secondary flex items-center justify-center text-muted-foreground">
+                        🎵
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground truncate">{album.title}</p>
+                      <p className="text-sm text-muted-foreground truncate">{album.artist?.name}</p>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {album.tracks_downloaded}/{album.tracks_total} tracks
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { getArtist, followArtist, unfollowArtist } from '../api/artists';
+import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
@@ -17,6 +18,7 @@ export default function Artist(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [artistImageError, setArtistImageError] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
 
@@ -31,19 +33,17 @@ export default function Artist(): JSX.Element {
 
     setLoading(true);
     setError(null);
+    setArtistImageError(false);
 
     try {
       const data = await getArtist(artistId);
       setArtist(data.artist || data);
       
-      // Combine albums and singles, compute thumbnails once
+      // Combine albums and singles
       const allAlbums = [
         ...(data.albums || []),
         ...(data.singles || [])
-      ].map((album: any) => ({
-        ...album,
-        computedThumbnail: album.image_local || album.thumbnail || ''
-      }));
+      ];
       
       setAlbums(allAlbums);
       setIsFollowing(data.followed || false);
@@ -100,20 +100,20 @@ export default function Artist(): JSX.Element {
   }
 
   const { albums: regularAlbums, singles } = categorizeAlbums(albums);
-
-  // Compute thumbnail once
-  const artistThumbnail = artist ? (artist.image_local || artist.thumbnail || '') : '';
+  const artistThumbnailUrl = getImageUrl(artist.image_local || artist.thumbnail);
 
   return (
     <div className="space-y-8">
       {/* Artist header */}
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <img
-          src={artistThumbnail || '/assets/placeholder-music.png'}
+          src={artistImageError ? '/assets/placeholder-music.png' : artistThumbnailUrl}
           alt={artist.name}
           className="w-48 h-48 rounded-full object-cover bg-secondary shadow-lg"
-          onError={(e) => {
-            e.currentTarget.src = '/assets/placeholder-music.png';
+          onError={() => {
+            if (!artistImageError) {
+              setArtistImageError(true);
+            }
           }}
         />
 
@@ -144,20 +144,17 @@ export default function Artist(): JSX.Element {
             {t('artist.albums')}
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {regularAlbums.map((album) => {
-              const thumbnail = album.image_local || album.thumbnail || '';
-              return (
-                <MediaCard
-                  key={album.id}
-                  id={album.id}
-                  title={album.title}
-                  thumbnail={thumbnail}
-                  type="album"
-                  year={album.year}
-                  onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
-                />
-              );
-            })}
+            {regularAlbums.map((album) => (
+              <MediaCard
+                key={album.id}
+                id={album.id}
+                title={album.title}
+                thumbnail={getImageUrl(album.image_local || album.thumbnail)}
+                type="album"
+                year={album.year}
+                onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+              />
+            ))}
           </div>
         </section>
       )}
@@ -169,20 +166,17 @@ export default function Artist(): JSX.Element {
             {t('artist.singles')}
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {singles.map((album) => {
-              const thumbnail = album.image_local || album.thumbnail || '';
-              return (
-                <MediaCard
-                  key={album.id}
-                  id={album.id}
-                  title={album.title}
-                  thumbnail={thumbnail}
-                  type="album"
-                  year={album.year}
-                  onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
-                />
-              );
-            })}
+            {singles.map((album) => (
+              <MediaCard
+                key={album.id}
+                id={album.id}
+                title={album.title}
+                thumbnail={getImageUrl(album.image_local || album.thumbnail)}
+                type="album"
+                year={album.year}
+                onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+              />
+            ))}
           </div>
         </section>
       )}
