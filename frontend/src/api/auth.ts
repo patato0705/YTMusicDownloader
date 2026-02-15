@@ -52,7 +52,7 @@ export async function login(username: string, password: string): Promise<LoginRe
 }
 
 /**
- * Register new user (admin only in production)
+ * Register new user (admin only)
  */
 export async function register(data: RegisterRequest): Promise<User> {
   return api.post<User>('/auth/register', data);
@@ -91,32 +91,4 @@ export async function getCurrentUser(): Promise<User> {
  */
 export async function changePassword(data: ChangePasswordRequest): Promise<void> {
   await api.post('/auth/change-password', data);
-}
-
-/**
- * List all users (admin only)
- */
-export async function listUsers(includeInactive = false): Promise<User[]> {
-  return api.get<User[]>('/auth/users', { include_inactive: includeInactive });
-}
-
-/**
- * Update user role (admin only)
- */
-export async function updateUserRole(userId: number, role: string): Promise<User> {
-  return api.patch<User>(`/auth/users/${userId}/role`, { role });
-}
-
-/**
- * Deactivate user (admin only)
- */
-export async function deactivateUser(userId: number): Promise<User> {
-  return api.post<User>(`/auth/users/${userId}/deactivate`);
-}
-
-/**
- * Activate user (admin only)
- */
-export async function activateUser(userId: number): Promise<User> {
-  return api.post<User>(`/auth/users/${userId}/activate`);
 }
