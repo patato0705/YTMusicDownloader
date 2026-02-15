@@ -31,6 +31,21 @@ class RegisterRequest(BaseModel):
         return v
 
 
+class CreateUserRequest(BaseModel):
+    """Request to create a new user (admin only)"""
+    username: str = Field(..., min_length=3, max_length=64)
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    role: str = Field(..., pattern="^(administrator|member|visitor)$")
+    
+    @field_validator("username")
+    @classmethod
+    def username_alphanumeric(cls, v: str) -> str:
+        if not v.replace("_", "").replace("-", "").isalnum():
+            raise ValueError("Username must contain only letters, numbers, hyphens, and underscores")
+        return v
+
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
@@ -66,8 +81,7 @@ class UserResponse(BaseModel):
     created_at: datetime
     last_login_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class LoginResponse(BaseModel):

@@ -17,6 +17,7 @@ Note: We use SQLAlchemy models directly for database outputs.
 from .auth import (
     LoginRequest,
     RegisterRequest,
+    CreateUserRequest,
     RefreshTokenRequest,
     ChangePasswordRequest,
     UpdateUserRequest,
@@ -65,6 +66,7 @@ __all__ = [
     # Auth
     "LoginRequest",
     "RegisterRequest",
+    "CreateUserRequest",
     "RefreshTokenRequest",
     "ChangePasswordRequest",
     "UpdateUserRequest",

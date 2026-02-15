@@ -4,6 +4,7 @@ Admin endpoints.
 
 User Management:
 - GET /api/admin/users - List all users
+- POST /api/admin/users - Create new user
 - PATCH /api/admin/users/{user_id}/role - Update user role
 - POST /api/admin/users/{user_id}/deactivate - Deactivate user
 - POST /api/admin/users/{user_id}/activate - Activate user
@@ -25,9 +26,11 @@ from sqlalchemy.orm import Session
 from backend.db import get_session
 from backend.dependencies import require_admin
 from backend.services import admin as admin_svc
+from backend.services import auth as auth_svc  # For create_user
 from backend import settings as settings_module
 from backend.schemas import (
     UserResponse,
+    CreateUserRequest,
     SettingResponse,
     SettingUpdateRequest,
     MessageResponse,
@@ -67,6 +70,36 @@ def list_users(
     )
     
     return [UserResponse.model_validate(u) for u in users]
+
+
+@router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def create_user(
+    data: CreateUserRequest,
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    """
+    Create a new user (admin only).
+    
+    Allows admins to create users with any role.
+    This is separate from the public registration endpoint.
+    """
+    try:
+        user = auth_svc.create_user(
+            session=session,
+            username=data.username,
+            email=data.email,
+            password=data.password,
+            role=data.role,
+        )
+        
+        return UserResponse.model_validate(user)
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
 
 @router.patch("/users/{user_id}/role", response_model=UserResponse)
