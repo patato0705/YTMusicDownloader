@@ -141,6 +141,7 @@ def create_app() -> FastAPI:
 
     # Include API routers FIRST (these take precedence)
     routers_to_try: List[str] = [
+        "admin",
         "albums",
         "artists",
         "auth",
