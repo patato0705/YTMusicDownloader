@@ -10,6 +10,9 @@ export const ChangePassword: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [currentPasswordError, setCurrentPasswordError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmError, setConfirmError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
   const { t } = useI18n();
@@ -19,17 +22,56 @@ export const ChangePassword: React.FC = () => {
   const forced = location.state?.forced || false;
   const message = location.state?.message || '';
 
+  // Validate new password on blur or change
+  const validateNewPassword = (password: string) => {
+    if (password && password.length < 8) {
+      setPasswordError(t('auth.errors.passwordTooShort'));
+    } else {
+      setPasswordError('');
+    }
+  };
+
+  // Validate confirm password on blur or change
+  const validateConfirmPassword = (confirm: string) => {
+    if (confirm && newPassword && confirm !== newPassword) {
+      setConfirmError(t('auth.errors.passwordMismatch'));
+    } else {
+      setConfirmError('');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setCurrentPasswordError('');
+    setPasswordError('');
+    setConfirmError('');
 
-    if (newPassword.length < 8) {
-      setError(t('auth.errors.passwordTooShort'));
+    // Check for empty fields
+    if (!currentPassword) {
+      setCurrentPasswordError(t('auth.errors.currentPasswordRequired') || 'Current password is required');
       return;
     }
 
+    if (!newPassword) {
+      setPasswordError(t('auth.errors.newPasswordRequired') || 'New password is required');
+      return;
+    }
+
+    if (!confirmPassword) {
+      setConfirmError(t('auth.errors.confirmPasswordRequired') || 'Please confirm your password');
+      return;
+    }
+
+    // Validate password length
+    if (newPassword.length < 8) {
+      setPasswordError(t('auth.errors.passwordTooShort'));
+      return;
+    }
+
+    // Validate password match
     if (newPassword !== confirmPassword) {
-      setError(t('auth.errors.passwordMismatch'));
+      setConfirmError(t('auth.errors.passwordMismatch'));
       return;
     }
 
@@ -43,6 +85,7 @@ export const ChangePassword: React.FC = () => {
 
       navigate('/');
     } catch (err: any) {
+      // Server errors go to the top error box
       setError(err.message || t('auth.errors.changePasswordFailed') || 'Failed to change password');
     } finally {
       setIsLoading(false);
@@ -93,7 +136,7 @@ export const ChangePassword: React.FC = () => {
 
         {/* Change password form */}
         <div className="glass rounded-3xl p-8 md:p-10 border-gradient shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-5">
             {/* Error message */}
             {error && (
               <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-4 border border-red-500/20">
@@ -114,11 +157,24 @@ export const ChangePassword: React.FC = () => {
                 type="password"
                 required
                 value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value);
+                  if (currentPasswordError) setCurrentPasswordError('');
+                }}
+                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  currentPasswordError 
+                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
+                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
+                } focus:border-transparent transition-all duration-300`}
                 placeholder="••••••••"
                 disabled={isLoading}
               />
+              {currentPasswordError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span>
+                  {currentPasswordError}
+                </p>
+              )}
             </div>
 
             {/* New password field */}
@@ -130,16 +186,34 @@ export const ChangePassword: React.FC = () => {
                 id="newPassword"
                 type="password"
                 required
-                minLength={8}
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  if (e.target.value) {
+                    validateNewPassword(e.target.value);
+                  } else {
+                    setPasswordError('');
+                  }
+                }}
+                onBlur={(e) => validateNewPassword(e.target.value)}
+                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  passwordError 
+                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
+                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
+                } focus:border-transparent transition-all duration-300`}
                 placeholder="••••••••"
                 disabled={isLoading}
               />
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {t('auth.errors.passwordTooShort')}
-              </p>
+              {passwordError ? (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span>
+                  {passwordError}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {t('auth.errors.passwordTooShort')}
+                </p>
+              )}
             </div>
 
             {/* Confirm password field */}
@@ -152,11 +226,29 @@ export const ChangePassword: React.FC = () => {
                 type="password"
                 required
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (e.target.value) {
+                    validateConfirmPassword(e.target.value);
+                  } else {
+                    setConfirmError('');
+                  }
+                }}
+                onBlur={(e) => validateConfirmPassword(e.target.value)}
+                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  confirmError 
+                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
+                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
+                } focus:border-transparent transition-all duration-300`}
                 placeholder="••••••••"
                 disabled={isLoading}
               />
+              {confirmError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span>
+                  {confirmError}
+                </p>
+              )}
             </div>
 
             {/* Submit button */}

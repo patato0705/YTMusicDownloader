@@ -11,6 +11,8 @@ export const Login: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
   const { login, isAuthenticated } = useAuth();
@@ -27,6 +29,20 @@ export const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setUsernameError('');
+    setPasswordError('');
+
+    // Check for empty fields
+    if (!username) {
+      setUsernameError(t('auth.errors.usernameRequired') || 'Username is required');
+      return;
+    }
+
+    if (!password) {
+      setPasswordError(t('auth.errors.passwordRequired') || 'Password is required');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -46,6 +62,7 @@ export const Login: React.FC = () => {
         navigate('/');
       }
     } catch (err: any) {
+      // Server/API errors go to top error box
       setError(err.message || t('auth.errors.invalidCredentials'));
     } finally {
       setIsLoading(false);
@@ -79,7 +96,7 @@ export const Login: React.FC = () => {
 
         {/* Login form */}
         <div className="glass rounded-3xl p-8 md:p-10 border-gradient shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} noValidate className="space-y-6">
             {/* Error message */}
             {error && (
               <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-4 border border-red-500/20">
@@ -100,11 +117,24 @@ export const Login: React.FC = () => {
                 type="text"
                 required
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (usernameError) setUsernameError('');
+                }}
+                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  usernameError 
+                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
+                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
+                } focus:border-transparent transition-all duration-300`}
                 placeholder={t('auth.login.username')}
                 disabled={isLoading}
               />
+              {usernameError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span>
+                  {usernameError}
+                </p>
+              )}
             </div>
 
             {/* Password field */}
@@ -117,11 +147,24 @@ export const Login: React.FC = () => {
                 type="password"
                 required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError('');
+                }}
+                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  passwordError 
+                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
+                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
+                } focus:border-transparent transition-all duration-300`}
                 placeholder="••••••••"
                 disabled={isLoading}
               />
+              {passwordError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span>
+                  {passwordError}
+                </p>
+              )}
             </div>
 
             {/* Submit button */}

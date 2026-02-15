@@ -11,6 +11,10 @@ export const Register: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmError, setConfirmError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
   const { login, isAuthenticated } = useAuth();
@@ -24,23 +28,77 @@ export const Register: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
+  // Validate username
+  const validateUsername = (name: string) => {
+    if (name && name.length < 3) {
+      setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
+    } else {
+      setUsernameError('');
+    }
+  };
+
+  // Validate password
+  const validatePassword = (pass: string) => {
+    if (pass && pass.length < 8) {
+      setPasswordError(t('auth.errors.passwordTooShort'));
+    } else {
+      setPasswordError('');
+    }
+  };
+
+  // Validate confirm password
+  const validateConfirmPassword = (confirm: string) => {
+    if (confirm && password && confirm !== password) {
+      setConfirmError(t('auth.errors.passwordMismatch'));
+    } else {
+      setConfirmError('');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setUsernameError('');
+    setEmailError('');
+    setPasswordError('');
+    setConfirmError('');
 
-    // Validation
+    // Check for empty fields
+    if (!username) {
+      setUsernameError(t('auth.errors.usernameRequired') || 'Username is required');
+      return;
+    }
+
+    if (!email) {
+      setEmailError(t('auth.errors.emailRequired') || 'Email is required');
+      return;
+    }
+
+    if (!password) {
+      setPasswordError(t('auth.errors.passwordRequired') || 'Password is required');
+      return;
+    }
+
+    if (!confirmPassword) {
+      setConfirmError(t('auth.errors.confirmPasswordRequired') || 'Please confirm your password');
+      return;
+    }
+
+    // Validate username length
     if (username.length < 3) {
-      setError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
+      setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
       return;
     }
 
+    // Validate password length
     if (password.length < 8) {
-      setError(t('auth.errors.passwordTooShort'));
+      setPasswordError(t('auth.errors.passwordTooShort'));
       return;
     }
 
+    // Validate password match
     if (password !== confirmPassword) {
-      setError(t('auth.errors.passwordMismatch'));
+      setConfirmError(t('auth.errors.passwordMismatch'));
       return;
     }
 
@@ -62,6 +120,7 @@ export const Register: React.FC = () => {
       await login(username, password);
       navigate('/');
     } catch (err: any) {
+      // Server/API errors go to top error box
       setError(err.message || t('auth.errors.registrationFailed') || 'Registration failed');
     } finally {
       setIsLoading(false);
@@ -95,7 +154,7 @@ export const Register: React.FC = () => {
 
         {/* Register form */}
         <div className="glass rounded-3xl p-8 md:p-10 border-gradient shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-5">
             {/* Error message */}
             {error && (
               <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-4 border border-red-500/20">
@@ -115,17 +174,34 @@ export const Register: React.FC = () => {
                 id="username"
                 type="text"
                 required
-                minLength={3}
-                maxLength={64}
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (e.target.value) {
+                    validateUsername(e.target.value);
+                  } else {
+                    setUsernameError('');
+                  }
+                }}
+                onBlur={(e) => validateUsername(e.target.value)}
+                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  usernameError 
+                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
+                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
+                } focus:border-transparent transition-all duration-300`}
                 placeholder={t('auth.register.username')}
                 disabled={isLoading}
               />
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {t('auth.register.usernameHint') || '3-64 characters'}
-              </p>
+              {usernameError ? (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span>
+                  {usernameError}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {t('auth.register.usernameHint') || '3-64 characters'}
+                </p>
+              )}
             </div>
 
             {/* Email field */}
@@ -138,11 +214,24 @@ export const Register: React.FC = () => {
                 type="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError('');
+                }}
+                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  emailError 
+                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
+                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
+                } focus:border-transparent transition-all duration-300`}
                 placeholder="your@email.com"
                 disabled={isLoading}
               />
+              {emailError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span>
+                  {emailError}
+                </p>
+              )}
             </div>
 
             {/* Password field */}
@@ -154,16 +243,34 @@ export const Register: React.FC = () => {
                 id="password"
                 type="password"
                 required
-                minLength={8}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (e.target.value) {
+                    validatePassword(e.target.value);
+                  } else {
+                    setPasswordError('');
+                  }
+                }}
+                onBlur={(e) => validatePassword(e.target.value)}
+                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  passwordError 
+                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
+                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
+                } focus:border-transparent transition-all duration-300`}
                 placeholder="••••••••"
                 disabled={isLoading}
               />
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {t('auth.errors.passwordTooShort')}
-              </p>
+              {passwordError ? (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span>
+                  {passwordError}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {t('auth.errors.passwordTooShort')}
+                </p>
+              )}
             </div>
 
             {/* Confirm password field */}
@@ -176,11 +283,29 @@ export const Register: React.FC = () => {
                 type="password"
                 required
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300"
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (e.target.value) {
+                    validateConfirmPassword(e.target.value);
+                  } else {
+                    setConfirmError('');
+                  }
+                }}
+                onBlur={(e) => validateConfirmPassword(e.target.value)}
+                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  confirmError 
+                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
+                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
+                } focus:border-transparent transition-all duration-300`}
                 placeholder="••••••••"
                 disabled={isLoading}
               />
+              {confirmError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span>
+                  {confirmError}
+                </p>
+              )}
             </div>
 
             {/* Submit button */}
