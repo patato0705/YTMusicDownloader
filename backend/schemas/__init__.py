@@ -2,10 +2,15 @@
 """
 Centralized schema imports for easy access throughout the application.
 
-Usage:
-    from backend.schemas import ArtistOut, AlbumSchema, UserResponse
-    from backend.schemas.auth import LoginRequest
-    from backend.schemas.ytmusic import TrackSchema
+Schema Organization:
+- auth.py: Authentication request/response schemas
+- common.py: Shared schemas (MessageResponse, ErrorResponse, Pagination)
+- jobs.py: Job management schemas
+- ytmusic.py: YouTube Music API response schemas
+- settings.py: Settings management schemas (NEW)
+
+Note: We use SQLAlchemy models directly for database outputs.
+      They have .to_dict() methods and work with Pydantic's from_attributes=True
 """
 
 # Auth schemas
@@ -18,7 +23,6 @@ from .auth import (
     TokenResponse,
     UserResponse,
     LoginResponse,
-    MessageResponse as AuthMessageResponse,
 )
 
 # Job schemas
@@ -29,15 +33,14 @@ from .jobs import (
     CancelRequest,
     RequeueRequest,
 )
-from .models import (
-    ArtistOut,
-    AlbumOut,
-    TrackOut,
-    TrackArtist,
-    JobOut,
+
+# Settings schemas
+from .settings import (
+    SettingResponse,
+    SettingUpdateRequest,
 )
 
-# YTMusic API schemas
+# YTMusic API schemas (external API, not our database)
 from .ytmusic import (
     Thumbnail,
     ArtistRefSchema,
@@ -68,7 +71,6 @@ __all__ = [
     "TokenResponse",
     "UserResponse",
     "LoginResponse",
-    "AuthMessageResponse",
     
     # Job schemas
     "EnqueueRequest",
@@ -77,14 +79,11 @@ __all__ = [
     "CancelRequest",
     "RequeueRequest",
     
-    # Database models
-    "ArtistOut",
-    "AlbumOut",
-    "TrackOut",
-    "TrackArtist",
-    "JobOut",
+    # Settings
+    "SettingResponse",
+    "SettingUpdateRequest",
     
-    # YTMusic
+    # YTMusic (external API schemas)
     "Thumbnail",
     "ArtistRefSchema",
     "AlbumRefSchema",

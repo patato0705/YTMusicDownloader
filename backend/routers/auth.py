@@ -3,7 +3,7 @@
 Authentication endpoints.
 
 Endpoints:
-- POST /api/auth/register - Register new user
+- POST /api/auth/register - Register new user (Admin only)
 - POST /api/auth/login - Login with username/password
 - POST /api/auth/refresh - Refresh access token
 - POST /api/auth/logout - Revoke refresh token
@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.db import get_session
-from backend.dependencies import get_current_user, require_auth, require_member_or_admin, require_admin
+from backend.dependencies import get_current_user, require_admin
 from backend.services import auth as auth_svc
 from backend.schemas import (
     LoginRequest,
@@ -212,107 +212,3 @@ def change_password(
     logger.info(f"Password changed for user {current_user.username}")
     
     return MessageResponse(message="Password changed successfully")
-
-
-# ============================================================================
-# ADMIN ENDPOINTS
-# ============================================================================
-
-@router.get("/users", response_model=list[UserResponse])
-def list_users(
-    include_inactive: bool = False,
-    limit: int = 100,
-    offset: int = 0,
-    current_user: User = Depends(require_admin),
-    session: Session = Depends(get_session),
-):
-    """
-    List all users (admin only).
-    """
-    users = auth_svc.list_users(
-        session=session,
-        include_inactive=include_inactive,
-        limit=limit,
-        offset=offset,
-    )
-    
-    return [UserResponse.model_validate(u) for u in users]
-
-
-@router.patch("/users/{user_id}/role", response_model=UserResponse)
-def update_user_role(
-    user_id: int,
-    role: str,
-    current_user: User = Depends(require_admin),
-    session: Session = Depends(get_session),
-):
-    """
-    Update user's role (admin only).
-    
-    Valid roles: administrator, member, visitor
-    """
-    try:
-        user = auth_svc.update_user_role(session, user_id, role)
-        return UserResponse.model_validate(user)
-    
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-
-
-@router.post("/users/{user_id}/deactivate", response_model=UserResponse)
-def deactivate_user(
-    user_id: int,
-    current_user: User = Depends(require_admin),
-    session: Session = Depends(get_session),
-):
-    """
-    Deactivate a user (admin only).
-    
-    Prevents login and revokes all refresh tokens.
-    Cannot deactivate yourself.
-    """
-    if user_id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot deactivate your own account",
-        )
-    
-    try:
-        user = auth_svc.deactivate_user(session, user_id)
-        return UserResponse.model_validate(user)
-    
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-
-
-@router.post("/users/{user_id}/activate", response_model=UserResponse)
-def activate_user(
-    user_id: int,
-    current_user: User = Depends(require_admin),
-    session: Session = Depends(get_session),
-):
-    """
-    Reactivate a deactivated user (admin only).
-    """
-    user = auth_svc.get_user_by_id(session, user_id)
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    
-    user.is_active = True
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    
-    logger.info(f"Activated user {user_id}")
-    
-    return UserResponse.model_validate(user)
