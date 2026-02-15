@@ -1,4 +1,4 @@
-// src/pages/AdminPanel.tsx
+// src/pages/admin/AdminPanel.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,22 +7,8 @@ import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
-
-interface Setting {
-  key: string;
-  value: any;
-  type: 'int' | 'bool' | 'string';
-  description: string;
-}
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  role: 'administrator' | 'member' | 'visitor';
-  is_active: boolean;
-  created_at: string;
-}
+import * as adminApi from '../api/admin';
+import type { Setting, User } from '../api/admin';
 
 export default function AdminPanel(): JSX.Element {
   const [activeTab, setActiveTab] = useState<'settings' | 'users'>('settings');
@@ -67,20 +53,7 @@ export default function AdminPanel(): JSX.Element {
   };
 
   const loadSettings = async () => {
-    const response = await fetch('/api/admin/settings', {
-      credentials: 'include',
-    });
-    if (!response.ok) throw new Error('Failed to load settings');
-    const data = await response.json();
-    
-    // Convert settings object to array
-    const settingsArray = Object.entries(data).map(([key, config]: [string, any]) => ({
-      key,
-      value: config.value,
-      type: config.type,
-      description: config.description,
-    }));
-    
+    const settingsArray = await adminApi.getAllSettings();
     setSettings(settingsArray);
     
     // Initialize edited settings
@@ -92,12 +65,8 @@ export default function AdminPanel(): JSX.Element {
   };
 
   const loadUsers = async () => {
-    const response = await fetch('/api/admin/users', {
-      credentials: 'include',
-    });
-    if (!response.ok) throw new Error('Failed to load users');
-    const data = await response.json();
-    setUsers(data);
+    const usersData = await adminApi.listUsers(true); // Include inactive users
+    setUsers(usersData);
   };
 
   const handleSettingChange = (key: string, value: any, type: string) => {
@@ -120,14 +89,16 @@ export default function AdminPanel(): JSX.Element {
     setError(null);
 
     try {
-      const response = await fetch('/api/admin/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(editedSettings),
+      // Update each changed setting
+      const updatePromises = Object.entries(editedSettings).map(([key, value]) => {
+        const originalSetting = settings.find(s => s.key === key);
+        if (originalSetting && originalSetting.value !== value) {
+          return adminApi.updateSetting(key, value);
+        }
+        return Promise.resolve();
       });
 
-      if (!response.ok) throw new Error('Failed to save settings');
+      await Promise.all(updatePromises);
       
       await loadSettings();
       alert(t('admin.settings.saved') || 'Settings saved successfully');
@@ -140,14 +111,11 @@ export default function AdminPanel(): JSX.Element {
 
   const toggleUserStatus = async (userId: number, currentStatus: boolean) => {
     try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ is_active: !currentStatus }),
-      });
-
-      if (!response.ok) throw new Error('Failed to update user');
+      if (currentStatus) {
+        await adminApi.deactivateUser(userId);
+      } else {
+        await adminApi.activateUser(userId);
+      }
       
       await loadUsers();
     } catch (err: any) {
@@ -157,15 +125,7 @@ export default function AdminPanel(): JSX.Element {
 
   const changeUserRole = async (userId: number, newRole: string) => {
     try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ role: newRole }),
-      });
-
-      if (!response.ok) throw new Error('Failed to update role');
-      
+      await adminApi.updateUserRole(userId, newRole);
       await loadUsers();
     } catch (err: any) {
       setError(err.message || 'Failed to update role');
@@ -178,13 +138,7 @@ export default function AdminPanel(): JSX.Element {
     }
 
     try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-
-      if (!response.ok) throw new Error('Failed to delete user');
-      
+      await adminApi.deleteUser(userId);
       await loadUsers();
     } catch (err: any) {
       setError(err.message || 'Failed to delete user');
@@ -381,7 +335,6 @@ export default function AdminPanel(): JSX.Element {
       <div className="relative z-10 space-y-8 pb-12">
         {/* Page header */}
         <PageHero
-          badge={{ text: 'Admin Only', online: true }}
           title={
             <>
               <span className="text-foreground">{t('admin.title')} </span>

@@ -6,6 +6,9 @@
 import { api } from './client';
 import type { User } from './auth';
 
+// Re-export User type for convenience
+export type { User } from './auth';
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -57,6 +60,13 @@ export async function deactivateUser(userId: number): Promise<User> {
  */
 export async function activateUser(userId: number): Promise<User> {
   return api.post<User>(`/admin/users/${userId}/activate`);
+}
+
+/**
+ * Delete user (admin only)
+ */
+export async function deleteUser(userId: number): Promise<MessageResponse> {
+  return api.delete<MessageResponse>(`/admin/users/${userId}`);
 }
 
 // ============================================================================
