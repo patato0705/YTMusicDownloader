@@ -36,7 +36,8 @@
       "button": "Create account",
       "loading": "Creating account...",
       "hasAccount": "Already have an account?",
-      "login": "Sign in here"
+      "login": "Sign in here",
+      "usernameHint": "Username must be 3-64 characters"
     },
     "logout": "Logout",
     "changePassword": {
@@ -48,10 +49,15 @@
       "success": "Password changed successfully"
     },
     "errors": {
+      "usernameRequired": "Username is required",
+      "passwordRequired": "Password is required",
+      "emailRequired": "Email is required",
+      "currentPasswordRequired": "Current password is required",
+      "newPasswordRequired": "New password is required",
+      "confirmPasswordRequired": "Please confirm your password",
       "invalidCredentials": "Invalid username or password",
       "passwordMismatch": "Passwords do not match",
       "passwordTooShort": "Password must be at least 8 characters",
-      "usernameRequired": "Username is required",
       "sessionExpired": "Session expired. Please login again."
     }
   },
@@ -122,24 +128,6 @@
       "tracks": "No downloaded tracks yet"
     }
   },
-  "settings": {
-    "title": "Settings",
-    "profile": "Profile",
-    "appearance": "Appearance",
-    "language": "Language",
-    "theme": {
-      "title": "Theme",
-      "light": "Light",
-      "dark": "Dark",
-      "system": "System"
-    },
-    "account": {
-      "username": "Username",
-      "email": "Email",
-      "role": "Role",
-      "changePassword": "Change Password"
-    }
-  },
   "jobs": {
     "title": "Jobs",
     "status": {
@@ -151,5 +139,33 @@
     "cancel": "Cancel Job",
     "retry": "Retry",
     "view": "View Details"
+  },
+  "admin": {
+    "title": "Admin",
+    "panel": "Panel",
+    "subtitle": "Manage application settings and users",
+    
+    "tabs": {
+      "settings": "Settings",
+      "users": "Users"
+    },
+    
+    "settings": {
+      "title": "Settings",
+      "save": "Save",
+      "saved": "Settings saved successfully"
+    },
+    
+    "users": {
+      "username": "Username",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "actions": "Actions",
+      "active": "Active",
+      "inactive": "Inactive",
+      "delete": "Delete",
+      "confirmDelete": "Delete user {{username}}? This action cannot be undone."
+    }
   }
 }
