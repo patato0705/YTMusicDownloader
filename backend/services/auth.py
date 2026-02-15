@@ -8,14 +8,16 @@ Functions:
 - create_access_token() - Generate JWT access token
 - create_refresh_token() - Generate and store refresh token
 - verify_access_token() - Decode and validate access token
+- verify_refresh_token() - Verify refresh token and return user
+- revoke_refresh_token() - Invalidate refresh token (logout)
+- cleanup_expired_tokens() - Remove expired tokens from database
 - authenticate_user() - Verify username/password
 - create_user() - Register new user
 - get_user_by_username() - Fetch user by username
 - get_user_by_email() - Fetch user by email
 - get_user_by_id() - Fetch user by ID
-- refresh_access_token() - Exchange refresh token for new access token
-- revoke_refresh_token() - Invalidate refresh token (logout)
 - update_last_login() - Update user's last_login_at
+- ensure_first_admin() - Create first admin user on startup
 """
 from __future__ import annotations
 import logging
@@ -222,7 +224,7 @@ def cleanup_expired_tokens(session: Session) -> int:
 
 
 # ============================================================================
-# USER MANAGEMENT
+# USER AUTHENTICATION & LOOKUP
 # ============================================================================
 
 def get_user_by_username(session: Session, username: str) -> Optional[User]:
@@ -240,55 +242,6 @@ def get_user_by_email(session: Session, email: str) -> Optional[User]:
 def get_user_by_id(session: Session, user_id: int) -> Optional[User]:
     """Fetch user by ID"""
     return session.get(User, user_id)
-
-
-def create_user(
-    session: Session,
-    username: str,
-    email: str,
-    password: str,
-    role: str = config.ROLE_MEMBER,
-) -> User:
-    """
-    Create a new user.
-    
-    Raises:
-        ValueError if username/email already exists or invalid role
-    """
-    # Validate inputs
-    if not username or not email or not password:
-        raise ValueError("Username, email, and password are required")
-    
-    if role not in config.VALID_ROLES:
-        raise ValueError(f"Invalid role: {role}")
-    
-    # Check for existing username
-    if get_user_by_username(session, username):
-        raise ValueError(f"Username '{username}' already exists")
-    
-    # Check for existing email
-    if get_user_by_email(session, email):
-        raise ValueError(f"Email '{email}' already exists")
-    
-    # Hash password
-    password_hash = hash_password(password)
-    
-    # Create user
-    user = User(
-        username=username,
-        email=email,
-        password_hash=password_hash,
-        role=role,
-        is_active=True,
-        created_at=now_utc(),
-    )
-    
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    
-    logger.info(f"Created user: {username} (role={role})")
-    return user
 
 
 def authenticate_user(session: Session, username: str, password: str) -> Optional[User]:
@@ -326,78 +279,67 @@ def update_last_login(session: Session, user_id: int) -> None:
         session.commit()
 
 
-def update_user_role(session: Session, user_id: int, new_role: str) -> User:
-    """
-    Update user's role.
-    
-    Raises:
-        ValueError if user not found or invalid role
-    """
-    if new_role not in config.VALID_ROLES:
-        raise ValueError(f"Invalid role: {new_role}")
-    
-    user = session.get(User, user_id)
-    if not user:
-        raise ValueError(f"User {user_id} not found")
-    
-    user.role = new_role
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    
-    logger.info(f"Updated user {user_id} role to {new_role}")
-    return user
+# ============================================================================
+# USER REGISTRATION
+# ============================================================================
 
-
-def deactivate_user(session: Session, user_id: int) -> User:
-    """
-    Deactivate a user (soft delete).
-    Also revokes all their refresh tokens.
-    """
-    user = session.get(User, user_id)
-    if not user:
-        raise ValueError(f"User {user_id} not found")
-    
-    user.is_active = False
-    session.add(user)
-    
-    # Revoke all refresh tokens
-    stmt = select(RefreshToken).where(RefreshToken.user_id == user_id)
-    tokens = session.execute(stmt).scalars().all()
-    for token in tokens:
-        token.revoked = True
-        session.add(token)
-    
-    session.commit()
-    session.refresh(user)
-    
-    logger.info(f"Deactivated user {user_id}")
-    return user
-
-
-def list_users(
+def create_user(
     session: Session,
-    include_inactive: bool = False,
-    limit: int = 100,
-    offset: int = 0,
-) -> list[User]:
+    username: str,
+    email: str,
+    password: str,
+    role: str = config.ROLE_VISITOR,
+) -> User:
     """
-    List all users.
+    Create a new user.
     
     Args:
         session: SQLAlchemy session
-        include_inactive: Include deactivated users
-        limit: Max results
-        offset: Pagination offset
+        username: Unique username
+        email: Unique email address
+        password: Plain text password (will be hashed)
+        role: User role (default: visitor)
+    
+    Returns:
+        Created User instance
+    
+    Raises:
+        ValueError: If username/email already exists or invalid role
     """
-    stmt = select(User)
+    # Validate inputs
+    if not username or not email or not password:
+        raise ValueError("Username, email, and password are required")
     
-    if not include_inactive:
-        stmt = stmt.where(User.is_active == True)
+    if role not in config.VALID_ROLES:
+        raise ValueError(f"Invalid role: {role}. Must be one of {config.VALID_ROLES}")
     
-    stmt = stmt.order_by(User.created_at.desc()).limit(limit).offset(offset)
+    # Check for existing username
+    if get_user_by_username(session, username):
+        raise ValueError(f"Username '{username}' already exists")
     
-    return list(session.execute(stmt).scalars().all())
+    # Check for existing email
+    if get_user_by_email(session, email):
+        raise ValueError(f"Email '{email}' already exists")
+    
+    # Hash password
+    password_hash = hash_password(password)
+    
+    # Create user
+    user = User(
+        username=username,
+        email=email,
+        password_hash=password_hash,
+        role=role,
+        is_active=True,
+        created_at=now_utc(),
+    )
+    
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    
+    logger.info(f"Created user: {username} (role={role})")
+    return user
 
 
 # ============================================================================

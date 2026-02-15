@@ -7,6 +7,7 @@ User Management:
 - PATCH /api/admin/users/{user_id}/role - Update user role
 - POST /api/admin/users/{user_id}/deactivate - Deactivate user
 - POST /api/admin/users/{user_id}/activate - Activate user
+- DELETE /api/admin/users/{user_id} - Permanently delete user
 
 Settings Management:
 - GET /api/admin/settings - Get all settings
@@ -23,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from backend.db import get_session
 from backend.dependencies import require_admin
-from backend.services import auth as auth_svc
+from backend.services import admin as admin_svc
 from backend import settings as settings_module
 from backend.schemas import (
     UserResponse,
@@ -58,7 +59,7 @@ def list_users(
         limit: Maximum number of users to return
         offset: Number of users to skip
     """
-    users = auth_svc.list_users(
+    users = admin_svc.list_users(
         session=session,
         include_inactive=include_inactive,
         limit=limit,
@@ -81,7 +82,7 @@ def update_user_role(
     Valid roles: administrator, member, visitor
     """
     try:
-        user = auth_svc.update_user_role(session, user_id, role)
+        user = admin_svc.update_user_role(session, user_id, role)
         return UserResponse.model_validate(user)
     
     except ValueError as e:
@@ -110,7 +111,7 @@ def deactivate_user(
         )
     
     try:
-        user = auth_svc.deactivate_user(session, user_id)
+        user = admin_svc.deactivate_user(session, user_id)
         return UserResponse.model_validate(user)
     
     except ValueError as e:
@@ -129,22 +130,59 @@ def activate_user(
     """
     Reactivate a deactivated user (admin only).
     """
-    user = auth_svc.get_user_by_id(session, user_id)
+    try:
+        user = admin_svc.activate_user(session, user_id)
+        return UserResponse.model_validate(user)
     
-    if not user:
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            detail=str(e),
+        )
+
+
+@router.delete("/users/{user_id}", response_model=MessageResponse)
+def delete_user(
+    user_id: int,
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    """
+    Permanently delete a user (admin only).
+    
+    WARNING: This is a hard delete that removes the user and all associated data.
+    This action cannot be undone.
+    
+    Cannot delete yourself.
+    """
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account",
         )
     
-    user.is_active = True
-    session.add(user)
-    session.commit()
-    session.refresh(user)
+    try:
+        admin_svc.delete_user(session, user_id)
+        return MessageResponse(message=f"User {user_id} permanently deleted")
     
-    logger.info(f"Activated user {user_id}")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+
+@router.get("/users/stats")
+def get_user_stats(
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    """
+    Get user statistics (admin only).
     
-    return UserResponse.model_validate(user)
+    Returns counts of users by role and status.
+    """
+    return admin_svc.get_user_stats(session)
 
 
 # ============================================================================
