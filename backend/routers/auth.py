@@ -42,6 +42,18 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 # PUBLIC ENDPOINTS
 # ============================================================================
 
+@router.get("/registration-status")
+async def get_registration_status(
+    session: Session = Depends(get_session),
+) -> dict:
+    """
+    Public endpoint to check if registration is enabled.
+    """
+    
+    enabled = get_setting(session, "auth.registration_enabled", default=False)
+    return {"enabled": enabled}
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(
     data: RegisterRequest,
@@ -53,7 +65,7 @@ def register(
     Registration must be enabled via the 'auth.registration_enabled' setting.
     """
     # Check if registration is enabled
-    if not get_setting(session, "auth.registration_enabled", False):
+    if not get_setting(session, "auth.registration_enabled", default=False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Registration is currently disabled. If you think this is a mistake, please contact an administrator.",
