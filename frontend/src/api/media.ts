@@ -17,8 +17,7 @@ export function getLocalImageUrl(imagePath: string | null | undefined): string {
     return '/assets/placeholder-music.png';
   }
   
-  const VITE_API_BASE = "http://192.168.1.1:8000"
-  const API_BASE = (VITE_API_BASE ?? "/api").replace(/\/+$/, "");
+  const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
   
   // Clean the path - remove leading slash if present
   let cleanPath = imagePath;
