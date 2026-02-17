@@ -13,6 +13,13 @@ export type { User } from './auth';
 // TYPES
 // ============================================================================
 
+export interface CreateUserRequest {
+  username: string;
+  email: string;
+  password: string;
+  role: 'administrator' | 'member' | 'visitor';
+}
+
 export interface Setting {
   key: string;
   value: any; // Can be number, boolean, string, or object
@@ -30,6 +37,17 @@ export interface MessageResponse {
   message: string;
 }
 
+export interface UserStats {
+  total: number;
+  active: number;
+  inactive: number;
+  by_role: {
+    administrator: number;
+    member: number;
+    visitor: number;
+  };
+}
+
 // ============================================================================
 // USER MANAGEMENT
 // ============================================================================
@@ -42,10 +60,17 @@ export async function listUsers(includeInactive = false): Promise<User[]> {
 }
 
 /**
+ * Create a new user (admin only)
+ */
+export async function createUser(data: CreateUserRequest): Promise<User> {
+  return api.post<User>('/admin/users', data);
+}
+
+/**
  * Update user role (admin only)
  */
 export async function updateUserRole(userId: number, role: string): Promise<User> {
-  return api.patch<User>(`/admin/users/${userId}/role`, { role });
+  return api.patch<User>(`/admin/users/${userId}/role?role=${encodeURIComponent(role)}`);
 }
 
 /**
@@ -63,10 +88,18 @@ export async function activateUser(userId: number): Promise<User> {
 }
 
 /**
- * Delete user (admin only)
+ * Permanently delete user (admin only)
+ * WARNING: This cannot be undone!
  */
 export async function deleteUser(userId: number): Promise<MessageResponse> {
   return api.delete<MessageResponse>(`/admin/users/${userId}`);
+}
+
+/**
+ * Get user statistics (admin only)
+ */
+export async function getUserStats(): Promise<UserStats> {
+  return api.get<UserStats>('/admin/users/stats');
 }
 
 // ============================================================================

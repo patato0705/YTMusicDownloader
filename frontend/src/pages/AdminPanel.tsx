@@ -7,6 +7,9 @@ import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
+import { Toast } from '../components/ui/Toast';
+import { CreateUserModal } from '../components/ui/CreateUserModal';
+import { SearchInput } from '../components/ui/SearchInput';
 import * as adminApi from '../api/admin';
 import type { Setting, User } from '../api/admin';
 
@@ -18,6 +21,17 @@ export default function AdminPanel(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const [editedSettings, setEditedSettings] = useState<Record<string, any>>({});
+  
+  // Toast notification
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  
+  // Create user modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  
+  // User filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'administrator' | 'member' | 'visitor'>('all');
   
   const { user } = useAuth();
   const { t } = useI18n();
@@ -101,12 +115,31 @@ export default function AdminPanel(): JSX.Element {
       await Promise.all(updatePromises);
       
       await loadSettings();
-      alert(t('admin.settings.saved') || 'Settings saved successfully');
+      setToast({ message: t('admin.settings.saved') || 'Settings saved successfully', type: 'success' });
     } catch (err: any) {
-      setError(err.message || 'Failed to save settings');
+      setToast({ message: err.message || 'Failed to save settings', type: 'error' });
     } finally {
       setSaveLoading(false);
     }
+  };
+
+  // Parse API errors from ApiError class (err.data holds the raw response body)
+  const parseApiError = (err: any): string => {
+    const data = err.data;
+
+    if (data?.detail && Array.isArray(data.detail)) {
+      return data.detail.map((e: any) => {
+        const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
+        const msg = e.msg || 'Invalid value';
+        return field ? `${field}: ${msg}` : msg;
+      }).join(', ');
+    }
+
+    if (data?.detail && typeof data.detail === 'string') {
+      return data.detail;
+    }
+
+    return err.message || 'An error occurred';
   };
 
   const toggleUserStatus = async (userId: number, currentStatus: boolean) => {
@@ -116,10 +149,15 @@ export default function AdminPanel(): JSX.Element {
       } else {
         await adminApi.activateUser(userId);
       }
-      
       await loadUsers();
+      setToast({ 
+        message: currentStatus 
+          ? (t('admin.users.deactivated') || 'User deactivated') 
+          : (t('admin.users.activated') || 'User activated'), 
+        type: 'success' 
+      });
     } catch (err: any) {
-      setError(err.message || 'Failed to update user');
+      setToast({ message: parseApiError(err), type: 'error' });
     }
   };
 
@@ -127,8 +165,9 @@ export default function AdminPanel(): JSX.Element {
     try {
       await adminApi.updateUserRole(userId, newRole);
       await loadUsers();
+      setToast({ message: t('admin.users.roleUpdated') || 'Role updated successfully', type: 'success' });
     } catch (err: any) {
-      setError(err.message || 'Failed to update role');
+      setToast({ message: parseApiError(err), type: 'error' });
     }
   };
 
@@ -140,10 +179,29 @@ export default function AdminPanel(): JSX.Element {
     try {
       await adminApi.deleteUser(userId);
       await loadUsers();
+      setToast({ message: t('admin.users.deleted') || 'User deleted successfully', type: 'success' });
     } catch (err: any) {
-      setError(err.message || 'Failed to delete user');
+      setToast({ message: parseApiError(err), type: 'error' });
     }
   };
+
+  // Filter users based on search and filters
+  const filteredUsers = users.filter(u => {
+    // Search filter
+    const matchesSearch = searchQuery === '' || 
+      u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Status filter
+    const matchesStatus = statusFilter === 'all' ||
+      (statusFilter === 'active' && u.is_active) ||
+      (statusFilter === 'inactive' && !u.is_active);
+    
+    // Role filter
+    const matchesRole = roleFilter === 'all' || u.role === roleFilter;
+    
+    return matchesSearch && matchesStatus && matchesRole;
+  });
 
   const renderSettingsTab = () => {
     // Group settings by category
@@ -233,6 +291,59 @@ export default function AdminPanel(): JSX.Element {
 
     return (
       <div className="space-y-6">
+        {/* Search and Filters */}
+        <div className="glass rounded-2xl p-6 border-gradient space-y-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Search */}
+            <div className="flex-1">
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder={t('admin.users.search') || 'Search by username or email...'}
+                showClearButton
+                onClear={() => setSearchQuery('')}
+              />
+            </div>
+
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
+            >
+              <option value="all">{t('admin.users.allStatuses') || 'All Statuses'}</option>
+              <option value="active">{t('admin.users.active')}</option>
+              <option value="inactive">{t('admin.users.inactive')}</option>
+            </select>
+
+            {/* Role Filter */}
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value as any)}
+              className="px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
+            >
+              <option value="all">{t('admin.users.allRoles') || 'All Roles'}</option>
+              <option value="administrator">Administrator</option>
+              <option value="member">Member</option>
+              <option value="visitor">Visitor</option>
+            </select>
+
+            {/* Create User Button */}
+            <Button
+              onClick={() => setShowCreateModal(true)}
+              variant="primary"
+            >
+              + {t('admin.users.create')}
+            </Button>
+          </div>
+
+          {/* Results count */}
+          <div className="text-sm text-muted-foreground">
+            {t('admin.users.showing') || 'Showing'} {filteredUsers.length} {t('admin.users.of') || 'of'} {users.length} {t('admin.users.users') || 'users'}
+          </div>
+        </div>
+
+        {/* Users Table */}
         <div className="glass rounded-2xl overflow-hidden border-gradient">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -256,51 +367,62 @@ export default function AdminPanel(): JSX.Element {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-white/10">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-semibold text-foreground">{u.username}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-muted-foreground">{u.email}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <select
-                        value={u.role}
-                        onChange={(e) => changeUserRole(u.id, e.target.value)}
-                        disabled={u.id === user?.id}
-                        className={`px-3 py-1 text-xs font-medium rounded-lg ${roleColors[u.role]} border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 disabled:opacity-50`}
-                      >
-                        <option value="visitor">Visitor</option>
-                        <option value="member">Member</option>
-                        <option value="administrator">Administrator</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => toggleUserStatus(u.id, u.is_active)}
-                        disabled={u.id === user?.id}
-                        className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 ${
-                          u.is_active
-                            ? 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30'
-                            : 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30'
-                        }`}
-                      >
-                        {u.is_active ? t('admin.users.active') : t('admin.users.inactive')}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <Button
-                        onClick={() => deleteUser(u.id, u.username)}
-                        variant="danger"
-                        size="sm"
-                        disabled={u.id === user?.id}
-                      >
-                        {t('admin.users.delete')}
-                      </Button>
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <div className="text-muted-foreground">
+                        <span className="text-4xl mb-2 block">👥</span>
+                        <p>{t('admin.users.noResults') || 'No users found'}</p>
+                      </div>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredUsers.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-foreground">{u.username}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-muted-foreground">{u.email}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <select
+                          value={u.role}
+                          onChange={(e) => changeUserRole(u.id, e.target.value)}
+                          disabled={u.id === user?.id}
+                          className={`px-3 py-1 text-xs font-medium rounded-lg ${roleColors[u.role]} border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 disabled:opacity-50`}
+                        >
+                          <option value="visitor">Visitor</option>
+                          <option value="member">Member</option>
+                          <option value="administrator">Administrator</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => toggleUserStatus(u.id, u.is_active)}
+                          disabled={u.id === user?.id}
+                          className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 ${
+                            u.is_active
+                              ? 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30'
+                              : 'bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30'
+                          }`}
+                        >
+                          {u.is_active ? t('admin.users.active') : t('admin.users.inactive')}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <Button
+                          onClick={() => deleteUser(u.id, u.username)}
+                          variant="danger"
+                          size="sm"
+                          disabled={u.id === user?.id}
+                        >
+                          {t('admin.users.delete')}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -330,6 +452,26 @@ export default function AdminPanel(): JSX.Element {
       {/* Background effects */}
       <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
       <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
+      
+      {/* Toast notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <CreateUserModal
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => {
+            loadUsers();
+            setToast({ message: t('admin.users.created') || 'User created successfully', type: 'success' });
+          }}
+        />
+      )}
       
       {/* Main content */}
       <div className="relative z-10 space-y-8 pb-12">

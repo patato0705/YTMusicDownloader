@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ytmusicdownloader:latest
+    image: ytmusicdownloader:newfront
     ports:
       - "8000:8000"
     volumes:

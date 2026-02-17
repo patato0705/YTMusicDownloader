@@ -92,3 +92,20 @@ export async function getCurrentUser(): Promise<User> {
 export async function changePassword(data: ChangePasswordRequest): Promise<void> {
   await api.post('/auth/change-password', data);
 }
+
+/**
+ * Check if public registration is enabled (public endpoint, no auth required)
+ */
+export async function isRegistrationEnabled(): Promise<boolean> {
+  try {
+    // Use apiFetch directly to bypass auth headers for this public endpoint
+    const response = await apiFetch<{ enabled: boolean }>('/auth/registration-status', {
+      method: 'GET',
+    });
+    return response.enabled;
+  } catch (err) {
+    // If endpoint fails, assume enabled (fail-open) - backend will validate on submit
+    console.error('Failed to check registration status:', err);
+    return true;
+  }
+}

@@ -37,7 +37,12 @@
       "loading": "Creating account...",
       "hasAccount": "Already have an account?",
       "login": "Sign in here",
-      "usernameHint": "Username must be 3-64 characters"
+      "usernameHint": "Username must be 3-64 characters",
+      "disabled": {
+        "title": "Registration Disabled",
+        "message": "Public registration is currently disabled. Please contact an administrator for access.",
+        "goToLogin": "Go to Login"
+      }
     },
     "logout": "Logout",
     "changePassword": {
@@ -52,6 +57,7 @@
       "usernameRequired": "Username is required",
       "passwordRequired": "Password is required",
       "emailRequired": "Email is required",
+      "invalidEmail": "Please enter a valid email address",
       "currentPasswordRequired": "Current password is required",
       "newPasswordRequired": "New password is required",
       "confirmPasswordRequired": "Please confirm your password",

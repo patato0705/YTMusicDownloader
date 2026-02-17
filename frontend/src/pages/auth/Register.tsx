@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
+import * as authApi from '../../api/auth';
 
 export const Register: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -16,6 +17,8 @@ export const Register: React.FC = () => {
   const [usernameError, setUsernameError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
+  const [checkingRegistration, setCheckingRegistration] = useState(true);
   
   const { login, isAuthenticated } = useAuth();
   const { t } = useI18n();
@@ -28,13 +31,61 @@ export const Register: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
+  // Check if registration is enabled using public API endpoint
+  useEffect(() => {
+    const checkRegistration = async () => {
+      try {
+        const enabled = await authApi.isRegistrationEnabled();
+        setRegistrationEnabled(enabled);
+      } catch (err) {
+        console.error('Failed to check registration status:', err);
+        // On error, assume enabled - backend will validate on submit
+        setRegistrationEnabled(true);
+      } finally {
+        setCheckingRegistration(false);
+      }
+    };
+
+    checkRegistration();
+  }, []);
+
   // Validate username
   const validateUsername = (name: string) => {
     if (name && name.length < 3) {
       setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
+    } else if (name && name.length > 64) {
+      setUsernameError(t('auth.errors.usernameTooLong') || 'Username must be at most 64 characters');
     } else {
       setUsernameError('');
     }
+  };
+
+  // Validate email format
+  const validateEmail = (value: string) => {
+    if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setEmailError(t('auth.errors.invalidEmail') || 'Please enter a valid email address');
+    } else {
+      setEmailError('');
+    }
+  };
+
+  // Parse API errors from ApiError class (err.data = raw response body)
+  const parseApiError = (err: any): string => {
+    const data = err.data;
+
+    if (data?.detail && Array.isArray(data.detail)) {
+      return data.detail.map((e: any) => {
+        const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
+        const msg = e.msg || 'Invalid value';
+        return field ? `${field}: ${msg}` : msg;
+      }).join(', ');
+    }
+
+    if (data?.detail && typeof data.detail === 'string') {
+      return data.detail;
+    }
+
+    return err.message || t('auth.errors.registrationFailed') || 'Registration failed';
   };
 
   // Validate password
@@ -89,6 +140,10 @@ export const Register: React.FC = () => {
       setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
       return;
     }
+    if (username.length > 64) {
+      setUsernameError(t('auth.errors.usernameTooLong') || 'Username must be at most 64 characters');
+      return;
+    }
 
     // Validate password length
     if (password.length < 8) {
@@ -105,27 +160,93 @@ export const Register: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || t('auth.errors.registrationFailed') || 'Registration failed');
-      }
+      await authApi.register({ username, email, password });
 
       // Auto-login after registration
       await login(username, password);
       navigate('/');
     } catch (err: any) {
-      // Server/API errors go to top error box
-      setError(err.message || t('auth.errors.registrationFailed') || 'Registration failed');
+      const data = err.data;
+
+      // Route field-specific errors from FastAPI validation
+      if (data?.detail && Array.isArray(data.detail)) {
+        let hasFieldError = false;
+        data.detail.forEach((e: any) => {
+          const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
+          const msg = e.msg || 'Invalid value';
+
+          if (field === 'username') {
+            setUsernameError(msg);
+            hasFieldError = true;
+          } else if (field === 'email') {
+            setEmailError(msg);
+            hasFieldError = true;
+          } else if (field === 'password') {
+            setPasswordError(msg);
+            hasFieldError = true;
+          }
+        });
+        if (!hasFieldError) setError(parseApiError(err));
+      } else {
+        setError(parseApiError(err));
+      }
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Loading state while checking registration
+  if (checkingRegistration) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden bg-background">
+        <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
+        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
+        
+        <div className="relative z-10 text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 dark:border-red-500 border-t-transparent" />
+          <p className="text-muted-foreground mt-4">{t('common.loading')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Registration disabled state
+  if (registrationEnabled === false) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden bg-background">
+        {/* Background effects */}
+        <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
+        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
+        
+        {/* Static background orbs */}
+        <div className="fixed top-20 left-20 w-96 h-96 bg-blue-500/20 dark:bg-red-500/20 rounded-full blur-3xl" />
+        <div className="fixed bottom-20 right-20 w-96 h-96 bg-indigo-500/20 dark:bg-red-700/20 rounded-full blur-3xl" />
+        
+        {/* Main content */}
+        <div className="relative z-10 max-w-md w-full">
+          <div className="glass rounded-3xl p-8 md:p-10 border-gradient shadow-2xl text-center">
+            <div className="mb-6">
+              <div className="w-20 h-20 mx-auto rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center mb-4">
+                <span className="text-4xl">🔒</span>
+              </div>
+              <h1 className="text-3xl font-bold mb-3">
+                <span className="text-gradient">{t('auth.register.disabled.title') || 'Registration Disabled'}</span>
+              </h1>
+              <p className="text-muted-foreground mb-6">
+                {t('auth.register.disabled.message') || 'Public registration is currently disabled. Please contact an administrator for access.'}
+              </p>
+            </div>
+
+            <Link to="/login">
+              <Button variant="primary" size="lg" className="w-full">
+                {t('auth.register.disabled.goToLogin') || 'Go to Login'}
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden bg-background">
@@ -216,14 +337,16 @@ export const Register: React.FC = () => {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
-                  if (emailError) setEmailError('');
+                  if (e.target.value) validateEmail(e.target.value);
+                  else setEmailError('');
                 }}
+                onBlur={(e) => validateEmail(e.target.value)}
                 className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
                   emailError 
                     ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
                     : 'focus:ring-blue-500 dark:focus:ring-red-600'
                 } focus:border-transparent transition-all duration-300`}
-                placeholder="your@email.com"
+                placeholder={t('auth.register.mailPlaceholder')}
                 disabled={isLoading}
               />
               {emailError && (
