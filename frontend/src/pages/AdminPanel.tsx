@@ -10,11 +10,12 @@ import { PageHero } from '../components/ui/PageHero';
 import { Toast } from '../components/ui/Toast';
 import { CreateUserModal } from '../components/ui/CreateUserModal';
 import { SearchInput } from '../components/ui/SearchInput';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import * as adminApi from '../api/admin';
 import type { Setting, User } from '../api/admin';
 
 export default function AdminPanel(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<'settings' | 'users'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'users'>('users');
   const [settings, setSettings] = useState<Setting[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +28,9 @@ export default function AdminPanel(): JSX.Element {
   
   // Create user modal
   const [showCreateModal, setShowCreateModal] = useState(false);
+  
+  // Delete confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState<{ userId: number; username: string } | null>(null);
   
   // User filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -172,16 +176,20 @@ export default function AdminPanel(): JSX.Element {
   };
 
   const deleteUser = async (userId: number, username: string) => {
-    if (!confirm(t('admin.users.confirmDelete', { username }) || `Delete user ${username}?`)) {
-      return;
-    }
+    setDeleteConfirm({ userId, username });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
 
     try {
-      await adminApi.deleteUser(userId);
+      await adminApi.deleteUser(deleteConfirm.userId);
       await loadUsers();
       setToast({ message: t('admin.users.deleted') || 'User deleted successfully', type: 'success' });
     } catch (err: any) {
       setToast({ message: parseApiError(err), type: 'error' });
+    } finally {
+      setDeleteConfirm(null);
     }
   };
 
@@ -472,6 +480,23 @@ export default function AdminPanel(): JSX.Element {
           }}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!deleteConfirm}
+        title={t('admin.users.deleteTitle') || 'Delete User'}
+        message={
+          deleteConfirm
+            ? (t('admin.users.confirmDelete', { username: deleteConfirm.username }) || 
+               `Are you sure you want to delete user "${deleteConfirm.username}"? This action cannot be undone.`)
+            : ''
+        }
+        confirmText={t('admin.users.delete') || 'Delete'}
+        cancelText={t('common.cancel') || 'Cancel'}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm(null)}
+        variant="danger"
+      />
       
       {/* Main content */}
       <div className="relative z-10 space-y-8 pb-12">
@@ -499,16 +524,6 @@ export default function AdminPanel(): JSX.Element {
         {/* Tab navigation */}
         <div className="flex items-center gap-2 glass rounded-2xl p-2 w-fit">
           <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
-              activeTab === 'settings'
-                ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
-                : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-            }`}
-          >
-            ⚙️ {t('admin.tabs.settings')}
-          </button>
-          <button
             onClick={() => setActiveTab('users')}
             className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
               activeTab === 'users'
@@ -517,6 +532,16 @@ export default function AdminPanel(): JSX.Element {
             }`}
           >
             👥 {t('admin.tabs.users')}
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
+              activeTab === 'settings'
+                ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
+                : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
+            }`}
+          >
+            ⚙️ {t('admin.tabs.settings')}
           </button>
         </div>
 

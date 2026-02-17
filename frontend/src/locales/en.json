@@ -171,7 +171,7 @@
       "active": "Active",
       "inactive": "Inactive",
       "delete": "Delete",
-      "confirmDelete": "Delete user {{username}}? This action cannot be undone."
+      "confirmDelete": "Delete user \"{username}\"? This action cannot be undone."
     }
   }
 }
