@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.db import get_session
 from backend.dependencies import get_current_user, require_admin
+from backend.settings import get_setting
 from backend.services import auth as auth_svc
 from backend.schemas import (
     LoginRequest,
@@ -44,19 +45,27 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(
     data: RegisterRequest,
-    current_user: User = Depends(require_admin),
     session: Session = Depends(get_session),
 ):
     """
-    Register a new user (Admin only).
+    Register a new user (public registration).
+    
+    Registration must be enabled via the 'auth.registration_enabled' setting.
     """
+    # Check if registration is enabled
+    if not get_setting(session, "auth.registration_enabled", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is currently disabled. If you think this is a mistake, please contact an administrator.",
+        )
+    
     try:
         user = auth_svc.create_user(
             session=session,
             username=data.username,
             email=data.email,
             password=data.password,
-            role=config.ROLE_VISITOR,  # Default role
+            role=config.ROLE_VISITOR,  # Default role for public registration
         )
         
         return UserResponse.model_validate(user)
