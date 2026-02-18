@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../ui/Button';
+import { Select } from '../ui/Select';
 import * as adminApi from '../../api/admin';
 
 interface CreateUserModalProps {
@@ -275,23 +276,17 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
             <label className="block text-sm font-semibold text-foreground mb-2">
               {t('admin.users.role')}
             </label>
-            <select
+            <Select
               value={role}
-              onChange={(e) => setRole(e.target.value as any)}
-              className="w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 transition-all appearance-none cursor-pointer"
+              onChange={(value) => setRole(value as any)}
+              options={[
+                { value: 'visitor', label: 'Visitor' },
+                { value: 'member', label: 'Member' },
+                { value: 'administrator', label: 'Administrator' },
+              ]}
               disabled={loading}
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                backgroundPosition: 'right 0.5rem center',
-                backgroundRepeat: 'no-repeat',
-                backgroundSize: '1.5em 1.5em',
-                paddingRight: '2.5rem'
-              }}
-            >
-              <option value="visitor">Visitor</option>
-              <option value="member">Member</option>
-              <option value="administrator">Administrator</option>
-            </select>
+              className="w-full"
+            />
           </div>
 
           <div className="flex gap-3 pt-4">

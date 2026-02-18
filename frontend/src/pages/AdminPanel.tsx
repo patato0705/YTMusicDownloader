@@ -11,6 +11,7 @@ import { Toast } from '../components/ui/Toast';
 import { CreateUserModal } from '../components/ui/CreateUserModal';
 import { SearchInput } from '../components/ui/SearchInput';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { Select } from '../components/ui/Select';
 import * as adminApi from '../api/admin';
 import type { Setting, User } from '../api/admin';
 
@@ -314,27 +315,27 @@ export default function AdminPanel(): JSX.Element {
             </div>
 
             {/* Status Filter */}
-            <select
+            <Select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
-            >
-              <option value="all">{t('admin.users.allStatuses') || 'All Statuses'}</option>
-              <option value="active">{t('admin.users.active')}</option>
-              <option value="inactive">{t('admin.users.inactive')}</option>
-            </select>
+              onChange={(value) => setStatusFilter(value as any)}
+              options={[
+                { value: 'all', label: t('admin.users.allStatuses') || 'All Statuses' },
+                { value: 'active', label: t('admin.users.active') || 'Active' },
+                { value: 'inactive', label: t('admin.users.inactive') || 'Inactive' },
+              ]}
+            />
 
             {/* Role Filter */}
-            <select
+            <Select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value as any)}
-              className="px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
-            >
-              <option value="all">{t('admin.users.allRoles') || 'All Roles'}</option>
-              <option value="administrator">Administrator</option>
-              <option value="member">Member</option>
-              <option value="visitor">Visitor</option>
-            </select>
+              onChange={(value) => setRoleFilter(value as any)}
+              options={[
+                { value: 'all', label: t('admin.users.allRoles') || 'All Roles' },
+                { value: 'administrator', label: 'Administrator' },
+                { value: 'member', label: 'Member' },
+                { value: 'visitor', label: 'Visitor' },
+              ]}
+            />
 
             {/* Create User Button */}
             <Button
@@ -394,16 +395,17 @@ export default function AdminPanel(): JSX.Element {
                         <div className="text-sm text-muted-foreground">{u.email}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <select
+                        <Select
                           value={u.role}
-                          onChange={(e) => changeUserRole(u.id, e.target.value)}
+                          onChange={(value) => changeUserRole(u.id, value)}
+                          options={[
+                            { value: 'visitor', label: 'Visitor' },
+                            { value: 'member', label: 'Member' },
+                            { value: 'administrator', label: 'Administrator' },
+                          ]}
                           disabled={u.id === user?.id}
-                          className={`px-3 py-1 text-xs font-medium rounded-lg ${roleColors[u.role]} border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 disabled:opacity-50`}
-                        >
-                          <option value="visitor">Visitor</option>
-                          <option value="member">Member</option>
-                          <option value="administrator">Administrator</option>
-                        </select>
+                          className={`text-xs font-medium ${roleColors[u.role]} border-0 py-1`}
+                        />
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
