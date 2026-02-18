@@ -94,29 +94,7 @@ export async function apiFetch<T = any>(
     headers,
   });
 
-  // Handle 401 - try refreshing token
-  if (response.status === 401) {
-    const refreshed = await refreshAccessToken();
-    
-    if (refreshed) {
-      // Retry with new token
-      const newToken = getAuthToken();
-      if (newToken) {
-        headers.set('Authorization', `Bearer ${newToken}`);
-        response = await fetch(url, {
-          ...options,
-          headers,
-        });
-      }
-    } else {
-      // Refresh failed - redirect to login
-      clearAuthTokens();
-      window.location.href = '/login';
-      throw new ApiError(401, 'Session expired');
-    }
-  }
-
-  // Parse response
+  // Parse response first (before handling 401)
   const contentType = response.headers.get('content-type');
   let data: any;
 
@@ -131,7 +109,59 @@ export async function apiFetch<T = any>(
     }
   }
 
-  // Handle errors
+  // Handle 401 - try refreshing token
+  if (response.status === 401) {
+    const refreshed = await refreshAccessToken();
+    
+    if (refreshed) {
+      // Retry with new token
+      const newToken = getAuthToken();
+      if (newToken) {
+        headers.set('Authorization', `Bearer ${newToken}`);
+        const retryResponse = await fetch(url, {
+          ...options,
+          headers,
+        });
+        
+        // Parse retry response
+        const retryContentType = retryResponse.headers.get('content-type');
+        let retryData: any;
+        
+        if (retryContentType?.includes('application/json')) {
+          retryData = await retryResponse.json();
+        } else {
+          const retryText = await retryResponse.text();
+          try {
+            retryData = retryText ? JSON.parse(retryText) : null;
+          } catch {
+            retryData = retryText;
+          }
+        }
+        
+        if (!retryResponse.ok) {
+          const message = retryData?.detail || retryData?.message || `HTTP ${retryResponse.status}`;
+          throw new ApiError(retryResponse.status, message, retryData);
+        }
+        
+        return retryData as T;
+      }
+    } else {
+      // Refresh failed - clear tokens
+      clearAuthTokens();
+      
+      // Only redirect if not already on auth pages
+      const currentPath = window.location.pathname;
+      if (!currentPath.startsWith('/login') && !currentPath.startsWith('/register')) {
+        window.location.href = '/login';
+      }
+      
+      // Use the actual error message from the response, not "Session expired"
+      const message = data?.detail || data?.message || 'Authentication failed';
+      throw new ApiError(401, message, data);
+    }
+  }
+
+  // Handle errors (non-401)
   if (!response.ok) {
     const message = data?.detail || data?.message || `HTTP ${response.status}`;
     throw new ApiError(response.status, message, data);
