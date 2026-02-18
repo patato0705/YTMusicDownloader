@@ -34,21 +34,45 @@ export function clearAuthTokens(): void {
  */
 async function refreshAccessToken(): Promise<boolean> {
   const refreshToken = localStorage.getItem('refresh_token');
-  if (!refreshToken) return false;
+  if (!refreshToken) {
+    console.warn('[Auth] No refresh token found');
+    return false;
+  }
 
   try {
+    console.log('[Auth] Attempting token refresh...');
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
 
-    if (!res.ok) return false;
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      console.error('[Auth] Token refresh failed:', res.status, errorData);
+      return false;
+    }
 
     const data = await res.json();
-    localStorage.setItem('access_token', data.access_token);
+    
+    // Update access token
+    if (data.access_token) {
+      localStorage.setItem('access_token', data.access_token);
+      console.log('[Auth] Access token refreshed successfully');
+    } else {
+      console.error('[Auth] No access_token in refresh response:', data);
+      return false;
+    }
+    
+    // Update refresh token if backend provides a new one (token rotation)
+    if (data.refresh_token) {
+      localStorage.setItem('refresh_token', data.refresh_token);
+      console.log('[Auth] Refresh token rotated');
+    }
+    
     return true;
-  } catch {
+  } catch (error) {
+    console.error('[Auth] Token refresh error:', error);
     return false;
   }
 }
