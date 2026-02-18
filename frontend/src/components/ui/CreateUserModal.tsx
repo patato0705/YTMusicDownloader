@@ -1,4 +1,4 @@
-// src/components/admin/CreateUserModal.tsx
+// src/components/ui/CreateUserModal.tsx
 import React, { useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../ui/Button';
