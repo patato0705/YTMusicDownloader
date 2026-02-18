@@ -7,7 +7,7 @@ from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from backend.time_utils import now_utc
+from backend.time_utils import now_utc, ensure_timezone_aware
 
 logger = __import__("logging").getLogger("models")
 
@@ -252,7 +252,6 @@ class User(Base):
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     token: Mapped[str] = mapped_column(String(512), unique=True, nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(
@@ -264,13 +263,20 @@ class RefreshToken(Base):
     expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-
+    
     def is_valid(self) -> bool:
         """Check if token is still valid"""
         if self.revoked:
             return False
-        return now_utc() < self.expires_at
-
+        
+        # Ensure expires_at is timezone-aware before comparison
+        expires = ensure_timezone_aware(self.expires_at)
+        if expires is None:
+            # Should never happen since expires_at is non-nullable
+            return False
+        
+        return now_utc() < expires
+    
     def __repr__(self) -> str:
         return f"<RefreshToken id={self.id} user_id={self.user_id} revoked={self.revoked}>"
 
