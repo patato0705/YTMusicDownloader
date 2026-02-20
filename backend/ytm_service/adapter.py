@@ -425,10 +425,11 @@ def get_charts(country: str = "US") -> Dict[str, Any]:
                 continue
             thumbs_models = N._build_thumbnails(a.get("thumbnails") or [])
             artists_out.append({
-                "id": str(a.get("browseId") or a.get("channelId") or a.get("id") or ""),
-                "name": a.get("title") or a.get("name"),
+                "id": str(a.get("browseId") or ""),
+                "name": a.get("title"),
                 "thumbnails": [t.model_dump() for t in thumbs_models],
-                "raw": a,
+                "rank": a.get("rank"),
+                "trend": a.get("trend"),
             })
 
     songs_in = raw.get("tracks") or raw.get("songs") or []
@@ -444,7 +445,7 @@ def get_charts(country: str = "US") -> Dict[str, Any]:
                 logger.debug("Skipping invalid chart song %r", s, exc_info=True)
                 continue
 
-    return {"artists": artists_out, "songs": songs_out, "raw": raw}
+    return {"artists": artists_out, "songs": songs_out}
 
 
 def search(q: str, filter: Optional[str] = None, limit: int = 10,
