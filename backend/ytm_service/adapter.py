@@ -412,10 +412,10 @@ def get_charts(country: str = "US") -> Dict[str, Any]:
     try:
         raw = _safe_call("get_charts", country=country)
     except Exception:
-        return {"artists": [], "songs": [], "raw": None}
+        return {"artists": [], "raw": None}
 
     if not isinstance(raw, dict):
-        return {"artists": [], "songs": [], "raw": raw}
+        return {"artists": [], "raw": raw}
 
     artists_in = raw.get("artists") or []
     artists_out: List[Dict[str, Any]] = []
@@ -432,20 +432,7 @@ def get_charts(country: str = "US") -> Dict[str, Any]:
                 "trend": a.get("trend"),
             })
 
-    songs_in = raw.get("tracks") or raw.get("songs") or []
-    songs_out: List[Dict[str, Any]] = []
-    if isinstance(songs_in, Sequence):
-        for s in songs_in:
-            try:
-                nt_raw = N.normalize_track_item(s)
-                nt = _ensure_track_payload(nt_raw)
-                ts = TrackSchema(**nt)
-                songs_out.append(ts.model_dump())
-            except Exception:
-                logger.debug("Skipping invalid chart song %r", s, exc_info=True)
-                continue
-
-    return {"artists": artists_out, "songs": songs_out}
+    return {"artists": artists_out}
 
 
 def search(q: str, filter: Optional[str] = None, limit: int = 10,
