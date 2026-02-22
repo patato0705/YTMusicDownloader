@@ -408,7 +408,7 @@ def get_playlist(playlist_id: str) -> Dict[str, Any]:
     return model.model_dump()
 
 
-def get_charts(country: str = "US") -> Dict[str, Any]:
+def get_charts(country: str = "ZZ") -> Dict[str, Any]:
     try:
         raw = _safe_call("get_charts", country=country)
     except Exception:
