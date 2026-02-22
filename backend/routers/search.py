@@ -7,7 +7,6 @@ Endpoints:
 - GET /api/search/artists - Search for artists only.
 - GET /api/search/albums - Search for albums only.
 - GET /api/search/songs - Search for songs only.
-- GET /api/search/charts - Get music charts for a country.
 - DELETE /api/search/cache - Clear the search cache. (Admin only)
 """
 from __future__ import annotations
@@ -136,34 +135,6 @@ def search_songs_only(
         raise HTTPException(
             status_code=503,
             detail=f"Song search unavailable: {str(e)}"
-        )
-
-
-@router.get("/charts", response_model=Dict[str, Any])
-def get_charts(
-    current_user: User = Depends(require_auth),
-    country: Optional[str] = Query("US", description="Country code (e.g., 'US', 'FR')"),
-) -> Dict[str, Any]:
-    """
-    Get music charts for a country.
-    
-    Returns top artists and songs.
-    Results are cached for 15 minutes.
-    
-    Returns:
-        {"artists": [...], "songs": [...]}
-    """
-    try:
-        results = search_service.get_charts(
-            country=country,
-            use_cache=True
-        )
-        return results
-    except Exception as e:
-        logger.exception(f"Charts failed for country '{country}'")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Charts service unavailable: {str(e)}"
         )
 
 

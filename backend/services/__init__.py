@@ -7,8 +7,11 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+from . import admin
 from . import albums
 from . import artists
+from . import auth
+from . import charts
 from . import normalizers
 from . import search
 from . import subscriptions

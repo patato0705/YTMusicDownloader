@@ -217,6 +217,68 @@ class AlbumSubscription(Base):
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+# Charts
+
+class ChartSubscription(Base):
+    """
+    Chart subscriptions - tracks which country charts to sync weekly.
+    Auto-follows top N artists from the chart.
+    """
+    __tablename__ = "chart_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    country_code: Mapped[str] = mapped_column(String(2), unique=True, nullable=False, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    top_n_artists: Mapped[int] = mapped_column(Integer, nullable=False, default=10)  # 1-40
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    created_by: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": getattr(self, "id", None),
+            "country_code": getattr(self, "country_code", None),
+            "enabled": bool(getattr(self, "enabled", True)),
+            "top_n_artists": getattr(self, "top_n_artists", 10),
+            "created_at": created.isoformat() if (created := getattr(self, "created_at", None)) else None,
+            "created_by": getattr(self, "created_by", None),
+            "last_synced_at": synced.isoformat() if (synced := getattr(self, "last_synced_at", None)) else None,
+            "last_error": getattr(self, "last_error", None),
+        }
+
+    def __repr__(self) -> str:
+        return f"<ChartSubscription country={self.country_code} top_n={self.top_n_artists} enabled={self.enabled}>"
+
+
+class ChartSnapshot(Base):
+    """
+    Historical chart data snapshots.
+    Stores chart rankings over time to track trends.
+    """
+    __tablename__ = "chart_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    country_code: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    snapshot_date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False, index=True)
+    data: Mapped[Optional[Any]] = mapped_column(JSONCol, nullable=True)  # Full chart data
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": getattr(self, "id", None),
+            "country_code": getattr(self, "country_code", None),
+            "snapshot_date": snapshot.isoformat() if (snapshot := getattr(self, "snapshot_date", None)) else None,
+            "data": getattr(self, "data", None),
+        }
+
+    def __repr__(self) -> str:
+        return f"<ChartSnapshot country={self.country_code} date={self.snapshot_date}>"
+
+
 # Authentication
 
 class User(Base):

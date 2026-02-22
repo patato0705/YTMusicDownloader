@@ -26,6 +26,7 @@ from ..models import Job, Track, Album, Artist
 from ..services import albums as albums_svc
 from ..services import artists as artists_svc
 from ..services import tracks as tracks_svc
+from ..services import charts as charts_svc
 from .. import downloader
 
 from ..config import YDL_COOKIEFILE
@@ -881,6 +882,140 @@ def sync_artist(
 
 
 # ============================================================================
+# TASK: SYNC CHART
+# ============================================================================
+
+
+def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
+    """
+    Sync a country chart: fetch latest data and follow top N artists.
+    
+    Flow:
+    1. Fetch chart data and save snapshot
+    2. Identify artists to follow (not already followed)
+    3. For each artist:
+       - Fetch artist metadata from YTMusic
+       - Mark as followed
+       - Create artist subscription
+    4. Queue sync_artist jobs for each artist
+    
+    Args:
+        session: SQLAlchemy session
+        country_code: Country code (from job payload)
+    
+    Returns:
+        Dict with sync results
+    """
+    if not country_code:
+        raise ValueError("country_code required")
+    
+    logger.info(f"Starting chart sync for {country_code}")
+    
+    # ===== TRANSACTION 1: Sync chart (fetch, save snapshot, identify artists) =====
+    result = charts_svc.sync_chart(session, country_code)
+    
+    if result.get("skipped"):
+        logger.info(f"Chart sync skipped for {country_code}: {result.get('reason')}")
+        return result
+    
+    # Get artists to follow
+    artist_ids = result.get("artists_to_follow", [])
+    
+    logger.info(f"Chart sync for {country_code}: {len(artist_ids)} artists to follow")
+    
+    if not artist_ids:
+        logger.info(f"No new artists to follow for {country_code}")
+        return {**result, "jobs_queued": 0}
+    
+    # ===== TRANSACTION 2: Follow artists (mark as followed + create subscriptions) =====
+    from ..services import subscriptions as subs_svc
+    
+    artists_followed = 0
+    failed_artists = []
+    
+    for artist_id in artist_ids:
+        try:
+            # Fetch artist metadata from YTMusic and upsert to DB
+            artist_data = artists_svc.fetch_and_upsert_artist(session, artist_id)
+            artist_name = artist_data.get("name", "Unknown")
+            
+            # Get artist object from DB
+            artist_obj = session.get(Artist, artist_id)
+            if not artist_obj:
+                logger.warning(f"Artist {artist_id} not found after fetch, skipping")
+                failed_artists.append(artist_id)
+                continue
+            
+            # Check if already followed (shouldn't happen, but safety check)
+            if artist_obj.followed:
+                logger.debug(f"Artist {artist_id} already followed, skipping")
+                continue
+            
+            # Mark as followed
+            artist_obj.followed = True
+            session.add(artist_obj)
+            
+            # Create artist subscription
+            subs_svc.subscribe_to_artist(
+                session,
+                artist_id=artist_id,
+                mode="full",
+            )
+            
+            artists_followed += 1
+            logger.debug(f"Followed artist {artist_id} ({artist_name}) from {country_code} chart")
+            
+        except Exception as e:
+            logger.exception(f"Failed to follow artist {artist_id} from chart {country_code}")
+            failed_artists.append(artist_id)
+            continue
+    
+    # Commit all follows and subscriptions
+    def commit_follows():
+        session.commit()
+    
+    _db_operation_with_retry(commit_follows)
+    
+    logger.info(
+        f"Followed {artists_followed}/{len(artist_ids)} artists from {country_code} chart"
+    )
+    
+    # ===== TRANSACTION 3: Queue sync_artist jobs =====
+    from .jobqueue import enqueue_job
+    jobs_queued = 0
+    
+    # Only queue jobs for successfully followed artists
+    successfully_followed = [aid for aid in artist_ids if aid not in failed_artists]
+    
+    for artist_id in successfully_followed:
+        try:
+            job = enqueue_job(
+                session,
+                job_type="sync_artist",
+                payload={"artist_id": artist_id},
+                priority=10,  # Lower priority than manual follows
+            )
+            jobs_queued += 1
+            logger.debug(f"Queued sync_artist job {job.id} for artist {artist_id}")
+        except Exception as e:
+            logger.exception(f"Failed to queue sync_artist job for {artist_id}")
+    
+    session.commit()
+    
+    logger.info(
+        f"Chart sync complete for {country_code}: "
+        f"{artists_followed} artists followed, {jobs_queued} sync jobs queued"
+    )
+    
+    return {
+        **result,
+        "artists_followed": artists_followed,
+        "jobs_queued": jobs_queued,
+        "failed_artists": len(failed_artists),
+    }
+
+
+# ============================================================================
 # TASK DISPATCHER
 # ============================================================================
 
@@ -889,6 +1024,7 @@ _TASK_MAP = {
     "download_lyrics": download_lyrics,
     "import_album": import_album,
     "sync_artist": sync_artist,
+    "sync_chart": sync_chart,
 }
 
 
