@@ -7,7 +7,7 @@ Endpoints:
 - POST /api/charts/{country_code}/follow - Follow a chart (admin only)
 - DELETE /api/charts/{country_code}/follow - Unfollow a chart (admin only)
 - PATCH /api/charts/{country_code} - Update chart subscription (admin only)
-- GET /api/charts - List all chart subscriptions (admin only)
+- GET /api/charts - List all chart subscriptions
 """
 from __future__ import annotations
 import logging
@@ -93,14 +93,10 @@ def get_chart(
         )
 
 
-# ============================================================================
-# ADMIN ENDPOINTS
-# ============================================================================
-
 @router.get("", response_model=List[ChartSubscriptionResponse])
 def list_chart_subscriptions(
     include_disabled: bool = False,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_auth),
     session: Session = Depends(get_session),
 ) -> List[ChartSubscriptionResponse]:
     """
@@ -115,6 +111,11 @@ def list_chart_subscriptions(
     )
     
     return [ChartSubscriptionResponse.model_validate(sub) for sub in subscriptions]
+
+
+# ============================================================================
+# ADMIN ENDPOINTS
+# ============================================================================
 
 
 @router.post("/{country_code}/follow", response_model=ChartSubscriptionResponse, status_code=status.HTTP_201_CREATED)
