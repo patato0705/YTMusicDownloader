@@ -12,11 +12,16 @@ import { CreateUserModal } from '../components/ui/CreateUserModal';
 import { SearchInput } from '../components/ui/SearchInput';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Select } from '../components/ui/Select';
+import { FollowChartModal } from '../components/ui/FollowChartModal';
+import { ChartArtistGrid } from '../components/ui/ChartArtistGrid';
 import * as adminApi from '../api/admin';
+import * as chartsApi from '../api/charts';
+import { CHART_COUNTRIES, getCountry } from '../config/charts';
 import type { Setting, User } from '../api/admin';
+import type { ChartSubscription, Chart } from '../api/charts';
 
 export default function AdminPanel(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<'settings' | 'users'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'charts' | 'settings'>('users');
   const [settings, setSettings] = useState<Setting[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +37,13 @@ export default function AdminPanel(): JSX.Element {
   
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{ userId: number; username: string } | null>(null);
+  
+  // Charts state
+  const [chartSubscriptions, setChartSubscriptions] = useState<ChartSubscription[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>('');
+  const [selectedChartData, setSelectedChartData] = useState<Chart | null>(null);
+  const [showFollowModal, setShowFollowModal] = useState(false);
+  const [loadingChart, setLoadingChart] = useState(false);
   
   // User filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,8 +72,10 @@ export default function AdminPanel(): JSX.Element {
     try {
       if (activeTab === 'settings') {
         await loadSettings();
-      } else {
+      } else if (activeTab === 'users') {
         await loadUsers();
+      } else if (activeTab === 'charts') {
+        await loadChartSubscriptions();
       }
     } catch (err: any) {
       console.error('Failed to load data:', err);
@@ -194,6 +208,81 @@ export default function AdminPanel(): JSX.Element {
     }
   };
 
+  // ============================================================================
+  // CHARTS MANAGEMENT
+  // ============================================================================
+
+  const loadChartSubscriptions = async () => {
+    const subs = await chartsApi.listChartSubscriptions(true);
+    setChartSubscriptions(subs);
+  };
+
+  const handleCountrySelect = async (countryCode: string) => {
+    setSelectedCountry(countryCode);
+    if (!countryCode) {
+      setSelectedChartData(null);
+      return;
+    }
+
+    setLoadingChart(true);
+    try {
+      const chart = await chartsApi.getChart(countryCode);
+      setSelectedChartData(chart);
+    } catch (err: any) {
+      console.error('Failed to load chart:', err);
+      setToast({ message: parseApiError(err), type: 'error' });
+      setSelectedChartData(null);
+    } finally {
+      setLoadingChart(false);
+    }
+  };
+
+  const handleFollowChart = () => {
+    if (!selectedCountry) return;
+    setShowFollowModal(true);
+  };
+
+  const handleUnfollowChart = async (countryCode: string) => {
+    try {
+      await chartsApi.unfollowChart(countryCode);
+      await loadChartSubscriptions();
+      setToast({ message: t('admin.charts.unfollowed') || 'Chart unfollowed successfully', type: 'success' });
+      
+      // Clear selection if we unfollowed the currently selected chart
+      if (countryCode === selectedCountry) {
+        setSelectedCountry('');
+        setSelectedChartData(null);
+      }
+    } catch (err: any) {
+      setToast({ message: parseApiError(err), type: 'error' });
+    }
+  };
+
+  const handleToggleChart = async (countryCode: string, enabled: boolean) => {
+    try {
+      await chartsApi.updateChart(countryCode, { enabled: !enabled });
+      await loadChartSubscriptions();
+      setToast({ 
+        message: enabled 
+          ? (t('admin.charts.disabled') || 'Chart disabled') 
+          : (t('admin.charts.enabled') || 'Chart enabled'), 
+        type: 'success' 
+      });
+    } catch (err: any) {
+      setToast({ message: parseApiError(err), type: 'error' });
+    }
+  };
+
+  const handleUpdateTopN = async (countryCode: string, topN: number) => {
+    try {
+      await chartsApi.updateChart(countryCode, { top_n_artists: topN });
+      await loadChartSubscriptions();
+      setToast({ message: t('admin.charts.updated') || 'Chart updated successfully', type: 'success' });
+    } catch (err: any) {
+      setToast({ message: parseApiError(err), type: 'error' });
+    }
+  };
+
   // Filter users based on search and filters
   const filteredUsers = users.filter(u => {
     // Search filter
@@ -286,6 +375,167 @@ export default function AdminPanel(): JSX.Element {
           >
             {t('admin.settings.save')} {t('admin.settings.title')}
           </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderChartsTab = () => {
+    const followedCountryCodes = new Set(chartSubscriptions.map(s => s.country_code));
+    const availableCountries = CHART_COUNTRIES.filter(c => !followedCountryCodes.has(c.code));
+
+    return (
+      <div className="space-y-6">
+        {/* Country Selection */}
+        <div className="glass rounded-2xl p-6 border-gradient">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
+            {t('admin.charts.selectCountry') || 'Select a Country Chart'}
+          </h3>
+          
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <Select
+                value={selectedCountry}
+                onChange={handleCountrySelect}
+                options={[
+                  { value: '', label: t('admin.charts.selectCountry') || '-- Select Country --' },
+                  ...availableCountries.map(c => ({
+                    value: c.code,
+                    label: `${c.flag} ${c.name}`
+                  }))
+                ]}
+                placeholder={t('admin.charts.selectCountry')}
+              />
+            </div>
+
+            {selectedCountry && !followedCountryCodes.has(selectedCountry) && (
+              <Button
+                onClick={handleFollowChart}
+                variant="primary"
+                disabled={loadingChart}
+              >
+                + {t('admin.charts.followChart') || 'Follow Chart'}
+              </Button>
+            )}
+          </div>
+
+          {/* Chart Preview */}
+          {loadingChart && (
+            <div className="mt-4 flex items-center justify-center py-8">
+              <Spinner />
+            </div>
+          )}
+
+          {selectedChartData && !loadingChart && (
+            <div className="mt-4 glass rounded-xl p-4 border border-slate-200/50 dark:border-white/10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{getCountry(selectedCountry)?.flag}</span>
+                  <div>
+                    <h4 className="font-semibold text-foreground">{getCountry(selectedCountry)?.name}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Top 40 Artists Preview
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Artists Grid Preview */}
+              <ChartArtistGrid 
+                artists={selectedChartData.artists.slice(0, 40)} 
+                maxHeight="200px"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Current Subscriptions */}
+        <div className="glass rounded-2xl p-6 border-gradient">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
+            {t('admin.charts.currentSubscriptions') || 'Current Chart Subscriptions'}
+          </h3>
+
+          {chartSubscriptions.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <span className="text-5xl mb-3 block">📊</span>
+              <p>{t('admin.charts.noSubscriptions') || 'No charts followed yet'}</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="border-b border-slate-200 dark:border-white/10">
+                  <tr className="text-left text-sm font-semibold text-muted-foreground">
+                    <th className="pb-3">{t('admin.charts.country') || 'Country'}</th>
+                    <th className="pb-3">{t('admin.charts.topArtists') || 'Top Artists'}</th>
+                    <th className="pb-3">{t('admin.charts.status') || 'Status'}</th>
+                    <th className="pb-3">{t('admin.charts.lastSynced') || 'Last Synced'}</th>
+                    <th className="pb-3 text-center">{t('admin.charts.actions') || 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chartSubscriptions.map((sub) => {
+                    const country = getCountry(sub.country_code);
+                    if (!country) return null;
+
+                    return (
+                      <tr key={sub.id} className="border-b border-slate-200 dark:border-white/10 last:border-0">
+                        <td className="py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">{country.flag}</span>
+                            <span className="font-medium text-foreground">{country.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-4">
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={sub.top_n_artists}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value);
+                              if (val >= 1 && val <= 100) {
+                                handleUpdateTopN(sub.country_code, val);
+                              }
+                            }}
+                            className="w-20 px-2 py-1 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
+                          />
+                        </td>
+                        <td className="py-4">
+                          <button
+                            onClick={() => handleToggleChart(sub.country_code, sub.enabled)}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                              sub.enabled
+                                ? 'bg-green-500/20 text-green-600 dark:text-green-400'
+                                : 'bg-slate-500/20 text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            {sub.enabled 
+                              ? (t('admin.charts.enabled') || 'Enabled')
+                              : (t('admin.charts.disabled') || 'Disabled')
+                            }
+                          </button>
+                        </td>
+                        <td className="py-4 text-sm text-muted-foreground">
+                          {sub.last_synced_at 
+                            ? new Date(sub.last_synced_at).toLocaleString()
+                            : (t('admin.charts.neverSynced') || 'Never')
+                          }
+                        </td>
+                        <td className="py-4 text-center">
+                          <button
+                            onClick={() => handleUnfollowChart(sub.country_code)}
+                            className="px-3 py-1 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-all text-sm"
+                          >
+                            {t('admin.charts.unfollowChart') || 'Unfollow'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -499,6 +749,20 @@ export default function AdminPanel(): JSX.Element {
         onCancel={() => setDeleteConfirm(null)}
         variant="danger"
       />
+
+      {/* Follow Chart Modal */}
+      {showFollowModal && selectedCountry && (
+        <FollowChartModal
+          country={getCountry(selectedCountry)!}
+          onClose={() => setShowFollowModal(false)}
+          onSuccess={async () => {
+            await loadChartSubscriptions();
+            setToast({ message: t('admin.charts.followed') || 'Chart followed successfully', type: 'success' });
+            setSelectedCountry('');
+            setSelectedChartData(null);
+          }}
+        />
+      )}
       
       {/* Main content */}
       <div className="relative z-10 space-y-8 pb-12">
@@ -536,6 +800,16 @@ export default function AdminPanel(): JSX.Element {
             👥 {t('admin.tabs.users')}
           </button>
           <button
+            onClick={() => setActiveTab('charts')}
+            className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
+              activeTab === 'charts'
+                ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
+                : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
+            }`}
+          >
+            📊 {t('admin.tabs.charts')}
+          </button>
+          <button
             onClick={() => setActiveTab('settings')}
             className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
               activeTab === 'settings'
@@ -548,7 +822,9 @@ export default function AdminPanel(): JSX.Element {
         </div>
 
         {/* Tab content */}
-        {activeTab === 'settings' ? renderSettingsTab() : renderUsersTab()}
+        {activeTab === 'users' ? renderUsersTab() 
+          : activeTab === 'charts' ? renderChartsTab()
+          : renderSettingsTab()}
       </div>
     </div>
   );

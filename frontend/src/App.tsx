@@ -19,6 +19,7 @@ import Browse from './pages/Browse';
 import Library from './pages/Library';
 import Artist from './pages/Artist';
 import Album from './pages/Album';
+import Charts from './pages/Charts';
 import AdminPanel from './pages/AdminPanel';
 
 export default function App(): JSX.Element {
@@ -58,6 +59,7 @@ export default function App(): JSX.Element {
                     <Route path="/library" element={<Library />} />
                     <Route path="/artists/:artistId" element={<Artist />} />
                     <Route path="/albums/:albumId" element={<Album />} />
+                    <Route path="/charts" element={<Charts />} />
                     
                     {/* Admin Panel */}
                     <Route path="/admin" element={<AdminPanel />} />
