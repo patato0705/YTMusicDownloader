@@ -229,7 +229,7 @@ export default function Home(): JSX.Element {
                 </p>
                 <Link
                   to="/browse"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-red-700 dark:to-red-600 text-white font-medium hover:shadow-lg hover:shadow-blue-600/50 dark:hover:shadow-red-700/50 transition-all duration-300"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-red-700 dark:to-red-600 text-white font-medium hover:shadow-lg hover:shadow-blue-600/50 dark:hover:shadow-red-700/50 transition-all duration-300"
                 >
                   <SearchIcon />
                   Browse Music

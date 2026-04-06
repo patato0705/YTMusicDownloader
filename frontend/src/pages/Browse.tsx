@@ -8,7 +8,6 @@ import MediaCard from '../components/MediaCard';
 import { SearchInput } from '../components/ui/SearchInput';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
-import { useDebounce } from '../hooks';
 import {
   formatArtist,
   formatAlbum,
@@ -17,6 +16,25 @@ import {
   filterAlbums,
 } from '../utils';
 import type { SearchResults } from '../types';
+
+/**
+ * Debounce hook - delays updating a value until after a specified delay
+ */
+function useDebounce<T>(value: T, delay: number = 500): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 export default function Browse(): JSX.Element {
   const [query, setQuery] = useState('');

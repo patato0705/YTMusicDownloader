@@ -55,8 +55,8 @@ backend/.python-version
 # DOCKER
 # =========================
 # Local volumes, caches, etc.
-config/
-data/
+/config/
+/data/
 docker-compose.override.yml
 .env
 .env.local

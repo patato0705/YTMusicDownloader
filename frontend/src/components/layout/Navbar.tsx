@@ -6,6 +6,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { UserMenu } from './UserMenu';
 import { LanguageSelector } from '../ui/LanguageSelector';
+import * as adminApi from '../../api/admin';
 
 export default function Navbar(): JSX.Element {
   const { isAuthenticated } = useAuth();
@@ -14,6 +15,24 @@ export default function Navbar(): JSX.Element {
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [chartsEnabled, setChartsEnabled] = useState(false);
+
+  // Check if charts feature is enabled
+  useEffect(() => {
+    const checkChartsEnabled = async () => {
+      try {
+        const enabled = await adminApi.Settings.areChartsEnabled();
+        setChartsEnabled(enabled);
+      } catch (err) {
+        console.error('Failed to check charts setting:', err);
+        setChartsEnabled(false);
+      }
+    };
+    
+    if (isAuthenticated) {
+      checkChartsEnabled();
+    }
+  }, [isAuthenticated]);
 
   // Handle scroll effect
   useEffect(() => {
@@ -97,9 +116,11 @@ export default function Navbar(): JSX.Element {
                       <Link to="/library" className={navLinkClass('/library')}>
                         {t('nav.library')}
                       </Link>
-                      <Link to="/showcase" className={navLinkClass('/library')}>
-                        {t('nav.library')}
-                      </Link>
+                      {chartsEnabled && (
+                        <Link to="/charts" className={navLinkClass('/charts')}>
+                          {t('nav.charts')}
+                        </Link>
+                      )}
                     </div>
                   )}
                 </div>
@@ -167,6 +188,15 @@ export default function Navbar(): JSX.Element {
                   >
                     {t('nav.library')}
                   </Link>
+                  {chartsEnabled && (
+                    <Link 
+                      to="/charts" 
+                      className={navLinkClass('/charts')}
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      {t('nav.charts')}
+                    </Link>
+                  )}
                 </div>
               )}
             </div>

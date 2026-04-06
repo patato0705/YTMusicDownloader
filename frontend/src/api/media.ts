@@ -34,7 +34,8 @@ export function getLocalImageUrl(imagePath: string | null | undefined): string {
  * Goes through proxy/cache, no auth required
  */
 export function getThumbnailUrl(url: string): string {
-  const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+  const VITE_API_BASE = "http://localhost:8000"
+  const API_BASE = (VITE_API_BASE ?? "/api").replace(/\/+$/, "");
   return `${API_BASE}/api/media/thumbnail?url=${encodeURIComponent(url)}`;
 }
 

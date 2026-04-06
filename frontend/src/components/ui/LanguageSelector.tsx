@@ -1,24 +1,7 @@
 // src/components/ui/LanguageSelector.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-
-// Define the Locale type to match what i18n expects
-type Locale = 'en' | 'fr';
-
-interface Language {
-  code: Locale;
-  name: string;
-  flag: string;
-}
-
-const AVAILABLE_LANGUAGES: Language[] = [
-  { code: 'en', name: 'English', flag: '🇬🇧' },
-  { code: 'fr', name: 'Français', flag: '🇫🇷' },
-  // Easy to add more - just update the Locale type above too:
-  // { code: 'es', name: 'Español', flag: '🇪🇸' },
-  // { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  // { code: 'ja', name: '日本語', flag: '🇯🇵' },
-];
+import { Locale, SUPPORTED_LOCALES, getLanguage } from '../../config/i18n';
 
 interface LanguageSelectorProps {
   currentLocale: Locale;
@@ -38,7 +21,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const currentLanguage = AVAILABLE_LANGUAGES.find(lang => lang.code === currentLocale) || AVAILABLE_LANGUAGES[0];
+  const currentLanguage = getLanguage(currentLocale) || SUPPORTED_LOCALES[0];
 
   // Handle scroll to update dropdown position
   useEffect(() => {
@@ -127,7 +110,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
               right: `${dropdownPosition.right}px` 
             }}
           >
-            {AVAILABLE_LANGUAGES.map((language) => (
+            {SUPPORTED_LOCALES.map((language) => (
               <button
                 key={language.code}
                 onClick={() => handleSelect(language.code)}
@@ -181,7 +164,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
             left: `${dropdownPosition.left}px`
           }}
         >
-          {AVAILABLE_LANGUAGES.map((language) => (
+          {SUPPORTED_LOCALES.map((language) => (
             <button
               key={language.code}
               onClick={() => handleSelect(language.code)}

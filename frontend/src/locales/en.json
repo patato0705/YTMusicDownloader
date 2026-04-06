@@ -37,7 +37,12 @@
       "loading": "Creating account...",
       "hasAccount": "Already have an account?",
       "login": "Sign in here",
-      "usernameHint": "Username must be 3-64 characters"
+      "usernameHint": "Username must be 3-64 characters",
+      "disabled": {
+        "title": "Registration Disabled",
+        "message": "Public registration is currently disabled. Please contact an administrator for access.",
+        "goToLogin": "Go to Login"
+      }
     },
     "logout": "Logout",
     "changePassword": {
@@ -52,6 +57,7 @@
       "usernameRequired": "Username is required",
       "passwordRequired": "Password is required",
       "emailRequired": "Email is required",
+      "invalidEmail": "Please enter a valid email address",
       "currentPasswordRequired": "Current password is required",
       "newPasswordRequired": "New password is required",
       "confirmPasswordRequired": "Please confirm your password",
@@ -66,6 +72,7 @@
     "browse": "Browse",
     "library": "Library",
     "settings": "Settings",
+    "charts": "Charts",
     "admin": "Admin Panel"
   },
   "browse": {
@@ -147,6 +154,7 @@
     
     "tabs": {
       "settings": "Settings",
+      "charts": "Charts",
       "users": "Users"
     },
     
@@ -165,7 +173,26 @@
       "active": "Active",
       "inactive": "Inactive",
       "delete": "Delete",
-      "confirmDelete": "Delete user {{username}}? This action cannot be undone."
+      "deleteTitle": "Delete User",
+      "confirmDelete": "Delete user \"{username}\"? This action cannot be undone."
+    },
+    "charts": {
+      "selectCountry": "Select a Country",
+      "followChart": "Follow Chart",
+      "unfollowChart": "Unfollow",
+      "currentSubscriptions": "Current Chart Subscriptions",
+      "country": "Country",
+      "topArtists": "Top Artists",
+      "status": "Status",
+      "lastSynced": "Last Synced",
+      "actions": "Actions",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "neverSynced": "Never",
+      "noSubscriptions": "No charts followed yet",
+      "followed": "Chart followed successfully",
+      "unfollowed": "Chart unfollowed successfully",
+      "updated": "Chart updated successfully"
     }
   }
 }

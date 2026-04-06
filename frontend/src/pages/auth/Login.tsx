@@ -19,6 +19,26 @@ export const Login: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
 
+  // Parse API errors from ApiError class
+  const parseApiError = (err: any): string => {
+    const data = err.data;
+
+    if (data?.detail && Array.isArray(data.detail)) {
+      return data.detail.map((e: any) => {
+        const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
+        const msg = e.msg || 'Invalid value';
+        return field ? `${field}: ${msg}` : msg;
+      }).join(', ');
+    }
+
+    if (data?.detail && typeof data.detail === 'string') {
+      return data.detail;
+    }
+
+    // Fallback to i18n invalid credentials message
+    return err.message || t('auth.errors.invalidCredentials') || 'Invalid username or password';
+  };
+
   // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated) {
@@ -62,8 +82,8 @@ export const Login: React.FC = () => {
         navigate('/');
       }
     } catch (err: any) {
-      // Server/API errors go to top error box
-      setError(err.message || t('auth.errors.invalidCredentials'));
+      // Parse and display API error with i18n support
+      setError(parseApiError(err));
     } finally {
       setIsLoading(false);
     }

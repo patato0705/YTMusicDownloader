@@ -1,7 +1,6 @@
 // src/contexts/I18nContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-
-type Locale = 'en' | 'fr';
+import { Locale, DEFAULT_LOCALE, isValidLocale } from '../config/i18n';
 
 type Translations = Record<string, any>;
 
@@ -35,16 +34,18 @@ async function loadTranslations(locale: Locale): Promise<Translations> {
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [locale, setLocaleState] = useState<Locale>(() => {
     // Check localStorage
-    const stored = localStorage.getItem('locale') as Locale | null;
-    if (stored && ['en', 'fr'].includes(stored)) {
+    const stored = localStorage.getItem('locale');
+    if (stored && isValidLocale(stored)) {
       return stored;
     }
 
     // Check browser language
     const browserLang = navigator.language.split('-')[0];
-    if (browserLang === 'fr') return 'fr';
+    if (isValidLocale(browserLang)) {
+      return browserLang;
+    }
     
-    return 'en';
+    return DEFAULT_LOCALE;
   });
 
   const [translations, setTranslations] = useState<Translations>({});

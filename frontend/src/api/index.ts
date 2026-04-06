@@ -5,6 +5,7 @@
 
 // Re-export everything from individual modules
 export * from './client';
+export * from './admin';
 export * from './auth';
 export * from './jobs';
 export * from './albums';

@@ -34,21 +34,45 @@ export function clearAuthTokens(): void {
  */
 async function refreshAccessToken(): Promise<boolean> {
   const refreshToken = localStorage.getItem('refresh_token');
-  if (!refreshToken) return false;
+  if (!refreshToken) {
+    console.warn('[Auth] No refresh token found');
+    return false;
+  }
 
   try {
+    console.log('[Auth] Attempting token refresh...');
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
 
-    if (!res.ok) return false;
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      console.error('[Auth] Token refresh failed:', res.status, errorData);
+      return false;
+    }
 
     const data = await res.json();
-    localStorage.setItem('access_token', data.access_token);
+    
+    // Update access token
+    if (data.access_token) {
+      localStorage.setItem('access_token', data.access_token);
+      console.log('[Auth] Access token refreshed successfully');
+    } else {
+      console.error('[Auth] No access_token in refresh response:', data);
+      return false;
+    }
+    
+    // Update refresh token if backend provides a new one (token rotation)
+    if (data.refresh_token) {
+      localStorage.setItem('refresh_token', data.refresh_token);
+      console.log('[Auth] Refresh token rotated');
+    }
+    
     return true;
-  } catch {
+  } catch (error) {
+    console.error('[Auth] Token refresh error:', error);
     return false;
   }
 }
@@ -94,29 +118,7 @@ export async function apiFetch<T = any>(
     headers,
   });
 
-  // Handle 401 - try refreshing token
-  if (response.status === 401) {
-    const refreshed = await refreshAccessToken();
-    
-    if (refreshed) {
-      // Retry with new token
-      const newToken = getAuthToken();
-      if (newToken) {
-        headers.set('Authorization', `Bearer ${newToken}`);
-        response = await fetch(url, {
-          ...options,
-          headers,
-        });
-      }
-    } else {
-      // Refresh failed - redirect to login
-      clearAuthTokens();
-      window.location.href = '/login';
-      throw new ApiError(401, 'Session expired');
-    }
-  }
-
-  // Parse response
+  // Parse response first (before handling 401)
   const contentType = response.headers.get('content-type');
   let data: any;
 
@@ -131,7 +133,59 @@ export async function apiFetch<T = any>(
     }
   }
 
-  // Handle errors
+  // Handle 401 - try refreshing token
+  if (response.status === 401) {
+    const refreshed = await refreshAccessToken();
+    
+    if (refreshed) {
+      // Retry with new token
+      const newToken = getAuthToken();
+      if (newToken) {
+        headers.set('Authorization', `Bearer ${newToken}`);
+        const retryResponse = await fetch(url, {
+          ...options,
+          headers,
+        });
+        
+        // Parse retry response
+        const retryContentType = retryResponse.headers.get('content-type');
+        let retryData: any;
+        
+        if (retryContentType?.includes('application/json')) {
+          retryData = await retryResponse.json();
+        } else {
+          const retryText = await retryResponse.text();
+          try {
+            retryData = retryText ? JSON.parse(retryText) : null;
+          } catch {
+            retryData = retryText;
+          }
+        }
+        
+        if (!retryResponse.ok) {
+          const message = retryData?.detail || retryData?.message || `HTTP ${retryResponse.status}`;
+          throw new ApiError(retryResponse.status, message, retryData);
+        }
+        
+        return retryData as T;
+      }
+    } else {
+      // Refresh failed - clear tokens
+      clearAuthTokens();
+      
+      // Only redirect if not already on auth pages
+      const currentPath = window.location.pathname;
+      if (!currentPath.startsWith('/login') && !currentPath.startsWith('/register')) {
+        window.location.href = '/login';
+      }
+      
+      // Use the actual error message from the response, not "Session expired"
+      const message = data?.detail || data?.message || 'Authentication failed';
+      throw new ApiError(401, message, data);
+    }
+  }
+
+  // Handle errors (non-401)
   if (!response.ok) {
     const message = data?.detail || data?.message || `HTTP ${response.status}`;
     throw new ApiError(response.status, message, data);

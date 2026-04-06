@@ -52,7 +52,7 @@ export async function login(username: string, password: string): Promise<LoginRe
 }
 
 /**
- * Register new user (admin only in production)
+ * Register new user (admin only)
  */
 export async function register(data: RegisterRequest): Promise<User> {
   return api.post<User>('/auth/register', data);
@@ -94,29 +94,18 @@ export async function changePassword(data: ChangePasswordRequest): Promise<void>
 }
 
 /**
- * List all users (admin only)
+ * Check if public registration is enabled (public endpoint, no auth required)
  */
-export async function listUsers(includeInactive = false): Promise<User[]> {
-  return api.get<User[]>('/auth/users', { include_inactive: includeInactive });
-}
-
-/**
- * Update user role (admin only)
- */
-export async function updateUserRole(userId: number, role: string): Promise<User> {
-  return api.patch<User>(`/auth/users/${userId}/role`, { role });
-}
-
-/**
- * Deactivate user (admin only)
- */
-export async function deactivateUser(userId: number): Promise<User> {
-  return api.post<User>(`/auth/users/${userId}/deactivate`);
-}
-
-/**
- * Activate user (admin only)
- */
-export async function activateUser(userId: number): Promise<User> {
-  return api.post<User>(`/auth/users/${userId}/activate`);
+export async function isRegistrationEnabled(): Promise<boolean> {
+  try {
+    // Use apiFetch directly to bypass auth headers for this public endpoint
+    const response = await apiFetch<{ enabled: boolean }>('/auth/registration-status', {
+      method: 'GET',
+    });
+    return response.enabled;
+  } catch (err) {
+    // If endpoint fails, assume enabled (fail-open) - backend will validate on submit
+    console.error('Failed to check registration status:', err);
+    return true;
+  }
 }
