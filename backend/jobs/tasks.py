@@ -653,168 +653,152 @@ def import_album(
 # TASK: SYNC ARTIST
 # ============================================================================
 
-def sync_artist(
-    session: Session,
-    artist_id: str,
-) -> Dict[str, Any]:
+def sync_artist(session: Session, artist_id: str) -> Dict[str, Any]:
     """
-    Check an artist for new releases and queue import jobs.
+    Sync an artist: fetch latest releases and update database.
     
-    NEW BEHAVIOR:
-    Instead of importing all albums synchronously, this now:
-    1. Fetches artist data from YTMusic (just metadata + album list)
-    2. Checks and updates artist banner if thumbnails changed
-    3. Compares with existing albums in DB
-    4. Creates album subscriptions for new albums
-    5. Queues separate import_album jobs for each new album
-    6. Returns quickly (3-5 seconds instead of 2+ minutes)
-    
-    Flow:
-    1. Fetch artist data from YTMusic
-    2. Check if thumbnails changed and update banner if needed
-    3. Compare albums with DB
-    4. Create album subscriptions for new albums
-    5. Queue import_album job for each new album
-    6. Update last_synced_at timestamp
+    Behavior depends on artist subscription mode:
+    - "light": Import all albums with mode="metadata", download covers and banner, NO track downloads
+    - "full": Import all albums with mode="download", download covers and banner, queue track downloads
     
     Args:
         session: SQLAlchemy session
-        artist_id: Artist channel ID
+        artist_id: Artist ID to sync
     
     Returns:
-        {"ok": bool, "new_albums": int, "jobs_queued": int, "banner_updated": bool}
+        Dict with sync results
     """
     if not artist_id:
-        return {"ok": False, "error": "artist_id required"}
+        raise ValueError("artist_id required")
     
+    logger.info(f"Starting sync for artist {artist_id}")
+    
+    # ===== TRANSACTION 1: Get subscription and check mode =====
+    from ..services import subscriptions as subs_svc
+    
+    artist_subscription = subs_svc.get_artist_subscription(session, artist_id)
+    
+    if not artist_subscription:
+        logger.warning(f"No subscription found for artist {artist_id}, creating light mode subscription")
+        # Auto-create light subscription (happens when album is followed)
+        artist_subscription = subs_svc.subscribe_to_artist(
+            session,
+            artist_id=artist_id,
+            mode="light"
+        )
+        def commit_subscription():
+            session.commit()
+        _db_operation_with_retry(commit_subscription)
+    
+    sync_mode = artist_subscription.mode  # "light" or "full"
+    logger.info(f"Syncing artist {artist_id} in {sync_mode} mode")
+    
+    # ===== TRANSACTION 2: Fetch and upsert artist =====
     try:
-        logger.info(f"Syncing artist {artist_id}")
-        
-        # ===== TRANSACTION 1: Fetch and upsert artist =====
         artist_data = artists_svc.fetch_and_upsert_artist(session, artist_id)
-        
-        # Check if banner needs updating
-        banner_updated = False
+    except Exception as e:
+        logger.exception(f"Failed to fetch artist {artist_id}")
+        subs_svc.mark_artist_synced(session, artist_id, error=str(e))
+        def commit_error():
+            session.commit()
+        _db_operation_with_retry(commit_error)
+        return {"ok": False, "error": str(e)}
+    
+    def commit_artist():
+        session.commit()
+    
+    _db_operation_with_retry(commit_artist)
+    
+    artist_name = artist_data.get("name", "Unknown")
+    logger.info(f"Fetched artist: {artist_name}")
+    
+    # ===== TRANSACTION 2.5: Download artist banner =====
+    artist_obj = session.get(Artist, artist_id)
+    banner_updated = False
+    
+    if artist_obj:
         try:
-            artist_obj = session.get(Artist, artist_id)
-            if artist_obj:
-                # Get thumbnails from API response
-                new_thumbnails = artist_data.get("thumbnails") or []
-                
-                # Normalize both thumbnail lists for comparison
-                from ..ytm_service import normalizers as N
-                new_thumbs_normalized = N.normalize_thumbnails(new_thumbnails)
-                old_thumbs_normalized = N.normalize_thumbnails(artist_obj.thumbnails or [])
-                
-                # Check if thumbnails changed OR if banner doesn't exist
-                thumbnails_changed = new_thumbs_normalized != old_thumbs_normalized
-                banner_missing = not artist_obj.image_local or not Path(str(artist_obj.image_local)).exists()
-                
-                if thumbnails_changed or banner_missing:
-                    if thumbnails_changed:
-                        logger.info(f"Thumbnails changed for artist {artist_id}, updating banner")
-                    if banner_missing:
-                        logger.info(f"Banner missing for artist {artist_id}, downloading banner")
-                    
-                    # Update thumbnails in database if they changed
-                    if thumbnails_changed:
-                        artist_obj.thumbnails = new_thumbnails
-                        session.add(artist_obj)
-                    
-                    # Download and update banner
-                    banner_path = artists_svc.ensure_artist_banner(
-                        session=session,
-                        artist_obj=artist_obj,
-                        thumbnails=new_thumbnails,
-                    )
-                    
-                    if banner_path:
-                        logger.info(f"Updated banner for artist {artist_id}: {banner_path}")
-                        banner_updated = True
-                    else:
-                        logger.error(f"Failed to update banner for artist {artist_id}")
-                        # Fail the task if banner download fails
-                        return {
-                            "ok": False,
-                            "error": "Failed to download artist banner",
-                            "retry_delay_seconds": 300,  # Retry in 5 minutes
-                        }
-                else:
-                    logger.debug(f"Thumbnails unchanged and banner exists for artist {artist_id}, skipping banner update")
+            banner_path = artists_svc.ensure_artist_banner(
+                session,
+                artist_obj,
+                thumbnails=artist_data.get("thumbnails")
+            )
+            if banner_path:
+                banner_updated = True
+                logger.info(f"Updated artist banner: {banner_path}")
         except Exception as e:
-            logger.exception(f"Failed to check/update banner for artist {artist_id}")
-            # Fail the task if banner check fails
-            return {
-                "ok": False,
-                "error": f"Failed to check/update artist banner: {e}",
-                "retry_delay_seconds": 300,  # Retry in 5 minutes
-            }
-        
-        def commit_artist():
+            logger.exception(f"Failed to download artist banner for {artist_id}")
+    
+    def commit_banner():
+        session.commit()
+    
+    _db_operation_with_retry(commit_banner)
+    
+    # ===== TRANSACTION 3: Fetch all albums and identify new ones =====
+    try:
+        all_albums = albums_svc.fetch_albums_for_artist(
+            session=session,
+            artist_id=artist_id,
+            albums_from_api=artist_data.get("albums", []),
+            singles_from_api=artist_data.get("singles", []),
+        )
+    except Exception as e:
+        logger.exception(f"Failed to fetch albums for artist {artist_id}")
+        subs_svc.mark_artist_synced(session, artist_id, error=str(e))
+        def commit_error():
             session.commit()
+        _db_operation_with_retry(commit_error)
+        return {"ok": False, "error": str(e)}
+    
+    # Identify new albums (not already subscribed)
+    new_albums = []
+    for album_item in all_albums:
+        album_id = album_item.get("id") or album_item.get("browseId")
+        if not album_id:
+            continue
         
-        _db_operation_with_retry(commit_artist)
+        # Check if album subscription exists
+        existing_sub = subs_svc.get_album_subscription(session, album_id)
+        if not existing_sub:
+            new_albums.append(album_item)
+    
+    logger.info(f"Found {len(new_albums)} new albums for artist {artist_id}")
+    
+    # ===== TRANSACTION 4: Create album subscriptions based on mode =====
+    subscriptions_created = 0
+    
+    # Determine album subscription mode based on artist mode
+    album_mode = "download" if sync_mode == "full" else "metadata"
+    
+    for album_item in new_albums:
+        album_id = album_item.get("id") or album_item.get("browseId")
+        if not album_id:
+            continue
         
-        # ===== TRANSACTION 2: Get current albums from DB =====
-        existing_albums = albums_svc.list_albums_for_artist_from_db(session, artist_id)
-        existing_album_ids = {a["id"] for a in existing_albums}
-        
-        # Find new albums (no database operation)
-        ytm_albums = artist_data.get("albums", []) + artist_data.get("singles", [])
-        new_albums = [a for a in ytm_albums if a.get("id") not in existing_album_ids]
-        
-        if not new_albums:
-            logger.info(f"No new albums found for artist {artist_id}")
-            
-            # ===== TRANSACTION 3: Update sync timestamp =====
-            from ..services import subscriptions as subs_svc
-            subs_svc.mark_artist_synced(session, artist_id)
-            
-            def commit_sync():
-                session.commit()
-            
-            _db_operation_with_retry(commit_sync)
-            
-            return {
-                "ok": True,
-                "new_albums": 0,
-                "jobs_queued": 0,
-                "banner_updated": banner_updated,
-            }
-        
-        logger.info(f"Found {len(new_albums)} new albums for artist {artist_id}")
-        
-        # ===== TRANSACTION 3: Create album subscriptions for new albums =====
-        from ..services import subscriptions as subs_svc
-        subscriptions_created = 0
-        
-        for album_item in new_albums:
-            album_id = album_item.get("id") or album_item.get("browseId")
-            if not album_id:
-                continue
-            
-            try:
-                subs_svc.subscribe_to_album(
-                    session,
-                    album_id=album_id,
-                    artist_id=artist_id,
-                    mode="download"
-                )
-                subscriptions_created += 1
-            except Exception as e:
-                logger.exception(f"Failed to create album subscription for {album_id}")
-        
-        def commit_subscriptions():
-            session.commit()
-        
-        _db_operation_with_retry(commit_subscriptions)
-        
-        logger.info(f"Created {subscriptions_created} album subscriptions for artist {artist_id}")
-        
-        # ===== TRANSACTION 4: Queue import_album jobs =====
-        from .jobqueue import enqueue_job
-        jobs_queued = 0
-        
+        try:
+            subs_svc.subscribe_to_album(
+                session,
+                album_id=album_id,
+                artist_id=artist_id,
+                mode=album_mode
+            )
+            subscriptions_created += 1
+        except Exception as e:
+            logger.exception(f"Failed to create album subscription for {album_id}")
+    
+    def commit_subscriptions():
+        session.commit()
+    
+    _db_operation_with_retry(commit_subscriptions)
+    
+    logger.info(f"Created {subscriptions_created} album subscriptions (mode={album_mode}) for artist {artist_id}")
+    
+    # ===== TRANSACTION 5: Queue import_album jobs (only in full mode) =====
+    from .jobqueue import enqueue_job
+    jobs_queued = 0
+    
+    if sync_mode == "full":
+        # Full mode: queue import jobs (which will download tracks)
         for album_item in new_albums:
             browse_id = album_item.get("id") or album_item.get("browseId")
             if not browse_id:
@@ -828,7 +812,7 @@ def sync_artist(
                         "browse_id": browse_id,
                         "artist_id": artist_id,
                     },
-                    priority=20  # Medium priority (higher than downloads, lower than sync_artist)
+                    priority=20
                 )
                 jobs_queued += 1
                 logger.debug(f"Queued import_album job for {browse_id}")
@@ -836,49 +820,34 @@ def sync_artist(
                 logger.exception(f"Failed to queue import_album job for {browse_id}")
         
         logger.info(f"Queued {jobs_queued} import_album jobs for artist {artist_id}")
-        
-        # ===== TRANSACTION 5: Update sync timestamp =====
-        subs_svc.mark_artist_synced(session, artist_id)
-        
-        def commit_final_sync():
-            session.commit()
-        
-        _db_operation_with_retry(commit_final_sync)
-        
-        logger.info(
-            f"Synced artist {artist_id}: {len(new_albums)} new albums, "
-            f"{subscriptions_created} subscriptions created, {jobs_queued} import jobs queued, "
-            f"banner {'updated' if banner_updated else 'unchanged'}"
-        )
-        
-        return {
-            "ok": True,
-            "new_albums": len(new_albums),
-            "subscriptions_created": subscriptions_created,
-            "jobs_queued": jobs_queued,
-            "banner_updated": banner_updated,
-        }
+    else:
+        # Light mode: no download jobs
+        logger.info(f"Light mode: skipping download jobs for artist {artist_id}")
     
-    except Exception as e:
-        logger.exception(f"sync_artist failed for {artist_id}")
-        
-        # Update sync timestamp with error
-        try:
-            from ..services import subscriptions as subs_svc
-            subs_svc.mark_artist_synced(session, artist_id, error=str(e))
-            
-            def commit_sync_error():
-                session.commit()
-            
-            _db_operation_with_retry(commit_sync_error)
-        except Exception:
-            session.rollback()
-        
-        return {
-            "ok": False,
-            "error": str(e),
-            "retry_delay_seconds": 600,  # Retry in 10 minutes
-        }
+    # ===== TRANSACTION 6: Update sync timestamp =====
+    subs_svc.mark_artist_synced(session, artist_id)
+    
+    def commit_final_sync():
+        session.commit()
+    
+    _db_operation_with_retry(commit_final_sync)
+    
+    logger.info(
+        f"Synced artist {artist_id} ({sync_mode} mode): "
+        f"{len(new_albums)} new albums, "
+        f"{subscriptions_created} subscriptions created, "
+        f"{jobs_queued} import jobs queued, "
+        f"banner {'updated' if banner_updated else 'unchanged'}"
+    )
+    
+    return {
+        "ok": True,
+        "mode": sync_mode,
+        "new_albums": len(new_albums),
+        "subscriptions_created": subscriptions_created,
+        "jobs_queued": jobs_queued,
+        "banner_updated": banner_updated,
+    }
 
 
 # ============================================================================
@@ -892,11 +861,10 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
     
     Flow:
     1. Fetch chart data and save snapshot
-    2. Identify artists to follow (not already followed)
+    2. Identify artists to follow (not already subscribed)
     3. For each artist:
        - Fetch artist metadata from YTMusic
-       - Mark as followed
-       - Create artist subscription
+       - Create artist subscription (mode="full")
     4. Queue sync_artist jobs for each artist
     
     Args:
@@ -927,7 +895,7 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
         logger.info(f"No new artists to follow for {country_code}")
         return {**result, "jobs_queued": 0}
     
-    # ===== TRANSACTION 2: Follow artists (mark as followed + create subscriptions) =====
+    # ===== TRANSACTION 2: Follow artists (create subscriptions in full mode) =====
     from ..services import subscriptions as subs_svc
     
     artists_followed = 0
@@ -939,23 +907,7 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
             artist_data = artists_svc.fetch_and_upsert_artist(session, artist_id)
             artist_name = artist_data.get("name", "Unknown")
             
-            # Get artist object from DB
-            artist_obj = session.get(Artist, artist_id)
-            if not artist_obj:
-                logger.warning(f"Artist {artist_id} not found after fetch, skipping")
-                failed_artists.append(artist_id)
-                continue
-            
-            # Check if already followed (shouldn't happen, but safety check)
-            if artist_obj.followed:
-                logger.debug(f"Artist {artist_id} already followed, skipping")
-                continue
-            
-            # Mark as followed
-            artist_obj.followed = True
-            session.add(artist_obj)
-            
-            # Create artist subscription
+            # Create artist subscription in FULL mode (charts get full downloads)
             subs_svc.subscribe_to_artist(
                 session,
                 artist_id=artist_id,
@@ -963,7 +915,7 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
             )
             
             artists_followed += 1
-            logger.debug(f"Followed artist {artist_id} ({artist_name}) from {country_code} chart")
+            logger.debug(f"Followed artist {artist_id} ({artist_name}) from {country_code} chart in full mode")
             
         except Exception as e:
             logger.exception(f"Failed to follow artist {artist_id} from chart {country_code}")

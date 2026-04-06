@@ -22,14 +22,14 @@ JSONCol = SQLiteJSON
 
 class Artist(Base):
     __tablename__ = "artists"
-
+ 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     thumbnails: Mapped[Optional[List[Any]]] = mapped_column(JSONCol, nullable=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
-    followed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # CHANGED from monitored
+    # REMOVED: followed field - subscription determines status now
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
-
+ 
     # relationship: Artist -> Album
     albums: Mapped[List["Album"]] = relationship(
         "Album",
@@ -37,23 +37,21 @@ class Artist(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-
+ 
     def to_dict(self) -> Dict[str, Any]:
         thumbs = getattr(self, "thumbnails", None) or []
         image_local = getattr(self, "image_local", None)
-        followed = bool(getattr(self, "followed", False))  # CHANGED from monitored
         created_at_val = getattr(self, "created_at", None)
         created_at = created_at_val.isoformat() if created_at_val is not None else None
-
+ 
         return {
             "id": getattr(self, "id", None),
             "name": getattr(self, "name", None),
             "thumbnails": thumbs,
             "image_local": image_local,
-            "followed": followed,  # CHANGED from monitored
             "created_at": created_at,
         }
-
+ 
     def __repr__(self) -> str:
         return f"<Artist id={self.id!r} name={self.name!r}>"
 
@@ -194,10 +192,10 @@ class Job(Base):
 # Subscriptions
 class ArtistSubscription(Base):
     __tablename__ = "artist_subscriptions"
-
+ 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
     artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), nullable=False, index=True)
-    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="full")
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="full")  # "light" or "full"
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -206,11 +204,11 @@ class ArtistSubscription(Base):
 
 class AlbumSubscription(Base):
     __tablename__ = "album_subscriptions"
-
+ 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
     album_id: Mapped[str] = mapped_column(String(64), ForeignKey("albums.id", ondelete="CASCADE"), nullable=False, index=True)
     artist_id: Mapped[Optional[str]] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), nullable=True, index=True)
-    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="download")
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="download")  # "metadata" or "download"
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     download_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default="idle")

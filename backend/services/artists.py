@@ -1,4 +1,5 @@
 # backend/services/artists.py
+
 """
 Artist entity CRUD operations only.
 Business logic for fetching artist data from YTMusic lives here.
@@ -33,6 +34,8 @@ def upsert_artist(
     """
     Upsert an Artist row. `thumbnails` is expected to be the raw thumbnails list.
     Returns the Artist instance (not committed).
+    
+    Note: Does NOT set followed status - use subscriptions for that.
     """
     if not artist_id:
         raise ValueError("artist_id required")
@@ -46,7 +49,6 @@ def upsert_artist(
             name=str(name) if name is not None else "",
             thumbnails=thumbs or None,
             image_local=str(image_local) if image_local else None,
-            followed=False,
         )
         session.add(obj)
         logger.debug(f"Created new artist: {artist_id}")
@@ -210,6 +212,7 @@ def fetch_and_upsert_artist(
     Returns the artist data with albums and singles.
     
     Note: This does NOT upsert albums/tracks - use albums.fetch_and_upsert_albums_for_artist() for that.
+    Note: Does NOT set followed status - use subscriptions for that.
     Note: Does NOT commit the session - caller controls transaction.
     """
     try:

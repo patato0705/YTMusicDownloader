@@ -29,7 +29,6 @@ def normalize_artist_for_db(artist_data: dict) -> dict:
         "name": artist_data.get("name"),
         "thumbnails": artist_data.get("thumbnails", []),
         "image_local": None,  # Will be set when cover is downloaded
-        "followed": False,  # Default to not followed
     }
 
 

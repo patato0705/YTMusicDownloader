@@ -1,18 +1,30 @@
 # backend/services/subscriptions.py
+
+"""
+Subscription service - manages artist and album subscriptions.
+"""
 from __future__ import annotations
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional
 from datetime import datetime
 
+from sqlalchemy import select, func, case
 from sqlalchemy.orm import Session
-from sqlalchemy import select
 
-from . import normalizers as N
-
-from ..models import ArtistSubscription, AlbumSubscription, Artist, Album
+from ..models import Artist, ArtistSubscription, AlbumSubscription, Track
 from ..time_utils import now_utc, ensure_timezone_aware
 
 logger = logging.getLogger("services.subscriptions")
+
+
+# ============================================================================
+# ARTIST SUBSCRIPTIONS
+# ============================================================================
+
+def get_artist_subscription(session: Session, artist_id: str) -> Optional[ArtistSubscription]:
+    """Get artist subscription by artist ID."""
+    stmt = select(ArtistSubscription).where(ArtistSubscription.artist_id == artist_id)
+    return session.execute(stmt).scalars().first()
 
 
 def subscribe_to_artist(
@@ -21,19 +33,31 @@ def subscribe_to_artist(
     mode: str = "full",
 ) -> ArtistSubscription:
     """
-    Create or update an artist subscription.
-    mode: "full" = download all albums, "monitor" = track but don't download
+    Create or update artist subscription.
+    
+    Args:
+        session: SQLAlchemy session
+        artist_id: Artist ID
+        mode: "light" (metadata only) or "full" (download everything)
+    
+    Returns:
+        ArtistSubscription instance
+    
+    Raises:
+        ValueError: If invalid mode
     """
-    # Check if subscription already exists
-    stmt = select(ArtistSubscription).where(ArtistSubscription.artist_id == artist_id)
-    existing = session.execute(stmt).scalar_one_or_none()
+    if mode not in ("light", "full"):
+        raise ValueError(f"Invalid mode: {mode}. Must be 'light' or 'full'")
+    
+    # Check if already exists
+    existing = get_artist_subscription(session, artist_id)
     
     if existing:
-        # Update existing subscription
-        existing.enabled = True
-        existing.mode = mode
-        session.add(existing)
-        logger.info(f"Updated artist subscription for {artist_id}")
+        # Update mode if different
+        if existing.mode != mode:
+            logger.info(f"Updating artist subscription {artist_id}: {existing.mode} → {mode}")
+            existing.mode = mode
+            session.add(existing)
         return existing
     
     # Create new subscription
@@ -43,26 +67,85 @@ def subscribe_to_artist(
         enabled=True,
         created_at=now_utc(),
     )
+    
     session.add(subscription)
-    logger.info(f"Created artist subscription for {artist_id}")
+    logger.info(f"Created artist subscription: {artist_id} (mode={mode})")
+    
     return subscription
 
 
 def unsubscribe_from_artist(session: Session, artist_id: str) -> bool:
     """
-    Disable artist subscription (soft delete).
-    Returns True if subscription was found and disabled.
+    Delete artist subscription.
+    Does NOT delete files or database records - only stops syncing.
+    
+    Returns:
+        True if deleted, False if not found
     """
-    stmt = select(ArtistSubscription).where(ArtistSubscription.artist_id == artist_id)
-    subscription = session.execute(stmt).scalar_one_or_none()
+    subscription = get_artist_subscription(session, artist_id)
     
     if not subscription:
         return False
     
-    subscription.enabled = False
-    session.add(subscription)
-    logger.info(f"Disabled artist subscription for {artist_id}")
+    session.delete(subscription)
+    logger.info(f"Deleted artist subscription: {artist_id}")
+    
     return True
+
+
+def update_artist_subscription_mode(
+    session: Session,
+    artist_id: str,
+    mode: str,
+) -> ArtistSubscription:
+    """
+    Update artist subscription mode.
+    
+    Args:
+        mode: "light" or "full"
+    
+    Raises:
+        ValueError: If subscription not found or invalid mode
+    """
+    if mode not in ("light", "full"):
+        raise ValueError(f"Invalid mode: {mode}. Must be 'light' or 'full'")
+    
+    subscription = get_artist_subscription(session, artist_id)
+    
+    if not subscription:
+        raise ValueError(f"No subscription found for artist {artist_id}")
+    
+    old_mode = subscription.mode
+    subscription.mode = mode
+    session.add(subscription)
+    
+    logger.info(f"Updated artist subscription {artist_id}: {old_mode} → {mode}")
+    
+    return subscription
+
+
+def mark_artist_synced(
+    session: Session,
+    artist_id: str,
+    error: Optional[str] = None,
+) -> None:
+    """Update artist subscription sync timestamp."""
+    subscription = get_artist_subscription(session, artist_id)
+    
+    if subscription:
+        subscription.last_synced_at = now_utc()
+        subscription.last_error = error
+        session.add(subscription)
+
+
+# ============================================================================
+# ALBUM SUBSCRIPTIONS
+# ============================================================================
+
+def get_album_subscription(session: Session, album_id: str) -> Optional[AlbumSubscription]:
+    """Get album subscription by album ID."""
+    stmt = select(AlbumSubscription).where(AlbumSubscription.album_id == album_id)
+    return session.execute(stmt).scalars().first()
 
 
 def subscribe_to_album(
@@ -72,20 +155,32 @@ def subscribe_to_album(
     mode: str = "download",
 ) -> AlbumSubscription:
     """
-    Create or update an album subscription.
-    mode: "download" = download all tracks, "monitor" = track but don't download
+    Create or update album subscription.
+    
+    Args:
+        session: SQLAlchemy session
+        album_id: Album ID
+        artist_id: Optional artist ID
+        mode: "metadata" (metadata only) or "download" (download tracks)
+    
+    Returns:
+        AlbumSubscription instance
+    
+    Raises:
+        ValueError: If invalid mode
     """
-    # Check if subscription already exists
-    stmt = select(AlbumSubscription).where(AlbumSubscription.album_id == album_id)
-    existing = session.execute(stmt).scalar_one_or_none()
+    if mode not in ("metadata", "download"):
+        raise ValueError(f"Invalid mode: {mode}. Must be 'metadata' or 'download'")
+    
+    # Check if already exists
+    existing = get_album_subscription(session, album_id)
     
     if existing:
-        # Update existing subscription
-        existing.mode = mode
-        if artist_id:
-            existing.artist_id = artist_id
-        session.add(existing)
-        logger.info(f"Updated album subscription for {album_id}")
+        # Update mode if different
+        if existing.mode != mode:
+            logger.info(f"Updating album subscription {album_id}: {existing.mode} → {mode}")
+            existing.mode = mode
+            session.add(existing)
         return existing
     
     # Create new subscription
@@ -94,200 +189,232 @@ def subscribe_to_album(
         artist_id=artist_id,
         mode=mode,
         created_at=now_utc(),
-        download_status="pending",
     )
+    
     session.add(subscription)
-    logger.info(f"Created album subscription for {album_id}")
+    logger.info(f"Created album subscription: {album_id} (mode={mode})")
+    
     return subscription
 
 
 def unsubscribe_from_album(session: Session, album_id: str) -> bool:
     """
     Delete album subscription.
-    Returns True if subscription was found and deleted.
+    Does NOT delete files or database records - only stops syncing.
+    
+    Returns:
+        True if deleted, False if not found
     """
-    stmt = select(AlbumSubscription).where(AlbumSubscription.album_id == album_id)
-    subscription = session.execute(stmt).scalar_one_or_none()
+    subscription = get_album_subscription(session, album_id)
     
     if not subscription:
         return False
     
     session.delete(subscription)
-    logger.info(f"Deleted album subscription for {album_id}")
+    logger.info(f"Deleted album subscription: {album_id}")
+    
     return True
 
 
-def get_artist_subscription(session: Session, artist_id: str) -> Optional[ArtistSubscription]:
-    """Get artist subscription if it exists."""
-    stmt = select(ArtistSubscription).where(ArtistSubscription.artist_id == artist_id)
-    return session.execute(stmt).scalar_one_or_none()
-
-
-def get_album_subscription(session: Session, album_id: str) -> Optional[AlbumSubscription]:
-    """Get album subscription if it exists."""
-    stmt = select(AlbumSubscription).where(AlbumSubscription.album_id == album_id)
-    return session.execute(stmt).scalar_one_or_none()
-
-
-def list_active_artist_subscriptions(session: Session) -> List[ArtistSubscription]:
-    """Get all enabled artist subscriptions."""
-    stmt = select(ArtistSubscription).where(ArtistSubscription.enabled == True)
-    return list(session.execute(stmt).scalars().all())
-
-
-def list_pending_album_downloads(session: Session) -> List[AlbumSubscription]:
-    """Get all album subscriptions that need downloading."""
-    stmt = select(AlbumSubscription).where(
-        AlbumSubscription.download_status.in_(["pending", "failed"])
-    )
-    return list(session.execute(stmt).scalars().all())
-
-
-def get_due_album_subscriptions(session: Session) -> List[AlbumSubscription]:
-    """
-    Get album subscriptions that are due for sync/download.
-    Returns subscriptions with download_status in ('pending', 'failed').
-    This is called by the scheduler.
-    """
-    return list_pending_album_downloads(session)
-
-
-def get_monitored_artists_needing_sync(
-    session: Session,
-    sync_interval_hours: int
-) -> List[Artist]:
-    """
-    Get artists that are followed and need syncing.
-    An artist needs syncing if:
-    - artist.followed = True
-    - Either: artist_subscription doesn't exist, OR last_synced_at is older than sync_interval_hours
-    """
-    from sqlalchemy import select, or_
-    from datetime import timedelta
-    from ..models import Artist
-    
-    # Calculate cutoff time
-    cutoff = now_utc() - timedelta(hours=sync_interval_hours)
-    
-    # Get all followed artists
-    stmt = select(Artist).where(Artist.followed == True)
-    followed_artists = list(session.execute(stmt).scalars().all())
-    
-    due_artists = []
-    for artist in followed_artists:
-        # Check if subscription exists and when it was last synced
-        sub = get_artist_subscription(session, artist.id)
-        
-        if not sub:
-            # No subscription but followed - needs sync
-            due_artists.append(artist)
-        else:
-            # Ensure last_synced_at is timezone-aware for comparison
-            last_synced = ensure_timezone_aware(sub.last_synced_at)
-            if not last_synced or last_synced < cutoff:
-                # Subscription exists but hasn't been synced recently
-                due_artists.append(artist)
-    
-    return due_artists
-
-
-def mark_artist_synced(
-    session: Session,
-    artist_id: str,
-    error: Optional[str] = None
-) -> None:
-    """Update last_synced_at timestamp for artist subscription."""
-    subscription = get_artist_subscription(session, artist_id)
-    if subscription:
-        subscription.last_synced_at = now_utc()
-        if error:
-            subscription.last_error = error
-        else:
-            subscription.last_error = None
-        session.add(subscription)
-
-
-def mark_album_download_status(
+def update_album_subscription_mode(
     session: Session,
     album_id: str,
-    status: str,
-    error: Optional[str] = None
-) -> None:
-    """Update download status for album subscription."""
+    mode: str,
+) -> AlbumSubscription:
+    """
+    Update album subscription mode.
+    
+    Args:
+        mode: "metadata" or "download"
+    
+    Raises:
+        ValueError: If subscription not found or invalid mode
+    """
+    if mode not in ("metadata", "download"):
+        raise ValueError(f"Invalid mode: {mode}. Must be 'metadata' or 'download'")
+    
     subscription = get_album_subscription(session, album_id)
-    if subscription:
-        subscription.download_status = status
-        subscription.last_synced_at = now_utc()
-        if error:
-            subscription.last_error = error
-        else:
-            subscription.last_error = None
-        session.add(subscription)
+    
+    if not subscription:
+        raise ValueError(f"No subscription found for album {album_id}")
+    
+    old_mode = subscription.mode
+    subscription.mode = mode
+    session.add(subscription)
+    
+    logger.info(f"Updated album subscription {album_id}: {old_mode} → {mode}")
+    
+    return subscription
+
+
+def upgrade_all_album_subscriptions_to_download(
+    session: Session,
+    artist_id: str,
+) -> int:
+    """
+    Upgrade all album subscriptions for an artist from metadata to download.
+    Used when upgrading artist from light to full mode.
+    
+    Returns:
+        Number of albums upgraded
+    """
+    stmt = select(AlbumSubscription).where(
+        AlbumSubscription.artist_id == artist_id,
+        AlbumSubscription.mode == "metadata"
+    )
+    
+    subscriptions = session.execute(stmt).scalars().all()
+    
+    for sub in subscriptions:
+        sub.mode = "download"
+        session.add(sub)
+    
+    count = len(subscriptions)
+    
+    if count > 0:
+        logger.info(f"Upgraded {count} album subscriptions to download mode for artist {artist_id}")
+    
+    return count
+
+
+def downgrade_all_album_subscriptions_to_metadata(
+    session: Session,
+    artist_id: str,
+) -> int:
+    """
+    Downgrade all album subscriptions for an artist from download to metadata.
+    Used when downgrading artist from full to light mode.
+    
+    Returns:
+        Number of albums downgraded
+    """
+    stmt = select(AlbumSubscription).where(
+        AlbumSubscription.artist_id == artist_id,
+        AlbumSubscription.mode == "download"
+    )
+    
+    subscriptions = session.execute(stmt).scalars().all()
+    
+    for sub in subscriptions:
+        sub.mode = "metadata"
+        session.add(sub)
+    
+    count = len(subscriptions)
+    
+    if count > 0:
+        logger.info(f"Downgraded {count} album subscriptions to metadata mode for artist {artist_id}")
+    
+    return count
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
 def check_and_update_album_download_status(
     session: Session,
     album_id: str,
 ) -> str:
     """
-    Check all tracks for an album and update AlbumSubscription.download_status.
-    
-    Returns the new status:
-    - "idle": No subscription found
-    - "pending": Some tracks not downloaded
-    - "downloading": Some tracks actively downloading
-    - "completed": All tracks done
-    - "failed": All tracks failed
+    Check track statuses for an album and update the album subscription's download_status.
+
+    Status logic:
+    - "completed": all tracks are "done"
+    - "downloading": at least one track is "downloading"
+    - "failed": at least one track is "failed" and none are "downloading"
+    - "pending": at least one track is "new"
+    - "idle": no tracks or no subscription
+
+    Returns:
+        The new download_status string
     """
-    from ..models import Track
-    
-    # Get subscription
     subscription = get_album_subscription(session, album_id)
     if not subscription:
         return "idle"
-    
-    # Get all tracks for album
-    tracks = session.query(Track).filter(Track.album_id == album_id).all()
-    
-    if not tracks:
-        # No tracks yet
-        subscription.download_status = "pending"
+
+    stats = (
+        session.query(
+            func.count(Track.id).label("total"),
+            func.sum(case((Track.status == "done", 1), else_=0)).label("done"),
+            func.sum(case((Track.status == "downloading", 1), else_=0)).label("downloading"),
+            func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
+            func.sum(case((Track.status == "new", 1), else_=0)).label("new"),
+        )
+        .filter(Track.album_id == album_id)
+        .first()
+    )
+
+    if not stats:
+        subscription.download_status = "idle"
         session.add(subscription)
-        return "pending"
-    
-    # Count track statuses
-    status_counts = {}
-    for track in tracks:
-        status = track.status or "new"
-        status_counts[status] = status_counts.get(status, 0) + 1
-    
-    total = len(tracks)
-    done_count = status_counts.get("done", 0)
-    downloading_count = status_counts.get("downloading", 0)
-    failed_count = status_counts.get("failed", 0)
-    new_count = status_counts.get("new", 0)
-    
-    # Determine overall status
-    if done_count == total:
+        return "idle"
+
+    total = int(stats.total or 0)
+    done = int(stats.done or 0)
+    downloading = int(stats.downloading or 0)
+    failed = int(stats.failed or 0)
+    new_count = int(getattr(stats, "new", 0) or 0)
+
+    if total == 0:
+        new_status = "idle"
+    elif done == total:
         new_status = "completed"
-    elif done_count > 0 and (new_count + failed_count) == 0:
-        new_status = "completed"  # Some might be in other states but main ones are done
-    elif downloading_count > 0:
+    elif downloading > 0:
         new_status = "downloading"
-    elif failed_count == total:
+    elif failed > 0 and new_count == 0 and downloading == 0:
         new_status = "failed"
-    elif failed_count > 0 or new_count > 0:
+    elif new_count > 0:
         new_status = "pending"
     else:
-        new_status = "completed"
-    
-    # Update subscription
+        new_status = "idle"
+
     subscription.download_status = new_status
-    subscription.last_synced_at = now_utc()
     session.add(subscription)
-    
-    logger.debug(
-        f"Album {album_id} download status: {new_status} "
-        f"(done={done_count}/{total}, downloading={downloading_count}, failed={failed_count})"
-    )
-    
+
     return new_status
+
+
+def get_artist_status(session: Session, artist_id: str) -> dict:
+    """
+    Get comprehensive artist subscription status.
+    
+    Returns:
+        {
+            "has_subscription": bool,
+            "mode": None | "light" | "full",
+            "is_fully_followed": bool,
+        }
+    """
+    subscription = get_artist_subscription(session, artist_id)
+    
+    return {
+        "has_subscription": subscription is not None,
+        "mode": subscription.mode if subscription else None,
+        "is_fully_followed": subscription is not None and subscription.mode == "full",
+    }
+
+
+def get_monitored_artists_needing_sync(
+    session: Session,
+    sync_interval_hours: int = 6,
+) -> list[Artist]:
+    """
+    Return Artist rows that have an enabled subscription and haven't been
+    synced within the last `sync_interval_hours` hours.
+
+    Used by the scheduler to decide which artists to re-sync.
+    """
+    from datetime import timedelta
+
+    cutoff = now_utc() - timedelta(hours=sync_interval_hours)
+
+    stmt = (
+        select(Artist)
+        .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
+        .where(
+            ArtistSubscription.enabled == True,
+            (ArtistSubscription.last_synced_at == None) | (ArtistSubscription.last_synced_at < cutoff),
+        )
+    )
+
+    return list(session.execute(stmt).scalars().all())

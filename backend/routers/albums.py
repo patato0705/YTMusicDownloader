@@ -195,16 +195,33 @@ def follow_album(
                 },
                 "tracks_queued": 0,
             }
-        
-        # Create album subscription
+
+        # Create album subscription (mode=download)
+        album_artist_id = album.get("artist_id")
         subscription = subs_svc.subscribe_to_album(
             db,
             album_id=album_id,
-            artist_id=album.get("artist_id"),
+            artist_id=album_artist_id,
             mode="download"
         )
         logger.info(f"Created album subscription for {album_id} (user_id={current_user.id})")
-        
+
+        # Auto-create light artist subscription if artist doesn't have one yet
+        artist_sub_created = False
+        if album_artist_id:
+            existing_artist_sub = subs_svc.get_artist_subscription(db, album_artist_id)
+            if not existing_artist_sub:
+                from ..services import artists as artists_svc
+                # Ensure artist record exists in DB
+                artists_svc.upsert_artist(
+                    db,
+                    artist_id=album_artist_id,
+                    name=album.get("artist_name") or None,
+                )
+                subs_svc.subscribe_to_artist(db, artist_id=album_artist_id, mode="light")
+                artist_sub_created = True
+                logger.info(f"Auto-created light artist subscription for {album_artist_id}")
+
         # Queue download jobs for all tracks
         tracks = album.get("tracks", [])
         queued_count = 0
@@ -213,7 +230,7 @@ def follow_album(
             track_id = track.get("id")
             if not track_id:
                 continue
-            
+
             # Only queue if track is not already downloaded
             if track.get("status") in ["new", "failed"]:
                 try:
@@ -226,17 +243,31 @@ def follow_album(
                         },
                         priority=10,
                         user_id=current_user.id,
-                        commit=False,  # Don't commit yet
+                        commit=False,
                     )
                     queued_count += 1
                 except Exception as e:
                     logger.exception(f"Failed to enqueue job for track {track_id}")
 
-        # Commit everything once
+        # Commit subscriptions + download jobs
         db.commit()
-        
+
+        # Queue sync_artist job for light subscription (fetches all albums metadata + banner)
+        if artist_sub_created and album_artist_id:
+            try:
+                enqueue_job(
+                    db,
+                    job_type="sync_artist",
+                    payload={"artist_id": album_artist_id},
+                    priority=15,
+                    user_id=current_user.id,
+                )
+                logger.info(f"Queued sync_artist job for light subscription of {album_artist_id}")
+            except Exception as e:
+                logger.exception(f"Failed to queue sync_artist job for {album_artist_id}")
+
         logger.info(f"Album {album_id} followed by user {current_user.id}: {queued_count} tracks queued for download")
-        
+
         return {
             "source": "database",
             "followed": True,
@@ -244,11 +275,12 @@ def follow_album(
             "album": {
                 "id": album["id"],
                 "title": album["title"],
-                "artist_id": album["artist_id"],
+                "artist_id": album_artist_id,
                 "type": album["type"],
             },
             "tracks_total": len(tracks),
             "tracks_queued": queued_count,
+            "artist_subscription_created": artist_sub_created,
         }
         
     except HTTPException:

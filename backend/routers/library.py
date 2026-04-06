@@ -1,6 +1,6 @@
 # backend/routers/library.py
 """
-Library endpoints for browsing downloaded/followed content.
+Library endpoints for browsing and managing downloaded/followed content.
 
 Endpoints:
 - GET /api/library/artists - List followed artists with stats
@@ -8,6 +8,9 @@ Endpoints:
 - GET /api/library/tracks - List downloaded tracks (with filters)
 - GET /api/library/stats - Overall library statistics
 - GET /api/library/albums/{album_id}/progress - Detailed album download progress
+- DELETE /api/library/artists/{artist_id} - Delete artist from library (admin)
+- DELETE /api/library/albums/{album_id} - Delete album from library (admin)
+- POST /api/library/cleanup - Remove orphaned data (admin)
 """
 from __future__ import annotations
 import logging
@@ -51,23 +54,27 @@ def list_followed_artists(
     Returns list of artists with download stats.
     """
     try:
-        # Get all followed artists
-        query = db.query(Artist).filter(Artist.followed == True)
-        
+        # Get all artists with active subscriptions
+        query = (
+            db.query(Artist, ArtistSubscription)
+            .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
+            .filter(ArtistSubscription.enabled == True)
+        )
+
         # Apply sorting
         if sort_by == "name":
             query = query.order_by(Artist.name.asc() if order == "asc" else Artist.name.desc())
         elif sort_by == "followed_at":
-            query = query.order_by(Artist.created_at.desc() if order == "desc" else Artist.created_at.asc())
+            query = query.order_by(ArtistSubscription.created_at.desc() if order == "desc" else ArtistSubscription.created_at.asc())
         # albums_count sorting will be done in Python after fetching
-        
-        artists = query.all()
+
+        rows = query.all()
         
         result = []
-        for artist in artists:
+        for artist, subscription in rows:
             # Get albums count
             albums_count = db.query(func.count(Album.id)).filter(Album.artist_id == artist.id).scalar() or 0
-            
+
             # Get tracks stats
             tracks_query = (
                 db.query(
@@ -78,32 +85,30 @@ def list_followed_artists(
                 .join(Album, Track.album_id == Album.id)
                 .filter(Album.artist_id == artist.id)
             )
-            
+
             tracks_stats = tracks_query.first()
             stats = _safe_stats(tracks_stats, ['total', 'downloaded', 'failed'])
             tracks_total = stats['total']
             tracks_downloaded = stats['downloaded']
             tracks_failed = stats['failed']
-            
+
             # Calculate download progress
             download_progress = 0.0
             if tracks_total > 0:
                 download_progress = round((tracks_downloaded / tracks_total) * 100, 1)
-            
-            # Get subscription info
-            subscription = subs_svc.get_artist_subscription(db, artist.id)
-            
+
             result.append({
                 "id": artist.id,
                 "name": artist.name,
                 "thumbnail": artist.image_local,
-                "followed_at": artist.created_at.isoformat() if artist.created_at else None,
+                "mode": subscription.mode,
+                "followed_at": subscription.created_at.isoformat() if subscription.created_at else None,
                 "albums_count": albums_count,
                 "tracks_total": tracks_total,
                 "tracks_downloaded": tracks_downloaded,
                 "tracks_failed": tracks_failed,
                 "download_progress": download_progress,
-                "last_synced_at": subscription.last_synced_at.isoformat() if subscription and subscription.last_synced_at else None,
+                "last_synced_at": subscription.last_synced_at.isoformat() if subscription.last_synced_at else None,
             })
         
         # Sort by albums_count if requested
@@ -335,8 +340,8 @@ def get_library_stats(
     Get overall library statistics.
     """
     try:
-        # Artists stats
-        artists_total = db.query(func.count(Artist.id)).filter(Artist.followed == True).scalar() or 0
+        # Artists stats (count active subscriptions)
+        artists_total = db.query(func.count(ArtistSubscription.id)).filter(ArtistSubscription.enabled == True).scalar() or 0
         
         # Albums stats
         albums_total = db.query(func.count(AlbumSubscription.id)).scalar() or 0
@@ -471,3 +476,294 @@ def get_album_download_progress(
     except Exception as e:
         logger.exception(f"get_album_download_progress failed for {album_id}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch album progress: {e}")
+
+
+# ============================================================================
+# DELETE ENDPOINTS - Library content removal
+# ============================================================================
+
+def _delete_file_safe(path: Optional[str]) -> bool:
+    """Delete a file if it exists. Returns True if deleted."""
+    if not path:
+        return False
+    from pathlib import Path
+    try:
+        p = Path(path)
+        if p.exists():
+            p.unlink()
+            return True
+    except Exception as e:
+        logger.warning(f"Failed to delete file {path}: {e}")
+    return False
+
+
+def _delete_dir_safe(path: str) -> bool:
+    """Delete a directory if it exists and is empty. Returns True if deleted."""
+    from pathlib import Path
+    import shutil
+    try:
+        p = Path(path)
+        if p.exists() and p.is_dir():
+            shutil.rmtree(str(p))
+            return True
+    except Exception as e:
+        logger.warning(f"Failed to delete directory {path}: {e}")
+    return False
+
+
+@router.delete("/artists/{artist_id}", status_code=status.HTTP_200_OK)
+def delete_artist_from_library(
+    artist_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Delete an artist and all associated data from the library.
+
+    Removes:
+    - All track files and lyrics files for the artist's albums
+    - Album cover images
+    - Artist banner image
+    - Artist folder (if exists)
+    - All DB records: tracks, albums, subscriptions, artist
+    - Cancels any pending jobs for this artist
+
+    Requires administrator role.
+    """
+    if not artist_id:
+        raise HTTPException(status_code=400, detail="artist_id required")
+
+    try:
+        artist = db.get(Artist, artist_id)
+        if not artist:
+            raise HTTPException(status_code=404, detail="Artist not found in library")
+
+        artist_name = artist.name
+        files_deleted = 0
+        tracks_deleted = 0
+        albums_deleted = 0
+
+        # Get all albums for this artist
+        albums = db.query(Album).filter(Album.artist_id == artist_id).all()
+
+        for album in albums:
+            # Delete all track files and lyrics
+            tracks = db.query(Track).filter(Track.album_id == album.id).all()
+            for track in tracks:
+                if _delete_file_safe(track.file_path):
+                    files_deleted += 1
+                _delete_file_safe(track.lyrics_local)
+                db.delete(track)
+                tracks_deleted += 1
+
+            # Delete album cover
+            _delete_file_safe(album.image_local)
+
+            # Delete album subscription
+            album_sub = subs_svc.get_album_subscription(db, album.id)
+            if album_sub:
+                db.delete(album_sub)
+
+            db.delete(album)
+            albums_deleted += 1
+
+        # Delete artist banner
+        _delete_file_safe(artist.image_local)
+
+        # Delete artist subscription
+        artist_sub = subs_svc.get_artist_subscription(db, artist_id)
+        if artist_sub:
+            db.delete(artist_sub)
+
+        # Delete artist record (cascade should handle albums/tracks but we did it manually above)
+        db.delete(artist)
+
+        # Try to delete artist folder
+        from pathlib import Path
+        from .. import config
+        safe_name = "".join(c for c in (artist_name or "") if c.isalnum() or c in " .-_()").strip()
+        if safe_name:
+            artist_folder = Path(str(config.MUSIC_DIR)) / safe_name
+            _delete_dir_safe(str(artist_folder))
+
+        db.commit()
+
+        logger.info(
+            f"Deleted artist {artist_id} ({artist_name}) from library: "
+            f"{albums_deleted} albums, {tracks_deleted} tracks, {files_deleted} files"
+        )
+
+        return {
+            "message": f"Artist '{artist_name}' deleted from library.",
+            "artist_id": artist_id,
+            "albums_deleted": albums_deleted,
+            "tracks_deleted": tracks_deleted,
+            "files_deleted": files_deleted,
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"delete_artist_from_library failed for {artist_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete artist: {e}")
+
+
+@router.delete("/albums/{album_id}", status_code=status.HTTP_200_OK)
+def delete_album_from_library(
+    album_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Delete an album and its tracks from the library.
+
+    Removes:
+    - All track files and lyrics files
+    - Album cover image
+    - Album subscription
+    - All DB records: tracks, album
+
+    Does NOT delete the artist record or artist subscription.
+    Requires administrator role.
+    """
+    if not album_id:
+        raise HTTPException(status_code=400, detail="album_id required")
+
+    try:
+        album = db.get(Album, album_id)
+        if not album:
+            raise HTTPException(status_code=404, detail="Album not found in library")
+
+        album_title = album.title
+        files_deleted = 0
+        tracks_deleted = 0
+
+        # Delete all track files and lyrics
+        tracks = db.query(Track).filter(Track.album_id == album.id).all()
+        for track in tracks:
+            if _delete_file_safe(track.file_path):
+                files_deleted += 1
+            _delete_file_safe(track.lyrics_local)
+            db.delete(track)
+            tracks_deleted += 1
+
+        # Delete album cover
+        _delete_file_safe(album.image_local)
+
+        # Delete album subscription
+        album_sub = subs_svc.get_album_subscription(db, album.id)
+        if album_sub:
+            db.delete(album_sub)
+
+        db.delete(album)
+        db.commit()
+
+        logger.info(
+            f"Deleted album {album_id} ({album_title}) from library: "
+            f"{tracks_deleted} tracks, {files_deleted} files"
+        )
+
+        return {
+            "message": f"Album '{album_title}' deleted from library.",
+            "album_id": album_id,
+            "tracks_deleted": tracks_deleted,
+            "files_deleted": files_deleted,
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"delete_album_from_library failed for {album_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete album: {e}")
+
+
+@router.post("/cleanup", status_code=status.HTTP_200_OK)
+def cleanup_orphaned_data(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Remove orphaned data from the library.
+
+    Cleans up:
+    - Tracks with no album (orphaned tracks)
+    - Albums with no artist and no subscription
+    - Artists with no albums and no subscription
+
+    Requires administrator role.
+    """
+    try:
+        orphaned_tracks = 0
+        orphaned_albums = 0
+        orphaned_artists = 0
+
+        # 1. Delete tracks with no album
+        tracks_no_album = db.query(Track).filter(
+            (Track.album_id == None) | ~Track.album_id.in_(db.query(Album.id))
+        ).all()
+        for track in tracks_no_album:
+            _delete_file_safe(track.file_path)
+            _delete_file_safe(track.lyrics_local)
+            db.delete(track)
+            orphaned_tracks += 1
+
+        # 2. Delete albums with no artist and no subscription
+        albums_no_owner = (
+            db.query(Album)
+            .filter(
+                (Album.artist_id == None) | ~Album.artist_id.in_(db.query(Artist.id))
+            )
+            .all()
+        )
+        for album in albums_no_owner:
+            # Check if album has a subscription — keep it if so
+            album_sub = subs_svc.get_album_subscription(db, album.id)
+            if album_sub:
+                continue
+            # Delete tracks first
+            for track in db.query(Track).filter(Track.album_id == album.id).all():
+                _delete_file_safe(track.file_path)
+                _delete_file_safe(track.lyrics_local)
+                db.delete(track)
+                orphaned_tracks += 1
+            _delete_file_safe(album.image_local)
+            db.delete(album)
+            orphaned_albums += 1
+
+        # 3. Delete artists with no albums and no subscription
+        from sqlalchemy import exists
+        artists_empty = (
+            db.query(Artist)
+            .filter(
+                ~exists().where(Album.artist_id == Artist.id),
+                ~exists().where(ArtistSubscription.artist_id == Artist.id),
+            )
+            .all()
+        )
+        for artist in artists_empty:
+            _delete_file_safe(artist.image_local)
+            db.delete(artist)
+            orphaned_artists += 1
+
+        db.commit()
+
+        logger.info(
+            f"Cleanup complete: {orphaned_tracks} tracks, "
+            f"{orphaned_albums} albums, {orphaned_artists} artists removed"
+        )
+
+        return {
+            "message": "Cleanup complete.",
+            "orphaned_tracks_removed": orphaned_tracks,
+            "orphaned_albums_removed": orphaned_albums,
+            "orphaned_artists_removed": orphaned_artists,
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.exception("cleanup_orphaned_data failed")
+        raise HTTPException(status_code=500, detail=f"Cleanup failed: {e}")

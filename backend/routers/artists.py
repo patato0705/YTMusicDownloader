@@ -1,11 +1,13 @@
 # backend/routers/artists.py
+
 """
 Artist endpoints.
 
 Endpoints :
 - GET /api/artists/{artist_id} - Get artist details
-- POST /api/artists/{artist_id}/follow - Follow artist (follow all albums + queue downloads)
+- POST /api/artists/{artist_id}/follow - Follow artist (full mode)
 - DELETE /api/artists/{artist_id}/follow - Unfollow artist
+- PATCH /api/artists/{artist_id}/mode - Update subscription mode
 """
 from __future__ import annotations
 import logging
@@ -17,13 +19,10 @@ from sqlalchemy.orm import Session
 from ..deps import get_db
 from ..services import artists as artists_svc
 from ..services import albums as albums_svc
-from ..services import tracks as tracks_svc
 from ..services import subscriptions as subs_svc
 from ..jobs.jobqueue import enqueue_job
-from backend.dependencies import require_auth, require_member_or_admin, require_admin
-from backend.models import User
-
-from ..models import Artist, AlbumSubscription
+from backend.dependencies import require_auth, require_member_or_admin
+from backend.models import User, Artist
 
 logger = logging.getLogger("routers.artists")
 
@@ -37,55 +36,100 @@ def get_artist(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get artist info - tries DB first, then fetches from YTMusic if not found.
-    Returns full artist data including albums list.
+    Get artist info with smart fetching logic.
+    
+    Priority:
+    1. If artist has NO subscription → fetch from YTMusic (cloud data)
+    2. If artist has subscription (light OR full) but mode="light" → fetch from YTMusic + DB status
+    3. If artist has subscription mode="full" → use DB (full data)
     """
     if not artist_id:
         raise HTTPException(status_code=400, detail="artist_id required")
 
     try:
-        # Try to get from DB first
+        # Get artist subscription status
+        artist_sub = subs_svc.get_artist_subscription(db, artist_id)
         artist_obj = db.get(Artist, str(artist_id))
         
-        if artist_obj:
-            # Artist exists in DB - get albums from DB
-            from ..services import albums as albums_svc
+        # Case 1 & 2: No subscription OR light mode → fetch from YTMusic
+        if not artist_sub or artist_sub.mode == "light":
+            logger.info(f"Artist {artist_id} not fully followed, fetching from YTMusic")
             
-            albums = albums_svc.list_albums_for_artist_from_db(session=db, artist_id=str(artist_id))
+            from ..ytm_service import adapter as ytm_adapter
+            artist_data = ytm_adapter.get_artist(str(artist_id))
+            
+            if not artist_data:
+                raise HTTPException(status_code=404, detail="Artist not found in YTMusic")
+            
+            # Get DB albums for status flags
+            db_albums_map = {}
+            if artist_obj:
+                db_albums = albums_svc.list_albums_for_artist_from_db(session=db, artist_id=str(artist_id))
+                for db_album in db_albums:
+                    album_id = db_album.get("id")
+                    if album_id:
+                        album_sub = subs_svc.get_album_subscription(db, album_id)
+                        db_albums_map[album_id] = {
+                            "in_database": True,
+                            "mode": album_sub.mode if album_sub else None,
+                        }
+            
+            # Merge YTMusic albums with DB status
+            ytmusic_albums = artist_data.get("albums", [])
+            ytmusic_singles = artist_data.get("singles", [])
+            all_ytmusic_albums = ytmusic_albums + ytmusic_singles
+            
+            albums_with_status = []
+            for yt_album in all_ytmusic_albums:
+                album_id = yt_album.get("id") or yt_album.get("browseId")
+                db_status = db_albums_map.get(album_id, {
+                    "in_database": False,
+                    "mode": None,
+                })
+                
+                albums_with_status.append({
+                    **yt_album,
+                    **db_status,
+                })
             
             return {
                 "ok": True,
-                "source": "database",
-                "followed": getattr(artist_obj, "followed", False),
+                "source": "ytmusic",
+                "subscription_mode": artist_sub.mode if artist_sub else None,
                 "artist": {
-                    "id": artist_obj.id,
-                    "name": artist_obj.name,
-                    "thumbnails": artist_obj.thumbnails,
-                    "image_local": artist_obj.image_local,
+                    "id": artist_data.get("id", artist_id),
+                    "name": artist_data.get("name"),
+                    "thumbnails": artist_data.get("thumbnails", []),
+                    "image_local": artist_obj.image_local if artist_obj else None,
                 },
-                "albums": albums,
+                "albums": albums_with_status,
             }
         
-        # Not in DB - fetch from YTMusic adapter
-        logger.info(f"Artist {artist_id} not in DB, fetching from YTMusic")
-        from ..ytm_service import adapter as ytm_adapter
-        
-        artist_data = ytm_adapter.get_artist(str(artist_id))
-        if not artist_data:
-            raise HTTPException(status_code=404, detail="Artist not found in YTMusic")
-        
+        # Case 3: Full subscription → use DB (has complete data)
+        if not artist_obj:
+            raise HTTPException(status_code=404, detail="Artist not found in database")
+
+        albums = albums_svc.list_albums_for_artist_from_db(session=db, artist_id=str(artist_id))
+
+        # Add subscription mode to each album
+        for album in albums:
+            album_id = album.get("id")
+            if album_id:
+                album_sub = subs_svc.get_album_subscription(db, album_id)
+                album["mode"] = album_sub.mode if album_sub else None
+                album["in_database"] = True
+
         return {
             "ok": True,
-            "source": "ytmusic",
-            "followed": False,
+            "source": "database",
+            "subscription_mode": "full",
             "artist": {
-                "id": artist_data.get("id", artist_id),
-                "name": artist_data.get("name"),
-                "thumbnail": artist_data.get("thumbnail", []),
-                "image_local": None,
+                "id": artist_obj.id,
+                "name": artist_obj.name,
+                "thumbnails": artist_obj.thumbnails,
+                "image_local": artist_obj.image_local,
             },
-            "albums": artist_data.get("albums"),
-            "singles": artist_data.get("singles"),
+            "albums": albums,
         }
         
     except HTTPException:
@@ -102,92 +146,67 @@ def follow_artist(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Follow an artist - FAST version:
-    1. Fetch artist data from YTMusic (just metadata + album list)
-    2. Mark artist as followed and create subscriptions
-    3. Queue an import_artist job to handle the heavy lifting
-    4. Return immediately with artist info
+    Follow an artist in FULL mode (downloads everything).
     
-    The actual album/track fetching happens asynchronously via worker.
-    Response time: ~2-3 seconds instead of 15-35 seconds.
+    If artist already has light subscription, upgrades to full.
+    Queues sync_artist job to handle the heavy lifting.
     """
     if not artist_id:
         raise HTTPException(status_code=400, detail="artist_id required")
     
     try:
-        logger.info(f"Following artist {artist_id}")
+        logger.info(f"Following artist {artist_id} in full mode")
         
-        # Step 1: Fetch basic artist data from YTMusic (fast - just metadata)
+        # Check existing subscription
+        existing_sub = subs_svc.get_artist_subscription(db, artist_id)
+        
+        if existing_sub and existing_sub.mode == "full":
+            return {
+                "message": "Artist already fully followed",
+                "artist_id": artist_id,
+                "mode": "full",
+            }
+        
+        # Fetch basic artist data
         artist_data = artists_svc.fetch_and_upsert_artist(db, artist_id)
-        
         artist_name = artist_data.get("name", "Unknown Artist")
-        albums_list = artist_data.get("albums", [])
-        singles_list = artist_data.get("singles", [])
-        total_releases = len(albums_list) + len(singles_list)
         
-        logger.info(f"Fetched artist {artist_name}: {len(albums_list)} albums, {len(singles_list)} singles")
-        
-        # Step 2: Get artist object and check if already followed
-        artist_obj = db.get(Artist, artist_id)
-        if not artist_obj:
-            raise HTTPException(status_code=404, detail="Artist not found after fetch")
-        
-        if artist_obj.followed:
-            existing_sub = subs_svc.get_artist_subscription(db, artist_id)
-            if existing_sub:
-                return {
-                    "source": "database",
-                    "followed": True,
-                    "message": "Artist already followed",
-                    "artist": {
-                        "id": artist_id,
-                        "name": artist_name,
-                    },
-                    "albums_count": total_releases,
-                }
-        
-        # Step 3: Mark artist as followed and create artist subscription
-        artist_obj.followed = True
-        db.add(artist_obj)
-        
+        # Create or upgrade subscription to full mode
         artist_subscription = subs_svc.subscribe_to_artist(
             db,
             artist_id=artist_id,
             mode="full",
         )
         
-        # Commit artist follow status and subscription
-        db.commit()
-        logger.info(f"Marked artist {artist_id} as followed")
+        # If upgrading from light to full, upgrade all album subscriptions
+        if existing_sub and existing_sub.mode == "light":
+            upgraded_count = subs_svc.upgrade_all_album_subscriptions_to_download(db, artist_id)
+            logger.info(f"Upgraded {upgraded_count} albums to download mode for artist {artist_id}")
         
-        # Step 4: Queue a sync_artist job to import all albums/tracks asynchronously
+        db.commit()
+        logger.info(f"Artist {artist_id} followed in full mode")
+        
+        # Queue sync_artist job
         try:
             job = enqueue_job(
                 db,
                 job_type="sync_artist",
-                payload={
-                    "artist_id": artist_id,
-                },
-                priority=30,  # Higher priority for new follows
+                payload={"artist_id": artist_id},
+                priority=30,
                 user_id=current_user.id
             )
             logger.info(f"Queued sync_artist job {job.id} for artist {artist_id}")
         except Exception as e:
             logger.exception(f"Failed to queue sync_artist job for {artist_id}")
-            # Don't fail the request if job queueing fails
         
-        # Return immediately - user doesn't have to wait
         return {
-            "source": "ytmusic",
-            "followed": True,
-            "message": f"Artist followed successfully. Importing {total_releases} releases in the background.",
+            "message": f"Artist followed successfully in full mode. Syncing in background.",
             "artist": {
                 "id": artist_id,
                 "name": artist_name,
             },
-            "albums_count": total_releases,
-            "status": "importing",
-            "note": "Albums and tracks are being imported in the background. Check back in a few minutes.",
+            "mode": "full",
+            "status": "syncing",
         }
         
     except HTTPException:
@@ -206,61 +225,38 @@ def unfollow_artist(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Unfollow an artist:
-    - Marks artist as not followed
-    - Disables artist subscription
-    - Removes all album subscriptions for this artist
-    - Does NOT delete artist, albums, or tracks from database
-    - Does NOT cancel pending download jobs
+    Unfollow an artist (delete subscription).
+    
+    - Removes artist subscription
+    - Downgrades all album subscriptions to metadata mode
+    - Does NOT delete files or database records
     """
     if not artist_id:
         raise HTTPException(status_code=400, detail="artist_id required")
     
     try:
-        # Check if artist exists
-        artist_obj = artists_svc.get_artist_from_db(db, artist_id)
-        if not artist_obj:
-            raise HTTPException(status_code=404, detail="Artist not found")
-        
-        # Mark artist as not followed
-        if artist_obj.followed:
-            artist_obj.followed = False
-            db.add(artist_obj)
-        
-        # Unsubscribe from artist
-        success = subs_svc.unsubscribe_from_artist(db, artist_id)
-
-        if not success:
+        # Check if subscription exists
+        subscription = subs_svc.get_artist_subscription(db, artist_id)
+        if not subscription:
             raise HTTPException(status_code=404, detail="Artist is not followed")
         
-        # Remove all album subscriptions for this artist
-        from ..models import AlbumSubscription
-        album_subs = (
-            db.query(AlbumSubscription)
-            .filter(AlbumSubscription.artist_id == artist_id)
-            .all()
-        )
+        # Downgrade all album subscriptions to metadata mode
+        downgraded_count = subs_svc.downgrade_all_album_subscriptions_to_metadata(db, artist_id)
         
-        removed_album_subs = 0
-        for sub in album_subs:
-            try:
-                db.delete(sub)
-                removed_album_subs += 1
-            except Exception as e:
-                logger.exception(f"Failed to remove album subscription {sub.id}")
+        # Delete artist subscription
+        success = subs_svc.unsubscribe_from_artist(db, artist_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Artist subscription not found")
         
         db.commit()
         
-        logger.info(f"Artist {artist_id} unfollowed: removed {removed_album_subs} album subscriptions")
+        logger.info(f"Artist {artist_id} unfollowed: {downgraded_count} albums downgraded to metadata mode")
         
         return {
-            "message": "Artist unfollowed successfully",
-            "artist": {
-                "id": artist_id,
-                "name": artist_obj.name,
-            },
-            "followed": False,
-            "album_subscriptions_removed": removed_album_subs,
+            "message": "Artist unfollowed successfully. Files and metadata preserved.",
+            "artist_id": artist_id,
+            "albums_downgraded": downgraded_count,
         }
         
     except HTTPException:
@@ -270,3 +266,87 @@ def unfollow_artist(
         db.rollback()
         logger.exception(f"unfollow_artist failed for {artist_id}")
         raise HTTPException(status_code=500, detail=f"Failed to unfollow artist: {e}")
+
+
+@router.patch("/{artist_id}/mode", status_code=status.HTTP_200_OK)
+def update_artist_mode(
+    artist_id: str,
+    mode: str,  # "light" or "full"
+    current_user: User = Depends(require_member_or_admin),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Update artist subscription mode.
+    
+    light → full: Upgrades all albums to download mode, queues sync
+    full → light: Downgrades all albums to metadata mode
+    """
+    if mode not in ("light", "full"):
+        raise HTTPException(status_code=400, detail="mode must be 'light' or 'full'")
+    
+    try:
+        # Get current subscription
+        subscription = subs_svc.get_artist_subscription(db, artist_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Artist not followed")
+        
+        old_mode = subscription.mode
+        
+        if old_mode == mode:
+            return {
+                "message": f"Artist already in {mode} mode",
+                "artist_id": artist_id,
+                "mode": mode,
+            }
+        
+        # Update subscription mode
+        subs_svc.update_artist_subscription_mode(db, artist_id, mode)
+        
+        # Update album subscriptions accordingly
+        if mode == "full":
+            # Upgrade: metadata → download
+            upgraded_count = subs_svc.upgrade_all_album_subscriptions_to_download(db, artist_id)
+            db.commit()
+            
+            # Queue sync job
+            try:
+                job = enqueue_job(
+                    db,
+                    job_type="sync_artist",
+                    payload={"artist_id": artist_id},
+                    priority=20,
+                    user_id=current_user.id
+                )
+                db.commit()
+                logger.info(f"Queued sync_artist job {job.id} for upgraded artist {artist_id}")
+            except Exception as e:
+                logger.exception(f"Failed to queue sync_artist job")
+            
+            return {
+                "message": f"Artist upgraded to full mode. {upgraded_count} albums will be downloaded.",
+                "artist_id": artist_id,
+                "mode": "full",
+                "albums_upgraded": upgraded_count,
+            }
+        else:
+            # Downgrade: download → metadata
+            downgraded_count = subs_svc.downgrade_all_album_subscriptions_to_metadata(db, artist_id)
+            db.commit()
+            
+            return {
+                "message": f"Artist downgraded to light mode. Files preserved, syncing stopped.",
+                "artist_id": artist_id,
+                "mode": "light",
+                "albums_downgraded": downgraded_count,
+            }
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"update_artist_mode failed for {artist_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to update mode: {e}")

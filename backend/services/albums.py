@@ -261,6 +261,63 @@ def ensure_album_cover(
 
 
 # ============================================================================
+# FETCH ALBUMS LIST FOR ARTIST (lightweight, no upsert)
+# ============================================================================
+
+def fetch_albums_for_artist(
+    session: Session,
+    artist_id: str,
+    albums_from_api: List[Dict[str, Any]],
+    singles_from_api: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Return a normalized list of album items from API data.
+    Used by sync_artist to identify new albums without upserting.
+
+    Each item has at minimum: id (or browseId), title, type.
+
+    Args:
+        session: SQLAlchemy session (unused, kept for consistency)
+        artist_id: Artist ID
+        albums_from_api: Album items from ytm_adapter.get_artist()
+        singles_from_api: Single items from ytm_adapter.get_artist()
+
+    Returns:
+        Combined list of album dicts with normalized keys
+    """
+    result: List[Dict[str, Any]] = []
+
+    for item in (albums_from_api or []):
+        album_id = item.get("id") or item.get("browseId")
+        if not album_id:
+            continue
+        result.append({
+            "id": album_id,
+            "browseId": album_id,
+            "title": item.get("title", ""),
+            "type": item.get("type", "Album"),
+            "year": item.get("year"),
+            "thumbnails": item.get("thumbnails", []),
+        })
+
+    for item in (singles_from_api or []):
+        album_id = item.get("id") or item.get("browseId")
+        if not album_id:
+            continue
+        result.append({
+            "id": album_id,
+            "browseId": album_id,
+            "title": item.get("title", ""),
+            "type": item.get("type", "Single"),
+            "year": item.get("year"),
+            "thumbnails": item.get("thumbnails", []),
+        })
+
+    logger.debug(f"fetch_albums_for_artist {artist_id}: {len(result)} albums/singles")
+    return result
+
+
+# ============================================================================
 # FETCH & UPSERT ALBUM FROM YTMUSIC
 # ============================================================================
 

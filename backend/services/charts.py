@@ -10,7 +10,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import ChartSubscription, ChartSnapshot, Artist
+from ..models import ChartSubscription, ChartSnapshot, Artist, ArtistSubscription
 from ..ytm_service import adapter as ytm_adapter
 from ..time_utils import now_utc
 
@@ -233,8 +233,8 @@ def get_latest_snapshot(
 # ============================================================================
 
 def get_followed_artist_ids(session: Session) -> set[str]:
-    """Get set of all followed artist IDs."""
-    stmt = select(Artist.id).where(Artist.followed == True)
+    """Get set of all artist IDs with active subscriptions."""
+    stmt = select(ArtistSubscription.artist_id).where(ArtistSubscription.enabled == True)
     results = session.execute(stmt).scalars().all()
     return set(results)
 
