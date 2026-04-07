@@ -518,15 +518,14 @@ def delete_artist_from_library(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
-    Delete an artist and all associated data from the library.
+    Completely remove an artist from the library.
 
-    Removes:
-    - All track files and lyrics files for the artist's albums
-    - Album cover images
-    - Artist banner image
-    - Artist folder (if exists)
-    - All DB records: tracks, albums, subscriptions, artist
-    - Cancels any pending jobs for this artist
+    Deletes everything:
+    - All track files, lyrics files, album covers, artist banner
+    - Artist folder on disk
+    - All DB records: tracks, albums, artist
+    - All subscriptions: artist subscription + all album subscriptions
+      (including metadata-only subs that have no Album row in DB)
 
     Requires administrator role.
     """
@@ -534,51 +533,58 @@ def delete_artist_from_library(
         raise HTTPException(status_code=400, detail="artist_id required")
 
     try:
+        # Artist must exist either as a DB record or have subscriptions
         artist = db.get(Artist, artist_id)
-        if not artist:
+        artist_sub = subs_svc.get_artist_subscription(db, artist_id)
+
+        if not artist and not artist_sub:
             raise HTTPException(status_code=404, detail="Artist not found in library")
 
-        artist_name = artist.name
+        artist_name = artist.name if artist else "Unknown"
         files_deleted = 0
         tracks_deleted = 0
         albums_deleted = 0
 
-        # Get all albums for this artist
-        albums = db.query(Album).filter(Album.artist_id == artist_id).all()
+        # 1. Delete all albums that exist in DB for this artist
+        if artist:
+            albums = db.query(Album).filter(Album.artist_id == artist_id).all()
+            for album in albums:
+                tracks = db.query(Track).filter(Track.album_id == album.id).all()
+                for track in tracks:
+                    if _delete_file_safe(track.file_path):
+                        files_deleted += 1
+                    _delete_file_safe(track.lyrics_local)
+                    db.delete(track)
+                    tracks_deleted += 1
 
-        for album in albums:
-            # Delete all track files and lyrics
-            tracks = db.query(Track).filter(Track.album_id == album.id).all()
-            for track in tracks:
-                if _delete_file_safe(track.file_path):
-                    files_deleted += 1
-                _delete_file_safe(track.lyrics_local)
-                db.delete(track)
-                tracks_deleted += 1
+                _delete_file_safe(album.image_local)
+                db.delete(album)
+                albums_deleted += 1
 
-            # Delete album cover
-            _delete_file_safe(album.image_local)
+        # 2. Delete ALL album subscriptions for this artist
+        #    (includes metadata-only subs that have no Album row)
+        from sqlalchemy import select
+        all_album_subs = db.execute(
+            select(AlbumSubscription).where(AlbumSubscription.artist_id == artist_id)
+        ).scalars().all()
+        subs_deleted = 0
+        for album_sub in all_album_subs:
+            db.delete(album_sub)
+            subs_deleted += 1
 
-            # Delete album subscription
-            album_sub = subs_svc.get_album_subscription(db, album.id)
-            if album_sub:
-                db.delete(album_sub)
+        # 3. Delete artist banner
+        if artist:
+            _delete_file_safe(artist.image_local)
 
-            db.delete(album)
-            albums_deleted += 1
-
-        # Delete artist banner
-        _delete_file_safe(artist.image_local)
-
-        # Delete artist subscription
-        artist_sub = subs_svc.get_artist_subscription(db, artist_id)
+        # 4. Delete artist subscription
         if artist_sub:
             db.delete(artist_sub)
 
-        # Delete artist record (cascade should handle albums/tracks but we did it manually above)
-        db.delete(artist)
+        # 5. Delete artist record
+        if artist:
+            db.delete(artist)
 
-        # Try to delete artist folder
+        # 6. Delete artist folder from disk
         from pathlib import Path
         from .. import config
         safe_name = "".join(c for c in (artist_name or "") if c.isalnum() or c in " .-_()").strip()
@@ -590,15 +596,17 @@ def delete_artist_from_library(
 
         logger.info(
             f"Deleted artist {artist_id} ({artist_name}) from library: "
-            f"{albums_deleted} albums, {tracks_deleted} tracks, {files_deleted} files"
+            f"{albums_deleted} albums, {tracks_deleted} tracks, "
+            f"{files_deleted} files, {subs_deleted} album subs"
         )
 
         return {
-            "message": f"Artist '{artist_name}' deleted from library.",
+            "message": f"Artist '{artist_name}' completely removed from library.",
             "artist_id": artist_id,
             "albums_deleted": albums_deleted,
             "tracks_deleted": tracks_deleted,
             "files_deleted": files_deleted,
+            "subscriptions_deleted": subs_deleted,
         }
 
     except HTTPException:
@@ -617,15 +625,16 @@ def delete_album_from_library(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
-    Delete an album and its tracks from the library.
+    Delete an album's downloaded content from the library.
 
-    Removes:
-    - All track files and lyrics files
-    - Album cover image
-    - Album subscription
-    - All DB records: tracks, album
+    What happens:
+    - All track files, lyrics files, and album cover are deleted from disk
+    - Album and Track DB rows are deleted
+    - Album subscription is KEPT but downgraded to mode="metadata"
+    - Artist subscription is downgraded to mode="light"
+      (no more periodic sync; artist stays in library;
+       re-following the artist will reimport and redownload this album)
 
-    Does NOT delete the artist record or artist subscription.
     Requires administrator role.
     """
     if not album_id:
@@ -637,10 +646,11 @@ def delete_album_from_library(
             raise HTTPException(status_code=404, detail="Album not found in library")
 
         album_title = album.title
+        artist_id = album.artist_id
         files_deleted = 0
         tracks_deleted = 0
 
-        # Delete all track files and lyrics
+        # 1. Delete all track files and lyrics from disk
         tracks = db.query(Track).filter(Track.album_id == album.id).all()
         for track in tracks:
             if _delete_file_safe(track.file_path):
@@ -649,15 +659,29 @@ def delete_album_from_library(
             db.delete(track)
             tracks_deleted += 1
 
-        # Delete album cover
+        # 2. Delete album cover from disk
         _delete_file_safe(album.image_local)
 
-        # Delete album subscription
-        album_sub = subs_svc.get_album_subscription(db, album.id)
-        if album_sub:
-            db.delete(album_sub)
-
+        # 3. Delete Album row from DB
         db.delete(album)
+
+        # 4. Keep album subscription but downgrade to metadata
+        album_sub = subs_svc.get_album_subscription(db, album_id)
+        artist_downgraded = False
+        if album_sub:
+            album_sub.mode = "metadata"
+            album_sub.download_status = "idle"
+            db.add(album_sub)
+
+        # 5. Downgrade artist subscription to light mode (stops periodic sync)
+        if artist_id:
+            artist_sub = subs_svc.get_artist_subscription(db, artist_id)
+            if artist_sub and artist_sub.mode == "full":
+                artist_sub.mode = "light"
+                db.add(artist_sub)
+                artist_downgraded = True
+                logger.info(f"Downgraded artist {artist_id} to light mode after album deletion")
+
         db.commit()
 
         logger.info(
@@ -666,10 +690,11 @@ def delete_album_from_library(
         )
 
         return {
-            "message": f"Album '{album_title}' deleted from library.",
+            "message": f"Album '{album_title}' deleted from library. Artist switched to light mode.",
             "album_id": album_id,
             "tracks_deleted": tracks_deleted,
             "files_deleted": files_deleted,
+            "artist_downgraded": artist_downgraded,
         }
 
     except HTTPException:

@@ -181,9 +181,9 @@ def follow_album(
             
             logger.info(f"Fetched and upserted album {album_id}: {result['inserted_tracks']} tracks")
         
-        # Check if already followed
+        # Check if already followed (download mode = truly followed)
         existing_sub = subs_svc.get_album_subscription(db, album_id)
-        if existing_sub:
+        if existing_sub and existing_sub.mode == "download":
             return {
                 "source": "database",
                 "followed": True,
@@ -196,15 +196,22 @@ def follow_album(
                 "tracks_queued": 0,
             }
 
-        # Create album subscription (mode=download)
+        # Create or upgrade album subscription to download mode
         album_artist_id = album.get("artist_id")
-        subscription = subs_svc.subscribe_to_album(
-            db,
-            album_id=album_id,
-            artist_id=album_artist_id,
-            mode="download"
-        )
-        logger.info(f"Created album subscription for {album_id} (user_id={current_user.id})")
+        if existing_sub and existing_sub.mode == "metadata":
+            # Upgrade metadata → download
+            existing_sub.mode = "download"
+            db.add(existing_sub)
+            logger.info(f"Upgraded album subscription {album_id} from metadata to download")
+        else:
+            # Create new subscription
+            subscription = subs_svc.subscribe_to_album(
+                db,
+                album_id=album_id,
+                artist_id=album_artist_id,
+                mode="download"
+            )
+            logger.info(f"Created album subscription for {album_id} (user_id={current_user.id})")
 
         # Auto-create light artist subscription if artist doesn't have one yet
         artist_sub_created = False

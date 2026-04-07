@@ -413,6 +413,7 @@ def get_monitored_artists_needing_sync(
         .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
         .where(
             ArtistSubscription.enabled == True,
+            ArtistSubscription.mode == "full",
             (ArtistSubscription.last_synced_at == None) | (ArtistSubscription.last_synced_at < cutoff),
         )
     )

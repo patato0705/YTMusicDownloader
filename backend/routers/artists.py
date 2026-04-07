@@ -159,34 +159,63 @@ def follow_artist(
         
         # Check existing subscription
         existing_sub = subs_svc.get_artist_subscription(db, artist_id)
-        
-        if existing_sub and existing_sub.mode == "full":
+        old_mode = existing_sub.mode if existing_sub else None
+
+        if old_mode == "full":
             return {
                 "message": "Artist already fully followed",
                 "artist_id": artist_id,
                 "mode": "full",
             }
-        
+
         # Fetch basic artist data
         artist_data = artists_svc.fetch_and_upsert_artist(db, artist_id)
         artist_name = artist_data.get("name", "Unknown Artist")
-        
+
         # Create or upgrade subscription to full mode
         artist_subscription = subs_svc.subscribe_to_artist(
             db,
             artist_id=artist_id,
             mode="full",
         )
-        
+
         # If upgrading from light to full, upgrade all album subscriptions
-        if existing_sub and existing_sub.mode == "light":
+        # and queue import_album for albums that have no DB data yet
+        imports_queued = 0
+        if old_mode == "light":
             upgraded_count = subs_svc.upgrade_all_album_subscriptions_to_download(db, artist_id)
             logger.info(f"Upgraded {upgraded_count} albums to download mode for artist {artist_id}")
-        
+
+            # Queue import_album for upgraded albums that lack Album rows in DB
+            from sqlalchemy import select
+            from ..models import AlbumSubscription, Album
+            upgraded_subs = (
+                db.execute(
+                    select(AlbumSubscription.album_id).where(
+                        AlbumSubscription.artist_id == artist_id,
+                        AlbumSubscription.mode == "download",
+                        ~AlbumSubscription.album_id.in_(select(Album.id)),
+                    )
+                ).scalars().all()
+            )
+            for album_id in upgraded_subs:
+                try:
+                    enqueue_job(
+                        db,
+                        job_type="import_album",
+                        payload={"browse_id": album_id, "artist_id": artist_id},
+                        priority=20,
+                        user_id=current_user.id,
+                        commit=False,
+                    )
+                    imports_queued += 1
+                except Exception as e:
+                    logger.exception(f"Failed to queue import_album for {album_id}")
+
         db.commit()
         logger.info(f"Artist {artist_id} followed in full mode")
-        
-        # Queue sync_artist job
+
+        # Queue sync_artist job (picks up any brand-new albums from API)
         try:
             job = enqueue_job(
                 db,
@@ -198,7 +227,7 @@ def follow_artist(
             logger.info(f"Queued sync_artist job {job.id} for artist {artist_id}")
         except Exception as e:
             logger.exception(f"Failed to queue sync_artist job for {artist_id}")
-        
+
         return {
             "message": f"Artist followed successfully in full mode. Syncing in background.",
             "artist": {
@@ -207,6 +236,7 @@ def follow_artist(
             },
             "mode": "full",
             "status": "syncing",
+            "imports_queued": imports_queued,
         }
         
     except HTTPException:
@@ -306,9 +336,37 @@ def update_artist_mode(
         if mode == "full":
             # Upgrade: metadata → download
             upgraded_count = subs_svc.upgrade_all_album_subscriptions_to_download(db, artist_id)
+
+            # Queue import_album for upgraded albums that lack Album rows in DB
+            from sqlalchemy import select
+            from ..models import AlbumSubscription, Album
+            imports_queued = 0
+            upgraded_subs = (
+                db.execute(
+                    select(AlbumSubscription.album_id).where(
+                        AlbumSubscription.artist_id == artist_id,
+                        AlbumSubscription.mode == "download",
+                        ~AlbumSubscription.album_id.in_(select(Album.id)),
+                    )
+                ).scalars().all()
+            )
+            for album_id in upgraded_subs:
+                try:
+                    enqueue_job(
+                        db,
+                        job_type="import_album",
+                        payload={"browse_id": album_id, "artist_id": artist_id},
+                        priority=20,
+                        user_id=current_user.id,
+                        commit=False,
+                    )
+                    imports_queued += 1
+                except Exception as e:
+                    logger.exception(f"Failed to queue import_album for {album_id}")
+
             db.commit()
-            
-            # Queue sync job
+
+            # Queue sync job (picks up any brand-new albums from API)
             try:
                 job = enqueue_job(
                     db,
@@ -317,16 +375,16 @@ def update_artist_mode(
                     priority=20,
                     user_id=current_user.id
                 )
-                db.commit()
                 logger.info(f"Queued sync_artist job {job.id} for upgraded artist {artist_id}")
             except Exception as e:
                 logger.exception(f"Failed to queue sync_artist job")
-            
+
             return {
                 "message": f"Artist upgraded to full mode. {upgraded_count} albums will be downloaded.",
                 "artist_id": artist_id,
                 "mode": "full",
                 "albums_upgraded": upgraded_count,
+                "imports_queued": imports_queued,
             }
         else:
             # Downgrade: download → metadata

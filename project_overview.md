@@ -544,3 +544,557 @@ If continuing this project, key things to remember:
 3. Unfollowing ≠ Deleting (keeps files)
 4. Album follow auto-creates light artist subscription
 5. Always respect the router→service→adapter pattern
+
+# Music Library Frontend - Project State & Context
+
+You are working on a **YouTube Music downloader frontend** for Jellyfin integration. This is a dark SaaS-style web application built with React, TypeScript, Vite, and Tailwind CSS.
+
+---
+
+## 🎨 DESIGN SYSTEM - CRITICAL
+
+### Theme: Dual-Theme Glassmorphism
+- **Light Mode**: Blue accent (`blue-600`, `indigo-600`)
+- **Dark Mode**: Red accent (`red-600`, `red-700`)
+- **Glass Effects**: `glass` class (backdrop-blur + transparency)
+- **Gradients**: Text gradients for headings, border gradients for cards
+- **Rounded Corners**: Large (2xl, 3xl) for modern feel
+
+### Core Design Tokens
+```css
+/* Glassmorphic backgrounds */
+.glass {
+  background: rgba(255, 255, 255, 0.4); /* Light mode */
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.dark .glass {
+  background: rgba(255, 255, 255, 0.05); /* Dark mode */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Gradient text */
+.text-gradient {
+  background: linear-gradient(to right, #2563eb, #4f46e5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dark .text-gradient {
+  background: linear-gradient(to right, #ef4444, #b91c1c);
+}
+
+/* Border gradients */
+.border-gradient {
+  border: 1px solid;
+  border-image: linear-gradient(to right, #3b82f6, #6366f1) 1;
+}
+```
+
+### Component Styling Patterns
+- **Primary Buttons**: `bg-blue-600 dark:bg-red-600 text-white`
+- **Ghost Buttons**: `text-muted-foreground hover:bg-slate-100 dark:hover:bg-white/10`
+- **Input Fields**: Glass background, rounded-xl, focus ring (blue/red)
+- **Cards**: Glass + border-gradient + rounded-3xl
+- **Modals**: Glass background, fade-in + zoom-in animations
+
+### Typography
+- **Headings**: Bold, text-gradient for emphasis
+- **Body**: `text-foreground` (automatic theme contrast)
+- **Muted**: `text-muted-foreground` (lower contrast)
+
+---
+
+## 🏗️ TECH STACK
+
+### Core
+- **React 18** with TypeScript
+- **Vite** (build tool)
+- **React Router** (routing)
+- **Tailwind CSS** (styling)
+
+### State Management
+- React Context API (Auth, Theme, i18n)
+- No external state libraries
+
+### Key Libraries
+- `react-router-dom` - Routing
+- Tailwind CSS - Styling (configured for dark mode)
+
+---
+
+## 📁 PROJECT STRUCTURE
+
+```
+src/
+├── api/                    # API clients
+│   ├── client.ts          # Base fetch wrapper with auth & error handling
+│   ├── auth.ts            # Login, register, refresh token
+│   ├── admin.ts           # User management, settings
+│   ├── charts.ts          # Charts API (follow/unfollow country charts)
+│   └── media.ts           # Image URL helpers
+│
+├── components/
+│   ├── ui/                # Reusable UI components
+│   │   ├── Button.tsx
+│   │   ├── Spinner.tsx
+│   │   ├── Toast.tsx
+│   │   ├── SearchInput.tsx
+│   │   ├── Select.tsx           # Custom styled dropdown
+│   │   ├── ConfirmDialog.tsx    # Confirmation modal
+│   │   └── CreateUserModal.tsx
+│   ├── admin/
+│   │   └── FollowChartModal.tsx # Admin chart follow modal
+│   ├── charts/
+│   │   └── ChartArtistGrid.tsx  # Compact artist grid (rank + trend)
+│   └── layout/
+│       ├── Navbar.tsx           # Top navigation (conditional charts link)
+│       ├── UserMenu.tsx         # User dropdown menu
+│       └── LanguageSelector.tsx # Language switcher (EN/FR)
+│
+├── contexts/              # React Context providers
+│   ├── AuthContext.tsx   # User auth state, login/logout
+│   ├── ThemeContext.tsx  # Dark/light mode toggle
+│   └── I18nContext.tsx   # Internationalization (EN/FR)
+│
+├── pages/
+│   ├── auth/
+│   │   ├── Login.tsx            # Login page with reactive validation
+│   │   ├── Register.tsx         # Registration (checks if enabled)
+│   │   └── ChangePassword.tsx
+│   ├── admin/
+│   │   └── AdminPanel.tsx       # Users + Charts + Settings tabs
+│   ├── Browse.tsx               # Search YouTube Music
+│   ├── Charts.tsx               # Country charts (card grid layout)
+│   └── Home.tsx
+│
+├── config/
+│   ├── i18n.ts           # SUPPORTED_LOCALES, Locale type, helpers
+│   └── charts.ts         # CHART_COUNTRIES (50+ countries with flags)
+│
+├── locales/              # Translation files
+│   ├── en.json
+│   └── fr.json
+│
+└── index.css             # Global styles, Tailwind imports, glass effects
+```
+
+---
+
+## 🔐 AUTHENTICATION FLOW
+
+### Token Management
+- **Access Token**: Short-lived (15min), stored in `localStorage`
+- **Refresh Token**: Long-lived, stored in `localStorage`
+- **Auto-refresh**: `client.ts` intercepts 401s and refreshes tokens
+- **No redirect on auth pages**: Login/register don't reload on error
+
+### client.ts Behavior
+```typescript
+// On 401 error:
+1. Try refreshing token
+2. If successful → retry original request
+3. If failed → clear tokens
+4. Only redirect to /login if NOT already on /login or /register
+```
+
+### Error Handling
+```typescript
+// ApiError structure
+class ApiError {
+  status: number;
+  message: string; // Parsed from response.detail or response.message
+  data: any;       // Full response body
+}
+
+// Parse errors (used in Login, Register, Admin)
+const parseApiError = (err: any): string => {
+  const data = err.data;
+  
+  // Array of validation errors
+  if (Array.isArray(data?.detail)) {
+    return data.detail.map(e => `${e.loc[e.loc.length-1]}: ${e.msg}`).join(', ');
+  }
+  
+  // String detail
+  if (typeof data?.detail === 'string') return data.detail;
+  
+  // Fallback to i18n
+  return err.message || t('auth.errors.invalidCredentials');
+};
+```
+
+---
+
+## 🌍 INTERNATIONALIZATION (i18n)
+
+### Configuration (`src/config/i18n.ts`)
+```typescript
+export const SUPPORTED_LOCALES = [
+  { code: 'en', name: 'English', flag: '🇬🇧' },
+  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+] as const;
+
+export type Locale = typeof SUPPORTED_LOCALES[number]['code'];
+```
+
+**To add a language:**
+1. Add to `SUPPORTED_LOCALES` array
+2. Create `/src/locales/{code}.json`
+3. That's it! (Type-safe, auto-updating)
+
+### Usage
+```typescript
+const { t } = useI18n();
+t('auth.login.title')                    // "Login"
+t('auth.errors.invalidEmail')            // "Invalid email"
+t('common.cancel')                       // "Cancel"
+```
+
+### Storage
+- Locale stored in `localStorage`
+- Auto-detects browser language on first visit
+- Falls back to English
+
+---
+
+## 📊 CHARTS FEATURE
+
+### Overview
+Admins can follow country music charts (YouTube Music). Top N artists are synced and displayed to all users.
+
+### API Endpoints
+```
+GET    /api/charts/{country_code}              # Get chart data
+GET    /api/charts?include_disabled=true       # List subscriptions
+POST   /api/charts/{country_code}/follow       # Follow chart (admin)
+DELETE /api/charts/{country_code}/follow       # Unfollow chart (admin)
+PATCH  /api/charts/{country_code}              # Update subscription (admin)
+```
+
+### Charts Configuration (`src/config/charts.ts`)
+- 50+ countries with flags and names
+- Helpers: `getCountry(code)`, `isValidCountryCode(code)`
+
+### Components
+**ChartArtistGrid.tsx** - Compact artist display
+- Circular artist images (64x64px)
+- Rank badge (top-left corner) - #1, #2, #3...
+- Trend indicator (bottom-right) - ↗ up, ↘ down, → neutral
+- Color-coded trends (green/red/gray)
+- Scrollable grid (max-height configurable)
+- Used in: Charts.tsx (public), AdminPanel.tsx (preview)
+
+**Charts.tsx** - Public charts page
+- Card grid layout (2 columns on lg screens)
+- Each country in its own glassmorphic card
+- Shows: flag, name, top N artists
+- Uses ChartArtistGrid (280px height)
+
+**AdminPanel - Charts Tab**
+- Country dropdown (only unfollowed countries)
+- Chart preview (top 40 artists, 200px height)
+- Follow button → opens FollowChartModal
+- Subscriptions table:
+  - Inline edit top_n_artists
+  - Enable/disable toggle
+  - Unfollow button
+  - Last sync timestamp
+
+**FollowChartModal.tsx**
+- Slider for top_n_artists (1-100)
+- Quick select buttons (10, 20, 40, 50, 100)
+- Shows country flag and name
+
+### Navbar Integration
+- Charts link only shows when `features.charts_enabled` setting is true
+- Checks on mount: `adminApi.Settings.areChartsEnabled()`
+- Shows in both desktop and mobile menus
+
+---
+
+## 🛠️ REUSABLE COMPONENTS
+
+### Select.tsx
+Custom styled dropdown (replaces browser default)
+```typescript
+<Select
+  value={filter}
+  onChange={setFilter}
+  options={[
+    { value: 'all', label: 'All Items' },
+    { value: 'active', label: 'Active Only' },
+  ]}
+  disabled={loading}
+/>
+```
+
+### Button.tsx
+```typescript
+<Button variant="primary" size="lg" isLoading={loading}>
+  Submit
+</Button>
+
+// Variants: primary, secondary, ghost, danger
+// Sizes: sm, md, lg
+```
+
+### Toast.tsx
+```typescript
+const [toast, setToast] = useState<{message: string; type: 'success'|'error'} | null>(null);
+
+<Toast
+  message={toast?.message}
+  type={toast?.type}
+  onClose={() => setToast(null)}
+/>
+```
+
+### ConfirmDialog.tsx
+```typescript
+<ConfirmDialog
+  isOpen={!!deleteConfirm}
+  title="Delete User"
+  message="Are you sure?"
+  confirmText="Delete"
+  cancelText="Cancel"
+  onConfirm={handleDelete}
+  onCancel={() => setDeleteConfirm(null)}
+  variant="danger"  // danger | warning | info
+/>
+```
+
+---
+
+## 🎨 STYLING BEST PRACTICES
+
+### When to Use Lists/Bullets
+- ❌ **Don't use** for reports, documents, explanations
+- ❌ **Don't use** when declining to help
+- ✅ **Only use** when user explicitly asks or when essential for clarity
+- Default to prose and paragraphs
+
+### Formatting Guidelines
+- Avoid over-formatting (excessive bold, headers, bullets)
+- Keep responses natural and conversational
+- Use minimum formatting needed for readability
+- For documents: write in prose, no bullets
+
+### Component Patterns
+```typescript
+// ❌ Don't: Inline styles
+<div style={{ backgroundColor: 'red' }}>
+
+// ✅ Do: Tailwind classes
+<div className="bg-red-500">
+
+// ❌ Don't: Magic numbers
+<div className="w-[347px]">
+
+// ✅ Do: Semantic sizes
+<div className="w-full max-w-md">
+
+// ❌ Don't: Hardcoded colors
+<div className="bg-blue-600">
+
+// ✅ Do: Theme-aware colors
+<div className="bg-blue-600 dark:bg-red-600">
+```
+
+---
+
+## 🚨 CRITICAL PATTERNS TO FOLLOW
+
+### Error Handling
+1. **Always** parse API errors with `parseApiError()`
+2. **Never** show raw error objects to users
+3. Field-level validation errors route to specific input fields
+4. General errors show at top of form
+
+### API Calls
+```typescript
+try {
+  const data = await someApi.call();
+  setToast({ message: 'Success!', type: 'success' });
+} catch (err: any) {
+  setToast({ message: parseApiError(err), type: 'error' });
+}
+```
+
+### File Organization
+- **No hooks folder** - inline hooks where used (unless 2+ files need it)
+- One component per file
+- Barrel exports in component folders (`index.ts`)
+
+### TypeScript
+- Use explicit types for API responses
+- Avoid `any` except in catch blocks
+- Use type imports: `import type { User } from '../api/admin'`
+
+---
+
+## 📋 ADMIN PANEL STRUCTURE
+
+### Three Tabs
+1. **👥 Users** (default)
+   - User table with search/filters
+   - Create user modal
+   - Role dropdown (inline edit)
+   - Activate/deactivate toggle
+   - Delete button → ConfirmDialog
+
+2. **📊 Charts**
+   - Country selection dropdown
+   - Chart preview (top 40 artists)
+   - Follow button → FollowChartModal
+   - Subscriptions table (manage followed charts)
+
+3. **⚙️ Settings**
+   - Key-value settings editor
+   - Boolean toggles, text inputs
+   - Save button
+
+### State Management
+```typescript
+const [activeTab, setActiveTab] = useState<'users' | 'charts' | 'settings'>('users');
+
+useEffect(() => {
+  if (activeTab === 'users') loadUsers();
+  else if (activeTab === 'charts') loadChartSubscriptions();
+  else if (activeTab === 'settings') loadSettings();
+}, [activeTab]);
+```
+
+---
+
+## 🎯 CURRENT FEATURE STATUS
+
+### ✅ Completed
+- Full authentication system (login, register, change password)
+- Token refresh with auto-retry
+- Admin panel (users + charts + settings)
+- Charts feature (follow countries, display top artists)
+- Internationalization (EN/FR)
+- Dark/light theme toggle
+- Reusable component library
+- Glassmorphic design system
+
+### 📝 i18n Keys Needed
+```json
+{
+  "nav": {
+    "home": "Home",
+    "browse": "Browse",
+    "library": "Library",
+    "charts": "Charts"
+  },
+  "admin": {
+    "tabs": {
+      "users": "Users",
+      "charts": "Charts",
+      "settings": "Settings"
+    },
+    "charts": {
+      "selectCountry": "Select a Country",
+      "followChart": "Follow Chart",
+      "unfollowChart": "Unfollow",
+      "currentSubscriptions": "Current Chart Subscriptions",
+      "followed": "Chart followed successfully",
+      "unfollowed": "Chart unfollowed successfully",
+      "updated": "Chart updated successfully"
+    }
+  }
+}
+```
+
+---
+
+## 🚀 QUICK START FOR NEW FEATURES
+
+### Adding a New Page
+1. Create component in `src/pages/`
+2. Add route in router configuration
+3. Add navigation link in `Navbar.tsx`
+4. Add i18n keys
+5. Follow glassmorphic design patterns
+
+### Adding a New API Endpoint
+1. Add function to appropriate `src/api/*.ts` file
+2. Define TypeScript types
+3. Use in component with try/catch + parseApiError
+4. Show success/error toasts
+
+### Adding a New Modal
+1. Copy structure from `ConfirmDialog.tsx` or `FollowChartModal.tsx`
+2. Use glass background + border-gradient
+3. Add fade-in + zoom-in animations
+4. Close button (✕) in top-right
+5. Fixed positioning with backdrop
+
+---
+
+## 💡 DEVELOPMENT TIPS
+
+### Always Check
+- ✅ Dark mode appearance
+- ✅ Mobile responsiveness
+- ✅ Error states (loading, error, empty)
+- ✅ i18n support (wrap all text in `t()`)
+- ✅ Accessibility (labels, ARIA, keyboard nav)
+
+### Never Do
+- ❌ Inline styles (use Tailwind)
+- ❌ Hardcoded text (use i18n)
+- ❌ Browser default form elements (use custom components)
+- ❌ Bare `<form>` in React artifacts (use div + onClick)
+- ❌ LocalStorage/SessionStorage in artifacts (not supported)
+
+### Component Checklist
+- [ ] TypeScript types defined
+- [ ] Props interface documented
+- [ ] Dark mode tested
+- [ ] Loading state handled
+- [ ] Error state handled
+- [ ] Empty state handled
+- [ ] i18n keys added
+- [ ] Responsive design verified
+
+---
+
+## 📦 FILES TO REFERENCE
+
+### Core Infrastructure
+- `/src/api/client.ts` - Base API client with auth
+- `/src/contexts/AuthContext.tsx` - Auth state
+- `/src/contexts/ThemeContext.tsx` - Theme state
+- `/src/contexts/I18nContext.tsx` - i18n state
+
+### Config Files
+- `/src/config/i18n.ts` - Language configuration
+- `/src/config/charts.ts` - Country configuration
+
+### Key Components
+- `/src/components/ui/Select.tsx` - Styled dropdown
+- `/src/components/ui/Button.tsx` - Button variants
+- `/src/components/charts/ChartArtistGrid.tsx` - Compact artist grid
+
+### Pages
+- `/src/pages/admin/AdminPanel.tsx` - Admin interface
+- `/src/pages/Charts.tsx` - Public charts page
+- `/src/pages/auth/Login.tsx` - Login with error handling
+
+---
+
+## 🎨 DESIGN REFERENCE
+
+When creating new components, reference these for consistency:
+- `Button.tsx` - Button patterns
+- `CreateUserModal.tsx` - Modal structure
+- `Charts.tsx` - Card grid layout
+- `AdminPanel.tsx` - Tab navigation
+- `Login.tsx` - Form validation patterns
+
+---
+
+**Remember**: This is a dark SaaS application with dual-theme glassmorphism. Every component should feel modern, sleek, and professional with smooth animations and thoughtful UX.

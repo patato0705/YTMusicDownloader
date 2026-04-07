@@ -750,31 +750,44 @@ def sync_artist(session: Session, artist_id: str) -> Dict[str, Any]:
         _db_operation_with_retry(commit_error)
         return {"ok": False, "error": str(e)}
     
-    # Identify new albums (not already subscribed)
+    # Categorise albums into three buckets:
+    #  - new: no subscription at all
+    #  - upgradeable: have metadata sub, need download (full mode only)
+    #  - missing_data: have download sub but no Album row in DB (need re-import)
+    album_mode = "download" if sync_mode == "full" else "metadata"
     new_albums = []
+    upgradeable_albums = []
+    missing_data_albums = []
+
     for album_item in all_albums:
         album_id = album_item.get("id") or album_item.get("browseId")
         if not album_id:
             continue
-        
-        # Check if album subscription exists
+
         existing_sub = subs_svc.get_album_subscription(session, album_id)
         if not existing_sub:
             new_albums.append(album_item)
-    
-    logger.info(f"Found {len(new_albums)} new albums for artist {artist_id}")
-    
-    # ===== TRANSACTION 4: Create album subscriptions based on mode =====
+        elif sync_mode == "full" and existing_sub.mode == "metadata":
+            upgradeable_albums.append(album_item)
+        elif sync_mode == "full" and existing_sub.mode == "download":
+            # Check if Album row actually exists in DB
+            album_row = session.get(Album, album_id)
+            if not album_row:
+                missing_data_albums.append(album_item)
+
+    logger.info(
+        f"Artist {artist_id}: {len(new_albums)} new albums, "
+        f"{len(upgradeable_albums)} to upgrade, "
+        f"{len(missing_data_albums)} missing data (need re-import)"
+    )
+
+    # ===== TRANSACTION 4: Create/upgrade album subscriptions =====
     subscriptions_created = 0
-    
-    # Determine album subscription mode based on artist mode
-    album_mode = "download" if sync_mode == "full" else "metadata"
-    
+
     for album_item in new_albums:
         album_id = album_item.get("id") or album_item.get("browseId")
         if not album_id:
             continue
-        
         try:
             subs_svc.subscribe_to_album(
                 session,
@@ -785,43 +798,57 @@ def sync_artist(session: Session, artist_id: str) -> Dict[str, Any]:
             subscriptions_created += 1
         except Exception as e:
             logger.exception(f"Failed to create album subscription for {album_id}")
-    
+
+    # Upgrade metadata → download for existing subs
+    upgraded_count = 0
+    if upgradeable_albums:
+        upgraded_count = subs_svc.upgrade_all_album_subscriptions_to_download(session, artist_id)
+
     def commit_subscriptions():
         session.commit()
-    
+
     _db_operation_with_retry(commit_subscriptions)
-    
-    logger.info(f"Created {subscriptions_created} album subscriptions (mode={album_mode}) for artist {artist_id}")
-    
-    # ===== TRANSACTION 5: Queue import_album jobs (only in full mode) =====
+
+    logger.info(
+        f"Created {subscriptions_created} album subscriptions (mode={album_mode}), "
+        f"upgraded {upgraded_count} to download for artist {artist_id}"
+    )
+
+    # ===== TRANSACTION 5: Queue import_album jobs =====
     from .jobqueue import enqueue_job
     jobs_queued = 0
-    
+
+    # Albums that need import: new + upgraded + missing data (all full mode only)
+    albums_to_import = []
+
     if sync_mode == "full":
-        # Full mode: queue import jobs (which will download tracks)
-        for album_item in new_albums:
-            browse_id = album_item.get("id") or album_item.get("browseId")
-            if not browse_id:
-                continue
-            
-            try:
-                enqueue_job(
-                    session,
-                    job_type="import_album",
-                    payload={
-                        "browse_id": browse_id,
-                        "artist_id": artist_id,
-                    },
-                    priority=20
-                )
-                jobs_queued += 1
-                logger.debug(f"Queued import_album job for {browse_id}")
-            except Exception as e:
-                logger.exception(f"Failed to queue import_album job for {browse_id}")
-        
+        albums_to_import.extend(new_albums)
+        albums_to_import.extend(upgradeable_albums)
+        albums_to_import.extend(missing_data_albums)
+    # Light mode: no import jobs
+
+    for album_item in albums_to_import:
+        browse_id = album_item.get("id") or album_item.get("browseId")
+        if not browse_id:
+            continue
+        try:
+            enqueue_job(
+                session,
+                job_type="import_album",
+                payload={
+                    "browse_id": browse_id,
+                    "artist_id": artist_id,
+                },
+                priority=20
+            )
+            jobs_queued += 1
+            logger.debug(f"Queued import_album job for {browse_id}")
+        except Exception as e:
+            logger.exception(f"Failed to queue import_album job for {browse_id}")
+
+    if sync_mode == "full":
         logger.info(f"Queued {jobs_queued} import_album jobs for artist {artist_id}")
     else:
-        # Light mode: no download jobs
         logger.info(f"Light mode: skipping download jobs for artist {artist_id}")
     
     # ===== TRANSACTION 6: Update sync timestamp =====
