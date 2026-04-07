@@ -2,11 +2,15 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
+import { useAuth } from '../contexts/AuthContext';
 import { getArtist, followArtist, unfollowArtist } from '../api/artists';
+import { deleteLibraryArtist } from '../api/library';
 import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
+import { Toast } from '../components/ui/Toast';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { categorizeAlbums } from '../utils';
 import type { Album } from '../types';
@@ -20,8 +24,14 @@ export default function Artist(): JSX.Element {
   const [isFollowing, setIsFollowing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [artistImageError, setArtistImageError] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [source, setSource] = useState<string>('');
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'administrator';
 
   useEffect(() => {
     if (artistId) {
@@ -48,6 +58,7 @@ export default function Artist(): JSX.Element {
       
       setAlbums(allAlbums);
       setIsFollowing(data.followed || false);
+      setSource(data.source || '');
     } catch (err: any) {
       console.error('Failed to load artist:', err);
       setError(err.message || t('common.error'));
@@ -70,9 +81,26 @@ export default function Artist(): JSX.Element {
       }
     } catch (err: any) {
       console.error('Follow action failed:', err);
-      alert(err.message || t('common.error'));
+      setToast({ message: err.message || t('common.error'), type: 'error' });
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!artistId) return;
+
+    setDeleteLoading(true);
+    try {
+      await deleteLibraryArtist(artistId);
+      setToast({ message: t('artist.deleted'), type: 'success' });
+      setTimeout(() => navigate('/library'), 1500);
+    } catch (err: any) {
+      console.error('Delete failed:', err);
+      setToast({ message: err.message || t('common.error'), type: 'error' });
+    } finally {
+      setDeleteLoading(false);
+      setDeleteConfirm(false);
     }
   };
 
@@ -125,12 +153,38 @@ export default function Artist(): JSX.Element {
   const { albums: regularAlbums, singles } = categorizeAlbums(albums);
   const artistThumbnailUrl = getImageUrl(artist.image_local || artist.thumbnail);
 
+  const getAlbumStatus = (album: any): 'downloaded' | 'in_library' | undefined => {
+    if (source !== 'database') return undefined;
+    // Album has local data — it's in the DB
+    if (album.image_local || album.tracks_total != null) {
+      const total = album.tracks_total ?? 0;
+      const downloaded = album.tracks_downloaded ?? 0;
+      return total > 0 && downloaded >= total ? 'downloaded' : 'in_library';
+    }
+    return undefined; // Not yet synced to DB
+  };
+
   return (
     <div className="relative min-h-screen">
       {/* Background effects */}
       <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
       <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-      
+
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
+
+      <ConfirmDialog
+        isOpen={deleteConfirm}
+        title={t('artist.deleteTitle')}
+        message={t('artist.deleteMessage', { name: artist.name }) || `Are you sure you want to delete "${artist.name}" and all associated albums, tracks, and files? This cannot be undone.`}
+        confirmText={t('common.delete')}
+        cancelText={t('common.cancel')}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteConfirm(false)}
+        variant="danger"
+      />
+
       {/* Main content */}
       <div className="relative z-10 space-y-12 pb-12">
         {/* Artist header */}
@@ -195,6 +249,17 @@ export default function Artist(): JSX.Element {
                 >
                   ← {t('common.back')}
                 </Button>
+
+                {isAdmin && source === 'database' && (
+                  <Button
+                    onClick={() => setDeleteConfirm(true)}
+                    variant="danger"
+                    size="lg"
+                    isLoading={deleteLoading}
+                  >
+                    🗑️ {t('artist.delete')}
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -213,6 +278,7 @@ export default function Artist(): JSX.Element {
                   thumbnail={getImageUrl(album.image_local || album.thumbnail)}
                   type="album"
                   year={album.year}
+                  mediaStatus={getAlbumStatus(album)}
                   onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
                 />
               ))}
@@ -233,6 +299,7 @@ export default function Artist(): JSX.Element {
                   thumbnail={getImageUrl(album.image_local || album.thumbnail)}
                   type="album"
                   year={album.year}
+                  mediaStatus={getAlbumStatus(album)}
                   onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
                 />
               ))}

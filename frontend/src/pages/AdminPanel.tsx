@@ -16,6 +16,8 @@ import { FollowChartModal } from '../components/ui/FollowChartModal';
 import { ChartArtistGrid } from '../components/ui/ChartArtistGrid';
 import * as adminApi from '../api/admin';
 import * as chartsApi from '../api/charts';
+import { cleanupLibrary } from '../api/library';
+import type { CleanupResult } from '../api/library';
 import { CHART_COUNTRIES, getCountry } from '../config/charts';
 import type { Setting, User } from '../api/admin';
 import type { ChartSubscription, Chart } from '../api/charts';
@@ -45,6 +47,9 @@ export default function AdminPanel(): JSX.Element {
   const [showFollowModal, setShowFollowModal] = useState(false);
   const [loadingChart, setLoadingChart] = useState(false);
   
+  // Cleanup
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+
   // User filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -283,6 +288,31 @@ export default function AdminPanel(): JSX.Element {
     }
   };
 
+  // ============================================================================
+  // LIBRARY CLEANUP
+  // ============================================================================
+
+  const handleCleanup = async () => {
+    setCleanupLoading(true);
+    try {
+      const result: CleanupResult = await cleanupLibrary();
+      const total = result.orphaned_tracks_removed + result.orphaned_albums_removed + result.orphaned_artists_removed;
+      if (total === 0) {
+        setToast({ message: t('admin.settings.cleanupNone'), type: 'success' });
+      } else {
+        const parts: string[] = [];
+        if (result.orphaned_artists_removed > 0) parts.push(`${result.orphaned_artists_removed} artists`);
+        if (result.orphaned_albums_removed > 0) parts.push(`${result.orphaned_albums_removed} albums`);
+        if (result.orphaned_tracks_removed > 0) parts.push(`${result.orphaned_tracks_removed} tracks`);
+        setToast({ message: `${t('admin.settings.cleanupDone')}: ${parts.join(', ')} removed`, type: 'success' });
+      }
+    } catch (err: any) {
+      setToast({ message: parseApiError(err), type: 'error' });
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
   // Filter users based on search and filters
   const filteredUsers = users.filter(u => {
     // Search filter
@@ -376,6 +406,33 @@ export default function AdminPanel(): JSX.Element {
             {t('admin.settings.save')} {t('admin.settings.title')}
           </Button>
         </div>
+
+        {/* Maintenance */}
+        <section>
+          <SectionHeader>{t('admin.settings.maintenance')}</SectionHeader>
+
+          <div className="glass rounded-2xl p-6 border-gradient space-y-4">
+            <div className="flex items-center justify-between py-3">
+              <div className="flex-1 mr-4">
+                <label className="font-semibold text-foreground block mb-1">
+                  {t('admin.settings.cleanupTitle')}
+                </label>
+                <p className="text-sm text-muted-foreground">
+                  {t('admin.settings.cleanupDescription')}
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <Button
+                  onClick={handleCleanup}
+                  isLoading={cleanupLoading}
+                  variant="outline"
+                >
+                  {t('admin.settings.cleanupButton')}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     );
   };

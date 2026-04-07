@@ -248,6 +248,7 @@ export default function Library(): JSX.Element {
                       title={artist.name}
                       thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
                       type="artist"
+                      mediaStatus="in_library"
                       onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
                     />
                   ))}
@@ -262,18 +263,22 @@ export default function Library(): JSX.Element {
                   {t('library.albums')}
                 </SectionHeader>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                  {displayedAlbums.map((album) => (
-                    <MediaCard
-                      key={album.id}
-                      id={album.id}
-                      title={album.title}
-                      subtitle={album.artist_name}
-                      thumbnail={getImageUrl(album.image_local || album.thumbnail)}
-                      type="album"
-                      year={album.year}
-                      onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
-                    />
-                  ))}
+                  {displayedAlbums.map((album) => {
+                    const isDownloaded = album.tracks_total != null && album.tracks_total > 0 && album.tracks_downloaded === album.tracks_total;
+                    return (
+                      <MediaCard
+                        key={album.id}
+                        id={album.id}
+                        title={album.title}
+                        subtitle={album.artist_name}
+                        thumbnail={getImageUrl(album.image_local || album.thumbnail)}
+                        type="album"
+                        year={album.year}
+                        mediaStatus={isDownloaded ? 'downloaded' : 'in_library'}
+                        onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+                      />
+                    );
+                  })}
                 </div>
               </section>
             )}

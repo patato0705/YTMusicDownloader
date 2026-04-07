@@ -207,3 +207,31 @@ export async function getLibraryStats(): Promise<LibraryStats> {
 export async function getAlbumProgress(albumId: string): Promise<AlbumProgress> {
   return api.get<AlbumProgress>(`/library/albums/${encodeURIComponent(albumId)}/progress`);
 }
+
+/**
+ * Delete an artist and all associated albums, tracks, files, and subscriptions (admin only)
+ */
+export async function deleteLibraryArtist(artistId: string): Promise<{ message: string }> {
+  return api.delete(`/library/artists/${encodeURIComponent(artistId)}`);
+}
+
+/**
+ * Delete an album and all associated tracks, files, and subscription (admin only)
+ */
+export async function deleteLibraryAlbum(albumId: string): Promise<{ message: string }> {
+  return api.delete(`/library/albums/${encodeURIComponent(albumId)}`);
+}
+
+export interface CleanupResult {
+  message: string;
+  orphaned_tracks_removed: number;
+  orphaned_albums_removed: number;
+  orphaned_artists_removed: number;
+}
+
+/**
+ * Remove orphaned tracks, albums, and artists (admin only)
+ */
+export async function cleanupLibrary(): Promise<CleanupResult> {
+  return api.post<CleanupResult>('/library/cleanup');
+}

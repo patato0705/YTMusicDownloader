@@ -97,7 +97,11 @@
     "singles": "Singles & EPs",
     "noAlbums": "No Albums Yet",
     "noAlbumsDescription": "This artist doesn't have any albums in our database yet.",
-    "notFound": "Artist not found"
+    "notFound": "Artist not found",
+    "delete": "Delete Artist",
+    "deleteTitle": "Delete Artist",
+    "deleteMessage": "Are you sure you want to delete this artist and all associated albums, tracks, and files? This cannot be undone.",
+    "deleted": "Artist deleted successfully"
   },
   "album": {
     "album": "Album",
@@ -107,7 +111,13 @@
     "tracks": "tracks",
     "download": "Download Album",
     "downloadQueued": "Album download queued successfully",
+    "downloadQueuedWithArtist": "Album download queued. Artist also added to your library.",
     "downloadFailed": "Download failed",
+    "deleteAlbum": "Delete Album",
+    "deleteTitle": "Delete Album",
+    "deleteMessage": "Are you sure you want to delete this album and all associated tracks and files? This cannot be undone.",
+    "deleted": "Album deleted successfully",
+    "following": "In Library",
     "trackList": "Track List",
     "title": "Title",
     "artist": "Artist",
@@ -161,7 +171,13 @@
     "settings": {
       "title": "Settings",
       "save": "Save",
-      "saved": "Settings saved successfully"
+      "saved": "Settings saved successfully",
+      "maintenance": "Maintenance",
+      "cleanupTitle": "Library Cleanup",
+      "cleanupDescription": "Remove orphaned tracks, albums, and artists that are no longer associated with any subscription.",
+      "cleanupButton": "Run Cleanup",
+      "cleanupDone": "Cleanup complete",
+      "cleanupNone": "No orphaned items found"
     },
     
     "users": {

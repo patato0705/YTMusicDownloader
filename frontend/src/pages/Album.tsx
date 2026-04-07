@@ -2,10 +2,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
+import { useAuth } from '../contexts/AuthContext';
 import { getAlbum, followAlbum } from '../api/albums';
+import { deleteLibraryAlbum } from '../api/library';
 import { getImageUrl } from '../api/media';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
+import { Toast } from '../components/ui/Toast';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { formatDuration, getPrimaryArtist } from '../utils';
 import type { Track } from '../types';
@@ -19,8 +23,14 @@ export default function Album(): JSX.Element {
   const [isFollowing, setIsFollowing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [source, setSource] = useState<string>('');
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'administrator';
 
   useEffect(() => {
     if (albumId) {
@@ -40,6 +50,7 @@ export default function Album(): JSX.Element {
       setAlbum(data.album || data);
       setTracks(data.tracks || []);
       setIsFollowing(data.followed || false);
+      setSource(data.source || '');
     } catch (err: any) {
       console.error('Failed to load album:', err);
       setError(err.message || t('common.error'));
@@ -53,14 +64,34 @@ export default function Album(): JSX.Element {
 
     setActionLoading(true);
     try {
-      await followAlbum(albumId);
+      const result = await followAlbum(albumId);
       setIsFollowing(true);
-      alert(t('album.downloadQueued'));
+      const message = result?.artist_subscription_created
+        ? t('album.downloadQueuedWithArtist')
+        : t('album.downloadQueued');
+      setToast({ message, type: 'success' });
     } catch (err: any) {
       console.error('Download failed:', err);
-      alert(err.message || t('album.downloadFailed'));
+      setToast({ message: err.message || t('album.downloadFailed'), type: 'error' });
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!albumId) return;
+
+    setDeleteLoading(true);
+    try {
+      await deleteLibraryAlbum(albumId);
+      setToast({ message: t('album.deleted'), type: 'success' });
+      setTimeout(() => navigate('/library'), 1500);
+    } catch (err: any) {
+      console.error('Delete failed:', err);
+      setToast({ message: err.message || t('common.error'), type: 'error' });
+    } finally {
+      setDeleteLoading(false);
+      setDeleteConfirm(false);
     }
   };
 
@@ -144,7 +175,22 @@ export default function Album(): JSX.Element {
       {/* Background effects */}
       <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
       <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-      
+
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
+
+      <ConfirmDialog
+        isOpen={deleteConfirm}
+        title={t('album.deleteTitle')}
+        message={t('album.deleteMessage', { title: album.title }) || `Are you sure you want to delete "${album.title}" and all associated tracks and files? This cannot be undone.`}
+        confirmText={t('common.delete')}
+        cancelText={t('common.cancel')}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteConfirm(false)}
+        variant="danger"
+      />
+
       {/* Main content */}
       <div className="relative z-10 space-y-12 pb-12">
         {/* Album header */}
@@ -246,6 +292,17 @@ export default function Album(): JSX.Element {
                 >
                   ← {t('common.back')}
                 </Button>
+
+                {isAdmin && source === 'database' && (
+                  <Button
+                    onClick={() => setDeleteConfirm(true)}
+                    variant="danger"
+                    size="lg"
+                    isLoading={deleteLoading}
+                  >
+                    🗑️ {t('album.deleteAlbum')}
+                  </Button>
+                )}
               </div>
             </div>
           </div>

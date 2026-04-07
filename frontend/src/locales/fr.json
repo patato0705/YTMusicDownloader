@@ -81,7 +81,11 @@
     "unfollow": "Ne plus suivre",
     "following": "Suivi",
     "sync": "Synchroniser",
-    "syncing": "Synchronisation..."
+    "syncing": "Synchronisation...",
+    "delete": "Supprimer l'artiste",
+    "deleteTitle": "Supprimer l'artiste",
+    "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet artiste et tous les albums, titres et fichiers associés ? Cette action est irréversible.",
+    "deleted": "Artiste supprimé avec succès"
   },
   "album": {
     "tracks": "Titres",
@@ -90,7 +94,15 @@
     "follow": "Suivre",
     "unfollow": "Ne plus suivre",
     "download": "Télécharger",
-    "downloading": "Téléchargement..."
+    "downloading": "Téléchargement...",
+    "downloadQueued": "Téléchargement de l'album en file d'attente",
+    "downloadQueuedWithArtist": "Téléchargement en file d'attente. L'artiste a aussi été ajouté à votre bibliothèque.",
+    "downloadFailed": "Échec du téléchargement",
+    "deleteAlbum": "Supprimer l'album",
+    "deleteTitle": "Supprimer l'album",
+    "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet album et tous les titres et fichiers associés ? Cette action est irréversible.",
+    "deleted": "Album supprimé avec succès",
+    "following": "Dans la bibliothèque"
   },
   "library": {
     "title": "Bibliothèque",
@@ -126,6 +138,16 @@
       "email": "Email",
       "role": "Rôle",
       "changePassword": "Changer le mot de passe"
+    }
+  },
+  "admin": {
+    "settings": {
+      "maintenance": "Maintenance",
+      "cleanupTitle": "Nettoyage de la bibliothèque",
+      "cleanupDescription": "Supprimer les titres, albums et artistes orphelins qui ne sont plus associés à aucun abonnement.",
+      "cleanupButton": "Lancer le nettoyage",
+      "cleanupDone": "Nettoyage terminé",
+      "cleanupNone": "Aucun élément orphelin trouvé"
     }
   },
   "jobs": {
