@@ -21,10 +21,11 @@ export default function Artist(): JSX.Element {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [subscriptionMode, setSubscriptionMode] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [artistImageError, setArtistImageError] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [unfollowConfirm, setUnfollowConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [source, setSource] = useState<string>('');
@@ -57,7 +58,7 @@ export default function Artist(): JSX.Element {
       ];
       
       setAlbums(allAlbums);
-      setIsFollowing(data.followed || false);
+      setSubscriptionMode(data.subscription_mode ?? null);
       setSource(data.source || '');
     } catch (err: any) {
       console.error('Failed to load artist:', err);
@@ -70,20 +71,36 @@ export default function Artist(): JSX.Element {
   const handleFollow = async () => {
     if (!artistId) return;
 
+    if (subscriptionMode === 'full') {
+      setUnfollowConfirm(true);
+      return;
+    }
+
     setActionLoading(true);
     try {
-      if (isFollowing) {
-        await unfollowArtist(artistId);
-        setIsFollowing(false);
-      } else {
-        await followArtist(artistId);
-        setIsFollowing(true);
-      }
+      await followArtist(artistId);
+      setSubscriptionMode('full');
     } catch (err: any) {
       console.error('Follow action failed:', err);
       setToast({ message: err.message || t('common.error'), type: 'error' });
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleUnfollow = async () => {
+    if (!artistId) return;
+
+    setActionLoading(true);
+    try {
+      await unfollowArtist(artistId);
+      setSubscriptionMode(null);
+    } catch (err: any) {
+      console.error('Unfollow failed:', err);
+      setToast({ message: err.message || t('common.error'), type: 'error' });
+    } finally {
+      setActionLoading(false);
+      setUnfollowConfirm(false);
     }
   };
 
@@ -175,6 +192,17 @@ export default function Artist(): JSX.Element {
       )}
 
       <ConfirmDialog
+        isOpen={unfollowConfirm}
+        title={t('artist.unfollowTitle')}
+        message={t('artist.unfollowMessage')}
+        confirmText={t('artist.unfollow')}
+        cancelText={t('common.cancel')}
+        onConfirm={handleUnfollow}
+        onCancel={() => setUnfollowConfirm(false)}
+        variant="warning"
+      />
+
+      <ConfirmDialog
         isOpen={deleteConfirm}
         title={t('artist.deleteTitle')}
         message={t('artist.deleteMessage', { name: artist.name }) || `Are you sure you want to delete "${artist.name}" and all associated albums, tracks, and files? This cannot be undone.`}
@@ -226,13 +254,13 @@ export default function Artist(): JSX.Element {
                 <Button
                   onClick={handleFollow}
                   isLoading={actionLoading}
-                  variant={isFollowing ? 'secondary' : 'primary'}
+                  variant={subscriptionMode === 'full' ? 'secondary' : 'primary'}
                   size="lg"
                 >
-                  {isFollowing ? (
+                  {subscriptionMode === 'full' ? (
                     <>
                       <span className="mr-2">✓</span>
-                      {t('artist.following')}
+                      {t('artist.unfollow')}
                     </>
                   ) : (
                     <>
@@ -241,7 +269,7 @@ export default function Artist(): JSX.Element {
                     </>
                   )}
                 </Button>
-                
+
                 <Button
                   onClick={() => navigate(-1)}
                   variant="ghost"
@@ -250,7 +278,7 @@ export default function Artist(): JSX.Element {
                   ← {t('common.back')}
                 </Button>
 
-                {isAdmin && source === 'database' && (
+                {isAdmin && subscriptionMode != null && (
                   <Button
                     onClick={() => setDeleteConfirm(true)}
                     variant="danger"

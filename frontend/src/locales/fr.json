@@ -79,6 +79,8 @@
     "singles": "Singles & EPs",
     "follow": "Suivre",
     "unfollow": "Ne plus suivre",
+    "unfollowTitle": "Ne plus suivre l'artiste",
+    "unfollowMessage": "Les nouveaux albums ne seront plus automatiquement suivis. Le contenu déjà téléchargé ne sera pas affecté.",
     "following": "Suivi",
     "sync": "Synchroniser",
     "syncing": "Synchronisation...",
