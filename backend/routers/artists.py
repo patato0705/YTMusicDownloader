@@ -255,36 +255,33 @@ def unfollow_artist(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Unfollow an artist (delete subscription).
-    
-    - Removes artist subscription
+    Unfollow an artist (downgrade to light mode).
+
+    - Downgrades artist subscription to light mode
     - Downgrades all album subscriptions to metadata mode
     - Does NOT delete files or database records
     """
     if not artist_id:
         raise HTTPException(status_code=400, detail="artist_id required")
-    
+
     try:
         # Check if subscription exists
         subscription = subs_svc.get_artist_subscription(db, artist_id)
         if not subscription:
             raise HTTPException(status_code=404, detail="Artist is not followed")
-        
+
         # Downgrade all album subscriptions to metadata mode
         downgraded_count = subs_svc.downgrade_all_album_subscriptions_to_metadata(db, artist_id)
-        
-        # Delete artist subscription
-        success = subs_svc.unsubscribe_from_artist(db, artist_id)
-        
-        if not success:
-            raise HTTPException(status_code=404, detail="Artist subscription not found")
-        
+
+        # Downgrade artist subscription to light mode
+        subscription.mode = "light"
+
         db.commit()
-        
-        logger.info(f"Artist {artist_id} unfollowed: {downgraded_count} albums downgraded to metadata mode")
-        
+
+        logger.info(f"Artist {artist_id} unfollowed: downgraded to light mode, {downgraded_count} albums downgraded to metadata mode")
+
         return {
-            "message": "Artist unfollowed successfully. Files and metadata preserved.",
+            "message": "Artist unfollowed successfully. Downgraded to light mode.",
             "artist_id": artist_id,
             "albums_downgraded": downgraded_count,
         }
