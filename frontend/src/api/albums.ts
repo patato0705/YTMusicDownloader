@@ -15,7 +15,7 @@ export interface Album {
   type?: string;
   image_local?: string;
   tracks?: any[];
-  followed?: boolean;
+  mode?: string | null;
   [key: string]: any;
 }
 
@@ -28,19 +28,19 @@ export async function getAlbum(albumId: string): Promise<Album> {
 }
 
 /**
- * Follow an album
+ * Download an album
  * 1. Fetch album from YTMusic if not in DB
- * 2. Create album subscription
+ * 2. Set album mode to "download"
  * 3. Queue download jobs for all tracks
  */
-export async function followAlbum(albumId: string): Promise<any> {
-  return api.post(`/albums/${encodeURIComponent(albumId)}/follow`);
+export async function downloadAlbum(albumId: string): Promise<any> {
+  return api.post(`/albums/${encodeURIComponent(albumId)}/download`);
 }
 
 /**
- * Unfollow an album
- * Removes album subscription but doesn't delete data or cancel jobs
+ * Cancel album download
+ * Reverts album to metadata mode; does not delete data or files
  */
-export async function unfollowAlbum(albumId: string): Promise<any> {
-  return api.delete(`/albums/${encodeURIComponent(albumId)}/follow`);
+export async function cancelAlbumDownload(albumId: string): Promise<any> {
+  return api.delete(`/albums/${encodeURIComponent(albumId)}/download`);
 }

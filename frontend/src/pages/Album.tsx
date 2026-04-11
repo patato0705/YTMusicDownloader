@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
-import { getAlbum, followAlbum } from '../api/albums';
+import { getAlbum, downloadAlbum } from '../api/albums';
 import { deleteLibraryAlbum } from '../api/library';
 import { getImageUrl } from '../api/media';
 import { Spinner } from '../components/ui/Spinner';
@@ -49,7 +49,7 @@ export default function Album(): JSX.Element {
       const data = await getAlbum(albumId);
       setAlbum(data.album || data);
       setTracks(data.tracks || []);
-      setIsFollowing(data.followed || false);
+      setIsFollowing(data.mode === 'download');
       setSource(data.source || '');
     } catch (err: any) {
       console.error('Failed to load album:', err);
@@ -64,7 +64,7 @@ export default function Album(): JSX.Element {
 
     setActionLoading(true);
     try {
-      const result = await followAlbum(albumId);
+      const result = await downloadAlbum(albumId);
       setIsFollowing(true);
       const message = result?.artist_subscription_created
         ? t('album.downloadQueuedWithArtist')
