@@ -4,8 +4,8 @@ Album endpoints.
 
 Endpoints :
 - GET /api/albums/{album_id} - Get album details
-- POST /api/albums/{album_id}/follow - Follow album (queue downloads)
-- DELETE /api/albums/{album_id}/follow - Unfollow album
+- POST /api/albums/{album_id}/download - Download album (queue track downloads)
+- DELETE /api/albums/{album_id}/download - Stop downloading album (revert to metadata)
 """
 from __future__ import annotations
 import logging
@@ -37,19 +37,16 @@ def get_album(
 ) -> Dict[str, Any]:
     """
     Get album details - tries DB first, then fetches from YTMusic if not found.
-    Returns album data with tracks list and subscription status.
+    Returns album data with tracks list and mode.
     """
     if not album_id:
         raise HTTPException(status_code=400, detail="album_id required")
-    
+
     try:
         # Try DB first using service layer
         album = albums_svc.get_album_from_db(db, album_id, include_tracks=True)
-        
+
         if album:
-            # Check subscription status
-            subscription = subs_svc.get_album_subscription(db, album_id)
-            
             # Get artist info from DB
             artist = None
             if album.get("artist_id"):
@@ -63,7 +60,7 @@ def get_album(
 
             return {
                 "source": "database",
-                "followed": subscription is not None,
+                "mode": album.get("mode", "metadata"),
                 "album": {
                     "id": album["id"],
                     "title": album["title"],
@@ -76,16 +73,16 @@ def get_album(
                 },
                 "tracks": album.get("tracks", []),
             }
-        
+
         # Not in DB - fetch from YTMusic
         logger.info(f"Album {album_id} not in DB, fetching from YTMusic")
         from ..ytm_service import adapter as ytm_adapter
-        
+
         album_data = ytm_adapter.get_album(browse_id=album_id)
-        
+
         if not album_data or not album_data.get("id"):
             raise HTTPException(status_code=404, detail="Album not found in YTMusic")
-        
+
         # Extract artist info from artists list
         artist = None
         artists = album_data.get("artists", [])
@@ -96,10 +93,10 @@ def get_album(
                     "id": first_artist.get("id"),
                     "name": first_artist.get("name")
                 }
-        
+
         return {
             "source": "ytmusic",
-            "followed": False,
+            "mode": None,
             "album": {
                 "id": album_data.get("id", album_id),
                 "title": album_data.get("title"),
@@ -111,7 +108,7 @@ def get_album(
             },
             "tracks": album_data.get("tracks", []),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -119,27 +116,27 @@ def get_album(
         raise HTTPException(status_code=500, detail=f"Failed retrieving album: {e}")
 
 
-@router.post("/{album_id}/follow", status_code=status.HTTP_200_OK)
-def follow_album(
+@router.post("/{album_id}/download", status_code=status.HTTP_200_OK)
+def download_album(
     album_id: str,
     current_user: User = Depends(require_member_or_admin),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Follow an album:
+    Download an album:
     1. Fetch album from YTMusic if not in DB
-    2. Create album subscription
+    2. Set album mode to "download"
     3. Queue download jobs for all tracks
-    
+
     Returns album data and count of queued jobs.
     """
     if not album_id:
         raise HTTPException(status_code=400, detail="album_id required")
-    
+
     try:
         # Check if album exists in DB
         album = albums_svc.get_album_from_db(db, album_id, include_tracks=True)
-        
+
         if not album:
             # Not in DB - fetch and upsert from YTMusic
             logger.info(f"Album {album_id} not in DB, fetching from YTMusic")
@@ -156,7 +153,7 @@ def follow_album(
                 if isinstance(first_artist, dict):
                     artist_id = first_artist.get("id")
                     artist_name = first_artist.get("name")
-                    
+
                     if artist_id:
                         from ..services import artists as artists_svc
                         try:
@@ -164,7 +161,7 @@ def follow_album(
                                 db,
                                 artist_id=artist_id,
                                 name=artist_name,
-                                thumbnails=None  # Could extract from album or fetch artist separately
+                                thumbnails=None
                             )
                             logger.info(f"Upserted artist {artist_id}: {artist_name}")
                         except Exception as e:
@@ -175,19 +172,19 @@ def follow_album(
 
             # Get the album data
             album = albums_svc.get_album_from_db(db, album_id, include_tracks=True)
-            
+
             if not album:
                 raise HTTPException(status_code=500, detail="Failed to fetch album from YTMusic")
-            
+
             logger.info(f"Fetched and upserted album {album_id}: {result['inserted_tracks']} tracks")
-        
-        # Check if already followed (download mode = truly followed)
-        existing_sub = subs_svc.get_album_subscription(db, album_id)
-        if existing_sub and existing_sub.mode == "download":
+
+        # Check if already in download mode
+        album_obj = db.get(Album, album_id)
+        if album_obj and album_obj.mode == "download":
             return {
                 "source": "database",
-                "followed": True,
-                "message": "Album already followed",
+                "mode": "download",
+                "message": "Album already in download mode",
                 "album": {
                     "id": album["id"],
                     "title": album["title"],
@@ -196,22 +193,12 @@ def follow_album(
                 "tracks_queued": 0,
             }
 
-        # Create or upgrade album subscription to download mode
+        # Set album mode to download
+        album_obj.mode = "download"
+        db.add(album_obj)
+
         album_artist_id = album.get("artist_id")
-        if existing_sub and existing_sub.mode == "metadata":
-            # Upgrade metadata → download
-            existing_sub.mode = "download"
-            db.add(existing_sub)
-            logger.info(f"Upgraded album subscription {album_id} from metadata to download")
-        else:
-            # Create new subscription
-            subscription = subs_svc.subscribe_to_album(
-                db,
-                album_id=album_id,
-                artist_id=album_artist_id,
-                mode="download"
-            )
-            logger.info(f"Created album subscription for {album_id} (user_id={current_user.id})")
+        logger.info(f"Set album {album_id} to download mode")
 
         # Auto-create light artist subscription if artist doesn't have one yet
         artist_sub_created = False
@@ -256,7 +243,7 @@ def follow_album(
                 except Exception as e:
                     logger.exception(f"Failed to enqueue job for track {track_id}")
 
-        # Commit subscriptions + download jobs
+        # Commit mode change + download jobs
         db.commit()
 
         # Queue sync_artist job for light subscription (fetches all albums metadata + banner)
@@ -273,12 +260,12 @@ def follow_album(
             except Exception as e:
                 logger.exception(f"Failed to queue sync_artist job for {album_artist_id}")
 
-        logger.info(f"Album {album_id} followed by user {current_user.id}: {queued_count} tracks queued for download")
+        logger.info(f"Album {album_id} set to download by user {current_user.id}: {queued_count} tracks queued")
 
         return {
             "source": "database",
-            "followed": True,
-            "message": f"Album followed successfully. {queued_count} tracks queued for download.",
+            "mode": "download",
+            "message": f"Album download started. {queued_count} tracks queued.",
             "album": {
                 "id": album["id"],
                 "title": album["title"],
@@ -289,60 +276,61 @@ def follow_album(
             "tracks_queued": queued_count,
             "artist_subscription_created": artist_sub_created,
         }
-        
+
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
-        logger.exception(f"follow_album failed for {album_id}")
-        raise HTTPException(status_code=500, detail=f"Failed to follow album: {e}")
+        logger.exception(f"download_album failed for {album_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to download album: {e}")
 
 
-@router.delete("/{album_id}/follow", status_code=status.HTTP_200_OK)
-def unfollow_album(
+@router.delete("/{album_id}/download", status_code=status.HTTP_200_OK)
+def cancel_album_download(
     album_id: str,
     current_user: User = Depends(require_member_or_admin),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Unfollow an album:
-    - Removes album subscription
-    - Does NOT delete album or tracks from database
-    - Does NOT cancel pending download jobs
+    Revert album to metadata mode:
+    - Sets album mode back to "metadata"
+    - Clears download status
+    - Does NOT delete album, tracks, or files from database/disk
     """
     if not album_id:
         raise HTTPException(status_code=400, detail="album_id required")
-    
+
     try:
         # Check if album exists
         album = albums_svc.get_album_from_db(db, album_id, include_tracks=False)
         if not album:
             raise HTTPException(status_code=404, detail="Album not found")
-        
-        # Unsubscribe
-        success = subs_svc.unsubscribe_from_album(db, album_id)
-        
-        if not success:
-            raise HTTPException(status_code=404, detail="Album is not followed")
-        
+
+        album_obj = db.get(Album, album_id)
+        if not album_obj or album_obj.mode != "download":
+            raise HTTPException(status_code=404, detail="Album is not in download mode")
+
+        # Revert to metadata mode
+        subs_svc.clear_album_download(db, album_id)
+
         db.commit()
-        
-        logger.info(f"Album {album_id} unfollowed")
-        
+
+        logger.info(f"Album {album_id} reverted to metadata mode")
+
         return {
-            "message": "Album unfollowed successfully",
+            "message": "Album reverted to metadata mode",
             "album": {
                 "id": album["id"],
                 "title": album["title"],
             },
-            "followed": False,
+            "mode": "metadata",
         }
-        
+
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
-        logger.exception(f"unfollow_album failed for {album_id}")
-        raise HTTPException(status_code=500, detail=f"Failed to unfollow album: {e}")
+        logger.exception(f"cancel_album_download failed for {album_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to cancel album download: {e}")

@@ -122,6 +122,8 @@ def get_album_from_db(
             "thumbnails": album.thumbnails,
             "image_local": album.image_local,
             "playlist_id": album.playlist_id,
+            "mode": album.mode,
+            "download_status": album.download_status,
         }
         
         if include_tracks:
@@ -170,6 +172,8 @@ def list_albums_for_artist_from_db(
                 "image_local": album.image_local,
                 "year": album.year,
                 "type": album_type,
+                "mode": album.mode,
+                "download_status": album.download_status,
             })
     except Exception as e:
         logger.exception(f"list_albums_for_artist_from_db failed for {artist_id}: {e}")

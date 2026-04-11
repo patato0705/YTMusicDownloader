@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, case
 
 from ..deps import get_db
-from ..models import Artist, Album, Track, AlbumSubscription, ArtistSubscription
+from ..models import Artist, Album, Track, ArtistSubscription
 from ..services import subscriptions as subs_svc
 
 from backend.dependencies import require_auth, require_member_or_admin, require_admin
@@ -130,7 +130,7 @@ def list_followed_albums(
     current_user: User = Depends(require_auth),
     artist_id: Optional[str] = Query(None, description="Filter by artist ID"),
     status_filter: Optional[str] = Query(None, pattern="^(completed|downloading|pending|failed)$", description="Filter by download status"),
-    sort_by: str = Query("title", pattern="^(title|year|followed_at|download_progress)$"),
+    sort_by: str = Query("title", pattern="^(title|year|created_at|download_progress)$"),
     order: str = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
@@ -146,32 +146,24 @@ def list_followed_albums(
     Returns list of albums with download stats.
     """
     try:
-        # Get all album subscriptions
-        subs_query = db.query(AlbumSubscription)
-        
+        # Query albums directly (mode is now on the Album row)
+        albums_query = db.query(Album)
+
         if artist_id:
-            subs_query = subs_query.filter(AlbumSubscription.artist_id == artist_id)
-        
-        subscriptions = subs_query.all()
-        album_ids = [sub.album_id for sub in subscriptions]
-        
-        if not album_ids:
-            return {"albums": [], "total": 0}
-        
-        # Get albums
-        albums_query = db.query(Album).filter(Album.id.in_(album_ids))
+            albums_query = albums_query.filter(Album.artist_id == artist_id)
+
         albums = albums_query.all()
-        
+
+        if not albums:
+            return {"albums": [], "total": 0}
+
         result = []
         for album in albums:
-            # Get subscription for this album
-            subscription = next((s for s in subscriptions if s.album_id == album.id), None)
-            
             # Get artist info
             artist = None
             if album.artist_id:
                 artist = db.get(Artist, album.artist_id)
-            
+
             # Get tracks stats
             tracks_query = (
                 db.query(
@@ -182,26 +174,26 @@ def list_followed_albums(
                 )
                 .filter(Track.album_id == album.id)
             )
-            
+
             tracks_stats = tracks_query.first()
             stats = _safe_stats(tracks_stats, ['total', 'downloaded', 'failed', 'with_lyrics'])
             tracks_total = stats['total']
             tracks_downloaded = stats['downloaded']
             tracks_failed = stats['failed']
             tracks_with_lyrics = stats['with_lyrics']
-            
+
             # Calculate download progress
             download_progress = 0.0
             if tracks_total > 0:
                 download_progress = round((tracks_downloaded / tracks_total) * 100, 1)
-            
+
             # Determine overall status
-            download_status = subscription.download_status if subscription else "idle"
-            
+            download_status = album.download_status or "idle"
+
             # Apply status filter
             if status_filter and download_status != status_filter:
                 continue
-            
+
             result.append({
                 "id": album.id,
                 "title": album.title,
@@ -211,6 +203,7 @@ def list_followed_albums(
                 } if artist else None,
                 "year": album.year,
                 "type": album.type or "Album",
+                "mode": album.mode,
                 "thumbnail": album.image_local,
                 "download_status": download_status,
                 "tracks_total": tracks_total,
@@ -218,7 +211,7 @@ def list_followed_albums(
                 "tracks_failed": tracks_failed,
                 "tracks_with_lyrics": tracks_with_lyrics,
                 "download_progress": download_progress,
-                "followed_at": subscription.created_at.isoformat() if subscription and subscription.created_at else None,
+                "created_at": album.created_at.isoformat() if album.created_at else None,
             })
         
         # Sort results
@@ -226,8 +219,8 @@ def list_followed_albums(
             result.sort(key=lambda x: (x["title"] or "").lower(), reverse=(order == "desc"))
         elif sort_by == "year":
             result.sort(key=lambda x: x["year"] or "", reverse=(order == "desc"))
-        elif sort_by == "followed_at":
-            result.sort(key=lambda x: x["followed_at"] or "", reverse=(order == "desc"))
+        elif sort_by == "created_at":
+            result.sort(key=lambda x: x["created_at"] or "", reverse=(order == "desc"))
         elif sort_by == "download_progress":
             result.sort(key=lambda x: x["download_progress"], reverse=(order == "desc"))
         
@@ -343,19 +336,19 @@ def get_library_stats(
         # Artists stats (count active subscriptions)
         artists_total = db.query(func.count(ArtistSubscription.id)).filter(ArtistSubscription.enabled == True).scalar() or 0
         
-        # Albums stats
-        albums_total = db.query(func.count(AlbumSubscription.id)).scalar() or 0
-        albums_completed = db.query(func.count(AlbumSubscription.id)).filter(
-            AlbumSubscription.download_status == "completed"
+        # Albums stats (query Album table directly)
+        albums_total = db.query(func.count(Album.id)).scalar() or 0
+        albums_completed = db.query(func.count(Album.id)).filter(
+            Album.download_status == "completed"
         ).scalar() or 0
-        albums_downloading = db.query(func.count(AlbumSubscription.id)).filter(
-            AlbumSubscription.download_status == "downloading"
+        albums_downloading = db.query(func.count(Album.id)).filter(
+            Album.download_status == "downloading"
         ).scalar() or 0
-        albums_pending = db.query(func.count(AlbumSubscription.id)).filter(
-            AlbumSubscription.download_status == "pending"
+        albums_pending = db.query(func.count(Album.id)).filter(
+            Album.download_status == "pending"
         ).scalar() or 0
-        albums_failed = db.query(func.count(AlbumSubscription.id)).filter(
-            AlbumSubscription.download_status == "failed"
+        albums_failed = db.query(func.count(Album.id)).filter(
+            Album.download_status == "failed"
         ).scalar() or 0
         
         # Tracks stats
@@ -420,9 +413,6 @@ def get_album_download_progress(
         if not album:
             raise HTTPException(status_code=404, detail="Album not found")
         
-        # Get subscription
-        subscription = subs_svc.get_album_subscription(db, album_id)
-        
         # Get tracks
         tracks = db.query(Track).filter(Track.album_id == album_id).order_by(Track.id.asc()).all()
         
@@ -456,8 +446,9 @@ def get_album_download_progress(
                 "thumbnail": album.image_local,
             },
             "subscription": {
-                "status": subscription.download_status if subscription else "idle",
-                "followed_at": subscription.created_at.isoformat() if subscription and subscription.created_at else None,
+                "status": album.download_status or "idle",
+                "mode": album.mode,
+                "created_at": album.created_at.isoformat() if album.created_at else None,
             },
             "progress": {
                 "percentage": progress,
@@ -561,30 +552,19 @@ def delete_artist_from_library(
                 db.delete(album)
                 albums_deleted += 1
 
-        # 2. Delete ALL album subscriptions for this artist
-        #    (includes metadata-only subs that have no Album row)
-        from sqlalchemy import select
-        all_album_subs = db.execute(
-            select(AlbumSubscription).where(AlbumSubscription.artist_id == artist_id)
-        ).scalars().all()
-        subs_deleted = 0
-        for album_sub in all_album_subs:
-            db.delete(album_sub)
-            subs_deleted += 1
-
-        # 3. Delete artist banner
+        # 2. Delete artist banner
         if artist:
             _delete_file_safe(artist.image_local)
 
-        # 4. Delete artist subscription
+        # 3. Delete artist subscription
         if artist_sub:
             db.delete(artist_sub)
 
-        # 5. Delete artist record
+        # 4. Delete artist record
         if artist:
             db.delete(artist)
 
-        # 6. Delete artist folder from disk
+        # 5. Delete artist folder from disk
         from pathlib import Path
         from .. import config
         safe_name = "".join(c for c in (artist_name or "") if c.isalnum() or c in " .-_()").strip()
@@ -597,7 +577,7 @@ def delete_artist_from_library(
         logger.info(
             f"Deleted artist {artist_id} ({artist_name}) from library: "
             f"{albums_deleted} albums, {tracks_deleted} tracks, "
-            f"{files_deleted} files, {subs_deleted} album subs"
+            f"{files_deleted} files"
         )
 
         return {
@@ -606,7 +586,6 @@ def delete_artist_from_library(
             "albums_deleted": albums_deleted,
             "tracks_deleted": tracks_deleted,
             "files_deleted": files_deleted,
-            "subscriptions_deleted": subs_deleted,
         }
 
     except HTTPException:
@@ -661,19 +640,16 @@ def delete_album_from_library(
 
         # 2. Delete album cover from disk
         _delete_file_safe(album.image_local)
+        album.image_local = None
 
-        # 3. Delete Album row from DB
-        db.delete(album)
+        # 3. Downgrade album to metadata mode (keep the row)
+        album.mode = "metadata"
+        album.download_status = None
+        db.add(album)
 
-        # 4. Keep album subscription but downgrade to metadata
-        album_sub = subs_svc.get_album_subscription(db, album_id)
         artist_downgraded = False
-        if album_sub:
-            album_sub.mode = "metadata"
-            album_sub.download_status = "idle"
-            db.add(album_sub)
 
-        # 5. Downgrade artist subscription to light mode (stops periodic sync)
+        # 4. Downgrade artist subscription to light mode (stops periodic sync)
         if artist_id:
             artist_sub = subs_svc.get_artist_subscription(db, artist_id)
             if artist_sub and artist_sub.mode == "full":
@@ -745,9 +721,8 @@ def cleanup_orphaned_data(
             .all()
         )
         for album in albums_no_owner:
-            # Check if album has a subscription — keep it if so
-            album_sub = subs_svc.get_album_subscription(db, album.id)
-            if album_sub:
+            # Keep album if it has a mode set (part of a subscription flow)
+            if album.mode is not None:
                 continue
             # Delete tracks first
             for track in db.query(Track).filter(Track.album_id == album.id).all():

@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy import select, func, case
 from sqlalchemy.orm import Session
 
-from ..models import Artist, ArtistSubscription, AlbumSubscription, Track
+from ..models import Artist, Album, ArtistSubscription, Track
 from ..time_utils import now_utc, ensure_timezone_aware
 
 logger = logging.getLogger("services.subscriptions")
@@ -139,171 +139,98 @@ def mark_artist_synced(
 
 
 # ============================================================================
-# ALBUM SUBSCRIPTIONS
+# ALBUM MODE (formerly AlbumSubscription — now lives on the Album row)
 # ============================================================================
 
-def get_album_subscription(session: Session, album_id: str) -> Optional[AlbumSubscription]:
-    """Get album subscription by album ID."""
-    stmt = select(AlbumSubscription).where(AlbumSubscription.album_id == album_id)
-    return session.execute(stmt).scalars().first()
-
-
-def subscribe_to_album(
-    session: Session,
-    album_id: str,
-    artist_id: Optional[str] = None,
-    mode: str = "download",
-) -> AlbumSubscription:
+def set_album_mode(session: Session, album_id: str, mode: str) -> Album:
     """
-    Create or update album subscription.
-    
+    Set the mode on an existing Album row.
+
     Args:
-        session: SQLAlchemy session
-        album_id: Album ID
-        artist_id: Optional artist ID
-        mode: "metadata" (metadata only) or "download" (download tracks)
-    
-    Returns:
-        AlbumSubscription instance
-    
+        mode: "metadata" or "download"
+
     Raises:
-        ValueError: If invalid mode
+        ValueError: If album not found or invalid mode
     """
     if mode not in ("metadata", "download"):
         raise ValueError(f"Invalid mode: {mode}. Must be 'metadata' or 'download'")
-    
-    # Check if already exists
-    existing = get_album_subscription(session, album_id)
-    
-    if existing:
-        # Update mode if different
-        if existing.mode != mode:
-            logger.info(f"Updating album subscription {album_id}: {existing.mode} → {mode}")
-            existing.mode = mode
-            session.add(existing)
-        return existing
-    
-    # Create new subscription
-    subscription = AlbumSubscription(
-        album_id=album_id,
-        artist_id=artist_id,
-        mode=mode,
-        created_at=now_utc(),
-    )
-    
-    session.add(subscription)
-    logger.info(f"Created album subscription: {album_id} (mode={mode})")
-    
-    return subscription
+
+    album = session.get(Album, album_id)
+    if not album:
+        raise ValueError(f"Album {album_id} not found")
+
+    old_mode = album.mode
+    if old_mode != mode:
+        logger.info(f"Album {album_id} mode: {old_mode} → {mode}")
+        album.mode = mode
+        session.add(album)
+
+    return album
 
 
-def unsubscribe_from_album(session: Session, album_id: str) -> bool:
+def clear_album_download(session: Session, album_id: str) -> bool:
     """
-    Delete album subscription.
-    Does NOT delete files or database records - only stops syncing.
-    
+    Downgrade an album back to metadata mode and clear download status.
+
     Returns:
-        True if deleted, False if not found
+        True if album existed, False otherwise
     """
-    subscription = get_album_subscription(session, album_id)
-    
-    if not subscription:
+    album = session.get(Album, album_id)
+    if not album:
         return False
-    
-    session.delete(subscription)
-    logger.info(f"Deleted album subscription: {album_id}")
-    
+
+    album.mode = "metadata"
+    album.download_status = None
+    session.add(album)
+    logger.info(f"Cleared album download for {album_id}")
     return True
 
 
-def update_album_subscription_mode(
-    session: Session,
-    album_id: str,
-    mode: str,
-) -> AlbumSubscription:
+def upgrade_all_albums_to_download(session: Session, artist_id: str) -> int:
     """
-    Update album subscription mode.
-    
-    Args:
-        mode: "metadata" or "download"
-    
-    Raises:
-        ValueError: If subscription not found or invalid mode
-    """
-    if mode not in ("metadata", "download"):
-        raise ValueError(f"Invalid mode: {mode}. Must be 'metadata' or 'download'")
-    
-    subscription = get_album_subscription(session, album_id)
-    
-    if not subscription:
-        raise ValueError(f"No subscription found for album {album_id}")
-    
-    old_mode = subscription.mode
-    subscription.mode = mode
-    session.add(subscription)
-    
-    logger.info(f"Updated album subscription {album_id}: {old_mode} → {mode}")
-    
-    return subscription
-
-
-def upgrade_all_album_subscriptions_to_download(
-    session: Session,
-    artist_id: str,
-) -> int:
-    """
-    Upgrade all album subscriptions for an artist from metadata to download.
+    Upgrade all albums for an artist from metadata to download mode.
     Used when upgrading artist from light to full mode.
-    
+
     Returns:
         Number of albums upgraded
     """
-    stmt = select(AlbumSubscription).where(
-        AlbumSubscription.artist_id == artist_id,
-        AlbumSubscription.mode == "metadata"
+    stmt = select(Album).where(
+        Album.artist_id == artist_id,
+        Album.mode == "metadata",
     )
-    
-    subscriptions = session.execute(stmt).scalars().all()
-    
-    for sub in subscriptions:
-        sub.mode = "download"
-        session.add(sub)
-    
-    count = len(subscriptions)
-    
+    albums = session.execute(stmt).scalars().all()
+
+    for album in albums:
+        album.mode = "download"
+        session.add(album)
+
+    count = len(albums)
     if count > 0:
-        logger.info(f"Upgraded {count} album subscriptions to download mode for artist {artist_id}")
-    
+        logger.info(f"Upgraded {count} albums to download mode for artist {artist_id}")
     return count
 
 
-def downgrade_all_album_subscriptions_to_metadata(
-    session: Session,
-    artist_id: str,
-) -> int:
+def downgrade_all_albums_to_metadata(session: Session, artist_id: str) -> int:
     """
-    Downgrade all album subscriptions for an artist from download to metadata.
+    Downgrade all albums for an artist from download to metadata mode.
     Used when downgrading artist from full to light mode.
-    
+
     Returns:
         Number of albums downgraded
     """
-    stmt = select(AlbumSubscription).where(
-        AlbumSubscription.artist_id == artist_id,
-        AlbumSubscription.mode == "download"
+    stmt = select(Album).where(
+        Album.artist_id == artist_id,
+        Album.mode == "download",
     )
-    
-    subscriptions = session.execute(stmt).scalars().all()
-    
-    for sub in subscriptions:
-        sub.mode = "metadata"
-        session.add(sub)
-    
-    count = len(subscriptions)
-    
+    albums = session.execute(stmt).scalars().all()
+
+    for album in albums:
+        album.mode = "metadata"
+        session.add(album)
+
+    count = len(albums)
     if count > 0:
-        logger.info(f"Downgraded {count} album subscriptions to metadata mode for artist {artist_id}")
-    
+        logger.info(f"Downgraded {count} albums to metadata mode for artist {artist_id}")
     return count
 
 
@@ -316,20 +243,20 @@ def check_and_update_album_download_status(
     album_id: str,
 ) -> str:
     """
-    Check track statuses for an album and update the album subscription's download_status.
+    Check track statuses for an album and update Album.download_status.
 
     Status logic:
     - "completed": all tracks are "done"
     - "downloading": at least one track is "downloading"
     - "failed": at least one track is "failed" and none are "downloading"
     - "pending": at least one track is "new"
-    - "idle": no tracks or no subscription
+    - "idle": no tracks or album not found
 
     Returns:
         The new download_status string
     """
-    subscription = get_album_subscription(session, album_id)
-    if not subscription:
+    album = session.get(Album, album_id)
+    if not album:
         return "idle"
 
     stats = (
@@ -345,8 +272,8 @@ def check_and_update_album_download_status(
     )
 
     if not stats:
-        subscription.download_status = "idle"
-        session.add(subscription)
+        album.download_status = "idle"
+        session.add(album)
         return "idle"
 
     total = int(stats.total or 0)
@@ -368,8 +295,8 @@ def check_and_update_album_download_status(
     else:
         new_status = "idle"
 
-    subscription.download_status = new_status
-    session.add(subscription)
+    album.download_status = new_status
+    session.add(album)
 
     return new_status
 

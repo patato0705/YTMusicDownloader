@@ -73,6 +73,13 @@ class Album(Base):
     year: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
 
+    # subscription / sync fields (moved from former AlbumSubscription table)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="metadata")  # "metadata" or "download"
+    download_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default=None)
+    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
     # relationships
     artist: Mapped[Optional[Artist]] = relationship("Artist", back_populates="albums")
     tracks: Mapped[List["Track"]] = relationship(
@@ -92,6 +99,11 @@ class Album(Base):
             "playlist_id": getattr(self, "playlist_id", None),
             "year": getattr(self, "year", None),
             "image_local": getattr(self, "image_local", None),
+            "mode": getattr(self, "mode", None),
+            "download_status": getattr(self, "download_status", None),
+            "last_synced_at": (ls.isoformat() if (ls := getattr(self, "last_synced_at", None)) else None),
+            "last_error": getattr(self, "last_error", None),
+            "created_at": (ca.isoformat() if (ca := getattr(self, "created_at", None)) else None),
         }
 
     def __repr__(self) -> str:
@@ -199,19 +211,6 @@ class ArtistSubscription(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-
-class AlbumSubscription(Base):
-    __tablename__ = "album_subscriptions"
- 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    album_id: Mapped[str] = mapped_column(String(64), ForeignKey("albums.id", ondelete="CASCADE"), nullable=False, index=True)
-    artist_id: Mapped[Optional[str]] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), nullable=True, index=True)
-    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="download")  # "metadata" or "download"
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
-    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    download_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default="idle")
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 

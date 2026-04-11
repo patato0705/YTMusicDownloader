@@ -68,10 +68,9 @@ def get_artist(
                 for db_album in db_albums:
                     album_id = db_album.get("id")
                     if album_id:
-                        album_sub = subs_svc.get_album_subscription(db, album_id)
                         db_albums_map[album_id] = {
                             "in_database": True,
-                            "mode": album_sub.mode if album_sub else None,
+                            "mode": db_album.get("mode"),
                         }
             
             # Merge YTMusic albums with DB status
@@ -111,13 +110,9 @@ def get_artist(
 
         albums = albums_svc.list_albums_for_artist_from_db(session=db, artist_id=str(artist_id))
 
-        # Add subscription mode to each album
+        # Add in_database flag to each album (mode is already in the dict)
         for album in albums:
-            album_id = album.get("id")
-            if album_id:
-                album_sub = subs_svc.get_album_subscription(db, album_id)
-                album["mode"] = album_sub.mode if album_sub else None
-                album["in_database"] = True
+            album["in_database"] = True
 
         return {
             "ok": True,
@@ -179,38 +174,39 @@ def follow_artist(
             mode="full",
         )
 
-        # If upgrading from light to full, upgrade all album subscriptions
-        # and queue import_album for albums that have no DB data yet
+        # If upgrading from light to full, upgrade all albums to download mode
+        # and queue import_album for albums that don't have tracks yet
         imports_queued = 0
         if old_mode == "light":
-            upgraded_count = subs_svc.upgrade_all_album_subscriptions_to_download(db, artist_id)
+            upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id)
             logger.info(f"Upgraded {upgraded_count} albums to download mode for artist {artist_id}")
 
-            # Queue import_album for upgraded albums that lack Album rows in DB
-            from sqlalchemy import select
-            from ..models import AlbumSubscription, Album
-            upgraded_subs = (
+            # Queue import_album for albums that have no tracks in DB
+            from sqlalchemy import select, func
+            from ..models import Album, Track
+            albums_needing_import = (
                 db.execute(
-                    select(AlbumSubscription.album_id).where(
-                        AlbumSubscription.artist_id == artist_id,
-                        AlbumSubscription.mode == "download",
-                        ~AlbumSubscription.album_id.in_(select(Album.id)),
+                    select(Album.id).where(
+                        Album.artist_id == artist_id,
+                        Album.mode == "download",
                     )
                 ).scalars().all()
             )
-            for album_id in upgraded_subs:
-                try:
-                    enqueue_job(
-                        db,
-                        job_type="import_album",
-                        payload={"browse_id": album_id, "artist_id": artist_id},
-                        priority=20,
-                        user_id=current_user.id,
-                        commit=False,
-                    )
-                    imports_queued += 1
-                except Exception as e:
-                    logger.exception(f"Failed to queue import_album for {album_id}")
+            for aid in albums_needing_import:
+                track_count = db.query(func.count(Track.id)).filter(Track.album_id == aid).scalar()
+                if not track_count:
+                    try:
+                        enqueue_job(
+                            db,
+                            job_type="import_album",
+                            payload={"browse_id": aid, "artist_id": artist_id},
+                            priority=20,
+                            user_id=current_user.id,
+                            commit=False,
+                        )
+                        imports_queued += 1
+                    except Exception as e:
+                        logger.exception(f"Failed to queue import_album for {aid}")
 
         db.commit()
         logger.info(f"Artist {artist_id} followed in full mode")
@@ -270,8 +266,8 @@ def unfollow_artist(
         if not subscription:
             raise HTTPException(status_code=404, detail="Artist is not followed")
 
-        # Downgrade all album subscriptions to metadata mode
-        downgraded_count = subs_svc.downgrade_all_album_subscriptions_to_metadata(db, artist_id)
+        # Downgrade all albums to metadata mode
+        downgraded_count = subs_svc.downgrade_all_albums_to_metadata(db, artist_id)
 
         # Downgrade artist subscription to light mode
         subscription.mode = "light"
@@ -329,37 +325,38 @@ def update_artist_mode(
         # Update subscription mode
         subs_svc.update_artist_subscription_mode(db, artist_id, mode)
         
-        # Update album subscriptions accordingly
+        # Update albums accordingly
         if mode == "full":
             # Upgrade: metadata → download
-            upgraded_count = subs_svc.upgrade_all_album_subscriptions_to_download(db, artist_id)
+            upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id)
 
-            # Queue import_album for upgraded albums that lack Album rows in DB
-            from sqlalchemy import select
-            from ..models import AlbumSubscription, Album
+            # Queue import_album for albums that have no tracks in DB
+            from sqlalchemy import select, func
+            from ..models import Album, Track
             imports_queued = 0
-            upgraded_subs = (
+            albums_needing_import = (
                 db.execute(
-                    select(AlbumSubscription.album_id).where(
-                        AlbumSubscription.artist_id == artist_id,
-                        AlbumSubscription.mode == "download",
-                        ~AlbumSubscription.album_id.in_(select(Album.id)),
+                    select(Album.id).where(
+                        Album.artist_id == artist_id,
+                        Album.mode == "download",
                     )
                 ).scalars().all()
             )
-            for album_id in upgraded_subs:
-                try:
-                    enqueue_job(
-                        db,
-                        job_type="import_album",
-                        payload={"browse_id": album_id, "artist_id": artist_id},
-                        priority=20,
-                        user_id=current_user.id,
-                        commit=False,
-                    )
-                    imports_queued += 1
-                except Exception as e:
-                    logger.exception(f"Failed to queue import_album for {album_id}")
+            for aid in albums_needing_import:
+                track_count = db.query(func.count(Track.id)).filter(Track.album_id == aid).scalar()
+                if not track_count:
+                    try:
+                        enqueue_job(
+                            db,
+                            job_type="import_album",
+                            payload={"browse_id": aid, "artist_id": artist_id},
+                            priority=20,
+                            user_id=current_user.id,
+                            commit=False,
+                        )
+                        imports_queued += 1
+                    except Exception as e:
+                        logger.exception(f"Failed to queue import_album for {aid}")
 
             db.commit()
 
@@ -385,7 +382,7 @@ def update_artist_mode(
             }
         else:
             # Downgrade: download → metadata
-            downgraded_count = subs_svc.downgrade_all_album_subscriptions_to_metadata(db, artist_id)
+            downgraded_count = subs_svc.downgrade_all_albums_to_metadata(db, artist_id)
             db.commit()
             
             return {
