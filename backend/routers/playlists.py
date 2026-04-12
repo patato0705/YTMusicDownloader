@@ -24,7 +24,7 @@ def get_playlist(
 ):
     """
     Get playlist details with track/album info.
-    
+
     Use this to extract album IDs from playlists for bulk following.
     Playlists are not saved to library.
     """

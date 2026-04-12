@@ -46,8 +46,8 @@ def get_album(
         # Try DB first using service layer
         album = albums_svc.get_album_from_db(db, album_id, include_tracks=True)
 
-        if album:
-            # Get artist info from DB
+        if album and album.get("tracks"):
+            # Album in DB with tracks - return from DB
             artist = None
             if album.get("artist_id"):
                 from ..services import artists as artists_svc
@@ -67,15 +67,17 @@ def get_album(
                     "artist": artist,
                     "year": album["year"],
                     "type": album["type"],
-                    "thumbnails": album["thumbnails"],
                     "image_local": album["image_local"],
                     "playlist_id": album["playlist_id"],
                 },
                 "tracks": album.get("tracks", []),
             }
 
-        # Not in DB - fetch from YTMusic
-        logger.info(f"Album {album_id} not in DB, fetching from YTMusic")
+        # Not in DB or metadata-mode with no tracks - fetch from YTMusic
+        # Keep track of whether album exists in DB (metadata mode, no tracks)
+        db_mode = album.get("mode") if album else None
+
+        logger.info(f"Album {album_id} fetching tracks from YTMusic (db_mode={db_mode})")
         from ..ytm_service import adapter as ytm_adapter
 
         album_data = ytm_adapter.get_album(browse_id=album_id)
@@ -93,6 +95,23 @@ def get_album(
                     "id": first_artist.get("id"),
                     "name": first_artist.get("name")
                 }
+
+        # Use DB info when the album exists in library, otherwise pure YTMusic
+        if album:
+            return {
+                "source": "database",
+                "mode": db_mode,
+                "album": {
+                    "id": album["id"],
+                    "title": album["title"],
+                    "artist": artist,
+                    "year": album["year"],
+                    "type": album["type"],
+                    "image_local": album["image_local"],
+                    "playlist_id": album["playlist_id"],
+                },
+                "tracks": album_data.get("tracks", []),
+            }
 
         return {
             "source": "ytmusic",
@@ -134,8 +153,8 @@ def download_album(
         raise HTTPException(status_code=400, detail="album_id required")
 
     try:
-        # Check if album exists in DB
-        album = albums_svc.get_album_from_db(db, album_id, include_tracks=True)
+        # Check if album exists in DB (with on-demand track fetch for metadata mode)
+        album = albums_svc.get_album_with_tracks(db, album_id)
 
         if not album:
             # Not in DB - fetch and upsert from YTMusic
@@ -161,7 +180,6 @@ def download_album(
                                 db,
                                 artist_id=artist_id,
                                 name=artist_name,
-                                thumbnails=None
                             )
                             logger.info(f"Upserted artist {artist_id}: {artist_name}")
                         except Exception as e:

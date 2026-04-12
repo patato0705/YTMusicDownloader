@@ -787,7 +787,6 @@ def sync_artist(session: Session, artist_id: str) -> Dict[str, Any]:
                 title=album_item.get("title"),
                 artist_id=artist_id,
                 year=album_item.get("year"),
-                thumbnails=album_item.get("thumbnails"),
                 album_type=album_item.get("type"),
             )
             album_obj.mode = album_mode

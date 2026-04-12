@@ -27,7 +27,6 @@ def normalize_artist_for_db(artist_data: dict) -> dict:
     return {
         "id": str(artist_data.get("id", "")),
         "name": artist_data.get("name"),
-        "thumbnails": artist_data.get("thumbnails", []),
         "image_local": None,  # Will be set when cover is downloaded
     }
 
@@ -47,7 +46,6 @@ def normalize_album_for_db(album_data: dict, artist_id: Optional[str] = None) ->
         "id": album_data.get("id") or album_data.get("browseId", ""),
         "title": album_data.get("title"),
         "artist_id": artist_id or album_data.get("artist_id"),
-        "thumbnails": album_data.get("thumbnails", []),
         "playlist_id": album_data.get("playlistId"),
         "year": album_data.get("year"),
         "type": album_data.get("type", "Album"),

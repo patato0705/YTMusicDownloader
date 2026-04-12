@@ -29,19 +29,18 @@ def upsert_album(
     album_id: str,
     title: Optional[str],
     artist_id: Optional[str] = None,
-    thumbnails: Optional[List[Any]] = None,
     image_local: Optional[str] = None,
     year: Optional[str] = None,
     album_type: Optional[str] = None,
     playlist_id: Optional[str] = None,
 ) -> Album:
     """
-    Upsert an Album row. thumbnails is raw list (list[dict]).
+    Upsert an Album row.
     album_type: "Album", "Single", "EP", etc.
     Returns the Album instance (not committed).
     """
     from ..models import Album  # Import here to avoid circular dependency
-    
+
     if not album_id:
         raise ValueError("album_id required")
 
@@ -52,7 +51,6 @@ def upsert_album(
             id=str(album_id),
             title=str(title) if title is not None else "",
             artist_id=str(artist_id) if artist_id is not None else None,
-            thumbnails=thumbnails or None,
             image_local=str(image_local) if image_local else None,
             year=str(year) if year is not None else None,
             type=str(album_type) if album_type is not None else "Album",
@@ -67,9 +65,6 @@ def upsert_album(
             changed = True
         if artist_id is not None and obj.artist_id != artist_id:
             obj.artist_id = artist_id
-            changed = True
-        if thumbnails and obj.thumbnails != thumbnails:
-            obj.thumbnails = thumbnails
             changed = True
         if image_local and obj.image_local != image_local:
             obj.image_local = image_local
@@ -119,7 +114,6 @@ def get_album_from_db(
             "artist_id": album.artist_id,
             "year": album.year,
             "type": album.type or "Album",
-            "thumbnails": album.thumbnails,
             "image_local": album.image_local,
             "playlist_id": album.playlist_id,
             "mode": album.mode,
@@ -130,7 +124,7 @@ def get_album_from_db(
             tracks = (
                 session.query(Track)
                 .filter(Track.album_id == album_id)
-                .order_by(Track.id.asc())
+                .order_by(Track.track_number.asc(), Track.id.asc())
                 .all()
             )
             result["tracks"] = [track.to_dict() for track in tracks]
@@ -139,6 +133,56 @@ def get_album_from_db(
     except Exception as e:
         logger.exception(f"get_album_from_db failed for {album_id}: {e}")
         return None
+
+
+def get_album_with_tracks(
+    session: Session,
+    album_id: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Get album from DB, with on-demand track fetch for metadata-mode albums.
+
+    If the album exists in DB with mode="metadata" and has no tracks,
+    fetches full album data (including tracks) from YTMusic and persists
+    to DB before returning.
+    """
+    album = get_album_from_db(session, album_id, include_tracks=True)
+
+    if album is None:
+        return None
+
+    tracks = album.get("tracks", [])
+    mode = album.get("mode", "metadata")
+
+    if not tracks and mode == "metadata":
+        logger.info(
+            f"Album {album_id} is metadata-mode with no tracks, "
+            f"fetching from YTMusic on demand"
+        )
+        try:
+            fetch_and_upsert_album(
+                session=session,
+                browse_id=album_id,
+                artist_id=album.get("artist_id"),
+            )
+            session.commit()
+
+            album = get_album_from_db(session, album_id, include_tracks=True)
+            if album is None:
+                logger.error(f"Album {album_id} disappeared after upsert")
+                return None
+
+            logger.info(
+                f"On-demand fetch complete for {album_id}: "
+                f"{len(album.get('tracks', []))} tracks loaded"
+            )
+        except Exception as e:
+            logger.warning(
+                f"On-demand track fetch failed for {album_id}: {e}. "
+                f"Returning album without tracks."
+            )
+
+    return album
 
 
 def list_albums_for_artist_from_db(
@@ -168,7 +212,6 @@ def list_albums_for_artist_from_db(
             result.append({
                 "id": album.id,
                 "title": album.title,
-                "thumbnails": album.thumbnails,
                 "image_local": album.image_local,
                 "year": album.year,
                 "type": album_type,
@@ -194,18 +237,18 @@ def ensure_album_cover(
 ) -> Optional[str]:
     """
     Ensure the album has a local cover image. Downloads the best thumbnail if needed.
-    
+
     Args:
         album_obj: Album model instance (should be attached to session)
-        thumbnails: raw thumbnails (list[dict]) - optional, prefer these over album_obj.thumbnails
+        thumbnails: raw thumbnails (list[dict]) from the API
         dest_dir: override directory to save the cover. If None, uses COVERS_DIR from config
         final_cover_path: If provided from downloader, use this path directly
-    
+
     Returns:
         Path to the saved cover (string) or None if failed
     """
     from ..models import Album
-    
+
     if not album_obj:
         return None
 
@@ -225,9 +268,8 @@ def ensure_album_cover(
         if p.exists():
             return str(p)
 
-    # Pick thumbnails list to use
-    thumbs_src = thumbnails or album_obj.thumbnails or []
-    
+    thumbs_src = thumbnails or []
+
     # Normalize and pick best thumbnail
     norm_thumbs = N.normalize_thumbnails(thumbs_src)
     best_url = N.pick_best_thumbnail_url(norm_thumbs) if norm_thumbs else None
@@ -383,7 +425,6 @@ def fetch_and_upsert_album(
         album_id=str(album_id),
         title=album_title,
         artist_id=artist_id,
-        thumbnails=thumbnails,
         year=year,
         album_type=album_type,
         playlist_id=playlist_id,

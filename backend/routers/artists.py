@@ -98,10 +98,13 @@ def get_artist(
                 "artist": {
                     "id": artist_data.get("id", artist_id),
                     "name": artist_data.get("name"),
-                    "thumbnails": artist_data.get("thumbnails", []),
+                    "thumbnail": artist_data.get("thumbnail"),
                     "image_local": artist_obj.image_local if artist_obj else None,
                 },
-                "albums": albums_with_status,
+                "albums": [
+                    {k: v for k, v in album.items() if k != "thumbnails"}
+                    for album in albums_with_status
+                ],
             }
         
         # Case 3: Full subscription → use DB (has complete data)
@@ -121,7 +124,6 @@ def get_artist(
             "artist": {
                 "id": artist_obj.id,
                 "name": artist_obj.name,
-                "thumbnails": artist_obj.thumbnails,
                 "image_local": artist_obj.image_local,
             },
             "albums": albums,
@@ -179,6 +181,7 @@ def follow_artist(
         imports_queued = 0
         if old_mode == "light":
             upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id)
+            db.flush()  # ensure mode changes are visible to the query below (autoflush=False)
             logger.info(f"Upgraded {upgraded_count} albums to download mode for artist {artist_id}")
 
             # Queue import_album for albums that have no tracks in DB
@@ -329,6 +332,7 @@ def update_artist_mode(
         if mode == "full":
             # Upgrade: metadata → download
             upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id)
+            db.flush()  # ensure mode changes are visible to the query below (autoflush=False)
 
             # Queue import_album for albums that have no tracks in DB
             from sqlalchemy import select, func

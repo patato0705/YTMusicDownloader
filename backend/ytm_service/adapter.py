@@ -343,14 +343,13 @@ def get_playlist(playlist_id: str) -> Dict[str, Any]:
     try:
         raw = _safe_call("get_playlist", playlistId=playlist_id)
     except Exception:
-        model = PlaylistSchema(id=str(playlist_id), title=None, thumbnails=[], tracks=[], raw=None)
+        model = PlaylistSchema(id=str(playlist_id), title=None, tracks=[], raw=None)
         return model.model_dump()
     if not isinstance(raw, dict):
-        model = PlaylistSchema(id=str(playlist_id), title=None, thumbnails=[], tracks=[], raw=raw)
+        model = PlaylistSchema(id=str(playlist_id), title=None, tracks=[], raw=raw)
         return model.model_dump()
-    # Extract playlist title and thumbnails
+    # Extract playlist title
     title = raw.get("title") or None
-    thumbs_models = N._build_thumbnails(raw.get("thumbnails") or [])
     # Process tracks
     tracks_raw = raw.get("tracks") or []
     tracks_models_objects: List[TrackSchema] = []
@@ -400,7 +399,6 @@ def get_playlist(playlist_id: str) -> Dict[str, Any]:
     model = PlaylistSchema(
         id=str(playlist_id),
         title=str(title) if title is not None else None,
-        thumbnails=thumbs_models,
         tracks=tracks_models_objects,
     )
     
@@ -424,10 +422,11 @@ def get_charts(country: str = "ZZ") -> Dict[str, Any]:
             if not isinstance(a, dict):
                 continue
             thumbs_models = N._build_thumbnails(a.get("thumbnails") or [])
+            thumbs_dicts = [t.model_dump() for t in thumbs_models]
             artists_out.append({
                 "id": str(a.get("browseId") or ""),
                 "name": a.get("title"),
-                "thumbnails": [t.model_dump() for t in thumbs_models],
+                "thumbnail": N.pick_best_thumbnail_url(thumbs_dicts) if thumbs_models else None,
                 "rank": a.get("rank"),
                 "trend": a.get("trend"),
             })

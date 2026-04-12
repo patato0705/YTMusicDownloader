@@ -68,7 +68,7 @@ def get_chart(
             artists.append(ChartArtist(
                 id=artist_id,
                 name=artist_data.get("name"),
-                thumbnails=artist_data.get("thumbnails", []),
+                thumbnail=artist_data.get("thumbnail"),
                 rank=artist_data.get("rank"),
                 trend=artist_data.get("trend"),
                 followed=artist_id in followed_ids if artist_id else False,

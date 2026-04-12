@@ -28,26 +28,23 @@ def upsert_artist(
     session: Session,
     artist_id: str,
     name: Optional[str] = None,
-    thumbnails: Optional[List[Any]] = None,
     image_local: Optional[str] = None,
 ) -> Artist:
     """
-    Upsert an Artist row. `thumbnails` is expected to be the raw thumbnails list.
+    Upsert an Artist row.
     Returns the Artist instance (not committed).
-    
+
     Note: Does NOT set followed status - use subscriptions for that.
     """
     if not artist_id:
         raise ValueError("artist_id required")
 
     obj = session.get(Artist, str(artist_id))
-    thumbs = thumbnails or []
 
     if obj is None:
         obj = Artist(
             id=str(artist_id),
             name=str(name) if name is not None else "",
-            thumbnails=thumbs or None,
             image_local=str(image_local) if image_local else None,
         )
         session.add(obj)
@@ -56,9 +53,6 @@ def upsert_artist(
         changed = False
         if name is not None and obj.name != name:
             obj.name = name
-            changed = True
-        if thumbs and obj.thumbnails != thumbs:
-            obj.thumbnails = thumbs
             changed = True
         if image_local is not None and obj.image_local != image_local:
             obj.image_local = image_local
@@ -86,12 +80,12 @@ def ensure_artist_banner(
 ) -> Optional[str]:
     """
     Ensure the artist has a local banner image. Downloads the best thumbnail if needed.
-    
+
     Args:
         session: SQLAlchemy session
         artist_obj: Artist model instance (should be attached to session)
-        thumbnails: raw thumbnails (list[dict]) - optional, prefer these over artist_obj.thumbnails
-    
+        thumbnails: raw thumbnails (list[dict]) from the API
+
     Returns:
         Path to the saved banner (string) or None if failed
     """
@@ -101,16 +95,15 @@ def ensure_artist_banner(
     # Get artist name for folder path
     artist_name = artist_obj.name or "Unknown Artist"
     safe_artist_name = _safe_name(artist_name)
-    
+
     # Artist folder: /data/{artist}/
     artist_folder = Path(str(config.MUSIC_DIR)) / safe_artist_name
-    
+
     # Final banner path: /data/{artist}/backdrop.jpg
     final_banner_path = artist_folder / "backdrop.jpg"
 
-    # Pick thumbnails list to use
-    thumbs_src = thumbnails or artist_obj.thumbnails or []
-    
+    thumbs_src = thumbnails or []
+
     logger.debug(f"Artist {artist_obj.id} has {len(thumbs_src)} thumbnails")
     
     # Normalize and pick best thumbnail
@@ -225,19 +218,18 @@ def fetch_and_upsert_artist(
     name = artist_data.get("name")
     thumbnails = artist_data.get("thumbnails") or []
     description = artist_data.get("description")
-    
+
     # Upsert artist (without albums/tracks)
     artist_obj = upsert_artist(
         session=session,
         artist_id=artist_id,
         name=name,
-        thumbnails=thumbnails,
     )
-    
+
     session.flush()
-    
+
     logger.info(f"Fetched artist {artist_id}: {name}")
-    
+
     return {
         "artist_id": artist_id,
         "name": name,

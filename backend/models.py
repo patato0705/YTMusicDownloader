@@ -25,9 +25,7 @@ class Artist(Base):
  
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    thumbnails: Mapped[Optional[List[Any]]] = mapped_column(JSONCol, nullable=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
-    # REMOVED: followed field - subscription determines status now
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
  
     # relationship: Artist -> Album
@@ -39,15 +37,13 @@ class Artist(Base):
     )
  
     def to_dict(self) -> Dict[str, Any]:
-        thumbs = getattr(self, "thumbnails", None) or []
         image_local = getattr(self, "image_local", None)
         created_at_val = getattr(self, "created_at", None)
         created_at = created_at_val.isoformat() if created_at_val is not None else None
- 
+
         return {
             "id": getattr(self, "id", None),
             "name": getattr(self, "name", None),
-            "thumbnails": thumbs,
             "image_local": image_local,
             "created_at": created_at,
         }
@@ -68,7 +64,6 @@ class Album(Base):
         nullable=True,
         index=True,
     )
-    thumbnails: Mapped[Optional[List[Any]]] = mapped_column(JSONCol, nullable=True)
     playlist_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     year: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
@@ -90,12 +85,10 @@ class Album(Base):
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        thumbs = getattr(self, "thumbnails", None) or []
         return {
             "id": getattr(self, "id", None),
             "title": getattr(self, "title", None),
             "artist_id": getattr(self, "artist_id", None),
-            "thumbnails": thumbs,
             "playlist_id": getattr(self, "playlist_id", None),
             "year": getattr(self, "year", None),
             "image_local": getattr(self, "image_local", None),

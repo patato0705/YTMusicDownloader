@@ -32,11 +32,11 @@ class ChartArtist(BaseModel):
     """Artist in a chart"""
     id: str
     name: Optional[str] = None
-    thumbnails: List[Dict[str, Any]] = Field(default_factory=list)
+    thumbnail: Optional[str] = None
     rank: Optional[int] = None
     trend: Optional[str] = None  # "up", "down", "same", "new"
     followed: bool = False  # Whether this artist is already followed
-    
+
     model_config = {"from_attributes": True}
 
 
