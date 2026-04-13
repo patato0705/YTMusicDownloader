@@ -5,19 +5,24 @@
 
 import { api } from './client';
 
+export interface PlaylistTrack {
+  id: string;
+  title: string;
+  artists: Array<{ id: string | null; name: string | null }>;
+  album: { id: string | null; name: string | null } | null;
+  cover?: string | null;
+  duration_seconds: number;
+  track_number?: number | null;
+  isExplicit?: boolean;
+}
+
 export interface Playlist {
   id: string;
   title?: string;
-  thumbnails?: any[];
-  tracks?: any[];
-  [key: string]: any;
-}
-
-export interface PlaylistAlbum {
-  id: string;
-  title: string;
-  artist_id?: string;
-  [key: string]: any;
+  description?: string | null;
+  author?: string | null;
+  thumbnail?: string | null;
+  tracks: PlaylistTrack[];
 }
 
 /**
@@ -27,12 +32,4 @@ export interface PlaylistAlbum {
  */
 export async function getPlaylist(playlistId: string): Promise<Playlist> {
   return api.get<Playlist>(`/playlists/${encodeURIComponent(playlistId)}`);
-}
-
-/**
- * Extract unique album IDs from a playlist
- * Returns list of albums for bulk operations
- */
-export async function extractAlbumsFromPlaylist(playlistId: string): Promise<PlaylistAlbum[]> {
-  return api.get<PlaylistAlbum[]>(`/playlists/${encodeURIComponent(playlistId)}/albums`);
 }

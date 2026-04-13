@@ -1,6 +1,6 @@
 // src/pages/Browse.tsx
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { search } from '../api/index';
 import { getImageUrl } from '../api/media';
@@ -114,16 +114,35 @@ export default function Browse(): JSX.Element {
           subtitle="Search YouTube Music for artists, albums, and tracks to add to your library"
         />
 
-        {/* Search bar */}
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          placeholder="Search for artists, albums, or tracks..."
-          size="lg"
-          autoFocus
-          loading={loading}
-          className="max-w-4xl mx-auto"
-        />
+        {/* Search bar + Import playlist */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search for artists, albums, or tracks..."
+            size="lg"
+            autoFocus
+            loading={loading}
+            className="flex-1"
+          />
+
+          {/* "or" separator — vertical on lg, horizontal on mobile */}
+          <div className="flex lg:flex-col items-center gap-3 lg:gap-1.5 lg:self-stretch">
+            <div className="flex-1 lg:flex-1 h-px lg:h-auto lg:w-px bg-slate-300 dark:bg-white/10" />
+            <span className="text-xs text-muted-foreground font-medium">{t('common.or')}</span>
+            <div className="flex-1 lg:flex-1 h-px lg:h-auto lg:w-px bg-slate-300 dark:bg-white/10" />
+          </div>
+
+          <Link
+            to="/playlist-import"
+            className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl glass border border-slate-200 dark:border-white/10 text-foreground font-medium hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-300 whitespace-nowrap"
+          >
+            <svg className="w-5 h-5 text-blue-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+            {t('playlist.importFromPlaylist')}
+          </Link>
+        </div>
 
         {/* Error message */}
         {error && (

@@ -189,8 +189,8 @@ export default function Navbar(): JSX.Element {
                     {t('nav.library')}
                   </Link>
                   {chartsEnabled && (
-                    <Link 
-                      to="/charts" 
+                    <Link
+                      to="/charts"
                       className={navLinkClass('/charts')}
                       onClick={() => setMobileMenuOpen(false)}
                     >

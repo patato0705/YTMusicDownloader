@@ -13,7 +13,8 @@
     "next": "Next",
     "submit": "Submit",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "or": "or"
   },
   "auth": {
     "login": {
@@ -73,6 +74,7 @@
     "library": "Library",
     "settings": "Settings",
     "charts": "Charts",
+    "import": "Import",
     "admin": "Admin Panel"
   },
   "browse": {
@@ -213,5 +215,30 @@
       "unfollowed": "Chart unfollowed successfully",
       "updated": "Chart updated successfully"
     }
+  },
+  "playlist": {
+    "title": "Import Playlist",
+    "subtitle": "Paste a YouTube Music playlist URL to discover and follow artists and albums",
+    "urlPlaceholder": "Paste a YouTube Music playlist URL...",
+    "loadPlaylist": "Load Playlist",
+    "invalidUrl": "Could not extract a playlist ID from this URL",
+    "artists": "Artists",
+    "albums": "Albums",
+    "tracksInPlaylist": "tracks in playlist",
+    "followAll": "Follow All Artists",
+    "downloadAll": "Download All Albums",
+    "followingProgress": "Following {current} of {total}...",
+    "downloadingProgress": "Downloading {current} of {total}...",
+    "followComplete": "All artists followed successfully",
+    "downloadComplete": "All albums queued for download",
+    "followed": "Followed",
+    "downloaded": "Queued",
+    "emptyPlaylist": "Empty Playlist",
+    "emptyPlaylistDescription": "This playlist doesn't contain any tracks",
+    "noArtists": "No followable artists found in this playlist",
+    "noAlbums": "No downloadable albums found in this playlist",
+    "partialSuccess": "{succeeded} of {total} succeeded, {failed} failed",
+    "importFromPlaylist": "Import from playlist",
+    "trackView": "Tracks"
   }
 }

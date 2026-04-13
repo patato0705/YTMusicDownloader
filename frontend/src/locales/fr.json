@@ -13,7 +13,8 @@
     "next": "Suivant",
     "submit": "Soumettre",
     "yes": "Oui",
-    "no": "Non"
+    "no": "Non",
+    "or": "ou"
   },
   "auth": {
     "login": {
@@ -60,7 +61,8 @@
     "browse": "Explorer",
     "library": "Bibliothèque",
     "settings": "Paramètres",
-    "admin": "Administration"
+    "admin": "Administration",
+    "import": "Importer"
   },
   "browse": {
     "title": "Explorer",
@@ -163,5 +165,30 @@
     "cancel": "Annuler la tâche",
     "retry": "Réessayer",
     "view": "Voir les détails"
+  },
+  "playlist": {
+    "title": "Importer une playlist",
+    "subtitle": "Collez une URL de playlist YouTube Music pour découvrir et suivre des artistes et albums",
+    "urlPlaceholder": "Collez une URL de playlist YouTube Music...",
+    "loadPlaylist": "Charger la playlist",
+    "invalidUrl": "Impossible d'extraire un identifiant de playlist de cette URL",
+    "artists": "Artistes",
+    "albums": "Albums",
+    "tracksInPlaylist": "titres dans la playlist",
+    "followAll": "Suivre tous les artistes",
+    "downloadAll": "Télécharger tous les albums",
+    "followingProgress": "Suivi de {current} sur {total}...",
+    "downloadingProgress": "Téléchargement de {current} sur {total}...",
+    "followComplete": "Tous les artistes ont été suivis avec succès",
+    "downloadComplete": "Tous les albums ont été mis en file d'attente",
+    "followed": "Suivi",
+    "downloaded": "En file d'attente",
+    "emptyPlaylist": "Playlist vide",
+    "emptyPlaylistDescription": "Cette playlist ne contient aucun titre",
+    "noArtists": "Aucun artiste à suivre dans cette playlist",
+    "noAlbums": "Aucun album téléchargeable dans cette playlist",
+    "partialSuccess": "{succeeded} sur {total} réussis, {failed} échoués",
+    "importFromPlaylist": "Importer depuis une playlist",
+    "trackView": "Titres"
   }
 }

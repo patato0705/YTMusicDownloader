@@ -20,6 +20,7 @@ import Library from './pages/Library';
 import Artist from './pages/Artist';
 import Album from './pages/Album';
 import Charts from './pages/Charts';
+import PlaylistImport from './pages/PlaylistImport';
 import AdminPanel from './pages/AdminPanel';
 
 export default function App(): JSX.Element {
@@ -60,6 +61,7 @@ export default function App(): JSX.Element {
                     <Route path="/artists/:artistId" element={<Artist />} />
                     <Route path="/albums/:albumId" element={<Album />} />
                     <Route path="/charts" element={<Charts />} />
+                    <Route path="/playlist-import" element={<PlaylistImport />} />
                     
                     {/* Admin Panel */}
                     <Route path="/admin" element={<AdminPanel />} />
