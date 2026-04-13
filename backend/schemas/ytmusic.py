@@ -51,10 +51,12 @@ class PlaylistSchema(BaseModel):
     """Playlist from YTMusic (including albums as playlists)"""
     id: str
     title: Optional[str] = None
-    thumbnails: List[Thumbnail] = Field(default_factory=list)
+    description: Optional[str] = None
+    author: Optional[str] = None
+    thumbnail: Optional[str] = None
     tracks: List[TrackSchema] = Field(default_factory=list)
     raw: Optional[Any] = None
-    
+
     model_config = {"extra": "ignore"}
 
 

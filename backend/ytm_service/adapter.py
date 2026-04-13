@@ -348,8 +348,14 @@ def get_playlist(playlist_id: str) -> Dict[str, Any]:
     if not isinstance(raw, dict):
         model = PlaylistSchema(id=str(playlist_id), title=None, tracks=[], raw=raw)
         return model.model_dump()
-    # Extract playlist title
+    # Extract playlist metadata
     title = raw.get("title") or None
+    description = raw.get("description") or None
+    author_raw = raw.get("author")
+    author = author_raw.get("name") if isinstance(author_raw, dict) else None
+    thumbnail = N.pick_best_thumbnail_url(
+        N.normalize_thumbnails(raw.get("thumbnails", []))
+    )
     # Process tracks
     tracks_raw = raw.get("tracks") or []
     tracks_models_objects: List[TrackSchema] = []
@@ -399,6 +405,9 @@ def get_playlist(playlist_id: str) -> Dict[str, Any]:
     model = PlaylistSchema(
         id=str(playlist_id),
         title=str(title) if title is not None else None,
+        description=description,
+        author=author,
+        thumbnail=thumbnail,
         tracks=tracks_models_objects,
     )
     
