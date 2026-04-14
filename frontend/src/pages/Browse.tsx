@@ -1,6 +1,6 @@
 // src/pages/Browse.tsx
-import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { search } from '../api/index';
 import { getImageUrl } from '../api/media';
@@ -36,8 +36,31 @@ function useDebounce<T>(value: T, delay: number = 500): T {
   return debouncedValue;
 }
 
+const VALID_FILTERS = ['all', 'artists', 'albums', 'tracks'] as const;
+type FilterType = typeof VALID_FILTERS[number];
+
 export default function Browse(): JSX.Element {
-  const [query, setQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filterParam = searchParams.get('filter');
+  const activeFilter: FilterType = VALID_FILTERS.includes(filterParam as FilterType)
+    ? (filterParam as FilterType)
+    : 'all';
+
+  // Local state for responsive typing; URL params sync only after debounce
+  const [query, setQuery] = useState(searchParams.get('q') || '');
+
+  const setActiveFilter = useCallback((newFilter: FilterType) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newFilter && newFilter !== 'all') {
+        next.set('filter', newFilter);
+      } else {
+        next.delete('filter');
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
   const [results, setResults] = useState<SearchResults>({
     artists: [],
     albums: [],
@@ -45,17 +68,29 @@ export default function Browse(): JSX.Element {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'artists' | 'albums' | 'tracks'>('all');
   const navigate = useNavigate();
   const { t } = useI18n();
 
   // Debounce search query
   const debouncedQuery = useDebounce(query, 500);
 
+  // Sync debounced query to URL params (single history replace, not per-keystroke)
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (debouncedQuery) {
+        next.set('q', debouncedQuery);
+      } else {
+        next.delete('q');
+      }
+      return next;
+    }, { replace: true });
+  }, [debouncedQuery, setSearchParams]);
+
   // Trigger search when debounced query changes
   useEffect(() => {
     const trimmed = debouncedQuery.trim();
-    
+
     if (!trimmed) {
       setResults({ artists: [], albums: [], tracks: [] });
       setError(null);

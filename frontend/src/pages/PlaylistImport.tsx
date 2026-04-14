@@ -1,6 +1,6 @@
 // src/pages/PlaylistImport.tsx
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { getPlaylist } from '../api/playlists';
 import { followArtist } from '../api/artists';
@@ -131,8 +131,39 @@ function extractUniqueAlbums(tracks: PlaylistTrack[]): UniqueAlbum[] {
   return Array.from(albumMap.values()).sort((a, b) => b.trackCount - a.trackCount);
 }
 
+const VALID_PLAYLIST_FILTERS = ['artists', 'albums', 'tracks'] as const;
+type PlaylistFilterType = typeof VALID_PLAYLIST_FILTERS[number];
+
 export default function PlaylistImport(): JSX.Element {
-  const [url, setUrl] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filterParam = searchParams.get('filter');
+  const activeFilter: PlaylistFilterType = VALID_PLAYLIST_FILTERS.includes(filterParam as PlaylistFilterType)
+    ? (filterParam as PlaylistFilterType)
+    : 'artists';
+
+  // Local state for responsive typing; URL synced only on playlist load
+  const [url, setUrl] = useState(searchParams.get('url') || '');
+
+  const syncUrlToParams = useCallback((value: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value) {
+        next.set('url', value);
+      } else {
+        next.delete('url');
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const setActiveFilter = useCallback((newFilter: PlaylistFilterType) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('filter', newFilter);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
   const [playlistTitle, setPlaylistTitle] = useState<string | null>(null);
   const [playlistThumbnail, setPlaylistThumbnail] = useState<string | null>(null);
   const [playlistAuthor, setPlaylistAuthor] = useState<string | null>(null);
@@ -151,7 +182,6 @@ export default function PlaylistImport(): JSX.Element {
     total: number;
   } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [activeFilter, setActiveFilter] = useState<'artists' | 'albums' | 'tracks'>('artists');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const navigate = useNavigate();
@@ -176,6 +206,7 @@ export default function PlaylistImport(): JSX.Element {
       return;
     }
 
+    syncUrlToParams(url);
     setLoading(true);
     setError(null);
     setPlaylistTitle(null);
@@ -208,6 +239,13 @@ export default function PlaylistImport(): JSX.Element {
       setLoading(false);
     }
   };
+
+  // Auto-load playlist when mounting with a URL param (e.g., after back navigation)
+  useEffect(() => {
+    if (url.trim() && !hasResults && !loading) {
+      handleLoad();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFollowArtist = async (artistId: string) => {
     setActionLoadingId(artistId);
