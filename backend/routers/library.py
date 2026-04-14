@@ -42,6 +42,7 @@ def list_followed_artists(
     current_user: User = Depends(require_auth),
     sort_by: str = Query("name", pattern="^(name|followed_at|albums_count)$"),
     order: str = Query("asc", pattern="^(asc|desc)$"),
+    limit: Optional[int] = Query(None, ge=1, description="Maximum number of artists to return"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -115,9 +116,13 @@ def list_followed_artists(
         if sort_by == "albums_count":
             result.sort(key=lambda x: x["albums_count"], reverse=(order == "desc"))
         
+        total = len(result)
+        if limit is not None:
+            result = result[:limit]
+
         return {
             "artists": result,
-            "total": len(result),
+            "total": total,
         }
     
     except Exception as e:
@@ -132,6 +137,7 @@ def list_followed_albums(
     status_filter: Optional[str] = Query(None, pattern="^(completed|downloading|pending|failed)$", description="Filter by download status"),
     sort_by: str = Query("title", pattern="^(title|year|created_at|download_progress)$"),
     order: str = Query("asc", pattern="^(asc|desc)$"),
+    limit: Optional[int] = Query(None, ge=1, description="Maximum number of albums to return"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -224,9 +230,13 @@ def list_followed_albums(
         elif sort_by == "download_progress":
             result.sort(key=lambda x: x["download_progress"], reverse=(order == "desc"))
         
+        total = len(result)
+        if limit is not None:
+            result = result[:limit]
+
         return {
             "albums": result,
-            "total": len(result),
+            "total": total,
         }
     
     except Exception as e:
