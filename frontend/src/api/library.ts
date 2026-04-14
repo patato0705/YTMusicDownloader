@@ -7,7 +7,7 @@ import { api } from './client';
 
 export type SortOrder = 'asc' | 'desc';
 export type ArtistSortBy = 'name' | 'followed_at' | 'albums_count';
-export type AlbumSortBy = 'title' | 'year' | 'download_progress' | 'followed_at';
+export type AlbumSortBy = 'title' | 'year' | 'created_at' | 'download_progress';
 export type AlbumStatus = 'completed' | 'downloading' | 'pending' | 'failed';
 export type TrackStatus = 'done' | 'failed' | 'downloading' | 'new';
 

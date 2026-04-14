@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/I18nContext';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { StatCard } from '../components/ui/StatCard';
 import { ActionCard } from '../components/ui/ActionCard';
 import { SectionHeader } from '../components/ui/SectionHeader';
@@ -13,13 +12,13 @@ import { getImageUrl } from '../api/media';
 import { Spinner } from '../components/ui/Spinner';
 import { formatNumber } from '../utils';
 
-// Icon components (using Unicode until we potentially add a proper icon library)
-const MusicIcon = () => <span className="text-2xl">🎵</span>;
+// Icon components
+const ArtistsIcon = () => <span className="text-2xl">🎤</span>;
+const AlbumsIcon = () => <span className="text-2xl">💿</span>;
+const TracksIcon = () => <span className="text-2xl">🎵</span>;
+const ActivityIcon = () => <span className="text-2xl">⚡</span>;
 const SearchIcon = () => <span className="text-2xl">🔍</span>;
 const LibraryIcon = () => <span className="text-2xl">📚</span>;
-const SettingsIcon = () => <span className="text-2xl">⚙️</span>;
-const DownloadIcon = () => <span className="text-2xl">⬇️</span>;
-const ActivityIcon = () => <span className="text-2xl">⚡</span>;
 
 export default function Home(): JSX.Element {
   const { user } = useAuth();
@@ -38,7 +37,7 @@ export default function Home(): JSX.Element {
     try {
       const [statsData, albumsData] = await Promise.all([
         getLibraryStats(),
-        getLibraryAlbums({ limit: 6, sort_by: 'followed_at', order: 'desc' }),
+        getLibraryAlbums({ limit: 6, sort_by: 'created_at', order: 'desc' }),
       ]);
       setStats(statsData);
       setRecentAlbums(albumsData?.albums || []);
@@ -76,31 +75,27 @@ export default function Home(): JSX.Element {
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
-            icon={<LibraryIcon />}
+            icon={<ArtistsIcon />}
             label="Artists"
             value={loading ? <Spinner size="sm" /> : formatNumber(stats?.artists?.total || 0)}
-            trend="+12%"
             loading={loading}
           />
           <StatCard
-            icon={<MusicIcon />}
+            icon={<AlbumsIcon />}
             label="Albums"
             value={loading ? <Spinner size="sm" /> : formatNumber(stats?.albums?.total || 0)}
-            trend="+8%"
             loading={loading}
           />
           <StatCard
-            icon={<DownloadIcon />}
+            icon={<TracksIcon />}
             label="Tracks"
             value={loading ? <Spinner size="sm" /> : formatNumber(stats?.tracks?.downloaded || 0)}
-            trend="+24%"
             loading={loading}
           />
           <StatCard
             icon={<ActivityIcon />}
             label="Storage"
             value={loading ? <Spinner size="sm" /> : `${stats?.storage?.estimated_gb?.toFixed(1) || 0} GB`}
-            trend="+2.1 GB"
             loading={loading}
           />
         </div>
@@ -109,7 +104,7 @@ export default function Home(): JSX.Element {
         <div>
           <SectionHeader>Quick Actions</SectionHeader>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <ActionCard
               to="/browse"
               icon={<SearchIcon />}
@@ -117,21 +112,13 @@ export default function Home(): JSX.Element {
               description="Search YouTube Music for new content"
               gradient="from-blue-500/10 to-indigo-500/10 dark:from-red-900/20 dark:to-red-800/20"
             />
-            
+
             <ActionCard
               to="/library"
               icon={<LibraryIcon />}
               title={t('nav.library')}
               description="Manage your followed artists and albums"
               gradient="from-indigo-500/10 to-violet-500/10 dark:from-red-900/20 dark:via-purple-900/15 dark:to-red-800/20"
-            />
-            
-            <ActionCard
-              to="/settings"
-              icon={<SettingsIcon />}
-              title={t('nav.settings')}
-              description="Configure downloads and preferences"
-              gradient="from-violet-500/10 to-blue-500/10 dark:from-red-950/20 dark:to-red-900/20"
             />
           </div>
         </div>
@@ -177,7 +164,7 @@ export default function Home(): JSX.Element {
                           </>
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 flex items-center justify-center">
-                            <MusicIcon />
+                            <TracksIcon />
                           </div>
                         )}
                         
@@ -221,7 +208,7 @@ export default function Home(): JSX.Element {
             ) : (
               <div className="text-center py-16">
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4">
-                  <MusicIcon />
+                  <TracksIcon />
                 </div>
                 <h3 className="text-xl font-semibold mb-2">No activity yet</h3>
                 <p className="text-muted-foreground mb-6">

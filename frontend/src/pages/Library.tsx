@@ -17,7 +17,7 @@ import { formatNumber } from '../utils';
 const ArtistsIcon = () => <span className="text-2xl">🎤</span>;
 const AlbumsIcon = () => <span className="text-2xl">💿</span>;
 const TracksIcon = () => <span className="text-2xl">🎵</span>;
-const DownloadIcon = () => <span className="text-2xl">⬇️</span>;
+const ActivityIcon = () => <span className="text-2xl">⚡</span>;
 const LibraryIcon = () => <span className="text-2xl">📚</span>;
 const SearchIcon = () => <span className="text-2xl">🔍</span>;
 
@@ -140,22 +140,23 @@ export default function Library(): JSX.Element {
             <StatCard
               icon={<ArtistsIcon />}
               label={t('library.stats.artists')}
-              value={formatNumber(stats.followed_artists || 0)}
+              value={formatNumber(stats.artists?.total || 0)}
             />
             <StatCard
               icon={<AlbumsIcon />}
               label={t('library.stats.albums')}
-              value={formatNumber(stats.followed_albums || 0)}
+              value={formatNumber(stats.albums?.total || 0)}
             />
             <StatCard
               icon={<TracksIcon />}
               label={t('library.stats.tracks')}
-              value={formatNumber(stats.total_tracks || 0)}
+              value={formatNumber(stats.tracks?.total || 0)}
             />
             <StatCard
-              icon={<DownloadIcon />}
-              label="Downloaded"
-              value={formatNumber(stats.downloaded_tracks || 0)}
+              icon={<ActivityIcon />}
+              label="Storage"
+              value={loading ? <Spinner size="sm" /> : `${stats?.storage?.estimated_gb?.toFixed(1) || 0} GB`}
+              loading={loading}
             />
           </div>
         )}
