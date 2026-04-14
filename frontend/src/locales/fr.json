@@ -175,6 +175,7 @@
     "artists": "Artistes",
     "albums": "Albums",
     "tracksInPlaylist": "titres dans la playlist",
+    "followMainArtists": "Suivre les artistes principaux",
     "followAll": "Suivre tous les artistes",
     "downloadAll": "Télécharger tous les albums",
     "followingProgress": "Suivi de {current} sur {total}...",

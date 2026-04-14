@@ -82,6 +82,29 @@ function extractUniqueArtists(tracks: PlaylistTrack[]): UniqueArtist[] {
   return Array.from(artistMap.values()).sort((a, b) => b.trackCount - a.trackCount);
 }
 
+function extractMainArtists(tracks: PlaylistTrack[]): UniqueArtist[] {
+  const artistMap = new Map<string, UniqueArtist>();
+
+  for (const track of tracks) {
+    const main = track.artists[0];
+    if (!main?.id || !main.name) continue;
+    const existing = artistMap.get(main.id);
+    if (existing) {
+      existing.trackCount++;
+      existing.tracks.push(track);
+    } else {
+      artistMap.set(main.id, {
+        id: main.id,
+        name: main.name,
+        trackCount: 1,
+        tracks: [track],
+      });
+    }
+  }
+
+  return Array.from(artistMap.values()).sort((a, b) => b.trackCount - a.trackCount);
+}
+
 function extractUniqueAlbums(tracks: PlaylistTrack[]): UniqueAlbum[] {
   const albumMap = new Map<string, UniqueAlbum>();
 
@@ -115,6 +138,7 @@ export default function PlaylistImport(): JSX.Element {
   const [playlistAuthor, setPlaylistAuthor] = useState<string | null>(null);
   const [allTracks, setAllTracks] = useState<PlaylistTrack[]>([]);
   const [uniqueArtists, setUniqueArtists] = useState<UniqueArtist[]>([]);
+  const [mainArtists, setMainArtists] = useState<UniqueArtist[]>([]);
   const [uniqueAlbums, setUniqueAlbums] = useState<UniqueAlbum[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +183,7 @@ export default function PlaylistImport(): JSX.Element {
     setPlaylistAuthor(null);
     setAllTracks([]);
     setUniqueArtists([]);
+    setMainArtists([]);
     setUniqueAlbums([]);
     setFollowedArtists(new Set());
     setDownloadedAlbums(new Set());
@@ -174,6 +199,7 @@ export default function PlaylistImport(): JSX.Element {
       setPlaylistAuthor(playlist.author || null);
       setAllTracks(tracks);
       setUniqueArtists(extractUniqueArtists(tracks));
+      setMainArtists(extractMainArtists(tracks));
       setUniqueAlbums(extractUniqueAlbums(tracks));
     } catch (err: any) {
       console.error('Failed to load playlist:', err);
@@ -211,6 +237,43 @@ export default function PlaylistImport(): JSX.Element {
 
   const handleFollowAll = async () => {
     const toFollow = uniqueArtists.filter((a) => !followedArtists.has(a.id));
+    if (toFollow.length === 0) return;
+
+    let succeeded = 0;
+    let failed = 0;
+
+    setBulkProgress({ type: 'artists', current: 0, total: toFollow.length });
+
+    for (let i = 0; i < toFollow.length; i++) {
+      setBulkProgress({ type: 'artists', current: i + 1, total: toFollow.length });
+      try {
+        await followArtist(toFollow[i].id);
+        setFollowedArtists((prev) => new Set(prev).add(toFollow[i].id));
+        succeeded++;
+      } catch (err: any) {
+        console.error(`Failed to follow ${toFollow[i].name}:`, err);
+        failed++;
+      }
+    }
+
+    setBulkProgress(null);
+
+    if (failed === 0) {
+      setToast({ message: t('playlist.followComplete'), type: 'success' });
+    } else {
+      setToast({
+        message: t('playlist.partialSuccess', {
+          succeeded: String(succeeded),
+          total: String(toFollow.length),
+          failed: String(failed),
+        }),
+        type: 'error',
+      });
+    }
+  };
+
+  const handleFollowMainArtists = async () => {
+    const toFollow = mainArtists.filter((a) => !followedArtists.has(a.id));
     if (toFollow.length === 0) return;
 
     let succeeded = 0;
@@ -290,6 +353,7 @@ export default function PlaylistImport(): JSX.Element {
   };
 
   const unfollowedArtistCount = uniqueArtists.filter((a) => !followedArtists.has(a.id)).length;
+  const unfollowedMainArtistCount = mainArtists.filter((a) => !followedArtists.has(a.id)).length;
   const undownloadedAlbumCount = uniqueAlbums.filter((a) => !downloadedAlbums.has(a.id)).length;
 
   const renderArtistLinks = (artists: PlaylistTrack['artists']) => {
@@ -405,43 +469,28 @@ export default function PlaylistImport(): JSX.Element {
             {/* Playlist summary card */}
             <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-6 md:p-8 border border-slate-200/50 dark:border-white/10">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                {/* Playlist thumbnail */}
-                <TrackThumb
-                  src={playlistThumbnail}
-                  className="w-24 h-24 rounded-2xl shadow-lg"
-                />
+                <div className="flex items-center gap-4 min-w-0">
+                  {/* Playlist thumbnail */}
+                  <TrackThumb
+                    src={playlistThumbnail}
+                    className="w-24 h-24 rounded-2xl shadow-lg flex-shrink-0"
+                  />
 
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl font-bold mb-1">
-                    <span className="text-gradient">{playlistTitle || 'Playlist'}</span>
-                  </h2>
-                  {playlistAuthor && (
-                    <p className="text-sm text-muted-foreground mb-1">
-                      {playlistAuthor}
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-2xl font-bold mb-1">
+                      <span className="text-gradient">{playlistTitle || 'Playlist'}</span>
+                    </h2>
+                    {playlistAuthor && (
+                      <p className="text-sm text-muted-foreground mb-1">
+                        {playlistAuthor}
+                      </p>
+                    )}
+                    <p className="text-muted-foreground">
+                      {allTracks.length} {t('playlist.tracksInPlaylist')} · {uniqueArtists.length} {t('playlist.artists').toLowerCase()} · {uniqueAlbums.length} {t('playlist.albums').toLowerCase()} · {formatDurationLong(allTracks.reduce((s, t) => s + (t.duration_seconds || 0), 0))}
                     </p>
-                  )}
-                  <p className="text-muted-foreground">
-                    {allTracks.length} {t('playlist.tracksInPlaylist')} · {uniqueArtists.length} {t('playlist.artists').toLowerCase()} · {uniqueAlbums.length} {t('playlist.albums').toLowerCase()} · {formatDurationLong(allTracks.reduce((s, t) => s + (t.duration_seconds || 0), 0))}
-                  </p>
+                  </div>
                 </div>
 
-                {/* Bulk progress indicator */}
-                {bulkProgress && (
-                  <div className="flex items-center gap-3 px-4 py-2 rounded-xl glass">
-                    <Spinner size="sm" className="text-blue-600 dark:text-red-500" />
-                    <span className="text-sm font-medium text-foreground">
-                      {bulkProgress.type === 'artists'
-                        ? t('playlist.followingProgress', {
-                            current: String(bulkProgress.current),
-                            total: String(bulkProgress.total),
-                          })
-                        : t('playlist.downloadingProgress', {
-                            current: String(bulkProgress.current),
-                            total: String(bulkProgress.total),
-                          })}
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -484,28 +533,67 @@ export default function PlaylistImport(): JSX.Element {
                 </button>
               </div>
 
-              {/* Bulk action button */}
+              {/* Bulk action buttons / progress */}
               {activeFilter === 'artists' && uniqueArtists.length > 0 && (
-                <Button
-                  onClick={handleFollowAll}
-                  disabled={isBulkRunning || unfollowedArtistCount === 0}
-                  variant="primary"
-                >
-                  {unfollowedArtistCount === 0
-                    ? `✓ ${t('playlist.followAll')}`
-                    : `${t('playlist.followAll')} (${unfollowedArtistCount})`}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {bulkProgress && bulkProgress.type === 'artists' ? (
+                    <div className="flex items-center gap-3 px-4 py-2 rounded-xl glass">
+                      <Spinner size="sm" className="text-blue-600 dark:text-red-500" />
+                      <span className="text-sm font-medium text-foreground">
+                        {t('playlist.followingProgress', {
+                          current: String(bulkProgress.current),
+                          total: String(bulkProgress.total),
+                        })}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={handleFollowAll}
+                        disabled={isBulkRunning || unfollowedArtistCount === 0}
+                        variant="secondary"
+                      >
+                        {unfollowedArtistCount === 0
+                          ? `✓ ${t('playlist.followAll')}`
+                          : `${t('playlist.followAll')} (${unfollowedArtistCount})`}
+                      </Button>
+                      <Button
+                        onClick={handleFollowMainArtists}
+                        disabled={isBulkRunning || unfollowedMainArtistCount === 0}
+                        variant="primary"
+                      >
+                        {unfollowedMainArtistCount === 0
+                          ? `✓ ${t('playlist.followMainArtists')}`
+                          : `${t('playlist.followMainArtists')} (${unfollowedMainArtistCount})`}
+                      </Button>
+                    </>
+                  )}
+                </div>
               )}
               {activeFilter === 'albums' && uniqueAlbums.length > 0 && (
-                <Button
-                  onClick={handleDownloadAll}
-                  disabled={isBulkRunning || undownloadedAlbumCount === 0}
-                  variant="primary"
-                >
-                  {undownloadedAlbumCount === 0
-                    ? `✓ ${t('playlist.downloadAll')}`
-                    : `${t('playlist.downloadAll')} (${undownloadedAlbumCount})`}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {bulkProgress && bulkProgress.type === 'albums' ? (
+                    <div className="flex items-center gap-3 px-4 py-2 rounded-xl glass">
+                      <Spinner size="sm" className="text-blue-600 dark:text-red-500" />
+                      <span className="text-sm font-medium text-foreground">
+                        {t('playlist.downloadingProgress', {
+                          current: String(bulkProgress.current),
+                          total: String(bulkProgress.total),
+                        })}
+                      </span>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={handleDownloadAll}
+                      disabled={isBulkRunning || undownloadedAlbumCount === 0}
+                      variant="primary"
+                    >
+                      {undownloadedAlbumCount === 0
+                        ? `✓ ${t('playlist.downloadAll')}`
+                        : `${t('playlist.downloadAll')} (${undownloadedAlbumCount})`}
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -525,11 +613,11 @@ export default function PlaylistImport(): JSX.Element {
                             {/* Artist row — whole row toggles expand */}
                             <div
                               onClick={() => toggleExpanded(artist.id)}
-                              className="flex items-center gap-4 px-4 md:px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer select-none"
+                              className="flex items-start sm:items-center gap-4 px-4 md:px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer select-none"
                             >
                               {/* Expand chevron */}
                               <svg
-                                className={`w-4 h-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                                className={`w-4 h-4 flex-shrink-0 mt-1 sm:mt-0 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -537,29 +625,31 @@ export default function PlaylistImport(): JSX.Element {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>
 
-                              {/* Artist info — name links to artist page */}
-                              <div className="flex-1 min-w-0">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); navigate(`/artists/${encodeURIComponent(artist.id)}`); }}
-                                  className="font-semibold text-foreground truncate hover:text-blue-600 dark:hover:text-red-400 hover:underline transition-colors text-left"
-                                >
-                                  {artist.name}
-                                </button>
-                                <p className="text-sm text-muted-foreground">
-                                  {artist.trackCount} {artist.trackCount === 1 ? 'track' : 'tracks'}
-                                </p>
-                              </div>
+                              {/* Artist info + action */}
+                              <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/artists/${encodeURIComponent(artist.id)}`); }}
+                                    className="font-semibold text-foreground truncate hover:text-blue-600 dark:hover:text-red-400 hover:underline transition-colors text-left block max-w-full"
+                                  >
+                                    {artist.name}
+                                  </button>
+                                  <p className="text-sm text-muted-foreground">
+                                    {artist.trackCount} {artist.trackCount === 1 ? 'track' : 'tracks'}
+                                  </p>
+                                </div>
 
-                              {/* Follow button */}
-                              <Button
-                                onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleFollowArtist(artist.id); }}
-                                disabled={isFollowed || isLoading || isBulkRunning}
-                                isLoading={isLoading}
-                                variant={isFollowed ? 'secondary' : 'primary'}
-                                size="sm"
-                              >
-                                {isFollowed ? `✓ ${t('playlist.followed')}` : t('artist.follow')}
-                              </Button>
+                                {/* Follow button */}
+                                <Button
+                                  onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleFollowArtist(artist.id); }}
+                                  disabled={isFollowed || isLoading || isBulkRunning}
+                                  isLoading={isLoading}
+                                  variant={isFollowed ? 'secondary' : 'primary'}
+                                  size="sm"
+                                >
+                                  {isFollowed ? `✓ ${t('playlist.followed')}` : t('artist.follow')}
+                                </Button>
+                              </div>
                             </div>
 
                             {/* Expanded tracks */}
@@ -618,11 +708,11 @@ export default function PlaylistImport(): JSX.Element {
                             {/* Album row — whole row toggles expand */}
                             <div
                               onClick={() => toggleExpanded(album.id)}
-                              className="flex items-center gap-4 px-4 md:px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer select-none"
+                              className="flex items-start sm:items-center gap-4 px-4 md:px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer select-none"
                             >
                               {/* Expand chevron */}
                               <svg
-                                className={`w-4 h-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                                className={`w-4 h-4 flex-shrink-0 mt-1 sm:mt-0 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -630,38 +720,40 @@ export default function PlaylistImport(): JSX.Element {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>
 
-                              {/* Album info — name links to album page */}
-                              <div className="flex-1 min-w-0">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); navigate(`/albums/${encodeURIComponent(album.id)}`); }}
-                                  className="font-semibold text-foreground truncate hover:text-blue-600 dark:hover:text-red-400 hover:underline transition-colors text-left"
-                                >
-                                  {album.name}
-                                </button>
-                                <p className="text-sm text-muted-foreground truncate">
-                                  {album.artistId ? (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); navigate(`/artists/${encodeURIComponent(album.artistId!)}`); }}
-                                      className="hover:text-blue-600 dark:hover:text-red-400 hover:underline transition-colors"
-                                    >
-                                      {album.artistName}
-                                    </button>
-                                  ) : (
-                                    <span>{album.artistName}</span>
-                                  )} · {album.trackCount} {album.trackCount === 1 ? 'track' : 'tracks'}
-                                </p>
-                              </div>
+                              {/* Album info + action */}
+                              <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/albums/${encodeURIComponent(album.id)}`); }}
+                                    className="font-semibold text-foreground truncate hover:text-blue-600 dark:hover:text-red-400 hover:underline transition-colors text-left block max-w-full"
+                                  >
+                                    {album.name}
+                                  </button>
+                                  <p className="text-sm text-muted-foreground truncate">
+                                    {album.artistId ? (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/artists/${encodeURIComponent(album.artistId!)}`); }}
+                                        className="hover:text-blue-600 dark:hover:text-red-400 hover:underline transition-colors"
+                                      >
+                                        {album.artistName}
+                                      </button>
+                                    ) : (
+                                      <span>{album.artistName}</span>
+                                    )} · {album.trackCount} {album.trackCount === 1 ? 'track' : 'tracks'}
+                                  </p>
+                                </div>
 
-                              {/* Download button */}
-                              <Button
-                                onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleDownloadAlbum(album.id); }}
-                                disabled={isDownloaded || isLoading || isBulkRunning}
-                                isLoading={isLoading}
-                                variant={isDownloaded ? 'secondary' : 'primary'}
-                                size="sm"
-                              >
-                                {isDownloaded ? `✓ ${t('playlist.downloaded')}` : t('album.download')}
-                              </Button>
+                                {/* Download button */}
+                                <Button
+                                  onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleDownloadAlbum(album.id); }}
+                                  disabled={isDownloaded || isLoading || isBulkRunning}
+                                  isLoading={isLoading}
+                                  variant={isDownloaded ? 'secondary' : 'primary'}
+                                  size="sm"
+                                >
+                                  {isDownloaded ? `✓ ${t('playlist.downloaded')}` : t('album.download')}
+                                </Button>
+                              </div>
                             </div>
 
                             {/* Expanded tracks */}

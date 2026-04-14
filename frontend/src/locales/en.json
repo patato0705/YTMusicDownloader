@@ -225,6 +225,7 @@
     "artists": "Artists",
     "albums": "Albums",
     "tracksInPlaylist": "tracks in playlist",
+    "followMainArtists": "Follow Main Artists",
     "followAll": "Follow All Artists",
     "downloadAll": "Download All Albums",
     "followingProgress": "Following {current} of {total}...",
