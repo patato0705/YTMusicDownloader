@@ -12,11 +12,7 @@ import { api } from './client';
 export interface ChartArtist {
   id: string;
   name: string;
-  thumbnails: Array<{
-    url: string;
-    width: number;
-    height: number;
-  }>;
+  thumbnail: string | null;
   rank: number;
   trend: 'up' | 'down' | 'neutral';
   followed: boolean;
