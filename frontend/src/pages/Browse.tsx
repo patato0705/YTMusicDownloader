@@ -142,11 +142,11 @@ export default function Browse(): JSX.Element {
         <PageHero
           title={
             <>
-              <span className="text-foreground">Discover </span>
-              <span className="text-gradient">New Music</span>
+              <span className="text-foreground">{t('browse.heroDiscover')} </span>
+              <span className="text-gradient">{t('browse.heroNewMusic')}</span>
             </>
           }
-          subtitle="Search YouTube Music for artists, albums, and tracks to add to your library"
+          subtitle={t('browse.heroSubtitle')}
         />
 
         {/* Search bar + Import playlist */}
@@ -154,7 +154,7 @@ export default function Browse(): JSX.Element {
           <SearchInput
             value={query}
             onChange={setQuery}
-            placeholder="Search for artists, albums, or tracks..."
+            placeholder={t('browse.searchInputPlaceholder')}
             size="lg"
             autoFocus
             loading={loading}
@@ -186,7 +186,7 @@ export default function Browse(): JSX.Element {
               <span className="text-2xl">⚠️</span>
               <div>
                 <h3 className="font-semibold text-red-600 dark:text-red-400 mb-1">
-                  Search Error
+                  {t('browse.searchError')}
                 </h3>
                 <p className="text-sm text-red-600/80 dark:text-red-400/80">{error}</p>
               </div>
@@ -200,9 +200,9 @@ export default function Browse(): JSX.Element {
             <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
               <span className="text-5xl">🔍</span>
             </div>
-            <h3 className="text-2xl font-bold mb-3 text-foreground">Start Your Search</h3>
+            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('browse.startSearch')}</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Enter an artist name, album title, or song to discover new music from YouTube Music
+              {t('browse.startSearchDescription')}
             </p>
           </div>
         )}
@@ -213,12 +213,12 @@ export default function Browse(): JSX.Element {
             <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
               <span className="text-5xl">😔</span>
             </div>
-            <h3 className="text-2xl font-bold mb-3 text-foreground">No Results Found</h3>
+            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('browse.noResults')}</h3>
             <p className="text-muted-foreground max-w-md mx-auto mb-6">
-              We couldn't find anything matching <span className="font-semibold text-foreground">"{query}"</span>
+              {t('browse.noResultsFor')} <span className="font-semibold text-foreground">"{query}"</span>
             </p>
             <p className="text-sm text-muted-foreground">
-              Try different keywords or check your spelling
+              {t('browse.tryDifferentKeywords')}
             </p>
           </div>
         )}
@@ -236,7 +236,7 @@ export default function Browse(): JSX.Element {
                     : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
                 }`}
               >
-                All
+                {t('common.all')}
               </button>
               {results.artists && results.artists.length > 0 && (
                 <button
@@ -247,7 +247,7 @@ export default function Browse(): JSX.Element {
                       : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
                   }`}
                 >
-                  Artists ({results.artists.length})
+                  {t('browse.sections.artists')} ({results.artists.length})
                 </button>
               )}
               {results.albums && results.albums.length > 0 && (
@@ -259,7 +259,7 @@ export default function Browse(): JSX.Element {
                       : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
                   }`}
                 >
-                  Albums ({results.albums.length})
+                  {t('browse.sections.albums')} ({results.albums.length})
                 </button>
               )}
               {results.tracks && results.tracks.length > 0 && (
@@ -271,7 +271,7 @@ export default function Browse(): JSX.Element {
                       : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
                   }`}
                 >
-                  Tracks ({results.tracks.length})
+                  {t('browse.sections.tracks')} ({results.tracks.length})
                 </button>
               )}
             </div>
@@ -281,7 +281,7 @@ export default function Browse(): JSX.Element {
               {/* Artists */}
               {filteredResults.artists && filteredResults.artists.length > 0 && (
                 <section>
-                  <SectionHeader>Artists</SectionHeader>
+                  <SectionHeader>{t('browse.sections.artists')}</SectionHeader>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                     {filteredResults.artists.map((artist) => {
                       const formatted = formatArtist(artist);
@@ -304,7 +304,7 @@ export default function Browse(): JSX.Element {
               {/* Albums */}
               {filteredResults.albums && filteredResults.albums.length > 0 && (
                 <section>
-                  <SectionHeader>Albums</SectionHeader>
+                  <SectionHeader>{t('browse.sections.albums')}</SectionHeader>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                     {filterAlbums(filteredResults.albums).map((album) => {
                       const formatted = formatAlbum(album);
@@ -328,7 +328,7 @@ export default function Browse(): JSX.Element {
               {/* Tracks */}
               {filteredResults.tracks && filteredResults.tracks.length > 0 && (
                 <section>
-                  <SectionHeader>Tracks</SectionHeader>
+                  <SectionHeader>{t('browse.sections.tracks')}</SectionHeader>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                     {filteredResults.tracks.map((track) => {
                       const formatted = formatTrack(track);

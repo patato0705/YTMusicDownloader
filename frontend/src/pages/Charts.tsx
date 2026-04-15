@@ -66,7 +66,7 @@ export default function Charts(): JSX.Element {
                 <span className="text-gradient">Charts</span>
               </>
             }
-            subtitle="Discover trending artists from around the world"
+            subtitle={t('charts.heroSubtitle')}
           />
           
           <div className="relative z-10 text-center">
@@ -92,7 +92,7 @@ export default function Charts(): JSX.Element {
                 <span className="text-gradient">Charts</span>
               </>
             }
-            subtitle="Discover trending artists from around the world"
+            subtitle={t('charts.heroSubtitle')}
           />
           
           <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-6 border border-red-500/20">
@@ -100,7 +100,7 @@ export default function Charts(): JSX.Element {
               <span className="text-2xl">⚠️</span>
               <div>
                 <h3 className="font-semibold text-red-600 dark:text-red-400 mb-1">
-                  Error Loading Charts
+                  {t('charts.errorTitle')}
                 </h3>
                 <p className="text-sm text-red-600/80 dark:text-red-400/80">{error}</p>
               </div>
@@ -125,16 +125,16 @@ export default function Charts(): JSX.Element {
                 <span className="text-gradient">Charts</span>
               </>
             }
-            subtitle="Discover trending artists from around the world"
+            subtitle={t('charts.heroSubtitle')}
           />
           
           <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-16 border border-slate-200/50 dark:border-white/10 text-center">
             <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
               <span className="text-5xl">📊</span>
             </div>
-            <h3 className="text-2xl font-bold mb-3 text-foreground">No Charts Followed</h3>
+            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('charts.noCharts')}</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
-              No music charts are currently being tracked. Contact an administrator to follow charts from different countries.
+              {t('charts.noChartsDescription')}
             </p>
           </div>
         </div>
@@ -153,8 +153,8 @@ export default function Charts(): JSX.Element {
         <PageHero
           title={
             <>
-              <span className="text-foreground">Music </span>
-              <span className="text-gradient">Charts</span>
+              <span className="text-foreground">{t('charts.music')} </span>
+              <span className="text-gradient">{t('nav.charts')}</span>
             </>
           }
           subtitle="Discover trending artists from around the world"
@@ -185,7 +185,7 @@ export default function Charts(): JSX.Element {
                         {country.name}
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        Top {subscription.top_n_artists} Artists
+                        {t('charts.topNArtists', { n: subscription.top_n_artists })}
                       </p>
                     </div>
                   </div>
@@ -200,7 +200,7 @@ export default function Charts(): JSX.Element {
                 {/* Last sync info */}
                 {subscription.last_synced_at && (
                   <p className="text-xs text-muted-foreground mt-4 text-center">
-                    Last updated: {new Date(subscription.last_synced_at).toLocaleString()}
+                    {t('charts.lastUpdated', { date: new Date(subscription.last_synced_at).toLocaleString() })}
                   </p>
                 )}
               </div>

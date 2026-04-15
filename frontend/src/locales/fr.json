@@ -14,7 +14,9 @@
     "submit": "Soumettre",
     "yes": "Oui",
     "no": "Non",
-    "or": "ou"
+    "or": "ou",
+    "all": "Tout",
+    "searchMusic": "Rechercher de la musique..."
   },
   "auth": {
     "login": {
@@ -62,14 +64,59 @@
     "library": "Bibliothèque",
     "settings": "Paramètres",
     "admin": "Administration",
+    "charts": "Charts",
     "import": "Importer"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "profile": "Profil",
+    "appearance": "Apparence",
+    "language": "Langue",
+    "theme": {
+      "title": "Thème",
+      "light": "Clair",
+      "dark": "Sombre",
+      "system": "Système",
+      "switchToLight": "Passer en mode clair",
+      "switchToDark": "Passer en mode sombre"
+    },
+    "account": {
+      "username": "Nom d'utilisateur",
+      "email": "Email",
+      "role": "Rôle",
+      "changePassword": "Changer le mot de passe"
+    },
+    "changeLanguage": "Changer de langue"
+  },
+  "home": {
+    "badge": "Système en ligne",
+    "welcomeBack": "Bon retour,",
+    "heroSubtitle": "Votre système personnel de gestion de bibliothèque musicale. Téléchargez, organisez et synchronisez avec Jellyfin.",
+    "quickActions": "Actions rapides",
+    "browseDescription": "Rechercher de nouveaux contenus sur YouTube Music",
+    "libraryDescription": "Gérer vos artistes et albums suivis",
+    "recentActivity": "Activité récente",
+    "loadingActivity": "Chargement de l'activité récente...",
+    "noActivity": "Aucune activité",
+    "noActivityDescription": "Commencez par explorer et suivre vos artistes favoris",
+    "browseMusic": "Explorer la musique",
+    "complete": "Terminé"
   },
   "browse": {
     "title": "Explorer",
+    "heroDiscover": "Découvrir",
+    "heroNewMusic": "Nouvelle Musique",
+    "heroSubtitle": "Rechercher des artistes, albums et titres sur YouTube Music à ajouter à votre bibliothèque",
     "searchPlaceholder": "Rechercher artistes, albums, titres...",
+    "searchInputPlaceholder": "Rechercher des artistes, albums ou titres...",
     "searching": "Recherche...",
     "noQuery": "Tapez quelque chose pour rechercher",
     "noResults": "Aucun résultat trouvé",
+    "searchError": "Erreur de recherche",
+    "startSearch": "Commencez votre recherche",
+    "startSearchDescription": "Entrez un nom d'artiste, un titre d'album ou une chanson pour découvrir de la nouvelle musique sur YouTube Music",
+    "noResultsFor": "Aucun résultat pour",
+    "tryDifferentKeywords": "Essayez d'autres mots-clés ou vérifiez l'orthographe",
     "sections": {
       "artists": "Artistes",
       "albums": "Albums",
@@ -110,9 +157,17 @@
   },
   "library": {
     "title": "Bibliothèque",
+    "heroYour": "Votre",
+    "heroLibrary": "Bibliothèque Musicale",
+    "heroSubtitle": "Gérez vos artistes et albums suivis. Suivez les téléchargements et organisez votre collection.",
     "artists": "Artistes suivis",
     "albums": "Albums suivis",
     "tracks": "Titres téléchargés",
+    "searchPlaceholder": "Rechercher dans votre bibliothèque...",
+    "emptyTitle": "Votre bibliothèque est vide",
+    "emptyDescription": "Commencez à construire votre collection en explorant et en suivant vos artistes favoris !",
+    "noMatches": "Aucun résultat",
+    "noMatchesDescription": "Aucun élément dans votre bibliothèque ne correspond à",
     "stats": {
       "title": "Statistiques",
       "artists": "Artistes",
@@ -126,23 +181,34 @@
       "tracks": "Aucun titre téléchargé"
     }
   },
-  "settings": {
-    "title": "Paramètres",
-    "profile": "Profil",
-    "appearance": "Apparence",
-    "language": "Langue",
-    "theme": {
-      "title": "Thème",
-      "light": "Clair",
-      "dark": "Sombre",
-      "system": "Système"
+  "charts": {
+    "music": "Musique",
+    "heroSubtitle": "Découvrez les artistes tendance du monde entier",
+    "errorTitle": "Erreur de chargement des charts",
+    "noCharts": "Aucun chart suivi",
+    "noChartsDescription": "Aucun chart musical n'est actuellement suivi. Contactez un administrateur pour suivre les charts de différents pays.",
+    "topNArtists": "Top {n} Artistes",
+    "lastUpdated": "Dernière mise à jour : {date}",
+    "followChart": "Suivre le chart",
+    "musicChart": "Chart Musical",
+    "numberOfArtists": "Nombre d'artistes à suivre",
+    "trackTopArtists": "Suivre les meilleurs artistes",
+    "storageWarning": "Des nombres plus élevés suivent plus d'artistes mais nécessitent plus de stockage et de temps de synchronisation",
+    "artistCountError": "Le nombre d'artistes doit être compris entre 1 et 100"
+  },
+  "jobs": {
+    "title": "Tâches",
+    "status": {
+      "queued": "En attente",
+      "reserved": "Réservé",
+      "done": "Terminé",
+      "failed": "Échoué",
+      "downloading": "Téléchargement",
+      "new": "Nouveau"
     },
-    "account": {
-      "username": "Nom d'utilisateur",
-      "email": "Email",
-      "role": "Rôle",
-      "changePassword": "Changer le mot de passe"
-    }
+    "cancel": "Annuler la tâche",
+    "retry": "Réessayer",
+    "view": "Voir les détails"
   },
   "admin": {
     "settings": {
@@ -153,18 +219,6 @@
       "cleanupDone": "Nettoyage terminé",
       "cleanupNone": "Aucun élément orphelin trouvé"
     }
-  },
-  "jobs": {
-    "title": "Tâches",
-    "status": {
-      "queued": "En attente",
-      "reserved": "Réservé",
-      "done": "Terminé",
-      "failed": "Échoué"
-    },
-    "cancel": "Annuler la tâche",
-    "retry": "Réessayer",
-    "view": "Voir les détails"
   },
   "playlist": {
     "title": "Importer une playlist",

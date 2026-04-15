@@ -100,7 +100,7 @@ export default function Album(): JSX.Element {
       case 'done':
         return {
           styles: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 dark:border-green-500/25',
-          label: 'Done',
+          label: t('jobs.status.done'),
           icon: (
             <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -110,7 +110,7 @@ export default function Album(): JSX.Element {
       case 'failed':
         return {
           styles: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 dark:border-red-500/25',
-          label: 'Failed',
+          label: t('jobs.status.failed'),
           icon: (
             <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -120,7 +120,7 @@ export default function Album(): JSX.Element {
       case 'downloading':
         return {
           styles: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 dark:border-blue-500/25',
-          label: 'Downloading',
+          label: t('jobs.status.downloading'),
           icon: (
             <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -130,7 +130,7 @@ export default function Album(): JSX.Element {
       default:
         return {
           styles: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-400/20 dark:border-slate-500/20',
-          label: 'New',
+          label: t('jobs.status.new'),
           icon: (
             <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
