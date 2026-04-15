@@ -348,7 +348,7 @@ export default function AdminPanel(): JSX.Element {
               {category.charAt(0).toUpperCase() + category.slice(1)} {t('admin.settings.title')}
             </SectionHeader>
             
-            <div className="glass rounded-2xl p-6 border-gradient space-y-4">
+            <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
               {categorySettings.map(setting => (
                 <div key={setting.key} className="flex items-center justify-between py-3 border-b border-slate-200 dark:border-white/10 last:border-0">
                   <div className="flex-1 mr-4">
@@ -411,7 +411,7 @@ export default function AdminPanel(): JSX.Element {
         <section>
           <SectionHeader>{t('admin.settings.maintenance')}</SectionHeader>
 
-          <div className="glass rounded-2xl p-6 border-gradient space-y-4">
+          <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
             <div className="flex items-center justify-between py-3">
               <div className="flex-1 mr-4">
                 <label className="font-semibold text-foreground block mb-1">
@@ -444,7 +444,7 @@ export default function AdminPanel(): JSX.Element {
     return (
       <div className="space-y-6">
         {/* Country Selection */}
-        <div className="glass rounded-2xl p-6 border-gradient">
+        <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10">
           <h3 className="text-lg font-semibold text-foreground mb-4">
             {t('admin.charts.selectCountry') || 'Select a Country Chart'}
           </h3>
@@ -507,7 +507,7 @@ export default function AdminPanel(): JSX.Element {
         </div>
 
         {/* Current Subscriptions */}
-        <div className="glass rounded-2xl p-6 border-gradient">
+        <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10">
           <h3 className="text-lg font-semibold text-foreground mb-4">
             {t('admin.charts.currentSubscriptions') || 'Current Chart Subscriptions'}
           </h3>
@@ -608,7 +608,7 @@ export default function AdminPanel(): JSX.Element {
     return (
       <div className="space-y-6">
         {/* Search and Filters */}
-        <div className="glass rounded-2xl p-6 border-gradient space-y-4">
+        <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
           <div className="flex flex-col md:flex-row gap-4">
             {/* Search */}
             <div className="flex-1">
@@ -660,7 +660,7 @@ export default function AdminPanel(): JSX.Element {
         </div>
 
         {/* Users Table */}
-        <div className="glass rounded-2xl overflow-hidden border-gradient">
+        <div className="glass rounded-2xl overflow-hidden border border-slate-200/50 dark:border-white/10">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
