@@ -95,29 +95,48 @@ export default function Album(): JSX.Element {
     }
   };
 
-  const getStatusStyles = (status?: string) => {
+  const getStatusConfig = (status?: string): { styles: string; label: string; icon: JSX.Element } => {
     switch (status) {
       case 'done':
-        return 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30';
+        return {
+          styles: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 dark:border-green-500/25',
+          label: 'Done',
+          icon: (
+            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+          ),
+        };
       case 'failed':
-        return 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30';
+        return {
+          styles: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 dark:border-red-500/25',
+          label: 'Failed',
+          icon: (
+            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          ),
+        };
       case 'downloading':
-        return 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30';
+        return {
+          styles: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 dark:border-blue-500/25',
+          label: 'Downloading',
+          icon: (
+            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          ),
+        };
       default:
-        return 'bg-slate-500/20 text-slate-600 dark:text-slate-400 border-slate-500/30';
-    }
-  };
-
-  const getStatusIcon = (status?: string) => {
-    switch (status) {
-      case 'done':
-        return '✓';
-      case 'failed':
-        return '✗';
-      case 'downloading':
-        return '↓';
-      default:
-        return '•';
+        return {
+          styles: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-400/20 dark:border-slate-500/20',
+          label: 'New',
+          icon: (
+            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          ),
+        };
     }
   };
 
@@ -356,12 +375,15 @@ export default function Album(): JSX.Element {
                           {formatDuration(track.duration_seconds || track.duration)}
                         </td>
                         <td className="px-4 md:px-6 py-4 text-center">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border ${getStatusStyles(track.status)}`}
-                          >
-                            <span>{getStatusIcon(track.status)}</span>
-                            <span className="capitalize">{track.status || 'new'}</span>
-                          </span>
+                          {(() => {
+                            const { styles, label, icon } = getStatusConfig(track.status);
+                            return (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border backdrop-blur-sm ${styles}`}>
+                                {icon}
+                                <span>{label}</span>
+                              </span>
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}
@@ -375,7 +397,7 @@ export default function Album(): JSX.Element {
             <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
               <span className="text-5xl">🎵</span>
             </div>
-            <h3 className="text-2xl font-bold mb-3">{t('album.noTracks')}</h3>
+            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('album.noTracks')}</h3>
             <p className="text-muted-foreground">
               {t('album.noTracksDescription')}
             </p>
