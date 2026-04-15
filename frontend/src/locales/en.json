@@ -268,8 +268,13 @@
       "showing": "Showing",
       "of": "of",
       "users": "users",
+<<<<<<< HEAD
       "allStatuses": "All statuses",
       "allRoles": "All roles",
+=======
+      "allstatuses": "All statuses",
+      "allroles": "All roles",
+>>>>>>> 7369a315c8dca9beae2b431b065b9f40fd32a1a3
       "create": "Create user",
       "username": "Username",
       "email": "Email",
