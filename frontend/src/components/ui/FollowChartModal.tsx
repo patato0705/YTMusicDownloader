@@ -22,7 +22,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
     setError('');
 
     if (topNArtists < 1 || topNArtists > 100) {
-      setError('Number of artists must be between 1 and 100');
+      setError(t('charts.artistCountError'));
       return;
     }
 
@@ -44,7 +44,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
       <div className="glass rounded-3xl p-8 max-w-md w-full border-gradient shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gradient">
-            Follow Chart
+            {t('charts.followChart')}
           </h2>
           <button
             onClick={onClose}
@@ -69,7 +69,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
               <span className="text-4xl">{country.flag}</span>
               <div>
                 <h3 className="font-semibold text-foreground">{country.name}</h3>
-                <p className="text-sm text-muted-foreground">Music Chart</p>
+                <p className="text-sm text-muted-foreground">{t('charts.musicChart')}</p>
               </div>
             </div>
           </div>
@@ -77,7 +77,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
           {/* Top N Artists slider */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-3">
-              Number of Artists to Track
+              {t('charts.numberOfArtists')}
             </label>
             
             <div className="space-y-4">
@@ -96,7 +96,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
 
               {/* Value display */}
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Track top artists</span>
+                <span className="text-sm text-muted-foreground">{t('charts.trackTopArtists')}</span>
                 <div className="glass rounded-xl px-4 py-2 border border-slate-200/50 dark:border-white/10">
                   <span className="text-2xl font-bold text-gradient">{topNArtists}</span>
                 </div>
@@ -122,7 +122,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
             </div>
 
             <p className="text-xs text-muted-foreground mt-2">
-              Higher numbers track more artists but require more storage and sync time
+              {t('charts.storageWarning')}
             </p>
           </div>
 
@@ -142,7 +142,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
               isLoading={loading}
               className="flex-1"
             >
-              Follow Chart
+              {t('charts.followChart')}
             </Button>
           </div>
         </form>

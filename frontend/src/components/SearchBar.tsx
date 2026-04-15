@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { search } from "../api/index";
 import { Link } from "react-router-dom";
 import { SearchInput } from "./ui/SearchInput";
+import { useI18n } from "../contexts/I18nContext";
 
 type ResultSet = {
   artists?: any[];
@@ -19,7 +20,8 @@ function useDebounce<T>(value: T, delay = 300) {
   return v;
 }
 
-export default function SearchBar({ placeholder = "Search music..." }: { placeholder?: string }) {
+export default function SearchBar({ placeholder }: { placeholder?: string }) {
+  const { t } = useI18n();
   const [q, setQ] = useState("");
   const debouncedQ = useDebounce(q, 400);
   const [results, setResults] = useState<ResultSet>({});
@@ -71,7 +73,7 @@ export default function SearchBar({ placeholder = "Search music..." }: { placeho
       <SearchInput
         value={q}
         onChange={setQ}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('common.searchMusic')}
         onFocus={() => debouncedQ && setOpen(true)}
         size="md"
         loading={loading}
@@ -87,7 +89,7 @@ export default function SearchBar({ placeholder = "Search music..." }: { placeho
                 <div className="p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-2xl">🎤</span>
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Artists</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t('browse.sections.artists')}</h3>
                   </div>
                   <div className="space-y-1">
                     {results.artists.slice(0, 6).map((a: any) => (
@@ -122,7 +124,7 @@ export default function SearchBar({ placeholder = "Search music..." }: { placeho
                 <div className="p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-2xl">💿</span>
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Albums</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t('browse.sections.albums')}</h3>
                   </div>
                   <div className="space-y-1">
                     {results.albums.slice(0, 8).map((al: any) => (
@@ -155,7 +157,7 @@ export default function SearchBar({ placeholder = "Search music..." }: { placeho
                 <div className="p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-2xl">🎵</span>
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tracks</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t('browse.sections.tracks')}</h3>
                   </div>
                   <div className="space-y-1">
                     {results.tracks.slice(0, 10).map((t: any) => (
@@ -193,7 +195,7 @@ export default function SearchBar({ placeholder = "Search music..." }: { placeho
           ) : (
             <div className="p-8 text-center">
               <div className="text-4xl mb-3">🔍</div>
-              <p className="text-sm text-foreground text-muted-foreground">No results found</p>
+              <p className="text-sm text-foreground text-muted-foreground">{t('browse.noResults')}</p>
             </div>
           )}
         </div>

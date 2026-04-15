@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Locale, SUPPORTED_LOCALES, getLanguage } from '../../config/i18n';
+import { useI18n } from '../../contexts/I18nContext';
 
 interface LanguageSelectorProps {
   currentLocale: Locale;
@@ -20,6 +21,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, right: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const { t } = useI18n();
 
   const currentLanguage = getLanguage(currentLocale) || SUPPORTED_LOCALES[0];
 
@@ -87,7 +89,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
           ref={buttonRef}
           onClick={handleToggle}
           className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-blue-600 dark:hover:text-red-400 transition-all duration-300"
-          title="Change language"
+          title={t('settings.changeLanguage')}
         >
           <span>{currentLanguage.flag}</span>
           <span>{currentLanguage.code.toUpperCase()}</span>

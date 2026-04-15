@@ -14,7 +14,9 @@
     "submit": "Submit",
     "yes": "Yes",
     "no": "No",
-    "or": "or"
+    "or": "or",
+    "all": "All",
+    "searchMusic": "Search music..."
   },
   "auth": {
     "login": {
@@ -48,11 +50,18 @@
     "logout": "Logout",
     "changePassword": {
       "title": "Change Password",
+      "subtitle": "Choose a new password",
       "current": "Current Password",
       "new": "New Password",
       "confirm": "Confirm New Password",
       "button": "Change Password",
-      "success": "Password changed successfully"
+      "success": "Password changed successfully",
+      "tips": {
+        "title": "Tips for selecting a password",
+        "length": "Your password must be at least 8 characters",
+        "mix": "You should try to use a combination of letters, numbers and symbols",
+        "unique": "You should use an unique password on each website."
+      }
     },
     "errors": {
       "usernameRequired": "Username is required",
@@ -77,12 +86,56 @@
     "import": "Import",
     "admin": "Admin Panel"
   },
+  "settings": {
+    "title": "Settings",
+    "profile": "Profile",
+    "appearance": "Appearance",
+    "language": "Language",
+    "theme": {
+      "title": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System",
+      "switchToLight": "Switch to light mode",
+      "switchToDark": "Switch to dark mode"
+    },
+    "account": {
+      "username": "Username",
+      "email": "Email",
+      "role": "Role",
+      "changePassword": "Change Password"
+    },
+    "changeLanguage": "Change language"
+  },
+  "home": {
+    "badge": "System Online",
+    "welcomeBack": "Welcome back,",
+    "heroSubtitle": "Your personal music library management system. Download, organize, and sync with Jellyfin.",
+    "quickActions": "Quick Actions",
+    "browseDescription": "Search YouTube Music for new content",
+    "libraryDescription": "Manage your followed artists and albums",
+    "recentActivity": "Recent Activity",
+    "loadingActivity": "Loading recent activity...",
+    "noActivity": "No activity yet",
+    "noActivityDescription": "Start by browsing and following your favorite artists",
+    "browseMusic": "Browse Music",
+    "complete": "Complete"
+  },
   "browse": {
     "title": "Browse",
+    "heroDiscover": "Discover",
+    "heroNewMusic": "New Music",
+    "heroSubtitle": "Search YouTube Music for artists, albums, and tracks to add to your library",
     "searchPlaceholder": "Search artists, albums, tracks...",
+    "searchInputPlaceholder": "Search for artists, albums, or tracks...",
     "searching": "Searching...",
     "noQuery": "Type something to search",
     "noResults": "No results found",
+    "searchError": "Search Error",
+    "startSearch": "Start Your Search",
+    "startSearchDescription": "Enter an artist name, album title, or song to discover new music from YouTube Music",
+    "noResultsFor": "We couldn't find anything matching",
+    "tryDifferentKeywords": "Try different keywords or check your spelling",
     "sections": {
       "artists": "Artists",
       "albums": "Albums",
@@ -134,9 +187,17 @@
   },
   "library": {
     "title": "Library",
+    "heroYour": "Your",
+    "heroLibrary": "Music Library",
+    "heroSubtitle": "Manage your followed artists and albums. Track downloads and organize your collection.",
     "artists": "Followed Artists",
     "albums": "Followed Albums",
     "tracks": "Downloaded Tracks",
+    "searchPlaceholder": "Search your library...",
+    "emptyTitle": "Your library is empty",
+    "emptyDescription": "Start building your collection by browsing and following your favorite artists!",
+    "noMatches": "No matches found",
+    "noMatchesDescription": "No items in your library match",
     "stats": {
       "title": "Statistics",
       "artists": "Artists",
@@ -150,13 +211,30 @@
       "tracks": "No downloaded tracks yet"
     }
   },
+  "charts": {
+    "music": "Music",
+    "heroSubtitle": "Discover trending artists from around the world",
+    "errorTitle": "Error Loading Charts",
+    "noCharts": "No Charts Followed",
+    "noChartsDescription": "No music charts are currently being tracked. Contact an administrator to follow charts from different countries.",
+    "topNArtists": "Top {n} Artists",
+    "lastUpdated": "Last updated: {date}",
+    "followChart": "Follow Chart",
+    "musicChart": "Music Chart",
+    "numberOfArtists": "Number of Artists to Track",
+    "trackTopArtists": "Track top artists",
+    "storageWarning": "Higher numbers track more artists but require more storage and sync time",
+    "artistCountError": "Number of artists must be between 1 and 100"
+  },
   "jobs": {
     "title": "Jobs",
     "status": {
       "queued": "Queued",
       "reserved": "Reserved",
       "done": "Done",
-      "failed": "Failed"
+      "failed": "Failed",
+      "downloading": "Downloading",
+      "new": "New"
     },
     "cancel": "Cancel Job",
     "retry": "Retry",
@@ -166,13 +244,13 @@
     "title": "Admin",
     "panel": "Panel",
     "subtitle": "Manage application settings and users",
-    
+
     "tabs": {
       "settings": "Settings",
       "charts": "Charts",
       "users": "Users"
     },
-    
+
     "settings": {
       "title": "Settings",
       "save": "Save",
@@ -184,8 +262,15 @@
       "cleanupDone": "Cleanup complete",
       "cleanupNone": "No orphaned items found"
     },
-    
+
     "users": {
+      "search": "Search for users",
+      "showing": "Showing",
+      "of": "of",
+      "users": "users",
+      "allstatuses": "All statuses",
+      "allroles": "All roles",
+      "create": "Create user",
       "username": "Username",
       "email": "Email",
       "role": "Role",

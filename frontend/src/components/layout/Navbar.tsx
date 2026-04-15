@@ -132,7 +132,7 @@ export default function Navbar(): JSX.Element {
                     onClick={toggleTheme}
                     className="hidden md:block p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-300 group"
                     aria-label="Toggle theme"
-                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    title={theme === 'dark' ? t('settings.theme.switchToLight') : t('settings.theme.switchToDark')}
                   >
                     {theme === 'dark' ? (
                       <svg className="w-5 h-5 text-slate-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">

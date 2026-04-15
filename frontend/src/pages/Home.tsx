@@ -26,6 +26,7 @@ const LibraryIcon = () => <span className="text-2xl">📚</span>;
  */
 const AlbumCard = memo(function AlbumCard({ album }: { album: any }) {
   const [imgFailed, setImgFailed] = useState(false);
+  const { t } = useI18n();
 
   const thumbnailUrl = getImageUrl(album.image_local || album.thumbnail);
   const showImage = Boolean(thumbnailUrl) && !imgFailed;
@@ -80,9 +81,9 @@ const AlbumCard = memo(function AlbumCard({ album }: { album: any }) {
         {/* Download progress bar */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{album.tracks_downloaded}/{album.tracks_total} tracks</span>
+            <span>{album.tracks_downloaded}/{album.tracks_total} {t('album.tracks')}</span>
             {progress === 100 && (
-              <span className="text-blue-600 dark:text-red-400">✓ Complete</span>
+              <span className="text-blue-600 dark:text-red-400">✓ {t('home.complete')}</span>
             )}
           </div>
           <div className="h-1 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
@@ -129,10 +130,10 @@ export default function Home(): JSX.Element {
 
   const heroTitle = useMemo(() => (
     <>
-      <span className="text-foreground">Welcome back, </span>
+      <span className="text-foreground">{t('home.welcomeBack')} </span>
       <span className="text-gradient">{user?.username}</span>
     </>
-  ), [user?.username]);
+  ), [user?.username, t]);
 
   return (
     <div className="relative min-h-screen">
@@ -144,34 +145,34 @@ export default function Home(): JSX.Element {
       <div className="relative z-10 space-y-12 pb-12">
         {/* Hero section */}
         <PageHero
-          badge={{ text: 'System Online', online: true }}
+          badge={{ text: t('home.badge'), online: true }}
           title={heroTitle}
-          subtitle="Your personal music library management system. Download, organize, and sync with Jellyfin."
+          subtitle={t('home.heroSubtitle')}
         />
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             icon={<ArtistsIcon />}
-            label="Artists"
+            label={t('library.stats.artists')}
             value={loading ? <Spinner size="sm" /> : formatNumber(stats?.artists?.total || 0)}
             loading={loading}
           />
           <StatCard
             icon={<AlbumsIcon />}
-            label="Albums"
+            label={t('library.stats.albums')}
             value={loading ? <Spinner size="sm" /> : formatNumber(stats?.albums?.total || 0)}
             loading={loading}
           />
           <StatCard
             icon={<TracksIcon />}
-            label="Tracks"
+            label={t('library.stats.tracks')}
             value={loading ? <Spinner size="sm" /> : formatNumber(stats?.tracks?.downloaded || 0)}
             loading={loading}
           />
           <StatCard
             icon={<ActivityIcon />}
-            label="Storage"
+            label={t('library.stats.diskUsage')}
             value={loading ? <Spinner size="sm" /> : `${stats?.storage?.estimated_gb?.toFixed(1) || 0} GB`}
             loading={loading}
           />
@@ -179,14 +180,14 @@ export default function Home(): JSX.Element {
 
         {/* Quick Actions */}
         <div>
-          <SectionHeader>Quick Actions</SectionHeader>
+          <SectionHeader>{t('home.quickActions')}</SectionHeader>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <ActionCard
               to="/browse"
               icon={<SearchIcon />}
               title={t('nav.browse')}
-              description="Search YouTube Music for new content"
+              description={t('home.browseDescription')}
               gradient="from-blue-500/10 to-indigo-500/10 dark:from-red-900/20 dark:to-red-800/20"
             />
 
@@ -194,7 +195,7 @@ export default function Home(): JSX.Element {
               to="/library"
               icon={<LibraryIcon />}
               title={t('nav.library')}
-              description="Manage your followed artists and albums"
+              description={t('home.libraryDescription')}
               gradient="from-indigo-500/10 to-violet-500/10 dark:from-red-900/20 dark:via-purple-900/15 dark:to-red-800/20"
             />
           </div>
@@ -202,14 +203,14 @@ export default function Home(): JSX.Element {
 
         {/* Recent Activity */}
         <div>
-          <SectionHeader>Recent Activity</SectionHeader>
+          <SectionHeader>{t('home.recentActivity')}</SectionHeader>
 
           <div className="rounded-2xl p-6 bg-white/90 dark:bg-zinc-900/90 border border-slate-200/60 dark:border-white/10 shadow-sm">
             {loading ? (
               <div className="flex items-center justify-center py-16">
                 <div className="text-center">
                   <Spinner className="text-blue-600 dark:text-red-500 mb-4" />
-                  <p className="text-muted-foreground">Loading recent activity...</p>
+                  <p className="text-muted-foreground">{t('home.loadingActivity')}</p>
                 </div>
               </div>
             ) : recentAlbums.length > 0 ? (
@@ -223,16 +224,16 @@ export default function Home(): JSX.Element {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4">
                   <TracksIcon />
                 </div>
-                <h3 className="text-xl font-semibold mb-2">No activity yet</h3>
+                <h3 className="text-xl font-semibold mb-2">{t('home.noActivity')}</h3>
                 <p className="text-muted-foreground mb-6">
-                  Start by browsing and following your favorite artists
+                  {t('home.noActivityDescription')}
                 </p>
                 <Link
                   to="/browse"
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-red-700 dark:to-red-600 text-white font-medium hover:shadow-lg hover:shadow-blue-600/50 dark:hover:shadow-red-700/50 transition-shadow duration-300"
                 >
                   <SearchIcon />
-                  Browse Music
+                  {t('home.browseMusic')}
                 </Link>
               </div>
             )}

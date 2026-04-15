@@ -127,11 +127,11 @@ export default function Library(): JSX.Element {
         <PageHero
           title={
             <>
-              <span className="text-foreground">Your </span>
-              <span className="text-gradient">Music Library</span>
+              <span className="text-foreground">{t('library.heroYour')} </span>
+              <span className="text-gradient">{t('library.heroLibrary')}</span>
             </>
           }
-          subtitle="Manage your followed artists and albums. Track downloads and organize your collection."
+          subtitle={t('library.heroSubtitle')}
         />
 
         {/* Stats */}
@@ -154,7 +154,7 @@ export default function Library(): JSX.Element {
             />
             <StatCard
               icon={<ActivityIcon />}
-              label="Storage"
+              label={t('library.stats.diskUsage')}
               value={loading ? <Spinner size="sm" /> : `${stats?.storage?.estimated_gb?.toFixed(1) || 0} GB`}
               loading={loading}
             />
@@ -169,10 +169,10 @@ export default function Library(): JSX.Element {
                 <LibraryIcon />
               </div>
               <h3 className="text-2xl font-bold text-foreground mb-3">
-                Your library is empty
+                {t('library.emptyTitle')}
               </h3>
               <p className="text-muted-foreground mb-8">
-                Start building your collection by browsing and following your favorite artists!
+                {t('library.emptyDescription')}
               </p>
               <Button
                 variant="primary"
@@ -199,7 +199,7 @@ export default function Library(): JSX.Element {
                       : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
                   }`}
                 >
-                  All
+                  {t('common.all')}
                 </button>
                 <button
                   onClick={() => setActiveTab('artists')}
@@ -209,7 +209,7 @@ export default function Library(): JSX.Element {
                       : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
                   }`}
                 >
-                  Artists ({artists.length})
+                  {t('browse.sections.artists')} ({artists.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('albums')}
@@ -219,7 +219,7 @@ export default function Library(): JSX.Element {
                       : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
                   }`}
                 >
-                  Albums ({albums.length})
+                  {t('browse.sections.albums')} ({albums.length})
                 </button>
               </div>
 
@@ -227,7 +227,7 @@ export default function Library(): JSX.Element {
               <SearchInput
                 value={searchQuery}
                 onChange={setSearchQuery}
-                placeholder="Search your library..."
+                placeholder={t('library.searchPlaceholder')}
                 size="md"
                 showClearButton
                 onClear={() => setSearchQuery('')}
@@ -290,9 +290,9 @@ export default function Library(): JSX.Element {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4">
                   <span className="text-4xl">🔍</span>
                 </div>
-                <h3 className="text-xl font-semibold mb-2">No matches found</h3>
+                <h3 className="text-xl font-semibold mb-2">{t('library.noMatches')}</h3>
                 <p className="text-muted-foreground">
-                  No items in your library match <span className="font-semibold text-foreground">"{searchQuery}"</span>
+                  {t('library.noMatchesDescription')} <span className="font-semibold text-foreground">"{searchQuery}"</span>
                 </p>
               </div>
             )}
