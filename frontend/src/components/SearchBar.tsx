@@ -193,7 +193,7 @@ export default function SearchBar({ placeholder = "Search music..." }: { placeho
           ) : (
             <div className="p-8 text-center">
               <div className="text-4xl mb-3">🔍</div>
-              <p className="text-sm text-muted-foreground">No results found</p>
+              <p className="text-sm text-foreground text-muted-foreground">No results found</p>
             </div>
           )}
         </div>

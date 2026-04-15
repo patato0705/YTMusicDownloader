@@ -200,7 +200,7 @@ export default function Browse(): JSX.Element {
             <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
               <span className="text-5xl">🔍</span>
             </div>
-            <h3 className="text-2xl font-bold mb-3">Start Your Search</h3>
+            <h3 className="text-2xl font-bold mb-3 text-foreground">Start Your Search</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               Enter an artist name, album title, or song to discover new music from YouTube Music
             </p>
@@ -213,7 +213,7 @@ export default function Browse(): JSX.Element {
             <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
               <span className="text-5xl">😔</span>
             </div>
-            <h3 className="text-2xl font-bold mb-3">No Results Found</h3>
+            <h3 className="text-2xl font-bold mb-3 text-foreground">No Results Found</h3>
             <p className="text-muted-foreground max-w-md mx-auto mb-6">
               We couldn't find anything matching <span className="font-semibold text-foreground">"{query}"</span>
             </p>

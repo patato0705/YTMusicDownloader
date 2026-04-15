@@ -891,7 +891,7 @@ export default function PlaylistImport(): JSX.Element {
             <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
               <span className="text-5xl">📋</span>
             </div>
-            <h3 className="text-2xl font-bold mb-3">{t('playlist.title')}</h3>
+            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('playlist.title')}</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               {t('playlist.subtitle')}
             </p>
@@ -904,7 +904,7 @@ export default function PlaylistImport(): JSX.Element {
             <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
               <span className="text-5xl">😔</span>
             </div>
-            <h3 className="text-2xl font-bold mb-3">{t('playlist.emptyPlaylist')}</h3>
+            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('playlist.emptyPlaylist')}</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               {t('playlist.emptyPlaylistDescription')}
             </p>
