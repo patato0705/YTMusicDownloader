@@ -26,11 +26,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
     e.preventDefault();
     setError('');
 
-<<<<<<< HEAD
     if (topNArtists < 1 || topNArtists > MAX_ARTISTS) {
-=======
-    if (topNArtists < 1 || topNArtists > 100) {
->>>>>>> 7369a315c8dca9beae2b431b065b9f40fd32a1a3
       setError(t('charts.artistCountError'));
       return;
     }
@@ -77,7 +73,6 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
           )}
 
           {/* Country display */}
-<<<<<<< HEAD
           <div className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10 flex items-center gap-4">
             <span className="text-4xl leading-none">{country.flag}</span>
             <div className="min-w-0">
@@ -102,26 +97,6 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
 
             {/* Slider */}
             <div className="relative">
-=======
-          <div className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10">
-            <div className="flex items-center gap-3">
-              <span className="text-4xl">{country.flag}</span>
-              <div>
-                <h3 className="font-semibold text-foreground">{country.name}</h3>
-                <p className="text-sm text-muted-foreground">{t('charts.musicChart')}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Top N Artists slider */}
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-3">
-              {t('charts.numberOfArtists')}
-            </label>
-            
-            <div className="space-y-4">
-              {/* Slider */}
->>>>>>> 7369a315c8dca9beae2b431b065b9f40fd32a1a3
               <input
                 type="range"
                 min="1"
@@ -133,7 +108,6 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
                   background: `linear-gradient(to right, rgb(59,130,246) 0%, rgb(59,130,246) ${sliderPercent}%, rgb(226,232,240) ${sliderPercent}%, rgb(226,232,240) 100%)`,
                 }}
               />
-<<<<<<< HEAD
               <div className="flex justify-between mt-1.5">
                 <span className="text-xs text-muted-foreground">1</span>
                 <span className="text-xs text-muted-foreground">{MAX_ARTISTS}</span>
@@ -157,39 +131,6 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
                 </button>
               ))}
             </div>
-=======
-
-              {/* Value display */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">{t('charts.trackTopArtists')}</span>
-                <div className="glass rounded-xl px-4 py-2 border border-slate-200/50 dark:border-white/10">
-                  <span className="text-2xl font-bold text-gradient">{topNArtists}</span>
-                </div>
-              </div>
-
-              {/* Quick select buttons */}
-              <div className="flex gap-2">
-                {[10, 20, 40, 50, 100].map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setTopNArtists(value)}
-                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                      topNArtists === value
-                        ? 'bg-blue-600 dark:bg-red-600 text-white'
-                        : 'bg-slate-100 dark:bg-white/10 text-muted-foreground hover:bg-slate-200 dark:hover:bg-white/20'
-                    }`}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <p className="text-xs text-muted-foreground mt-2">
-              {t('charts.storageWarning')}
-            </p>
->>>>>>> 7369a315c8dca9beae2b431b065b9f40fd32a1a3
           </div>
 
           {/* Storage hint */}
