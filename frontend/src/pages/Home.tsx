@@ -225,7 +225,7 @@ export default function Home(): JSX.Element {
                   <TracksIcon />
                 </div>
                 <h3 className="text-xl font-semibold mb-2">{t('home.noActivity')}</h3>
-                <p className="text-muted-foreground mb-6">
+                <p className="text-muted-foreground mb-6 text-foreground">
                   {t('home.noActivityDescription')}
                 </p>
                 <Link
