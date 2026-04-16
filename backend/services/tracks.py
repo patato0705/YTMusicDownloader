@@ -28,7 +28,7 @@ def upsert_track(
     status: str = "new",
     file_path: Optional[str] = None,
     artist_valid: bool = True,
-    has_lyrics: bool = False,
+    lyrics: Optional[str] = None,
     lyrics_local: Optional[str] = None,
 ) -> Track:
     """
@@ -48,7 +48,7 @@ def upsert_track(
             artists=artists_list or None,
             album_id=str(album_id) if album_id is not None else None,
             track_number=int(track_number) if track_number is not None else None,
-            has_lyrics=bool(has_lyrics),
+            lyrics=lyrics,
             lyrics_local=str(lyrics_local) if lyrics_local else None,
             file_path=str(file_path) if file_path is not None else None,
             status=str(status),
@@ -82,8 +82,8 @@ def upsert_track(
         if obj.artist_valid != bool(artist_valid):
             obj.artist_valid = bool(artist_valid)
             changed = True
-        if obj.has_lyrics != bool(has_lyrics):
-            obj.has_lyrics = bool(has_lyrics)
+        if lyrics is not None and obj.lyrics != lyrics:
+            obj.lyrics = lyrics
             changed = True
         if lyrics_local is not None and obj.lyrics_local != lyrics_local:
             obj.lyrics_local = lyrics_local

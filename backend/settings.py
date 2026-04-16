@@ -34,7 +34,12 @@ DEFAULT_SETTINGS = {
         "type": "int",
         "description": "Days between expired token cleanup",
     },
-    
+    "scheduler.lyrics_retry_interval_hours": {
+        "value": 24,
+        "type": "int",
+        "description": "Hours between lyrics recovery/upgrade checks",
+    },
+
     # Registration settings
     "auth.registration_enabled": {
         "value": False,
@@ -58,7 +63,12 @@ DEFAULT_SETTINGS = {
     "features.lyrics_enabled": {
         "value": True,
         "type": "bool",
-        "description": "Enable automatic lyrics download",
+        "description": "Enable automatic lyrics download with LRCLIB",
+    },
+    "features.synced_lyrics_only": {
+        "value": True,
+        "type": "bool",
+        "description": "Only keep synced lyrics (reject plain/unsynced lyrics)",
     },
     "features.charts_enabled": {
         "value": True,

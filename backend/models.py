@@ -117,7 +117,7 @@ class Track(Base):
         index=True,
     )
     track_number: Mapped[int] = mapped_column(Integer, nullable=True)
-    has_lyrics: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    lyrics: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, default=None)
     lyrics_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     file_path: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
     status: Mapped[str] = mapped_column(String(64), default="new", nullable=False)
@@ -137,7 +137,7 @@ class Track(Base):
             "duration": getattr(self, "duration", None),
             "artists": artists_val,
             "album_id": getattr(self, "album_id", None),
-            "has_lyrics": bool(getattr(self, "has_lyrics", False)),
+            "lyrics": self.lyrics,
             "lyrics_local": getattr(self, "lyrics_local", None),
             "file_path": getattr(self, "file_path", None),
             "status": getattr(self, "status", None),

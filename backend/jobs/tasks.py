@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 
 from ..models import Job, Track, Album, Artist
+from ..settings import get_setting
 from ..services import albums as albums_svc
 from ..services import artists as artists_svc
 from ..services import tracks as tracks_svc
@@ -369,54 +370,62 @@ def download_track(
 def download_lyrics(
     session: Session,
     track_id: str,
+    mode: str = "normal",
 ) -> Dict[str, Any]:
     """
-    Download synced lyrics for a track using LRCLIB API.
-    
+    Download lyrics for a track using LRCLIB API.
+
     Flow:
     1. Get track info from DB
     2. Query LRCLIB API (cached first, then full)
     3. Save .lrc file next to audio file
-    4. Update Track.has_lyrics and Track.lyrics_local
-    
-    Only succeeds if syncedLyrics are available (plainLyrics only = retry later)
-    
+    4. Update Track.lyrics and Track.lyrics_local
+
+    Modes:
+    - "normal": Download lyrics, prefer synced, fall back to plain if allowed
+    - "upgrade": Only replace existing lyrics if synced are found
+
     Args:
         session: SQLAlchemy session
         track_id: Track video ID
-    
+        mode: "normal" or "upgrade"
+
     Returns:
         {"ok": bool, "lyrics_path": str, "error": str}
     """
     if not track_id:
         return {"ok": False, "error": "track_id required"}
-    
+
     try:
         import requests
         from pathlib import Path
         from urllib.parse import urlencode
-        
+
         # ===== TRANSACTION 1: Get track info =====
         track = session.get(Track, str(track_id))
         if not track:
             return {"ok": False, "error": f"Track {track_id} not found in database"}
-        
+
+        # In upgrade mode, skip if already synced
+        if mode == "upgrade" and track.lyrics == "synced":
+            return {"ok": True, "message": "Already has synced lyrics"}
+
         # Check if track has audio file
         if not track.file_path:
             return {"ok": False, "error": "Track has no audio file yet"}
-        
+
         audio_path = Path(track.file_path)
         if not audio_path.exists():
             return {"ok": False, "error": f"Audio file not found: {track.file_path}"}
-        
+
         # Get metadata for LRCLIB query
         track_name = track.title or ""
-        
+
         # Get artist name
         artist_name = ""
         if track.artists and len(track.artists) > 0:
             artist_name = track.artists[0].get("name", "")
-        
+
         # Get album name
         album_name = ""
         album = None
@@ -424,15 +433,15 @@ def download_lyrics(
             album = session.get(Album, track.album_id)
             if album:
                 album_name = album.title or ""
-        
+
         # Get duration
         duration = track.duration or 0
-        
+
         if not track_name or not artist_name:
             return {"ok": False, "error": "Missing track name or artist name"}
-        
-        logger.info(f"Fetching lyrics for: {artist_name} - {track_name}")
-        
+
+        logger.info(f"Fetching lyrics for: {artist_name} - {track_name} (mode={mode})")
+
         # ===== NO TRANSACTION: Fetch lyrics from API =====
         # Build query parameters
         params = {
@@ -441,32 +450,35 @@ def download_lyrics(
             "album_name": album_name,
             "duration": duration,
         }
-        
+
         # Try cached endpoint first
         synced_lyrics = None
+        plain_lyrics = None
         try:
             cached_url = f"https://lrclib.net/api/get-cached?{urlencode(params)}"
             logger.debug(f"Trying cached LRCLIB: {cached_url}")
-            
+
             response = requests.get(cached_url, timeout=10)
             if response.status_code == 200:
                 data = response.json()
                 synced_lyrics = data.get("syncedLyrics")
+                plain_lyrics = data.get("plainLyrics")
                 if synced_lyrics:
                     logger.info(f"Found synced lyrics in cache for track {track_id}")
         except Exception as e:
             logger.debug(f"Cached LRCLIB failed: {e}")
-        
+
         # If not in cache, try full endpoint
         if not synced_lyrics:
             try:
                 full_url = f"https://lrclib.net/api/get?{urlencode(params)}"
                 logger.debug(f"Trying full LRCLIB: {full_url}")
-                
+
                 response = requests.get(full_url, timeout=15)
                 if response.status_code == 200:
                     data = response.json()
                     synced_lyrics = data.get("syncedLyrics")
+                    plain_lyrics = data.get("plainLyrics") or plain_lyrics
                     if synced_lyrics:
                         logger.info(f"Found synced lyrics for track {track_id}")
                 elif response.status_code == 404:
@@ -483,22 +495,32 @@ def download_lyrics(
                     "error": f"LRCLIB request failed: {str(e)}",
                     "retry_delay_seconds": 3600,  # Retry in 1 hour
                 }
-        
-        # Check if we got synced lyrics
-        if not synced_lyrics:
-            # API returned data but only plainLyrics
-            logger.info(f"Only plain lyrics available for track {track_id}, will retry later")
-            return {
-                "ok": False,
-                "error": "Only plain lyrics available (synced lyrics required)",
-                "retry_delay_seconds": 86400,  # Retry in 24 hours
-            }
-        
+
+        # Determine which lyrics to save
+        if synced_lyrics:
+            lyrics_to_save = synced_lyrics
+            lyrics_value = "synced"
+        elif mode == "upgrade":
+            # Upgrade mode: only save if synced found, otherwise no-op
+            return {"ok": True, "message": "No synced lyrics available yet, keeping plain"}
+        else:
+            synced_only = get_setting(session, "features.synced_lyrics_only", True)
+            if synced_only or not plain_lyrics:
+                logger.info(f"Only plain lyrics available for track {track_id}, will retry later")
+                return {
+                    "ok": False,
+                    "error": "Only plain lyrics available (synced lyrics required)",
+                    "retry_delay_seconds": 86400,  # Retry in 24 hours
+                }
+            lyrics_to_save = plain_lyrics
+            lyrics_value = "plain"
+            logger.info(f"Using plain lyrics for track {track_id} (synced_lyrics_only=False)")
+
         # Save .lrc file next to audio file
         lrc_path = audio_path.with_suffix(".lrc")
         try:
             with open(lrc_path, "w", encoding="utf-8") as f:
-                f.write(synced_lyrics)
+                f.write(lyrics_to_save)
             logger.info(f"Saved lyrics to {lrc_path}")
         except Exception as e:
             logger.exception(f"Failed to save lyrics file: {e}")
@@ -507,28 +529,29 @@ def download_lyrics(
                 "error": f"Failed to save lyrics: {str(e)}",
                 "retry_delay_seconds": 300,  # Retry in 5 minutes
             }
-        
+
         # ===== TRANSACTION 2: Update track with lyrics info =====
         track = session.get(Track, str(track_id))  # Re-fetch to be safe
         if not track:
             raise RuntimeError(f"Track {track_id} disappeared after lyrics fetch")
-        track.has_lyrics = True
+        track.lyrics = lyrics_value
         track.lyrics_local = str(lrc_path)
         session.add(track)
-        
+
         def commit_lyrics():
             session.commit()
-        
+
         _db_operation_with_retry(commit_lyrics)
-        
-        logger.info(f"Successfully downloaded lyrics for track {track_id}")
-        
+
+        logger.info(f"Successfully downloaded {lyrics_value} lyrics for track {track_id}")
+
         return {
             "ok": True,
             "lyrics_path": str(lrc_path),
+            "lyrics_type": lyrics_value,
             "track_id": track_id,
         }
-    
+
     except Exception as e:
         logger.exception(f"download_lyrics failed for {track_id}")
         try:

@@ -195,6 +195,22 @@ export const Settings = {
     await updateSetting('features.lyrics_enabled', enabled);
   },
 
+  isSyncedLyricsOnly: async (): Promise<boolean> => {
+    const setting = await getSetting('features.synced_lyrics_only');
+    return setting.value as boolean;
+  },
+  setSyncedLyricsOnly: async (enabled: boolean): Promise<void> => {
+    await updateSetting('features.synced_lyrics_only', enabled);
+  },
+
+  getLyricsRetryInterval: async (): Promise<number> => {
+    const setting = await getSetting('scheduler.lyrics_retry_interval_hours');
+    return setting.value as number;
+  },
+  setLyricsRetryInterval: async (hours: number): Promise<void> => {
+    await updateSetting('scheduler.lyrics_retry_interval_hours', hours);
+  },
+
   areChartsEnabled: async (): Promise<boolean> => {
     const setting = await getSetting('features.charts_enabled');
     return setting.value as boolean;

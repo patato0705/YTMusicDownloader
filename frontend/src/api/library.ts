@@ -67,7 +67,7 @@ export interface LibraryTrack {
     name: string;
   };
   album_id?: string;
-  has_lyrics?: boolean;
+  lyrics?: 'synced' | 'plain' | null;
   lyrics_path?: string | null;
   file_path?: string;
   status?: TrackStatus;
@@ -181,7 +181,7 @@ export async function getLibraryTracks(
   artistId?: string,
   albumId?: string,
   statusFilter?: TrackStatus,
-  hasLyrics?: boolean,
+  lyricsFilter?: 'synced' | 'plain' | 'any',
   limit = 100,
   offset = 0
 ): Promise<TracksResponse> {
@@ -189,7 +189,7 @@ export async function getLibraryTracks(
   if (artistId) params.artist_id = artistId;
   if (albumId) params.album_id = albumId;
   if (statusFilter) params.status_filter = statusFilter;
-  if (hasLyrics !== undefined) params.has_lyrics = hasLyrics;
+  if (lyricsFilter) params.lyrics = lyricsFilter;
   
   return api.get<TracksResponse>('/library/tracks', params);
 }

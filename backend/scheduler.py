@@ -45,8 +45,9 @@ class Scheduler:
         self.sync_interval_seconds: int = sync_interval_seconds or 21600  # 6 hours default
         self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours default
         self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours default
+        self.lyrics_retry_interval_seconds: int = 43200  # 12 hours default
         self.settings_refresh_interval: int = settings_refresh_interval
-        
+
         self._thread_name = thread_name
         self._thread: Optional[threading.Thread] = None
         self._stopped = threading.Event()
@@ -54,6 +55,7 @@ class Scheduler:
         self._last_sync = 0.0
         self._last_cleanup = 0.0
         self._last_token_cleanup = 0.0
+        self._last_lyrics_retry = 0.0
         self._last_settings_refresh = 0.0
         
         # Don't load settings here - database might not be ready yet
@@ -106,11 +108,20 @@ class Scheduler:
                 default=1
             )
             self.token_cleanup_interval_seconds = int(token_cleanup_days) * 86400
-            
+
+            # Get lyrics retry interval from settings (in hours, convert to seconds)
+            lyrics_retry_hours = settings_module.get_setting(
+                session,
+                "scheduler.lyrics_retry_interval_hours",
+                default=12
+            )
+            self.lyrics_retry_interval_seconds = int(lyrics_retry_hours) * 3600
+
             logger.debug(
                 f"Settings refreshed: sync_interval={self.sync_interval_seconds}s, "
                 f"cleanup_interval={self.cleanup_interval_seconds}s, "
-                f"token_cleanup_interval={self.token_cleanup_interval_seconds}s"
+                f"token_cleanup_interval={self.token_cleanup_interval_seconds}s, "
+                f"lyrics_retry_interval={self.lyrics_retry_interval_seconds}s"
             )
             
         except Exception as e:
@@ -204,7 +215,15 @@ class Scheduler:
                     self._last_token_cleanup = now
                 except Exception:
                     logger.exception("Unexpected error in cleanup_expired_tokens")
-            
+
+            # Check if lyrics retry is due
+            if now - self._last_lyrics_retry >= self.lyrics_retry_interval_seconds:
+                try:
+                    self.retry_missing_lyrics()
+                    self._last_lyrics_retry = now
+                except Exception:
+                    logger.exception("Unexpected error in retry_missing_lyrics")
+
             # Sleep for a short interval (check every minute)
             self._stopped.wait(timeout=60.0)
 
@@ -321,17 +340,129 @@ class Scheduler:
         session: Optional[Session] = None
         try:
             session = SessionLocal()
-            
+
             deleted = auth_svc.cleanup_expired_tokens(session)
-            
+
             if deleted > 0:
                 logger.info(f"Cleaned up {deleted} expired refresh tokens")
             else:
                 logger.debug("No expired tokens to clean up")
-        
+
         except Exception:
             logger.exception("Failed to clean up expired tokens")
-        
+
+        finally:
+            if session:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+
+    def retry_missing_lyrics(self) -> None:
+        """
+        Find tracks that need lyrics recovery or plain-to-synced upgrade
+        and enqueue deduplicated download_lyrics jobs.
+
+        Two categories:
+        1. Recovery: status="done", has audio, lyrics=None → normal download
+        2. Upgrade: lyrics="plain" → attempt synced upgrade
+        """
+        session: Optional[Session] = None
+        try:
+            session = SessionLocal()
+
+            # Check if lyrics feature is enabled
+            lyrics_enabled = settings_module.get_setting(
+                session, "features.lyrics_enabled", True
+            )
+            if not lyrics_enabled:
+                logger.debug("Lyrics feature disabled, skipping retry")
+                return
+
+            from .models import Track, Job
+            from sqlalchemy import select, and_
+
+            # Build set of track IDs with already-queued lyrics jobs
+            pending_payloads = session.execute(
+                select(Job.payload).where(
+                    and_(
+                        Job.type == "download_lyrics",
+                        Job.status.in_(["queued", "reserved"]),
+                    )
+                )
+            ).scalars().all()
+
+            already_queued = set()
+            for payload in pending_payloads:
+                if isinstance(payload, dict):
+                    tid = payload.get("track_id")
+                    if tid:
+                        already_queued.add(tid)
+
+            # === Category 1: Recovery (missing lyrics) ===
+            recovery_tracks = (
+                session.query(Track.id)
+                .filter(
+                    Track.status == "done",
+                    Track.file_path != None,  # noqa: E711
+                    Track.lyrics == None,  # noqa: E711
+                )
+                .limit(50)
+                .all()
+            )
+
+            recovery_count = 0
+            for (track_id,) in recovery_tracks:
+                if track_id in already_queued:
+                    continue
+                try:
+                    enqueue_job(
+                        session,
+                        job_type="download_lyrics",
+                        payload={"track_id": track_id},
+                        priority=3,
+                        max_attempts=3,
+                    )
+                    already_queued.add(track_id)
+                    recovery_count += 1
+                except Exception:
+                    logger.exception(f"Failed to enqueue lyrics recovery for {track_id}")
+
+            # === Category 2: Upgrade (plain → synced) ===
+            upgrade_tracks = (
+                session.query(Track.id)
+                .filter(Track.lyrics == "plain")
+                .limit(25)
+                .all()
+            )
+
+            upgrade_count = 0
+            for (track_id,) in upgrade_tracks:
+                if track_id in already_queued:
+                    continue
+                try:
+                    enqueue_job(
+                        session,
+                        job_type="download_lyrics",
+                        payload={"track_id": track_id, "mode": "upgrade"},
+                        priority=2,
+                        max_attempts=2,
+                    )
+                    already_queued.add(track_id)
+                    upgrade_count += 1
+                except Exception:
+                    logger.exception(f"Failed to enqueue lyrics upgrade for {track_id}")
+
+            if recovery_count or upgrade_count:
+                logger.info(
+                    f"Lyrics retry: enqueued {recovery_count} recovery + "
+                    f"{upgrade_count} upgrade jobs"
+                )
+            else:
+                logger.debug("Lyrics retry: no tracks need recovery or upgrade")
+
+        except Exception:
+            logger.exception("Failed in retry_missing_lyrics")
         finally:
             if session:
                 try:

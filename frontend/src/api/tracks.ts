@@ -11,7 +11,7 @@ export interface Track {
   duration?: number;
   artists?: any[];
   album_id?: string;
-  has_lyrics?: boolean;
+  lyrics?: 'synced' | 'plain' | null;
   file_path?: string;
   status?: string;
   created_at?: string;

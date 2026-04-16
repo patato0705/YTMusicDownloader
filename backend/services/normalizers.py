@@ -71,7 +71,7 @@ def normalize_track_for_db(track_data: dict, album_id: Optional[str] = None) -> 
         "artists": track_data.get("artists", []),
         "album_id": album_id or track_data.get("album_id"),
         "track_number": track_data.get("track_number"),
-        "has_lyrics": False,  # Default, will be updated when lyrics are fetched
+        "lyrics": None,  # Default, will be updated when lyrics are fetched
         "lyrics_local": None,
         "file_path": None,
         "status": "new",

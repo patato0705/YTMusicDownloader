@@ -176,7 +176,7 @@ def list_followed_albums(
                     func.count(Track.id).label("total"),
                     func.sum(case((Track.status == "done", 1), else_=0)).label("downloaded"),
                     func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
-                    func.sum(case((Track.has_lyrics == True, 1), else_=0)).label("with_lyrics"),
+                    func.sum(case((Track.lyrics != None, 1), else_=0)).label("with_lyrics"),
                 )
                 .filter(Track.album_id == album.id)
             )
@@ -250,7 +250,7 @@ def list_tracks(
     artist_id: Optional[str] = Query(None, description="Filter by artist ID"),
     album_id: Optional[str] = Query(None, description="Filter by album ID"),
     status_filter: Optional[str] = Query(None, pattern="^(done|failed|downloading|new)$", description="Filter by track status"),
-    has_lyrics: Optional[bool] = Query(None, description="Filter by lyrics availability"),
+    lyrics: Optional[str] = Query(None, pattern="^(synced|plain|any)$", description="Filter by lyrics type (synced, plain, any)"),
     limit: int = Query(100, ge=1, le=1000, description="Max results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     db: Session = Depends(get_db),
@@ -262,27 +262,30 @@ def list_tracks(
     - artist_id: Filter by artist (optional)
     - album_id: Filter by album (optional)
     - status: Filter by status (done, failed, downloading, new)
-    - has_lyrics: Filter by lyrics availability (true/false)
+    - lyrics: Filter by lyrics type (synced, plain, any)
     - limit: Max results (default 100, max 1000)
     - offset: Pagination offset (default 0)
-    
+
     Returns list of tracks with metadata.
     """
     try:
         # Build query
         query = db.query(Track).join(Album, Track.album_id == Album.id)
-        
+
         # Apply filters
         if album_id:
             query = query.filter(Track.album_id == album_id)
         elif artist_id:
             query = query.filter(Album.artist_id == artist_id)
-        
+
         if status_filter:
             query = query.filter(Track.status == status_filter)
-        
-        if has_lyrics is not None:
-            query = query.filter(Track.has_lyrics == has_lyrics)
+
+        if lyrics is not None:
+            if lyrics == "any":
+                query = query.filter(Track.lyrics != None)  # noqa: E711
+            else:
+                query = query.filter(Track.lyrics == lyrics)
         
         # Get total count
         total = query.count()
@@ -317,11 +320,11 @@ def list_tracks(
                 "duration": track.duration,
                 "status": track.status,
                 "file_path": track.file_path,
-                "has_lyrics": track.has_lyrics,
+                "lyrics": track.lyrics,
                 "lyrics_path": track.lyrics_local,
                 "created_at": track.created_at.isoformat() if track.created_at else None,
             })
-        
+
         return {
             "tracks": result,
             "total": total,
@@ -367,12 +370,14 @@ def get_library_stats(
         tracks_downloading = db.query(func.count(Track.id)).filter(Track.status == "downloading").scalar() or 0
         tracks_failed = db.query(func.count(Track.id)).filter(Track.status == "failed").scalar() or 0
         tracks_pending = db.query(func.count(Track.id)).filter(Track.status == "new").scalar() or 0
-        tracks_with_lyrics = db.query(func.count(Track.id)).filter(Track.has_lyrics == True).scalar() or 0
-        
+        tracks_with_lyrics = db.query(func.count(Track.id)).filter(Track.lyrics != None).scalar() or 0  # noqa: E711
+        tracks_with_synced = db.query(func.count(Track.id)).filter(Track.lyrics == "synced").scalar() or 0
+        tracks_with_plain = db.query(func.count(Track.id)).filter(Track.lyrics == "plain").scalar() or 0
+
         # Calculate storage
         estimated_size_mb = int(tracks_downloaded) * 3
         estimated_size_gb = round(estimated_size_mb / 1024, 2)
-        
+
         return {
             "artists": {
                 "total": int(artists_total),
@@ -391,6 +396,8 @@ def get_library_stats(
                 "pending": int(tracks_pending),
                 "failed": int(tracks_failed),
                 "with_lyrics": int(tracks_with_lyrics),
+                "with_synced_lyrics": int(tracks_with_synced),
+                "with_plain_lyrics": int(tracks_with_plain),
             },
             "storage": {
                 "estimated_mb": estimated_size_mb,
@@ -433,17 +440,17 @@ def get_album_download_progress(
                 "title": track.title,
                 "duration": track.duration,
                 "status": track.status,
-                "has_lyrics": track.has_lyrics,
+                "lyrics": track.lyrics,
                 "file_path": track.file_path,
             })
-        
+
         # Calculate stats
         total = len(tracks)
         downloaded = sum(1 for t in tracks if t.status == "done")
         downloading = sum(1 for t in tracks if t.status == "downloading")
         failed = sum(1 for t in tracks if t.status == "failed")
         pending = sum(1 for t in tracks if t.status == "new")
-        with_lyrics = sum(1 for t in tracks if t.has_lyrics)
+        with_lyrics = sum(1 for t in tracks if t.lyrics is not None)
         
         progress = 0.0
         if total > 0:

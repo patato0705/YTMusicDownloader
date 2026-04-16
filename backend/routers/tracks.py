@@ -43,7 +43,7 @@ def _track_to_dict(t: Track) -> Dict[str, Any]:
         "album_id": getattr(t, "album_id", None),
         "file_path": getattr(t, "file_path", None),
         "status": getattr(t, "status", None),
-        "has_lyrics": bool(getattr(t, "has_lyrics", False)),
+        "lyrics": getattr(t, "lyrics", None),
         "lyrics_local": getattr(t, "lyrics_local", None),
         "artist_valid": bool(getattr(t, "artist_valid", False)),
         "created_at": getattr(t, "created_at", None),
