@@ -91,7 +91,6 @@ def _ensure_track_payload(nt: Dict[str, Any]) -> Dict[str, Any]:
         "album_name": album_name,
         "thumbnail": thumbnail_url,  # Add this line
         "track_number": track_number_int,
-        "raw": nt,
     }
 
 def _append_unique(out: List[Dict[str, Any]], item: Dict[str, Any], seen: set) -> bool:
@@ -389,7 +388,6 @@ def get_playlist(playlist_id: str) -> Dict[str, Any]:
                     "duration_seconds": nt.get("duration") or 0,
                     "track_number": nt.get("track_number") or None,
                     "isExplicit": t.get("isExplicit", False),
-                    "raw": t
                 }
                 # Create the TrackSchema instance
                 ts = TrackSchema(**track_data)
@@ -419,10 +417,10 @@ def get_charts(country: str = "ZZ") -> Dict[str, Any]:
     try:
         raw = _safe_call("get_charts", country=country)
     except Exception:
-        return {"artists": [], "raw": None}
+        return {"artists": []}
 
     if not isinstance(raw, dict):
-        return {"artists": [], "raw": raw}
+        return {"artists": []}
 
     artists_in = raw.get("artists") or []
     artists_out: List[Dict[str, Any]] = []

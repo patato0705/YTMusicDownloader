@@ -47,7 +47,7 @@ export default function Album(): JSX.Element {
 
     try {
       const data = await getAlbum(albumId);
-      setAlbum(data.album || data);
+      setAlbum(data.album);
       setTracks(data.tracks || []);
       setIsFollowing(data.mode === 'download');
       setSource(data.source || '');
@@ -312,7 +312,7 @@ export default function Album(): JSX.Element {
                   ← {t('common.back')}
                 </Button>
 
-                {isAdmin && source === 'database' && (
+                {isAdmin && source === 'database' && isFollowing && (
                   <Button
                     onClick={() => setDeleteConfirm(true)}
                     variant="danger"

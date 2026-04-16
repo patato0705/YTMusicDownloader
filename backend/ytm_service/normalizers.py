@@ -156,9 +156,6 @@ def _normalize_search_item(it: dict, include_raw: bool, allowed_set: Optional[se
             return None
 
     base: Dict[str, Any] = {"resultType": kind}
-    if include_raw:
-        base["raw"] = it
-
     if kind in ("song", "track"):
         base.update({
             "id": it.get("videoId") or it.get("id"),
@@ -326,7 +323,6 @@ def normalize_track_item(raw: Any) -> Dict[str, Optional[Any]]:
         "track_number": None,
         "album": {},
         "thumbnails": [],  # Add this line
-        "raw": raw,
     }
     try:
         if raw is None:

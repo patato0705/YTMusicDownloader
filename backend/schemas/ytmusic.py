@@ -42,8 +42,7 @@ class TrackSchema(BaseModel):
     duration_seconds: int
     track_number: Optional[int] = None
     isExplicit: bool = False
-    raw: Optional[Any] = None
-    
+
     model_config = {"extra": "ignore"}
 
 
@@ -55,7 +54,6 @@ class PlaylistSchema(BaseModel):
     author: Optional[str] = None
     thumbnail: Optional[str] = None
     tracks: List[TrackSchema] = Field(default_factory=list)
-    raw: Optional[Any] = None
 
     model_config = {"extra": "ignore"}
 
@@ -74,8 +72,7 @@ class AlbumItemSchema(BaseModel):
     cover: Optional[str] = None  # Best thumbnail URL
     year: Optional[str] = None
     artists: List[ArtistRefSchema] = Field(default_factory=list)
-    raw: Optional[Any] = None
-    
+
     model_config = {"extra": "ignore"}
 
 
@@ -109,8 +106,7 @@ class ArtistSchema(BaseModel):
     thumbnails: List[Thumbnail] = Field(default_factory=list)
     image: Optional[str] = None
     albums_count: Optional[int] = None
-    raw: Optional[Any] = None
-    
+
     model_config = {"extra": "ignore"}
 
 
@@ -120,6 +116,5 @@ class SongSchema(BaseModel):
     title: Optional[str] = None
     videoDetails: Optional[Dict[str, Any]] = None
     thumbnails: List[Thumbnail] = Field(default_factory=list)
-    raw: Optional[Any] = None
-    
+
     model_config = {"extra": "ignore"}
