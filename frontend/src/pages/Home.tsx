@@ -224,7 +224,7 @@ export default function Home(): JSX.Element {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4">
                   <TracksIcon />
                 </div>
-                <h3 className="text-xl font-semibold mb-2">{t('home.noActivity')}</h3>
+                <h3 className="text-xl font-semibold mb-2 text-foreground">{t('home.noActivity')}</h3>
                 <p className="text-muted-foreground mb-6 text-foreground">
                   {t('home.noActivityDescription')}
                 </p>
