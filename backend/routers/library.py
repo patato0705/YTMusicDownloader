@@ -23,6 +23,8 @@ from sqlalchemy import func, and_, or_, case
 from ..deps import get_db
 from ..models import Artist, Album, Track, ArtistSubscription
 from ..services import subscriptions as subs_svc
+from .. import config
+from ..downloader.cover import move_cover_if_exists
 
 from backend.dependencies import require_auth, require_member_or_admin, require_admin
 from backend.models import User
@@ -157,6 +159,8 @@ def list_followed_albums(
 
         if artist_id:
             albums_query = albums_query.filter(Album.artist_id == artist_id)
+
+        albums_query = albums_query.filter(Album.mode == "download")
 
         albums = albums_query.all()
 
@@ -641,6 +645,12 @@ def delete_album_from_library(
         if not album:
             raise HTTPException(status_code=404, detail="Album not found in library")
 
+        if album.mode == "metadata":
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete a metadata-only album. Only downloaded albums can be deleted."
+            )
+
         album_title = album.title
         artist_id = album.artist_id
         files_deleted = 0
@@ -655,9 +665,13 @@ def delete_album_from_library(
             db.delete(track)
             tracks_deleted += 1
 
-        # 2. Delete album cover from disk
-        _delete_file_safe(album.image_local)
-        album.image_local = None
+        # 2. Move album cover back to temp covers directory (for metadata display)
+        if album.image_local:
+            cover_temp_dest = config.COVERS_DIR / f"{album.id}.jpg"
+            moved = move_cover_if_exists(album.image_local, cover_temp_dest)
+            album.image_local = str(moved) if moved else None
+        else:
+            album.image_local = None
 
         # 3. Downgrade album to metadata mode (keep the row)
         album.mode = "metadata"
