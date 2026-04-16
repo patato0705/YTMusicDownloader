@@ -454,11 +454,12 @@ def download_lyrics(
         # Try cached endpoint first
         synced_lyrics = None
         plain_lyrics = None
+        lrclib_headers = {"User-Agent": "YTMusicDownloader v0.1 (https://github.com/patato0705/YTMusicDownloader)"}
         try:
             cached_url = f"https://lrclib.net/api/get-cached?{urlencode(params)}"
             logger.debug(f"Trying cached LRCLIB: {cached_url}")
 
-            response = requests.get(cached_url, timeout=10)
+            response = requests.get(cached_url, timeout=10, headers=lrclib_headers)
             if response.status_code == 200:
                 data = response.json()
                 synced_lyrics = data.get("syncedLyrics")
@@ -474,7 +475,7 @@ def download_lyrics(
                 full_url = f"https://lrclib.net/api/get?{urlencode(params)}"
                 logger.debug(f"Trying full LRCLIB: {full_url}")
 
-                response = requests.get(full_url, timeout=15)
+                response = requests.get(full_url, timeout=15, headers=lrclib_headers)
                 if response.status_code == 200:
                     data = response.json()
                     synced_lyrics = data.get("syncedLyrics")
