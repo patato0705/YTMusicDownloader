@@ -71,6 +71,7 @@ def get_artist(
                         db_albums_map[album_id] = {
                             "in_database": True,
                             "mode": db_album.get("mode"),
+                            "download_status": db_album.get("download_status"),
                         }
             
             # Merge YTMusic albums with DB status

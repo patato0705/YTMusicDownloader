@@ -171,9 +171,8 @@ export default function Artist(): JSX.Element {
   const artistThumbnailUrl = getImageUrl(artist.image_local || artist.thumbnail);
 
   const getAlbumStatus = (album: any): 'downloaded' | 'in_library' | undefined => {
-    if (source !== 'database') return undefined;
     // Album has local data — it's in the DB
-    if (album.image_local || album.tracks_total != null || album.in_database) {
+    if ((album.image_local || album.tracks_total != null || album.in_database) && album.mode !== 'metadata') {
       // Check download_status from API first (artist endpoint provides this)
       if (album.download_status === 'completed') return 'downloaded';
       // Fallback to track counts (library endpoint provides these)
