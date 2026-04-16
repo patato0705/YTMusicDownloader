@@ -56,6 +56,8 @@
       "confirm": "Confirm New Password",
       "button": "Change Password",
       "success": "Password changed successfully",
+      "required": "A password change is required",
+      "defaultWarning": "You currently have the default admin password. Changing it is required",
       "tips": {
         "title": "Tips for selecting a password",
         "length": "Your password must be at least 8 characters",
