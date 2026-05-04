@@ -20,11 +20,17 @@ export interface CreateUserRequest {
   role: 'administrator' | 'member' | 'visitor';
 }
 
+export interface SettingOption {
+  value: string;
+  label: string;
+}
+
 export interface Setting {
   key: string;
   value: any; // Can be number, boolean, string, or object
   type: 'int' | 'bool' | 'string' | 'json';
   description: string | null;
+  allowed_values: SettingOption[] | null;
   updated_at: string | null;
   updated_by: number | null;
 }

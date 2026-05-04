@@ -92,8 +92,9 @@ export default function AdminPanel(): JSX.Element {
 
   const loadSettings = async () => {
     const settingsArray = await adminApi.getAllSettings();
+    console.log('[AdminPanel] settings response:', settingsArray);
     setSettings(settingsArray);
-    
+
     // Initialize edited settings
     const initial: Record<string, any> = {};
     settingsArray.forEach(setting => {
@@ -380,6 +381,13 @@ export default function AdminPanel(): JSX.Element {
                         value={editedSettings[setting.key] || ''}
                         onChange={(e) => handleSettingChange(setting.key, e.target.value, setting.type)}
                         className="w-24 px-3 py-2 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
+                      />
+                    ) : Array.isArray(setting.allowed_values) && setting.allowed_values.length > 0 ? (
+                      <Select
+                        value={editedSettings[setting.key] || ''}
+                        onChange={(value) => handleSettingChange(setting.key, value, setting.type)}
+                        options={setting.allowed_values}
+                        className="w-48"
                       />
                     ) : (
                       <input
