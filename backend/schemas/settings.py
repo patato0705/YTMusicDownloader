@@ -3,7 +3,7 @@
 Pydantic schemas for settings management endpoints.
 """
 from __future__ import annotations
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -15,9 +15,10 @@ class SettingResponse(BaseModel):
     value: Any  # Can be int, bool, str, dict depending on type
     type: str  # "string", "int", "bool", "json"
     description: Optional[str] = None
+    allowed_values: Optional[List[Dict[str, str]]] = None
     updated_at: Optional[datetime] = None
     updated_by: Optional[int] = None
-    
+
     model_config = {"from_attributes": True}
 
 

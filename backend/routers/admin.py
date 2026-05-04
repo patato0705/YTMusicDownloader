@@ -233,7 +233,13 @@ def get_all_settings(
     Returns all settings with their current values, types, and descriptions.
     """
     settings_list = settings_module.get_all_settings(session)
-    return [SettingResponse(**setting) for setting in settings_list]
+    return [
+        SettingResponse(
+            **setting,
+            allowed_values=settings_module.get_allowed_values(setting["key"]),
+        )
+        for setting in settings_list
+    ]
 
 
 @router.get("/settings/{key}", response_model=SettingResponse)
@@ -259,16 +265,20 @@ def get_setting(
                 value=default_config["value"],
                 type=default_config["type"],
                 description=default_config["description"],
+                allowed_values=settings_module.get_allowed_values(key),
                 updated_at=None,
                 updated_by=None,
             )
-        
+
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Setting '{key}' not found",
         )
-    
-    return SettingResponse(**setting.to_dict())
+
+    return SettingResponse(
+        **setting.to_dict(),
+        allowed_values=settings_module.get_allowed_values(key),
+    )
 
 
 @router.put("/settings/{key}", response_model=SettingResponse)
@@ -292,8 +302,15 @@ def update_setting(
             value=data.value,
             user_id=current_user.id,
         )
-        
-        return SettingResponse(**setting.to_dict())
+
+        if key == "ytmusic.language":
+            from ..ytm_service.client import reset_client
+            reset_client()
+
+        return SettingResponse(
+            **setting.to_dict(),
+            allowed_values=settings_module.get_allowed_values(key),
+        )
     
     except Exception as e:
         logger.error(f"Error updating setting {key}: {e}")

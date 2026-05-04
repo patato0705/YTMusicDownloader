@@ -75,7 +75,41 @@ DEFAULT_SETTINGS = {
         "type": "bool",
         "description": "Enable charts import feature",
     },
+
+    # YTMusic API
+    "ytmusic.language": {
+        "value": "en",
+        "type": "string",
+        "description": "Language code for localized YTMusic responses (artist bios, album descriptions, etc.)",
+        "allowed_values": [
+            {"value": "ar", "label": "Arabic"},
+            {"value": "de", "label": "German"},
+            {"value": "en", "label": "English"},
+            {"value": "es", "label": "Spanish"},
+            {"value": "fr", "label": "French"},
+            {"value": "hi", "label": "Hindi"},
+            {"value": "it", "label": "Italian"},
+            {"value": "ja", "label": "Japanese"},
+            {"value": "ko", "label": "Korean"},
+            {"value": "nl", "label": "Dutch"},
+            {"value": "pt", "label": "Portuguese"},
+            {"value": "ru", "label": "Russian"},
+            {"value": "tr", "label": "Turkish"},
+            {"value": "ur", "label": "Urdu"},
+            {"value": "zh_CN", "label": "Chinese (Mainland)"},
+            {"value": "zh_TW", "label": "Chinese (Taiwan)"},
+        ],
+    },
 }
+
+
+def get_allowed_values(key: str) -> Optional[List[Dict[str, str]]]:
+    """Return the allowed {value, label} options for a setting key, or None if unconstrained."""
+    config = DEFAULT_SETTINGS.get(key)
+    if not config:
+        return None
+    values = config.get("allowed_values")
+    return list(values) if values else None
 
 
 def ensure_defaults(session: Session) -> None:
@@ -132,8 +166,16 @@ def set_setting(
     Returns:
         Updated Setting instance
     """
+    allowed = get_allowed_values(key)
+    if allowed is not None:
+        valid = [opt["value"] for opt in allowed]
+        if str(value) not in valid:
+            raise ValueError(
+                f"Invalid value for {key}: must be one of {', '.join(valid)}"
+            )
+
     setting = session.get(Setting, key)
-    
+
     if not setting:
         # Create new setting
         setting = Setting(
@@ -142,14 +184,14 @@ def set_setting(
             updated_at=now_utc(),
             updated_by=user_id,
         )
-        
+
         # Use default type if available
         if key in DEFAULT_SETTINGS:
             setting.type = DEFAULT_SETTINGS[key]["type"]
             setting.description = DEFAULT_SETTINGS[key]["description"]
-        
+
         session.add(setting)
-    
+
     setting.set_value(value)
     setting.updated_at = now_utc()
     setting.updated_by = user_id

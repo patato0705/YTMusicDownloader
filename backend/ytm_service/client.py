@@ -23,6 +23,21 @@ _BACKOFF_BASE = float(YTM_BACKOFF_BASE)
 _BACKOFF_MAX = float(YTM_BACKOFF_MAX)
 
 
+def _get_language() -> str:
+    """Read ytmusic.language setting from DB, fall back to 'en'."""
+    try:
+        from ..db import SessionLocal
+        from ..settings import get_setting
+        session = SessionLocal()
+        try:
+            return str(get_setting(session, "ytmusic.language", "en") or "en")
+        finally:
+            session.close()
+    except Exception:
+        logger.exception("Failed to read ytmusic.language setting; falling back to 'en'")
+        return "en"
+
+
 def _init_client() -> YTMusic:
     """
     Initialize YTMusic instance once.
@@ -34,14 +49,15 @@ def _init_client() -> YTMusic:
     with _ytm_lock:
         if _ytm_client is not None:
             return _ytm_client
+        language = _get_language()
         try:
             if HEADERS_AUTH:
                 # HEADERS_AUTH expected to be a path (string) to headers_auth.json
-                logger.info("Initializing YTMusic with headers file: %s", HEADERS_AUTH)
-                _ytm_client = YTMusic(auth=HEADERS_AUTH,language="en")
+                logger.info("Initializing YTMusic with headers file: %s (language=%s)", HEADERS_AUTH, language)
+                _ytm_client = YTMusic(auth=HEADERS_AUTH, language=language)
             else:
-                logger.info("Initializing anonymous YTMusic client")
-                _ytm_client = YTMusic(language="en")
+                logger.info("Initializing anonymous YTMusic client (language=%s)", language)
+                _ytm_client = YTMusic(language=language)
         except Exception as e:
             logger.exception("Failed to initialize YTMusic client: %s", e)
             raise
@@ -57,6 +73,17 @@ def get_client() -> YTMusic:
     if _ytm_client is None:
         return _init_client()
     return _ytm_client
+
+
+def reset_client() -> None:
+    """
+    Invalidate the cached YTMusic client. The next call to get_client() will
+    re-initialize it, picking up any changed settings (e.g. language).
+    """
+    global _ytm_client
+    with _ytm_lock:
+        _ytm_client = None
+    logger.info("YTMusic client cache cleared")
 
 
 def call(method_name: str, *args: Any, max_retries: int = 4, **kwargs: Any) -> Any:
