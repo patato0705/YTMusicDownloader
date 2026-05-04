@@ -28,6 +28,24 @@ def _safe_call(name: str, *args, **kwargs) -> Any:
         raise
 
 
+def _trim_to_complete_sentence(text: str) -> str:
+    """
+    YTMusic truncates artist descriptions mid-sentence. Trim back to the last
+    sentence boundary so we don't store/display a half-sentence tail.
+    """
+    if not text:
+        return text
+    text = text.rstrip()
+    if text.endswith((".", "!", "?", "\"", "”", ")")):
+        return text
+    best = -1
+    for marker in (". ", "! ", "? ", ".\n", "!\n", "?\n"):
+        best = max(best, text.rfind(marker))
+    if best > 0:
+        return text[: best + 1].rstrip()
+    return text
+
+
 def _ensure_track_payload(nt: Dict[str, Any]) -> Dict[str, Any]:
     """
     Guarantees that the returned dict by normalize_track_item has
@@ -134,7 +152,7 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
     
     # Extract basic artist info
     name = raw.get("name")
-    description = raw.get("description") or ""
+    description = _trim_to_complete_sentence(raw.get("description") or "")
     thumbs_models = N._build_thumbnails(raw.get("thumbnails", []))
     thumbs_dicts = [t.model_dump() for t in thumbs_models]
     thumbnail = N.pick_best_thumbnail_url(thumbs_dicts) if thumbs_models else None

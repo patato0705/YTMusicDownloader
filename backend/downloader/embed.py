@@ -14,10 +14,11 @@ if not logging.getLogger().handlers:
 try:
     from mutagen import File as MutagenFile  # type: ignore
     from mutagen.mp4 import MP4, MP4Cover  # type: ignore
-    from mutagen.id3 import ID3, TIT2, TALB, TPE1, TPE2, TRCK, APIC, USLT  # type: ignore
+    from mutagen.id3 import ID3, TIT2, TALB, TPE1, TPE2, TRCK, TDRC, APIC, USLT  # type: ignore
     _HAS_MUTAGEN = True
 except Exception:
     _HAS_MUTAGEN = False
+    logger.warning("mutagen not importable — audio files will be untagged")
 
 
 def _read_bytes(p: Union[str, Path]) -> Optional[bytes]:
@@ -120,7 +121,8 @@ def _embed_mp3_tags(path: Path,
             id3.delall("TRCK")
             id3.add(TRCK(encoding=3, text=[str(track_number)]))
         if year:
-            id3.add(TALB(encoding=3, text=[str(year)]))  # not ideal but keep
+            id3.delall("TDRC")
+            id3.add(TDRC(encoding=3, text=[str(year)]))
         # lyrics
         if lyrics_path:
             lyrics_bytes = _read_bytes(lyrics_path)
@@ -160,7 +162,7 @@ def embed_tags(file_path: str,
     If mutagen is not installed, logs and returns.
     """
     if not _HAS_MUTAGEN:
-        logger.debug("mutagen not available, skipping embedding for %s", file_path)
+        logger.warning("mutagen not available, skipping embedding for %s", file_path)
         return
 
     p = Path(str(file_path))

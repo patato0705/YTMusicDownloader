@@ -29,6 +29,7 @@ def upsert_artist(
     artist_id: str,
     name: Optional[str] = None,
     image_local: Optional[str] = None,
+    description: Optional[str] = None,
 ) -> Artist:
     """
     Upsert an Artist row.
@@ -46,6 +47,7 @@ def upsert_artist(
             id=str(artist_id),
             name=str(name) if name is not None else "",
             image_local=str(image_local) if image_local else None,
+            description=str(description) if description else None,
         )
         session.add(obj)
         logger.debug(f"Created new artist: {artist_id}")
@@ -56,6 +58,9 @@ def upsert_artist(
             changed = True
         if image_local is not None and obj.image_local != image_local:
             obj.image_local = image_local
+            changed = True
+        if description is not None and obj.description != description:
+            obj.description = description
             changed = True
         if changed:
             session.add(obj)
@@ -224,6 +229,7 @@ def fetch_and_upsert_artist(
         session=session,
         artist_id=artist_id,
         name=name,
+        description=description,
     )
 
     session.flush()

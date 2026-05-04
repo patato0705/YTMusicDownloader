@@ -614,13 +614,23 @@ def import_album(
         _db_operation_with_retry(commit_album)
         
         album_id = result["album_id"]
-        
+
         logger.info(
             f"Imported album {album_id}: "
             f"{result['inserted_tracks']} new tracks, "
             f"{result['updated_tracks']} updated tracks"
         )
-        
+
+        # Write album.nfo for Jellyfin
+        try:
+            from ..downloader.nfo import write_album_nfo
+            album_obj = session.get(Album, album_id)
+            if album_obj:
+                artist_obj = session.get(Artist, album_obj.artist_id) if album_obj.artist_id else None
+                write_album_nfo(album_obj, artist_obj)
+        except Exception:
+            logger.exception(f"Failed writing album.nfo for {album_id}")
+
         # ===== TRANSACTION 2: Queue download jobs for new tracks =====
         try:
             from .jobqueue import enqueue_job
@@ -755,9 +765,17 @@ def sync_artist(session: Session, artist_id: str) -> Dict[str, Any]:
     
     def commit_banner():
         session.commit()
-    
+
     _db_operation_with_retry(commit_banner)
-    
+
+    # Write artist.nfo for Jellyfin
+    if artist_obj:
+        try:
+            from ..downloader.nfo import write_artist_nfo
+            write_artist_nfo(artist_obj)
+        except Exception:
+            logger.exception(f"Failed writing artist.nfo for {artist_id}")
+
     # ===== TRANSACTION 3: Fetch all albums and identify new ones =====
     try:
         all_albums = albums_svc.fetch_albums_for_artist(

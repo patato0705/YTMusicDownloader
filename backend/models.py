@@ -26,8 +26,9 @@ class Artist(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
- 
+
     # relationship: Artist -> Album
     albums: Mapped[List["Album"]] = relationship(
         "Album",
@@ -35,7 +36,7 @@ class Artist(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
- 
+
     def to_dict(self) -> Dict[str, Any]:
         image_local = getattr(self, "image_local", None)
         created_at_val = getattr(self, "created_at", None)
@@ -45,6 +46,7 @@ class Artist(Base):
             "id": getattr(self, "id", None),
             "name": getattr(self, "name", None),
             "image_local": image_local,
+            "description": getattr(self, "description", None),
             "created_at": created_at,
         }
  
