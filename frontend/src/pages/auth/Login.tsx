@@ -6,6 +6,7 @@ import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import * as authApi from '../../api/auth';
+import { parseApiError } from '../../utils';
 
 export const Login: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -14,30 +15,10 @@ export const Login: React.FC = () => {
   const [usernameError, setUsernameError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const { login, isAuthenticated } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
-
-  // Parse API errors from ApiError class
-  const parseApiError = (err: any): string => {
-    const data = err.data;
-
-    if (data?.detail && Array.isArray(data.detail)) {
-      return data.detail.map((e: any) => {
-        const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
-        const msg = e.msg || 'Invalid value';
-        return field ? `${field}: ${msg}` : msg;
-      }).join(', ');
-    }
-
-    if (data?.detail && typeof data.detail === 'string') {
-      return data.detail;
-    }
-
-    // Fallback to i18n invalid credentials message
-    return err.message || t('auth.errors.invalidCredentials') || 'Invalid username or password';
-  };
 
   // Redirect if already logged in
   useEffect(() => {
@@ -83,7 +64,7 @@ export const Login: React.FC = () => {
       }
     } catch (err: any) {
       // Parse and display API error with i18n support
-      setError(parseApiError(err));
+      setError(parseApiError(err, t('auth.errors.invalidCredentials') || 'Invalid username or password'));
     } finally {
       setIsLoading(false);
     }

@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import * as authApi from '../../api/auth';
+import { parseApiError } from '../../utils';
 
 export const ChangePassword: React.FC = () => {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -86,7 +87,7 @@ export const ChangePassword: React.FC = () => {
       navigate('/');
     } catch (err: any) {
       // Server errors go to the top error box
-      setError(err.message || t('auth.errors.changePasswordFailed') || 'Failed to change password');
+      setError(parseApiError(err, t('auth.errors.changePasswordFailed') || 'Failed to change password'));
     } finally {
       setIsLoading(false);
     }

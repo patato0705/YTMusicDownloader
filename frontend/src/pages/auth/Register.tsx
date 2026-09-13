@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import * as authApi from '../../api/auth';
+import { parseApiError, getUsernameError, isValidEmail, getPasswordError } from '../../utils';
 
 export const Register: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -51,9 +52,10 @@ export const Register: React.FC = () => {
 
   // Validate username
   const validateUsername = (name: string) => {
-    if (name && name.length < 3) {
+    const reason = getUsernameError(name);
+    if (reason === 'too_short') {
       setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
-    } else if (name && name.length > 64) {
+    } else if (reason === 'too_long') {
       setUsernameError(t('auth.errors.usernameTooLong') || 'Username must be at most 64 characters');
     } else {
       setUsernameError('');
@@ -62,35 +64,16 @@ export const Register: React.FC = () => {
 
   // Validate email format
   const validateEmail = (value: string) => {
-    if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    if (value && !isValidEmail(value)) {
       setEmailError(t('auth.errors.invalidEmail') || 'Please enter a valid email address');
     } else {
       setEmailError('');
     }
   };
 
-  // Parse API errors from ApiError class (err.data = raw response body)
-  const parseApiError = (err: any): string => {
-    const data = err.data;
-
-    if (data?.detail && Array.isArray(data.detail)) {
-      return data.detail.map((e: any) => {
-        const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
-        const msg = e.msg || 'Invalid value';
-        return field ? `${field}: ${msg}` : msg;
-      }).join(', ');
-    }
-
-    if (data?.detail && typeof data.detail === 'string') {
-      return data.detail;
-    }
-
-    return err.message || t('auth.errors.registrationFailed') || 'Registration failed';
-  };
-
   // Validate password
   const validatePassword = (pass: string) => {
-    if (pass && pass.length < 8) {
+    if (getPasswordError(pass) === 'too_short') {
       setPasswordError(t('auth.errors.passwordTooShort'));
     } else {
       setPasswordError('');
@@ -186,9 +169,9 @@ export const Register: React.FC = () => {
             hasFieldError = true;
           }
         });
-        if (!hasFieldError) setError(parseApiError(err));
+        if (!hasFieldError) setError(parseApiError(err, t('auth.errors.registrationFailed') || 'Registration failed'));
       } else {
-        setError(parseApiError(err));
+        setError(parseApiError(err, t('auth.errors.registrationFailed') || 'Registration failed'));
       }
     } finally {
       setIsLoading(false);

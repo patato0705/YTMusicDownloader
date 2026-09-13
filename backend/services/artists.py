@@ -16,6 +16,7 @@ from ..models import Artist
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
 from .. import config
+from ..downloader.core import safe_name
 
 logger = logging.getLogger("services.artists")
 
@@ -99,7 +100,7 @@ def ensure_artist_banner(
 
     # Get artist name for folder path
     artist_name = artist_obj.name or "Unknown Artist"
-    safe_artist_name = _safe_name(artist_name)
+    safe_artist_name = safe_name(artist_name)
 
     # Artist folder: /data/{artist}/
     artist_folder = Path(str(config.MUSIC_DIR)) / safe_artist_name
@@ -185,16 +186,6 @@ def ensure_artist_banner(
             except Exception:
                 pass
         return None
-
-
-def _safe_name(s: Optional[str]) -> str:
-    """
-    Convert a string to a safe filename/directory name.
-    Removes or replaces problematic characters.
-    """
-    if not s:
-        return "Unknown"
-    return "".join(c for c in s if c.isalnum() or c in " .-_()").strip() or "Unknown"
 
 
 # ============================================================================

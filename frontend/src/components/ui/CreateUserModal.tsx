@@ -4,6 +4,7 @@ import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
 import * as adminApi from '../../api/admin';
+import { parseApiError, getUsernameError, isValidEmail, getPasswordError } from '../../utils';
 
 interface CreateUserModalProps {
   onClose: () => void;
@@ -22,36 +23,12 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
   const [loading, setLoading] = useState(false);
   const { t } = useI18n();
 
-  // Parse API validation errors from ApiError (client.ts)
-  // err.message = stringified detail (may be [object Object] if detail was an array)
-  // err.data    = full raw response body
-  // err.status  = HTTP status code
-  const parseApiError = (err: any): string => {
-    const data = err.data;
-
-    // FastAPI validation error: { detail: [{loc, msg, type}, ...] }
-    if (data?.detail && Array.isArray(data.detail)) {
-      return data.detail.map((e: any) => {
-        const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
-        const msg = e.msg || 'Invalid value';
-        return field ? `${field}: ${msg}` : msg;
-      }).join(', ');
-    }
-
-    // FastAPI simple string detail: { detail: "some error" }
-    if (data?.detail && typeof data.detail === 'string') {
-      return data.detail;
-    }
-
-    // Fallback to err.message (already a string from ApiError constructor)
-    return err.message || 'An error occurred';
-  };
-
   // Validate username
   const validateUsername = (value: string) => {
-    if (value && value.length < 3) {
+    const reason = getUsernameError(value);
+    if (reason === 'too_short') {
       setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
-    } else if (value && value.length > 64) {
+    } else if (reason === 'too_long') {
       setUsernameError(t('auth.errors.usernameTooLong') || 'Username must be at most 64 characters');
     } else {
       setUsernameError('');
@@ -60,7 +37,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
 
   // Validate email
   const validateEmail = (value: string) => {
-    if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    if (value && !isValidEmail(value)) {
       setEmailError(t('auth.errors.invalidEmail') || 'Please enter a valid email address');
     } else {
       setEmailError('');
@@ -69,7 +46,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
 
   // Validate password
   const validatePassword = (value: string) => {
-    if (value && value.length < 8) {
+    if (getPasswordError(value) === 'too_short') {
       setPasswordError(t('auth.errors.passwordTooShort'));
     } else {
       setPasswordError('');

@@ -98,25 +98,29 @@ export default function Browse(): JSX.Element {
       return;
     }
 
-    performSearch(trimmed);
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await search(trimmed, 20);
+        const normalized = normalizeSearchResults(response);
+        if (!cancelled) setResults(normalized);
+      } catch (err: any) {
+        console.error('Search error:', err);
+        if (!cancelled) {
+          setError(err.message || t('common.error'));
+          setResults({ artists: [], albums: [], tracks: [] });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [debouncedQuery]);
-
-  const performSearch = async (searchQuery: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await search(searchQuery, 20);
-      const normalized = normalizeSearchResults(response);
-      setResults(normalized);
-    } catch (err: any) {
-      console.error('Search error:', err);
-      setError(err.message || t('common.error'));
-      setResults({ artists: [], albums: [], tracks: [] });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const hasResults =
     (results.artists?.length || 0) +

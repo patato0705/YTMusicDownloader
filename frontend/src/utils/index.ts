@@ -7,7 +7,6 @@
 
 // Media helpers
 export {
-  getBestThumbnail,
   formatArtist,
   formatAlbum,
   formatTrack,
@@ -17,32 +16,14 @@ export {
   getPrimaryArtist,
   formatDuration,
   formatDurationLong,
-  needsThumbnailProxy,
-  getProxiedThumbnailUrl,
 } from './mediaHelpers';
 
 // Formatting utilities
-export {
-  formatDate,
-  formatRelativeTime,
-  formatFileSize,
-  formatNumber,
-  truncateText,
-  capitalize,
-  snakeToTitle,
-  pluralize,
-  formatCount,
-} from './formatting';
+export { formatNumber } from './formatting';
 
 // Validation utilities
-export {
-  isValidEmail,
-  isValidUsername,
-  validatePassword,
-  passwordsMatch,
-  sanitizeString,
-  isEmpty,
-  validateRequired,
-  validateMinLength,
-  validateMaxLength,
-} from './validation';
+export { getUsernameError, isValidEmail, getPasswordError } from './validation';
+export type { UsernameError, PasswordError } from './validation';
+
+// API error parsing
+export { parseApiError } from './apiError';

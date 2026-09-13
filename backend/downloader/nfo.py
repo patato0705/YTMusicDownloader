@@ -5,22 +5,17 @@ from typing import Optional
 from xml.etree import ElementTree as ET
 
 from ..config import MUSIC_DIR
+from .core import safe_name
 
 logger = logging.getLogger("downloader.nfo")
 
 
-def _safe_name(s: Optional[str]) -> str:
-    if not s:
-        return "Unknown"
-    return "".join(c for c in s if c.isalnum() or c in " .-_()").strip() or "Unknown"
-
-
 def _artist_dir(artist_name: Optional[str]) -> Path:
-    return Path(str(MUSIC_DIR)) / _safe_name(artist_name)
+    return Path(str(MUSIC_DIR)) / safe_name(artist_name)
 
 
 def _album_dir(artist_name: Optional[str], album_title: Optional[str]) -> Path:
-    return _artist_dir(artist_name) / _safe_name(album_title)
+    return _artist_dir(artist_name) / safe_name(album_title)
 
 
 def _set_text(parent: ET.Element, tag: str, value: Optional[str]) -> None:

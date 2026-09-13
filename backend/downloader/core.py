@@ -15,12 +15,6 @@ from ..config import DOWNLOAD_DIR, COVERS_DIR, MUSIC_DIR, LYRICS_DIR, YDL_FORMAT
 from . import cover as cover_mod  # type: ignore
 from . import embed as embed_mod  # type: ignore
 
-# optional lyrics helper (may not exist in new layout)
-try:
-    from ..lyrics import fetch_lyrics  # type: ignore
-except Exception:
-    fetch_lyrics = None  # type: ignore
-
 logger = logging.getLogger("downloader.core")
 if not logging.getLogger().handlers:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -37,7 +31,14 @@ def _cleanup_partial_files(directory: Union[str, Path]) -> None:
             logger.debug("Ignoring leftover partial file %s", f, exc_info=True)
 
 
-def _safe_name(s: Optional[str]) -> str:
+def safe_name(s: Optional[str]) -> str:
+    """
+    Sanitize a string (artist/album/track name) for use as a filesystem
+    path component. Security-relevant: this is what keeps metadata-derived
+    strings from injecting path traversal or special characters into
+    download destination paths -- keep it in one place (also used by
+    downloader/nfo.py and services/artists.py) rather than drifting copies.
+    """
     if not s:
         return "Unknown"
     return "".join(c for c in s if c.isalnum() or c in " .-_()").strip() or "Unknown"
@@ -193,9 +194,9 @@ def download_track_by_videoid(
                 logger.exception("Failed saving cover for %s", video_id)
 
     # prepare destination path
-    safe_artist = _safe_name(final_artist)
-    safe_album = _safe_name(final_album)
-    safe_title = _safe_name(final_title)
+    safe_artist = safe_name(final_artist)
+    safe_album = safe_name(final_album)
+    safe_title = safe_name(final_title)
     dest_dir = Path(str(MUSIC_DIR)) / safe_artist / safe_album
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -224,27 +225,9 @@ def download_track_by_videoid(
         except Exception:
             pass
 
-    # lyrics - skip if we don't have duration (which we won't in skip_metadata mode)
+    # Lyrics are fetched separately by jobs.tasks.download_lyrics (LRCLIB-based);
+    # this stays None on the initial download and gets filled in by that job.
     lyrics_lrc_path: Optional[Path] = None
-    if not skip_metadata:  # Only try lyrics if we have metadata
-        try:
-            if fetch_lyrics and artists_list and final_title and final_album and isinstance(duration_sec, int) and duration_sec > 0:
-                temp_lrc = fetch_lyrics(artists_list, final_title, final_album, duration_sec)
-                if temp_lrc:
-                    dest_lyrics = dest_dir / Path(str(temp_lrc)).name
-                    try:
-                        moved = None
-                        if hasattr(cover_mod, "move_if_exists"):
-                            moved = cover_mod.move_if_exists(temp_lrc, dest_lyrics)
-                        else:
-                            moved = shutil.move(str(temp_lrc), str(dest_lyrics))
-                            moved = Path(str(moved))
-                        if isinstance(moved, Path):
-                            lyrics_lrc_path = moved
-                    except Exception:
-                        logger.exception("Failed to move lyrics file")
-        except Exception:
-            logger.exception("Lyrics fetch failed")
 
     # move cover into album folder as cover.jpg if present
     final_cover_path: Optional[str] = None

@@ -1,6 +1,5 @@
-// src/pages/admin/AdminPanel.tsx
+// src/pages/AdminPanel.tsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/I18nContext';
 import { Button } from '../components/ui/Button';
@@ -21,6 +20,7 @@ import type { CleanupResult } from '../api/library';
 import { CHART_COUNTRIES, getCountry } from '../config/charts';
 import type { Setting, User } from '../api/admin';
 import type { ChartSubscription, Chart } from '../api/charts';
+import { parseApiError } from '../utils';
 
 export default function AdminPanel(): JSX.Element {
   const [activeTab, setActiveTab] = useState<'users' | 'charts' | 'settings'>('users');
@@ -57,42 +57,38 @@ export default function AdminPanel(): JSX.Element {
   
   const { user } = useAuth();
   const { t } = useI18n();
-  const navigate = useNavigate();
 
-  // Redirect if not admin
-  useEffect(() => {
-    if (user && user.role !== 'administrator') {
-      navigate('/');
-    }
-  }, [user, navigate]);
+  // Role gating happens in <ProtectedRoute requiredRole="administrator">
+  // around this route (see App.tsx) — a non-admin never mounts this component.
 
   useEffect(() => {
-    loadData();
-  }, [activeTab]);
+    let cancelled = false;
 
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
+    (async () => {
+      setLoading(true);
+      setError(null);
 
-    try {
-      if (activeTab === 'settings') {
-        await loadSettings();
-      } else if (activeTab === 'users') {
-        await loadUsers();
-      } else if (activeTab === 'charts') {
-        await loadChartSubscriptions();
+      try {
+        if (activeTab === 'settings') {
+          await loadSettings();
+        } else if (activeTab === 'users') {
+          await loadUsers();
+        } else if (activeTab === 'charts') {
+          await loadChartSubscriptions();
+        }
+      } catch (err: any) {
+        console.error('Failed to load data:', err);
+        if (!cancelled) setError(parseApiError(err, 'Failed to load data'));
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (err: any) {
-      console.error('Failed to load data:', err);
-      setError(err.message || 'Failed to load data');
-    } finally {
-      setLoading(false);
-    }
-  };
+    })();
+
+    return () => { cancelled = true; };
+  }, [activeTab]);
 
   const loadSettings = async () => {
     const settingsArray = await adminApi.getAllSettings();
-    console.log('[AdminPanel] settings response:', settingsArray);
     setSettings(settingsArray);
 
     // Initialize edited settings
@@ -146,25 +142,6 @@ export default function AdminPanel(): JSX.Element {
     } finally {
       setSaveLoading(false);
     }
-  };
-
-  // Parse API errors from ApiError class (err.data holds the raw response body)
-  const parseApiError = (err: any): string => {
-    const data = err.data;
-
-    if (data?.detail && Array.isArray(data.detail)) {
-      return data.detail.map((e: any) => {
-        const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
-        const msg = e.msg || 'Invalid value';
-        return field ? `${field}: ${msg}` : msg;
-      }).join(', ');
-    }
-
-    if (data?.detail && typeof data.detail === 'string') {
-      return data.detail;
-    }
-
-    return err.message || 'An error occurred';
   };
 
   const toggleUserStatus = async (userId: number, currentStatus: boolean) => {

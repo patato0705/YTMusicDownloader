@@ -273,23 +273,31 @@ export default function PlaylistImport(): JSX.Element {
     }
   };
 
-  const handleFollowAll = async () => {
-    const toFollow = uniqueArtists.filter((a) => !followedArtists.has(a.id));
-    if (toFollow.length === 0) return;
+  // Shared driver for the three "do this to every remaining item" bulk actions
+  // below (follow all artists, follow main artists, download all albums) —
+  // they differed only in which items/action/success-message they used.
+  const runBulkAction = async (
+    items: Array<{ id: string; name: string }>,
+    type: 'artists' | 'albums',
+    action: (id: string) => Promise<void>,
+    markDone: (id: string) => void,
+    successMessageKey: string,
+  ) => {
+    if (items.length === 0) return;
 
     let succeeded = 0;
     let failed = 0;
 
-    setBulkProgress({ type: 'artists', current: 0, total: toFollow.length });
+    setBulkProgress({ type, current: 0, total: items.length });
 
-    for (let i = 0; i < toFollow.length; i++) {
-      setBulkProgress({ type: 'artists', current: i + 1, total: toFollow.length });
+    for (let i = 0; i < items.length; i++) {
+      setBulkProgress({ type, current: i + 1, total: items.length });
       try {
-        await followArtist(toFollow[i].id);
-        setFollowedArtists((prev) => new Set(prev).add(toFollow[i].id));
+        await action(items[i].id);
+        markDone(items[i].id);
         succeeded++;
       } catch (err: any) {
-        console.error(`Failed to follow ${toFollow[i].name}:`, err);
+        console.error(`Bulk ${type} action failed for ${items[i].name}:`, err);
         failed++;
       }
     }
@@ -297,12 +305,12 @@ export default function PlaylistImport(): JSX.Element {
     setBulkProgress(null);
 
     if (failed === 0) {
-      setToast({ message: t('playlist.followComplete'), type: 'success' });
+      setToast({ message: t(successMessageKey), type: 'success' });
     } else {
       setToast({
         message: t('playlist.partialSuccess', {
           succeeded: String(succeeded),
-          total: String(toFollow.length),
+          total: String(items.length),
           failed: String(failed),
         }),
         type: 'error',
@@ -310,79 +318,32 @@ export default function PlaylistImport(): JSX.Element {
     }
   };
 
-  const handleFollowMainArtists = async () => {
-    const toFollow = mainArtists.filter((a) => !followedArtists.has(a.id));
-    if (toFollow.length === 0) return;
+  const handleFollowAll = () =>
+    runBulkAction(
+      uniqueArtists.filter((a) => !followedArtists.has(a.id)),
+      'artists',
+      followArtist,
+      (id) => setFollowedArtists((prev) => new Set(prev).add(id)),
+      'playlist.followComplete',
+    );
 
-    let succeeded = 0;
-    let failed = 0;
+  const handleFollowMainArtists = () =>
+    runBulkAction(
+      mainArtists.filter((a) => !followedArtists.has(a.id)),
+      'artists',
+      followArtist,
+      (id) => setFollowedArtists((prev) => new Set(prev).add(id)),
+      'playlist.followComplete',
+    );
 
-    setBulkProgress({ type: 'artists', current: 0, total: toFollow.length });
-
-    for (let i = 0; i < toFollow.length; i++) {
-      setBulkProgress({ type: 'artists', current: i + 1, total: toFollow.length });
-      try {
-        await followArtist(toFollow[i].id);
-        setFollowedArtists((prev) => new Set(prev).add(toFollow[i].id));
-        succeeded++;
-      } catch (err: any) {
-        console.error(`Failed to follow ${toFollow[i].name}:`, err);
-        failed++;
-      }
-    }
-
-    setBulkProgress(null);
-
-    if (failed === 0) {
-      setToast({ message: t('playlist.followComplete'), type: 'success' });
-    } else {
-      setToast({
-        message: t('playlist.partialSuccess', {
-          succeeded: String(succeeded),
-          total: String(toFollow.length),
-          failed: String(failed),
-        }),
-        type: 'error',
-      });
-    }
-  };
-
-  const handleDownloadAll = async () => {
-    const toDownload = uniqueAlbums.filter((a) => !downloadedAlbums.has(a.id));
-    if (toDownload.length === 0) return;
-
-    let succeeded = 0;
-    let failed = 0;
-
-    setBulkProgress({ type: 'albums', current: 0, total: toDownload.length });
-
-    for (let i = 0; i < toDownload.length; i++) {
-      setBulkProgress({ type: 'albums', current: i + 1, total: toDownload.length });
-      try {
-        await downloadAlbum(toDownload[i].id);
-        setDownloadedAlbums((prev) => new Set(prev).add(toDownload[i].id));
-        succeeded++;
-      } catch (err: any) {
-        console.error(`Failed to download ${toDownload[i].name}:`, err);
-        failed++;
-      }
-    }
-
-    setBulkProgress(null);
-
-    if (failed === 0) {
-      setToast({ message: t('playlist.downloadComplete'), type: 'success' });
-    } else {
-      setToast({
-        message: t('playlist.partialSuccess', {
-          succeeded: String(succeeded),
-          total: String(toDownload.length),
-          failed: String(failed),
-        }),
-        type: 'error',
-      });
-    }
-  };
+  const handleDownloadAll = () =>
+    runBulkAction(
+      uniqueAlbums.filter((a) => !downloadedAlbums.has(a.id)),
+      'albums',
+      downloadAlbum,
+      (id) => setDownloadedAlbums((prev) => new Set(prev).add(id)),
+      'playlist.downloadComplete',
+    );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !loading) {

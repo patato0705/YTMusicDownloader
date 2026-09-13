@@ -13,11 +13,11 @@ import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { categorizeAlbums } from '../utils';
-import type { Album } from '../types';
+import type { Album, Artist as ArtistType } from '../types';
 
 export default function Artist(): JSX.Element {
   const { artistId } = useParams<{ artistId: string }>();
-  const [artist, setArtist] = useState<any>(null);
+  const [artist, setArtist] = useState<ArtistType | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,38 +35,40 @@ export default function Artist(): JSX.Element {
   const isAdmin = user?.role === 'administrator';
 
   useEffect(() => {
-    if (artistId) {
-      loadArtist();
-    }
-  }, [artistId]);
-
-  const loadArtist = async () => {
     if (!artistId) return;
 
-    setLoading(true);
-    setError(null);
-    setArtistImageError(false);
+    let cancelled = false;
 
-    try {
-      const data = await getArtist(artistId);
-      setArtist(data.artist || data);
-      
-      // Combine albums and singles
-      const allAlbums = [
-        ...(data.albums || []),
-        ...(data.singles || [])
-      ];
-      
-      setAlbums(allAlbums);
-      setSubscriptionMode(data.subscription_mode ?? null);
-      setSource(data.source || '');
-    } catch (err: any) {
-      console.error('Failed to load artist:', err);
-      setError(err.message || t('common.error'));
-    } finally {
-      setLoading(false);
-    }
-  };
+    (async () => {
+      setLoading(true);
+      setError(null);
+      setArtistImageError(false);
+
+      try {
+        const data = await getArtist(artistId);
+        if (!cancelled) {
+          setArtist(data.artist || data);
+
+          // Combine albums and singles
+          const allAlbums = [
+            ...(data.albums || []),
+            ...(data.singles || [])
+          ];
+
+          setAlbums(allAlbums);
+          setSubscriptionMode(data.subscription_mode ?? null);
+          setSource(data.source || '');
+        }
+      } catch (err: any) {
+        console.error('Failed to load artist:', err);
+        if (!cancelled) setError(err.message || t('common.error'));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [artistId]);
 
   const handleFollow = async () => {
     if (!artistId) return;

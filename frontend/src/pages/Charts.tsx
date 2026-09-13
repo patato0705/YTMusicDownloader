@@ -16,41 +16,43 @@ export default function Charts(): JSX.Element {
   const { t } = useI18n();
 
   useEffect(() => {
-    loadCharts();
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Load all enabled subscriptions
+        const subs = await chartsApi.listChartSubscriptions(false);
+        if (!cancelled) setSubscriptions(subs.filter(s => s.enabled));
+
+        // Load chart data for each subscription
+        const chartData: Record<string, Chart> = {};
+        await Promise.all(
+          subs
+            .filter(s => s.enabled)
+            .map(async (sub) => {
+              try {
+                const chart = await chartsApi.getChart(sub.country_code);
+                chartData[sub.country_code] = chart;
+              } catch (err) {
+                console.error(`Failed to load chart for ${sub.country_code}:`, err);
+              }
+            })
+        );
+
+        if (!cancelled) setCharts(chartData);
+      } catch (err: any) {
+        console.error('Failed to load charts:', err);
+        if (!cancelled) setError(err.message || 'Failed to load charts');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, []);
-
-  const loadCharts = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Load all enabled subscriptions
-      const subs = await chartsApi.listChartSubscriptions(false);
-      setSubscriptions(subs.filter(s => s.enabled));
-
-      // Load chart data for each subscription
-      const chartData: Record<string, Chart> = {};
-      await Promise.all(
-        subs
-          .filter(s => s.enabled)
-          .map(async (sub) => {
-            try {
-              const chart = await chartsApi.getChart(sub.country_code);
-              chartData[sub.country_code] = chart;
-            } catch (err) {
-              console.error(`Failed to load chart for ${sub.country_code}:`, err);
-            }
-          })
-      );
-
-      setCharts(chartData);
-    } catch (err: any) {
-      console.error('Failed to load charts:', err);
-      setError(err.message || 'Failed to load charts');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) {
     return (
