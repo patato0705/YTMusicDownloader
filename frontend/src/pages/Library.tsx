@@ -166,7 +166,7 @@ export default function Library(): JSX.Element {
             <StatCard
               icon={<AlbumsIcon />}
               label={t('library.stats.albums')}
-              value={formatNumber(stats.albums?.total || 0)}
+              value={formatNumber(stats.albums?.downloaded || 0)}
             />
             <StatCard
               icon={<TracksIcon />}

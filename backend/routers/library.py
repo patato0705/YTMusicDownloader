@@ -354,7 +354,13 @@ def get_library_stats(
         artists_total = db.query(func.count(ArtistSubscription.id)).filter(ArtistSubscription.enabled == True).scalar() or 0
         
         # Albums stats (query Album table directly)
+        # "total" counts every followed album, including ones only followed for
+        # search/indexation (mode="metadata"). "downloaded" counts only albums
+        # actually in the library (mode="download").
         albums_total = db.query(func.count(Album.id)).scalar() or 0
+        albums_downloaded = db.query(func.count(Album.id)).filter(
+            Album.mode == "download"
+        ).scalar() or 0
         albums_completed = db.query(func.count(Album.id)).filter(
             Album.download_status == "completed"
         ).scalar() or 0
@@ -388,6 +394,7 @@ def get_library_stats(
             },
             "albums": {
                 "total": int(albums_total),
+                "downloaded": int(albums_downloaded),
                 "completed": int(albums_completed),
                 "downloading": int(albums_downloading),
                 "pending": int(albums_pending),

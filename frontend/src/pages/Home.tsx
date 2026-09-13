@@ -161,7 +161,7 @@ export default function Home(): JSX.Element {
           <StatCard
             icon={<AlbumsIcon />}
             label={t('library.stats.albums')}
-            value={loading ? <Spinner size="sm" /> : formatNumber(stats?.albums?.total || 0)}
+            value={loading ? <Spinner size="sm" /> : formatNumber(stats?.albums?.downloaded || 0)}
             loading={loading}
           />
           <StatCard

@@ -81,6 +81,7 @@ export interface LibraryStats {
   };
   albums?: {
     total: number;
+    downloaded: number;
     completed: number;
     downloading: number;
     pending: number;
