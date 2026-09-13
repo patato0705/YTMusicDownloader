@@ -1,14 +1,22 @@
-fastapi
-uvicorn[standard]
-ytmusicapi
+# Pinned to the versions this image was last built and import-tested against.
+# When bumping a pin, re-test the app (esp. bcrypt/pydantic/SQLAlchemy, which
+# this code targets the modern major-version API of) before committing.
+#
+# yt-dlp is deliberately NOT pinned here: YouTube breaks it often enough that
+# pinning it would mean the app silently going stale between image releases.
+# deploy/entrypoint.sh runs `pip install -U yt-dlp` at container startup so a
+# restart alone can pick up an upstream fix, no rebuild required.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+ytmusicapi==1.12.2
 yt-dlp
-requests
-SQLAlchemy
-pydantic
-Pillow
-httpx
-bcrypt
-email-validator==2.1.0
+requests==2.34.2
+SQLAlchemy==2.0.52
+pydantic==2.13.5
+Pillow==12.3.0
+httpx==0.28.1
+bcrypt==5.0.0
+email-validator==2.3.0
 PyJWT==2.8.0
-python-multipart
-mutagen>=1.47
+python-multipart==0.0.32
+mutagen==1.48.1

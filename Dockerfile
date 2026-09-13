@@ -46,8 +46,10 @@ COPY backend/ /app/backend
 # copy frontend build into backend static folder
 COPY --from=frontend-builder /app/frontend/dist /app/backend/static
 
-# copy supervisord config
+# copy supervisord config and startup entrypoint
 COPY deploy/supervisord.conf /etc/supervisor/supervisord.conf
+COPY deploy/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # create data dirs (will be mounted by compose typically)
 RUN mkdir -p /data /data/music /data/covers /data/lyrics_raw /config && chmod -R 0777 /data /config
@@ -57,4 +59,4 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8000
 
-CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
+ENTRYPOINT ["/entrypoint.sh"]
