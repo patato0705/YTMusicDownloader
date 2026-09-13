@@ -112,7 +112,7 @@ def list_tracks_for_album_from_db(
         query = (
             session.query(Track)
             .filter(Track.album_id == album_id)
-            .order_by(Track.id.asc())  # TODO: Add track_number field and order by that
+            .order_by(Track.track_number.asc().nulls_last(), Track.id.asc())
         )
         
         for track in query.all():

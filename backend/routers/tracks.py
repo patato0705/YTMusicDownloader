@@ -124,8 +124,8 @@ def download_track(
         for k in ("artist_name", "album_name", "track_title", "track_number", "year", "cover_path"):
             if k in body:
                 payload[k] = body.get(k)
-        job_id = jobqueue.enqueue_job(session=db, job_type="download_track", payload=payload)
-        return {"ok": True, "job_id": job_id}
+        job = jobqueue.enqueue_job(session=db, job_type="download_track", payload=payload)
+        return {"ok": True, "job_id": job.id}
     except Exception as e:
         logger.exception("download_track enqueue failed for %s", track_id)
         raise HTTPException(status_code=500, detail=str(e))
@@ -154,8 +154,8 @@ def ensure_lyrics(
         for k in ("artists", "title", "album", "duration", "dest_audio_path"):
             if k in body:
                 payload[k] = body.get(k)
-        job_id = jobqueue.enqueue_job(session=db, job_type="ensure_track_lyrics", payload=payload)
-        return {"ok": True, "job_id": job_id}
+        job = jobqueue.enqueue_job(session=db, job_type="ensure_track_lyrics", payload=payload)
+        return {"ok": True, "job_id": job.id}
     except Exception as e:
         logger.exception("ensure_lyrics enqueue failed for %s", track_id)
         raise HTTPException(status_code=500, detail=str(e))
