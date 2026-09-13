@@ -64,7 +64,14 @@ export default function App(): JSX.Element {
                     <Route path="/playlist-import" element={<PlaylistImport />} />
                     
                     {/* Admin Panel */}
-                    <Route path="/admin" element={<AdminPanel />} />
+                    <Route
+                      path="/admin"
+                      element={
+                        <ProtectedRoute requiredRole="administrator">
+                          <AdminPanel />
+                        </ProtectedRoute>
+                      }
+                    />
                     
                     {/* Catch-all redirect */}
                     <Route path="*" element={<Navigate to="/" replace />} />

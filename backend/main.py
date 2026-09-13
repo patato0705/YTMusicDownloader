@@ -15,7 +15,6 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from . import config
 from .logging_config import configure_logging
 from .db import init_db, get_engine
-from .scheduler import start_default_scheduler, stop_default_scheduler
 
 logger = logging.getLogger("backend.main")
 
@@ -70,7 +69,7 @@ def create_app() -> FastAPI:
         Replaces deprecated @app.on_event handlers.
         """
         # STARTUP
-        logger.info("Application startup: ensuring config dirs, initializing DB and scheduler")
+        logger.info("Application startup: ensuring config dirs and initializing DB")
         try:
             # ensure all configured directories exist (CONFIG_DIR, TEMP_DIR, COVERS_DIR, etc.)
             try:
@@ -91,12 +90,8 @@ def create_app() -> FastAPI:
             except Exception:
                 logger.exception("init_db failed")
 
-            # start scheduler (default instance) — safe if already started
-            try:
-                start_default_scheduler()
-                logger.info("Scheduler started")
-            except Exception:
-                logger.exception("Failed starting scheduler")
+            # Note: the scheduler runs as its own supervisord process
+            # (see deploy/supervisord.conf), not inside the web process.
 
         except Exception:
             logger.exception("Unhandled error during startup")
@@ -106,12 +101,7 @@ def create_app() -> FastAPI:
             yield
         finally:
             # SHUTDOWN
-            logger.info("Application shutdown: stopping scheduler")
-            try:
-                stop_default_scheduler()
-                logger.info("Scheduler stopped")
-            except Exception:
-                logger.exception("Failed stopping scheduler")
+            logger.info("Application shutdown")
 
     # create app with lifespan handler and move docs under /api
     app = FastAPI(
@@ -123,13 +113,17 @@ def create_app() -> FastAPI:
         redoc_url=None,
     )
 
-    # CORS - allow origins from env or default to '*'
-    cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "*")
-    if cors_env.strip() == "*" or not cors_env.strip():
-        origins = ["*"]
-    else:
-        # comma separated list
-        origins = [o.strip() for o in cors_env.split(",") if o.strip()]
+    # CORS - default to same-origin only (no cross-origin access at all).
+    # The standard deployment (this Dockerfile) serves the frontend from
+    # the same origin as the API, which browsers never subject to CORS
+    # checks in the first place -- so this default costs nothing for the
+    # normal setup. If you're running the frontend on a different origin
+    # (a custom/split deployment), set CORS_ALLOWED_ORIGINS to a
+    # comma-separated list of the exact origin(s) to allow. Auth now rides
+    # on cookies, so a wildcard here would mean any origin could make
+    # credentialed requests -- deliberately not offered as an option.
+    cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+    origins = [o.strip() for o in cors_env.split(",") if o.strip()]
 
     app.add_middleware(
         CORSMiddleware,

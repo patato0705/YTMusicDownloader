@@ -12,18 +12,15 @@ import hashlib
 import logging
 import time
 from pathlib import Path
-from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import Response, JSONResponse, FileResponse
 from starlette.background import BackgroundTask
 
-from sqlalchemy.orm import Session
-from ..deps import get_db
-
-from ..config import THUMBNAIL_CACHE_DIR, THUMBNAIL_CACHE_TTL, MUSIC_DIR
-from ..dependencies import require_auth, require_admin
+from ..config import THUMBNAIL_CACHE_DIR, THUMBNAIL_CACHE_TTL, MUSIC_DIR, COVERS_DIR
+from ..dependencies import require_admin, get_current_user_flexible
 from ..models import User
 
 logger = logging.getLogger("routers.media")
@@ -39,6 +36,25 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # In-memory cache for recently accessed URLs
 _memory_cache: dict[str, tuple[float, Path]] = {}
 _memory_cache_max_size = 1000
+
+# Hosts this proxy will actually fetch from. Without this, /thumbnail is an
+# unauthenticated, server-side fetch of any http(s) URL an attacker
+# supplies -- an SSRF that could reach internal services or a cloud
+# metadata endpoint (e.g. 169.254.169.254) from inside the container/host
+# network. These are the only hosts the frontend ever actually asks for
+# (see frontend/src/api/media.ts's getImageUrl).
+_ALLOWED_THUMBNAIL_HOSTS = ("googleusercontent.com", "ytimg.com", "ggpht.com")
+
+
+def _is_allowed_thumbnail_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+    host = parsed.hostname.lower()
+    return any(host == domain or host.endswith("." + domain) for domain in _ALLOWED_THUMBNAIL_HOSTS)
 
 
 def _get_cache_path(url: str) -> Path:
@@ -80,25 +96,44 @@ def _evict_memory_cache():
     for url, _ in items[:to_remove]:
         _memory_cache.pop(url, None)
 
+# Resolved once at import time; every request is checked against these real,
+# symlink-free roots so a `..` segment can't walk the served path outside them.
+_ALLOWED_IMAGE_ROOTS = [COVERS_DIR.resolve(), MUSIC_DIR.resolve()]
+
+
 @router.get("/images/{full_path:path}")
-def get_local_image(full_path: str):
-    """Serve images from /config/temp/covers or /data directories."""
-    
-    # Reconstruct absolute path
-    absolute_path = "/" + full_path
-    
-    logger.info(f"Serving image: {absolute_path}")
-    
-    # Check allowed directories
-    if not (absolute_path.startswith('/config/temp/covers/') or absolute_path.startswith('/data/')):
+def get_local_image(
+    full_path: str,
+    current_user: User = Depends(get_current_user_flexible),
+):
+    """Serve images from /config/temp/covers or /data directories.
+
+    Requires auth like every other route, but via get_current_user_flexible()
+    rather than the usual Authorization-header-only require_auth: the
+    frontend loads these via plain <img src="..."> tags, which can't attach
+    a header, so this also accepts the httpOnly access_token cookie the
+    browser sends automatically. Path safety is enforced separately by
+    resolving the path and checking it's contained within one of the
+    allowed roots (see _ALLOWED_IMAGE_ROOTS) -- auth alone wouldn't stop
+    traversal for a legitimately logged-in but malicious request.
+    """
+
+    # Reconstruct absolute path and resolve it (collapses any ".." segments)
+    try:
+        resolved = (Path("/") / full_path).resolve()
+    except (OSError, RuntimeError):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    logger.info(f"Serving image: {resolved}")
+
+    if not any(resolved.is_relative_to(root) for root in _ALLOWED_IMAGE_ROOTS):
         raise HTTPException(status_code=403, detail="Path not allowed")
-    
-    # Create Path object
-    file_path = Path(absolute_path)
-    
+
+    file_path = resolved
+
     # Check file exists
     if not file_path.exists() or not file_path.is_file():
-        logger.warning(f"File not found: {absolute_path}")
+        logger.warning(f"File not found: {resolved}")
         raise HTTPException(status_code=404, detail="Image not found")
     
     # Determine media type
@@ -130,20 +165,21 @@ async def get_thumbnail(
     url: str = Query(..., description="Thumbnail URL to proxy and cache"),
 ) -> Response:
     """
-    Proxy and cache thumbnail images from external sources (YouTube, Google, etc.).
-    
+    Proxy and cache thumbnail images from YouTube/Google's thumbnail CDNs.
+
     Flow:
     1. Check memory cache
     2. Check disk cache
     3. Fetch from source and cache
-    
-    No authentication required - thumbnails are public.
+
+    No authentication required - thumbnails are public. Restricted to a
+    fixed set of hosts (see _ALLOWED_THUMBNAIL_HOSTS) so this can't be used
+    as an open SSRF proxy to fetch arbitrary internal/external URLs.
     """
     try:
-        # Validate URL
-        if not url.startswith(("http://", "https://")):
-            raise HTTPException(status_code=400, detail="Invalid URL")
-        
+        if not _is_allowed_thumbnail_url(url):
+            raise HTTPException(status_code=400, detail="URL host not allowed")
+
         # Check memory cache
         if url in _memory_cache:
             timestamp, cache_path = _memory_cache[url]
