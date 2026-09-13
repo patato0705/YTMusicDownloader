@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
 from ..deps import wait_for_db
-from .jobqueue import reserve_job, mark_job_done, mark_job_failed
+from .jobqueue import reserve_job, mark_job_done, mark_job_failed, reclaim_orphaned_jobs
 from .tasks import run_job_task
 from ..logging_config import configure_logging
 
@@ -65,6 +65,15 @@ class Worker:
         Main loop. Never returns until stopped or max_jobs reached.
         """
         logger.info("Starting worker %s (poll_interval=%s)", self.worker_name, self.poll_interval)
+
+        try:
+            session = SessionLocal()
+            try:
+                reclaim_orphaned_jobs(session, self.worker_name)
+            finally:
+                session.close()
+        except Exception:
+            logger.exception("Failed to reclaim orphaned jobs on startup")
 
         while not self._stopped:
             # stop if max_jobs reached

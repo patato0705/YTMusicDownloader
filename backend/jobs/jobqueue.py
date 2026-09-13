@@ -7,6 +7,9 @@ Functions:
 - reserve_job() - Atomically reserve next job for processing
 - mark_job_done() - Mark job as successfully completed
 - mark_job_failed() - Mark job as failed (with optional retry)
+- reclaim_orphaned_jobs() - Requeue jobs left "reserved" by a crashed/killed worker
+- cancel_job() - Cancel a queued or reserved job
+- cleanup_old_jobs() - Delete old completed jobs
 
 Notes:
 - All functions commit the session to make changes visible to worker processes
@@ -16,7 +19,7 @@ Notes:
 from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
@@ -141,6 +144,45 @@ def reserve_job(session: Session, worker_name: str) -> Optional[Job]:
         return None
 
 
+def reclaim_orphaned_jobs(session: Session, worker_name: str) -> int:
+    """
+    Requeue any job still marked "reserved" from a previous run.
+
+    Only one worker process runs at a time (see deploy/supervisord.conf), so
+    if a job is "reserved" when a worker starts up, the worker that reserved
+    it is gone -- killed mid-job by a container restart, crash, or update --
+    and that job would otherwise sit "reserved" forever, never picked up
+    again and never showing as failed. Call this once, before the poll loop
+    starts.
+
+    Args:
+        session: SQLAlchemy session
+        worker_name: This worker's identifier, recorded in last_error for
+            whichever jobs it reclaims (for debugging)
+
+    Returns:
+        Number of jobs reclaimed
+    """
+    stmt = select(Job).where(Job.status == "reserved")
+    orphaned = session.execute(stmt).scalars().all()
+
+    if not orphaned:
+        return 0
+
+    now = now_utc()
+    for job in orphaned:
+        job.status = "queued"
+        job.reserved_by = None
+        job.started_at = None
+        job.last_error = f"Reclaimed by {worker_name}: orphaned by a previous worker that never finished it"
+        session.add(job)
+
+    session.commit()
+
+    logger.warning(f"Reclaimed {len(orphaned)} orphaned job(s) left 'reserved' by a previous run")
+    return len(orphaned)
+
+
 def mark_job_done(
     session: Session,
     job_id: int,
@@ -225,35 +267,6 @@ def mark_job_failed(
             f"Job {job_id} permanently failed after {job.attempts} attempts: "
             f"{error_message}"
         )
-
-
-def get_job_stats(session: Session) -> dict:
-    """
-    Get statistics about jobs in the queue.
-    Useful for monitoring and debugging.
-    
-    Returns:
-        Dict with counts by status
-    """
-    from sqlalchemy import func
-    
-    stats = {}
-    
-    # Count by status
-    result = session.query(Job.status, func.count(Job.id)).group_by(Job.status).all()
-    for status, count in result:
-        stats[status] = count
-    
-    # Count pending (queued but scheduled in future)
-    now = now_utc()
-    pending = (
-        session.query(func.count(Job.id))
-        .filter(Job.status == "queued", Job.scheduled_at > now)
-        .scalar()
-    )
-    stats["pending_scheduled"] = pending or 0
-    
-    return stats
 
 
 def cancel_job(session: Session, job_id: int, reason: Optional[str] = None) -> bool:
