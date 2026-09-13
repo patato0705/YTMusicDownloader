@@ -86,7 +86,8 @@
     "settings": "Settings",
     "charts": "Charts",
     "import": "Import",
-    "admin": "Admin Panel"
+    "admin": "Admin Panel",
+    "activeJobs": "{count} active"
   },
   "settings": {
     "title": "Settings",

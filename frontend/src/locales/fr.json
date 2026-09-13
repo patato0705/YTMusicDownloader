@@ -39,22 +39,43 @@
       "button": "Créer un compte",
       "loading": "Création...",
       "hasAccount": "Vous avez déjà un compte ?",
-      "login": "Se connecter ici"
+      "login": "Se connecter ici",
+      "usernameHint": "Le nom d'utilisateur doit contenir entre 3 et 64 caractères",
+      "disabled": {
+        "title": "Inscription désactivée",
+        "message": "L'inscription publique est actuellement désactivée. Veuillez contacter un administrateur pour obtenir un accès.",
+        "goToLogin": "Aller à la connexion"
+      }
     },
     "logout": "Déconnexion",
     "changePassword": {
       "title": "Changer le mot de passe",
+      "subtitle": "Choisissez un nouveau mot de passe",
       "current": "Mot de passe actuel",
       "new": "Nouveau mot de passe",
       "confirm": "Confirmer le nouveau mot de passe",
       "button": "Changer le mot de passe",
-      "success": "Mot de passe modifié avec succès"
+      "success": "Mot de passe modifié avec succès",
+      "required": "Un changement de mot de passe est requis",
+      "defaultWarning": "Vous utilisez actuellement le mot de passe administrateur par défaut. Vous devez le changer",
+      "tips": {
+        "title": "Conseils pour choisir un mot de passe",
+        "length": "Votre mot de passe doit contenir au moins 8 caractères",
+        "mix": "Essayez d'utiliser une combinaison de lettres, de chiffres et de symboles",
+        "unique": "Utilisez un mot de passe unique pour chaque site web."
+      }
     },
     "errors": {
+      "usernameRequired": "Le nom d'utilisateur est requis",
+      "passwordRequired": "Le mot de passe est requis",
+      "emailRequired": "L'email est requis",
+      "invalidEmail": "Veuillez saisir une adresse email valide",
+      "currentPasswordRequired": "Le mot de passe actuel est requis",
+      "newPasswordRequired": "Le nouveau mot de passe est requis",
+      "confirmPasswordRequired": "Veuillez confirmer votre mot de passe",
       "invalidCredentials": "Nom d'utilisateur ou mot de passe invalide",
       "passwordMismatch": "Les mots de passe ne correspondent pas",
       "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
-      "usernameRequired": "Le nom d'utilisateur est requis",
       "sessionExpired": "Session expirée. Veuillez vous reconnecter."
     }
   },
@@ -65,7 +86,8 @@
     "settings": "Paramètres",
     "admin": "Administration",
     "charts": "Charts",
-    "import": "Importer"
+    "import": "Importer",
+    "activeJobs": "{count} en cours"
   },
   "settings": {
     "title": "Paramètres",
@@ -124,28 +146,31 @@
     }
   },
   "artist": {
-    "albums": "Albums",
-    "singles": "Singles & EPs",
+    "title": "Artiste",
+    "release": "sortie",
+    "releases": "sorties",
     "follow": "Suivre",
     "unfollow": "Ne plus suivre",
     "unfollowTitle": "Ne plus suivre l'artiste",
     "unfollowMessage": "Les nouveaux albums ne seront plus automatiquement suivis. Le contenu déjà téléchargé ne sera pas affecté.",
     "following": "Suivi",
-    "sync": "Synchroniser",
-    "syncing": "Synchronisation...",
+    "albums": "Albums",
+    "singles": "Singles & EPs",
+    "noAlbums": "Aucun album pour le moment",
+    "noAlbumsDescription": "Cet artiste n'a encore aucun album dans notre base de données.",
+    "notFound": "Artiste introuvable",
     "delete": "Supprimer l'artiste",
     "deleteTitle": "Supprimer l'artiste",
     "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet artiste et tous les albums, titres et fichiers associés ? Cette action est irréversible.",
     "deleted": "Artiste supprimé avec succès"
   },
   "album": {
-    "tracks": "Titres",
-    "year": "Année",
+    "album": "Album",
     "type": "Type",
-    "follow": "Suivre",
-    "unfollow": "Ne plus suivre",
-    "download": "Télécharger",
-    "downloading": "Téléchargement...",
+    "unknownArtist": "Artiste inconnu",
+    "track": "titre",
+    "tracks": "titres",
+    "download": "Télécharger l'album",
     "downloadQueued": "Téléchargement de l'album en file d'attente",
     "downloadQueuedWithArtist": "Téléchargement en file d'attente. L'artiste a aussi été ajouté à votre bibliothèque.",
     "downloadFailed": "Échec du téléchargement",
@@ -153,7 +178,15 @@
     "deleteTitle": "Supprimer l'album",
     "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet album et tous les titres et fichiers associés ? Cette action est irréversible.",
     "deleted": "Album supprimé avec succès",
-    "following": "Dans la bibliothèque"
+    "following": "Dans la bibliothèque",
+    "trackList": "Liste des titres",
+    "title": "Titre",
+    "artist": "Artiste",
+    "duration": "Durée",
+    "status": "Statut",
+    "noTracks": "Aucun titre",
+    "noTracksDescription": "Cet album n'a pas encore de titres disponibles.",
+    "notFound": "Album introuvable"
   },
   "library": {
     "title": "Bibliothèque",
@@ -211,13 +244,64 @@
     "view": "Voir les détails"
   },
   "admin": {
+    "title": "Admin",
+    "panel": "Panneau",
+    "subtitle": "Gérer les paramètres de l'application et les utilisateurs",
+
+    "tabs": {
+      "settings": "Paramètres",
+      "charts": "Charts",
+      "users": "Utilisateurs"
+    },
+
     "settings": {
+      "title": "Paramètres",
+      "save": "Enregistrer",
+      "saved": "Paramètres enregistrés avec succès",
       "maintenance": "Maintenance",
       "cleanupTitle": "Nettoyage de la bibliothèque",
       "cleanupDescription": "Supprimer les titres, albums et artistes orphelins qui ne sont plus associés à aucun abonnement.",
       "cleanupButton": "Lancer le nettoyage",
       "cleanupDone": "Nettoyage terminé",
       "cleanupNone": "Aucun élément orphelin trouvé"
+    },
+
+    "users": {
+      "search": "Rechercher des utilisateurs",
+      "showing": "Affichage de",
+      "of": "sur",
+      "users": "utilisateurs",
+      "allStatuses": "Tous les statuts",
+      "allRoles": "Tous les rôles",
+      "create": "Créer un utilisateur",
+      "username": "Nom d'utilisateur",
+      "email": "Email",
+      "role": "Rôle",
+      "status": "Statut",
+      "actions": "Actions",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "delete": "Supprimer",
+      "deleteTitle": "Supprimer l'utilisateur",
+      "confirmDelete": "Supprimer l'utilisateur \"{username}\" ? Cette action est irréversible."
+    },
+    "charts": {
+      "selectCountry": "Sélectionner un pays",
+      "followChart": "Suivre le chart",
+      "unfollowChart": "Ne plus suivre",
+      "currentSubscriptions": "Abonnements aux charts actuels",
+      "country": "Pays",
+      "topArtists": "Meilleurs artistes",
+      "status": "Statut",
+      "lastSynced": "Dernière synchronisation",
+      "actions": "Actions",
+      "enabled": "Activé",
+      "disabled": "Désactivé",
+      "neverSynced": "Jamais",
+      "noSubscriptions": "Aucun chart suivi pour le moment",
+      "followed": "Chart suivi avec succès",
+      "unfollowed": "Chart non suivi avec succès",
+      "updated": "Chart mis à jour avec succès"
     }
   },
   "playlist": {
