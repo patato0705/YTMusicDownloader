@@ -4,7 +4,7 @@ import type { Artist, Album, Track, FormattedMedia, Thumbnail } from '../types';
 /**
  * Extracts the best quality thumbnail from various possible formats
  */
-export function getBestThumbnail(
+function getBestThumbnail(
   item: any,
   preferredSize: 'small' | 'medium' | 'large' = 'medium'
 ): string {
@@ -248,28 +248,4 @@ export function formatDurationLong(seconds?: number | null): string {
   }
   
   return `${minutes} min`;
-}
-
-/**
- * Checks if a URL is from Google/YouTube and needs proxying
- */
-export function needsThumbnailProxy(url: string): boolean {
-  if (!url) return false;
-  
-  return (
-    url.includes('googleusercontent.com') ||
-    url.includes('ytimg.com') ||
-    url.includes('youtube.com')
-  );
-}
-
-/**
- * Generates a proxied thumbnail URL for external images
- */
-export function getProxiedThumbnailUrl(url: string): string {
-  if (!url || !needsThumbnailProxy(url)) {
-    return url;
-  }
-  
-  return `/api/media/thumbnail?url=${encodeURIComponent(url)}`;
 }

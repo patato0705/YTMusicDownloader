@@ -7,7 +7,6 @@ to allow access like:
 
     import backend.downloader as downloader
     downloader.core.download_track_by_videoid(...)
-    downloader.lyrics.get_synced_lyrics(...)
 
 Reexport common functions (package level) is optional but practical.
 """

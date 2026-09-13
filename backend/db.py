@@ -83,20 +83,3 @@ def get_session() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-
-def cleanup_expired_tokens_job() -> None:
-    """
-    Background job to clean up expired refresh tokens.
-    Should be called periodically (e.g., daily via scheduler).
-    """
-    import logging
-    logger = logging.getLogger("db")
-    
-    try:
-        from .services import auth as auth_svc
-        with SessionLocal() as session:
-            count = auth_svc.cleanup_expired_tokens(session)
-            if count > 0:
-                logger.info(f"Token cleanup: removed {count} expired tokens")
-    except Exception as e:
-        logger.exception(f"Token cleanup failed: {e}")
