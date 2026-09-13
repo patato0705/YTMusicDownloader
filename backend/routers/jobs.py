@@ -22,6 +22,7 @@ from ..db import get_session
 from ..dependencies import require_auth, require_admin
 from ..models import Job, User
 from ..jobs import jobqueue
+from .. import time_utils
 from ..schemas.jobs import (
     EnqueueRequest,
     EnqueueResponse,
@@ -347,21 +348,34 @@ def get_job_stats(
     """
     try:
         from sqlalchemy import func
-        
+
         query = session.query(Job.status, func.count(Job.id))
-        
+
         # Filter by user for non-admins
         if current_user.role != config.ROLE_ADMINISTRATOR:
             query = query.filter(Job.user_id == current_user.id)
-        
+
         # Execute query and build dict
         results = query.group_by(Job.status).all()
         stats: Dict[str, int] = {status: count for status, count in results}
-        
+
+        # Of the "queued" jobs, how many are actually sitting in a retry
+        # backoff (scheduled_at in the future) rather than eligible to run
+        # right now. Callers like the navbar's "active jobs" indicator need
+        # this to avoid counting a job waiting out a multi-hour backoff as
+        # "in progress".
+        pending_query = session.query(func.count(Job.id)).filter(
+            Job.status == "queued",
+            Job.scheduled_at > time_utils.now_utc(),
+        )
+        if current_user.role != config.ROLE_ADMINISTRATOR:
+            pending_query = pending_query.filter(Job.user_id == current_user.id)
+        stats["pending_scheduled"] = pending_query.scalar() or 0
+
         return {
             "ok": True,
             "stats": stats,
-            "total": sum(stats.values()),
+            "total": sum(v for k, v in stats.items() if k != "pending_scheduled"),
         }
     
     except Exception as e:

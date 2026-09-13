@@ -11,7 +11,9 @@ import { StatCard } from '../components/ui/StatCard';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
 import { SearchInput } from '../components/ui/SearchInput';
-import { formatNumber } from '../utils';
+import { formatNumber, parseApiError } from '../utils';
+import { usePolling } from '../hooks/usePolling';
+import type { Artist } from '../types';
 
 // Icon components
 const ArtistsIcon = () => <span className="text-2xl">🎤</span>;
@@ -22,7 +24,7 @@ const LibraryIcon = () => <span className="text-2xl">📚</span>;
 const SearchIcon = () => <span className="text-2xl">🔍</span>;
 
 export default function Library(): JSX.Element {
-  const [artists, setArtists] = useState<any[]>([]);
+  const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -33,30 +35,49 @@ export default function Library(): JSX.Element {
   const { t } = useI18n();
 
   useEffect(() => {
-    loadLibrary();
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const [artistsResponse, albumsResponse, statsResponse] = await Promise.all([
+          getLibraryArtists(),
+          getLibraryAlbums(),
+          getLibraryStats(),
+        ]);
+
+        if (!cancelled) {
+          setArtists((artistsResponse as any)?.artists || artistsResponse || []);
+          setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
+          setStats(statsResponse || {});
+        }
+      } catch (err: any) {
+        console.error('Failed to load library:', err);
+        if (!cancelled) setError(parseApiError(err, 'Failed to load library'));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
-  const loadLibrary = async () => {
-    setLoading(true);
-    setError(null);
+  // While any followed album is actively downloading, refresh album data
+  // every few seconds so status badges update without a manual reload.
+  const hasActiveDownloads = albums.some(
+    (album) => album.download_status === 'downloading' || album.download_status === 'pending'
+  );
 
-    try {
-      const [artistsResponse, albumsResponse, statsResponse] = await Promise.all([
-        getLibraryArtists(),
-        getLibraryAlbums(),
-        getLibraryStats(),
-      ]);
-
-      setArtists((artistsResponse as any)?.artists || artistsResponse || []);
-      setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
-      setStats(statsResponse || {});
-    } catch (err: any) {
-      console.error('Failed to load library:', err);
-      setError(err.message || 'Failed to load library');
-    } finally {
-      setLoading(false);
-    }
-  };
+  usePolling((isActive) => {
+    getLibraryAlbums()
+      .then((albumsResponse) => {
+        if (!isActive()) return;
+        setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
+      })
+      .catch((err) => console.error('Failed to refresh library albums:', err));
+  }, 4000, hasActiveDownloads);
 
   if (loading) {
     return (
@@ -265,6 +286,7 @@ export default function Library(): JSX.Element {
                 </SectionHeader>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                   {displayedAlbums.map((album) => {
+                    const isDownloading = album.download_status === 'downloading' || album.download_status === 'pending';
                     const isDownloaded = album.tracks_total != null && album.tracks_total > 0 && album.tracks_downloaded === album.tracks_total;
                     return (
                       <MediaCard
@@ -275,7 +297,7 @@ export default function Library(): JSX.Element {
                         thumbnail={getImageUrl(album.image_local || album.thumbnail)}
                         type="album"
                         year={album.year}
-                        mediaStatus={isDownloaded ? 'downloaded' : 'in_library'}
+                        mediaStatus={isDownloading ? 'downloading' : isDownloaded ? 'downloaded' : 'in_library'}
                         onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
                       />
                     );

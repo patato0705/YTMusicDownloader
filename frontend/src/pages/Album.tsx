@@ -12,6 +12,7 @@ import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { formatDuration, getPrimaryArtist } from '../utils';
+import { usePolling } from '../hooks/usePolling';
 import type { Track } from '../types';
 
 export default function Album(): JSX.Element {
@@ -33,31 +34,56 @@ export default function Album(): JSX.Element {
   const isAdmin = user?.role === 'administrator';
 
   useEffect(() => {
-    if (albumId) {
-      loadAlbum();
-    }
-  }, [albumId]);
-
-  const loadAlbum = async () => {
     if (!albumId) return;
 
-    setLoading(true);
-    setError(null);
-    setImageError(false);
+    let cancelled = false;
 
-    try {
-      const data = await getAlbum(albumId);
-      setAlbum(data.album);
-      setTracks(data.tracks || []);
-      setIsFollowing(data.mode === 'download');
-      setSource(data.source || '');
-    } catch (err: any) {
-      console.error('Failed to load album:', err);
-      setError(err.message || t('common.error'));
-    } finally {
-      setLoading(false);
-    }
-  };
+    (async () => {
+      setLoading(true);
+      setError(null);
+      setImageError(false);
+
+      try {
+        const data = await getAlbum(albumId);
+        if (!cancelled) {
+          setAlbum(data.album);
+          setTracks(data.tracks || []);
+          setIsFollowing(data.mode === 'download');
+          setSource(data.source || '');
+        }
+      } catch (err: any) {
+        console.error('Failed to load album:', err);
+        if (!cancelled) setError(err.message || t('common.error'));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [albumId]);
+
+  // While this album is set to download and any track hasn't finished
+  // (or failed) yet, refresh track statuses every few seconds so the badges
+  // update live instead of requiring a manual reload.
+  //
+  // NOTE: the album object from getAlbum() has no `mode` field -- it's only
+  // on the top-level response (see the effect above), which is exactly what
+  // isFollowing already tracks. Checking album?.mode here was always
+  // undefined, so polling never actually started.
+  const hasActiveDownloads =
+    isFollowing && tracks.some((tr) => tr.status !== 'done' && tr.status !== 'failed');
+
+  usePolling((isActive) => {
+    if (!albumId) return;
+    getAlbum(albumId)
+      .then((data) => {
+        if (!isActive()) return;
+        setAlbum(data.album);
+        setTracks(data.tracks || []);
+        setIsFollowing(data.mode === 'download');
+      })
+      .catch((err) => console.error('Failed to refresh album:', err));
+  }, 4000, hasActiveDownloads);
 
   const handleDownload = async () => {
     if (!albumId) return;

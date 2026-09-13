@@ -7,6 +7,8 @@ import { useI18n } from '../../contexts/I18nContext';
 import { UserMenu } from './UserMenu';
 import { LanguageSelector } from '../ui/LanguageSelector';
 import * as adminApi from '../../api/admin';
+import { getJobStats } from '../../api/jobs';
+import { usePolling } from '../../hooks/usePolling';
 
 export default function Navbar(): JSX.Element {
   const { isAuthenticated } = useAuth();
@@ -16,6 +18,7 @@ export default function Navbar(): JSX.Element {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [chartsEnabled, setChartsEnabled] = useState(false);
+  const [activeJobCount, setActiveJobCount] = useState(0);
 
   // Check if charts feature is enabled
   useEffect(() => {
@@ -33,6 +36,37 @@ export default function Navbar(): JSX.Element {
       checkChartsEnabled();
     }
   }, [isAuthenticated]);
+
+  // Poll active job count so the navbar badge reflects downloads/syncs in
+  // progress from anywhere in the app.
+  //
+  // "queued" includes jobs sitting in a retry backoff (a failed download
+  // can wait anywhere from 2 minutes to 24 hours before its next attempt --
+  // see retry_delay_seconds in jobs/tasks.py) -- those aren't "in progress"
+  // from a user's perspective and would otherwise make the badge look stuck
+  // for hours. pending_scheduled is exactly that not-yet-eligible subset of
+  // "queued", so subtract it out; only "reserved" (actively running) and
+  // "queued" jobs that are actually eligible to run right now count.
+  const refreshJobStats = (isActive: () => boolean = () => true) => {
+    getJobStats()
+      .then((res) => {
+        if (!isActive()) return;
+        const stats = res?.stats || {};
+        const readyToRun = (stats.queued || 0) - (stats.pending_scheduled || 0);
+        setActiveJobCount(Math.max(0, readyToRun) + (stats.reserved || 0));
+      })
+      .catch((err) => console.error('Failed to fetch job stats:', err));
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshJobStats();
+    } else {
+      setActiveJobCount(0);
+    }
+  }, [isAuthenticated]);
+
+  usePolling(refreshJobStats, 5000, isAuthenticated);
 
   // Handle scroll effect
   useEffect(() => {
@@ -127,6 +161,19 @@ export default function Navbar(): JSX.Element {
 
                 {/* Right side - Desktop: Theme + Language + User, Mobile: User only */}
                 <div className="flex items-center space-x-2">
+                  {/* Active jobs indicator */}
+                  {isAuthenticated && activeJobCount > 0 && (
+                    <div
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-medium"
+                      title={t('nav.activeJobs', { count: String(activeJobCount) }) || `${activeJobCount} active`}
+                    >
+                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span className="tabular-nums">{activeJobCount}</span>
+                    </div>
+                  )}
+
                   {/* Theme toggle - Desktop only */}
                   <button
                     onClick={toggleTheme}

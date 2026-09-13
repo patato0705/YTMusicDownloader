@@ -1,7 +1,7 @@
 // src/components/MediaCard.tsx
 import React, { useState } from 'react';
 
-export type MediaStatus = 'downloaded' | 'in_library' | undefined;
+export type MediaStatus = 'downloaded' | 'in_library' | 'downloading' | undefined;
 
 interface MediaCardProps {
   id: string;
@@ -71,6 +71,13 @@ const MediaCard: React.FC<MediaCardProps> = ({
           <div className="absolute bottom-2 left-2 w-6 h-6 rounded-full bg-blue-500/90 dark:bg-red-600/90 backdrop-blur-sm flex items-center justify-center shadow-md" title="In library">
             <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </div>
+        )}
+        {mediaStatus === 'downloading' && (
+          <div className="absolute bottom-2 left-2 w-6 h-6 rounded-full bg-amber-500/90 backdrop-blur-sm flex items-center justify-center shadow-md" title="Downloading">
+            <svg className="w-3.5 h-3.5 text-white animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </div>
         )}
