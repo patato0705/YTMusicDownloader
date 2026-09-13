@@ -6,9 +6,11 @@
 import { api } from './client';
 
 /**
- * Get local image URL (no auth required)
+ * Get local image URL. Requires auth -- carried automatically via the
+ * access_token cookie the browser attaches to the <img> request, so no
+ * client-side change is needed here to send it.
  * For images stored in /data directory (cover.jpg files)
- * 
+ *
  * @param imagePath - Path like "/data/kroh/BUTTERFLY/cover.jpg" or "/config/temp/covers/albumid.jpg"
  * @returns URL that can be used in <img src="">
  */
@@ -34,8 +36,7 @@ export function getLocalImageUrl(imagePath: string | null | undefined): string {
  * Goes through proxy/cache, no auth required
  */
 export function getThumbnailUrl(url: string): string {
-  const VITE_API_BASE = "http://localhost:8000"
-  const API_BASE = (VITE_API_BASE ?? "/api").replace(/\/+$/, "");
+  const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
   return `${API_BASE}/api/media/thumbnail?url=${encodeURIComponent(url)}`;
 }
 

@@ -40,6 +40,14 @@ JWT_ALGORITHM = "HS256"
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 15
 JWT_REFRESH_TOKEN_EXPIRE_DAYS = 7
 
+# Auth cookies (access_token, refresh_token): mark Secure only if this
+# deployment is reached over HTTPS (e.g. behind a TLS-terminating reverse
+# proxy). Defaults to off so plain-HTTP/LAN homeserver setups work
+# out of the box -- browsers silently refuse to ever send a Secure cookie
+# back over plain HTTP, which would otherwise break login persistence.
+# Set COOKIE_SECURE=true if you've put this behind HTTPS.
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").strip().lower() in ("1", "true", "yes", "on")
+
 # Password hashing
 BCRYPT_ROUNDS = 12  # Balance between security and performance
 
@@ -66,9 +74,13 @@ HOST = os.environ.get("HOST", "0.0.0.0")
 
 # Helper: ensure directories exist (call from startup)
 def ensure_dirs() -> None:
+    import logging
+    logger = logging.getLogger("config")
     for p in (CONFIG_DIR, TEMP_DIR, DOWNLOAD_DIR, COVERS_DIR, LYRICS_DIR, LOG_DIR, MUSIC_DIR, CACHE_DIR, THUMBNAIL_CACHE_DIR):
         try:
             Path(p).mkdir(parents=True, exist_ok=True)
         except Exception:
-            # ignore failures here; callers should log if needed
-            pass
+            # Best-effort: keep starting up so the health endpoint stays reachable,
+            # but this directory being unwritable will surface as failures later
+            # (downloads, DB writes, etc.) unless someone sees this log line.
+            logger.error("Failed to create directory %s — check volume permissions", p, exc_info=True)

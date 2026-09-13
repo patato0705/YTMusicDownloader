@@ -3,7 +3,7 @@
  * Authentication API endpoints
  */
 
-import { api, apiFetch, setAuthTokens, clearAuthTokens } from './client';
+import { api, apiFetch, setAccessToken, clearAccessToken } from './client';
 
 export interface User {
   id: number;
@@ -18,7 +18,6 @@ export interface User {
 export interface LoginResponse {
   user: User;
   access_token: string;
-  refresh_token: string;
   token_type: string;
   expires_in: number;
 }
@@ -45,8 +44,9 @@ export async function login(username: string, password: string): Promise<LoginRe
     body: JSON.stringify({ username, password }),
   });
 
-  // Store tokens
-  setAuthTokens(response.access_token, response.refresh_token);
+  // The refresh token is set as an httpOnly cookie by the server -- only
+  // the access token needs to be kept on the JS side, in memory.
+  setAccessToken(response.access_token);
 
   return response;
 }
@@ -62,21 +62,15 @@ export async function register(data: RegisterRequest): Promise<User> {
  * Logout - revoke refresh token
  */
 export async function logout(): Promise<void> {
-  const refreshToken = localStorage.getItem('refresh_token');
-  
-  if (refreshToken) {
-    try {
-      await apiFetch('/auth/logout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
-    } catch (error) {
-      console.error('Logout request failed:', error);
-    }
+  try {
+    // No body needed -- the server reads the refresh_token cookie and
+    // clears both auth cookies in the response.
+    await apiFetch('/auth/logout', { method: 'POST' });
+  } catch (error) {
+    console.error('Logout request failed:', error);
   }
 
-  clearAuthTokens();
+  clearAccessToken();
 }
 
 /**

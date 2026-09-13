@@ -7,44 +7,41 @@
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
 
 /**
- * Get auth token from localStorage
+ * The access token lives in memory only (never localStorage) so an XSS bug
+ * can't read it out of storage. It's lost on a hard refresh by design --
+ * refreshAccessToken() below re-acquires one on app load via the httpOnly
+ * refresh_token cookie, which JS never touches directly.
  */
+let accessToken: string | null = null;
+
 function getAuthToken(): string | null {
-  return localStorage.getItem('access_token');
+  return accessToken;
 }
 
 /**
- * Set auth tokens in localStorage
+ * Store the access token in memory after login/refresh.
  */
-export function setAuthTokens(accessToken: string, refreshToken: string): void {
-  localStorage.setItem('access_token', accessToken);
-  localStorage.setItem('refresh_token', refreshToken);
+export function setAccessToken(token: string): void {
+  accessToken = token;
 }
 
 /**
- * Clear auth tokens from localStorage
+ * Clear the in-memory access token (logout, or failed refresh).
  */
-export function clearAuthTokens(): void {
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
+export function clearAccessToken(): void {
+  accessToken = null;
 }
 
 /**
- * Refresh access token using refresh token
+ * Re-acquire an access token using the httpOnly refresh_token cookie
+ * (sent automatically by the browser -- credentials: 'include' below is
+ * what makes fetch attach it). Called on app load and on a 401.
  */
-async function refreshAccessToken(): Promise<boolean> {
-  const refreshToken = localStorage.getItem('refresh_token');
-  if (!refreshToken) {
-    console.warn('[Auth] No refresh token found');
-    return false;
-  }
-
+export async function refreshAccessToken(): Promise<boolean> {
   try {
-    console.log('[Auth] Attempting token refresh...');
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      credentials: 'include',
     });
 
     if (!res.ok) {
@@ -54,22 +51,13 @@ async function refreshAccessToken(): Promise<boolean> {
     }
 
     const data = await res.json();
-    
-    // Update access token
-    if (data.access_token) {
-      localStorage.setItem('access_token', data.access_token);
-      console.log('[Auth] Access token refreshed successfully');
-    } else {
+
+    if (!data.access_token) {
       console.error('[Auth] No access_token in refresh response:', data);
       return false;
     }
-    
-    // Update refresh token if backend provides a new one (token rotation)
-    if (data.refresh_token) {
-      localStorage.setItem('refresh_token', data.refresh_token);
-      console.log('[Auth] Refresh token rotated');
-    }
-    
+
+    setAccessToken(data.access_token);
     return true;
   } catch (error) {
     console.error('[Auth] Token refresh error:', error);
@@ -116,6 +104,7 @@ export async function apiFetch<T = any>(
   let response = await fetch(url, {
     ...options,
     headers,
+    credentials: 'include',
   });
 
   // Parse response first (before handling 401)
@@ -145,6 +134,7 @@ export async function apiFetch<T = any>(
         const retryResponse = await fetch(url, {
           ...options,
           headers,
+          credentials: 'include',
         });
         
         // Parse retry response
@@ -170,9 +160,9 @@ export async function apiFetch<T = any>(
         return retryData as T;
       }
     } else {
-      // Refresh failed - clear tokens
-      clearAuthTokens();
-      
+      // Refresh failed - clear the in-memory access token
+      clearAccessToken();
+
       // Only redirect if not already on auth pages
       const currentPath = window.location.pathname;
       if (!currentPath.startsWith('/login') && !currentPath.startsWith('/register')) {

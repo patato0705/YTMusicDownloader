@@ -46,10 +46,6 @@ class CreateUserRequest(BaseModel):
         return v
 
 
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8)
@@ -67,7 +63,6 @@ class UpdateUserRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     expires_in: int  # seconds
 
@@ -87,7 +82,6 @@ class UserResponse(BaseModel):
 class LoginResponse(BaseModel):
     user: UserResponse
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     expires_in: int
 

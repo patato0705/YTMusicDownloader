@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -18,19 +18,14 @@ from . import config
 logger = logging.getLogger("dependencies")
 
 security = HTTPBearer()
+# auto_error=False: missing/malformed Authorization header falls through to
+# the access_token cookie check in get_current_user_flexible() instead of
+# raising immediately.
+security_optional = HTTPBearer(auto_error=False)
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    session: Session = Depends(get_session),
-) -> User:
-    """
-    Extract and validate JWT token from Authorization header.
-    Returns current user or raises 401.
-    """
-    token = credentials.credentials
-    
-    # Verify token
+def _resolve_user_from_token(token: str, session: Session) -> User:
+    """Shared validation: decode/verify a JWT access token and load its user."""
     payload = auth_svc.verify_access_token(token)
     if not payload:
         raise HTTPException(
@@ -38,8 +33,7 @@ def get_current_user(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Get user from database
+
     user_id = payload.get("user_id")
     if user_id is None:
         raise HTTPException(
@@ -47,7 +41,7 @@ def get_current_user(
             detail="Invalid token payload",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     try:
         user_id_int = int(user_id)
     except (ValueError, TypeError):
@@ -56,50 +50,55 @@ def get_current_user(
             detail="Invalid user ID in token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     user = auth_svc.get_user_by_id(session, user_id_int)
-    
+
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     return user
 
 
-def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     session: Session = Depends(get_session),
-) -> Optional[User]:
+) -> User:
     """
-    Optional authentication - returns user if token provided, None otherwise.
+    Extract and validate JWT token from the Authorization header.
+    Returns current user or raises 401.
     """
-    if not credentials:
-        return None
-    
-    try:
-        return get_current_user(credentials, session)
-    except HTTPException:
-        return None
+    return _resolve_user_from_token(credentials.credentials, session)
+
+
+def get_current_user_flexible(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
+    session: Session = Depends(get_session),
+) -> User:
+    """
+    Like get_current_user, but also accepts the access_token cookie.
+
+    For routes loaded via a plain <img src="..."> tag (browsers won't attach
+    an Authorization header to those) rather than JS-driven fetch calls. The
+    cookie carries the identical JWT the header would, just via a channel
+    the browser sends automatically.
+    """
+    token = credentials.credentials if credentials else request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return _resolve_user_from_token(token, session)
 
 
 # Alias for consistency
 require_auth = get_current_user
-
-
-def require_role(required_role: str):
-    """Factory function to create role-based dependencies."""
-    def role_checker(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != required_role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Requires {required_role} role",
-            )
-        return current_user
-    
-    return role_checker
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:

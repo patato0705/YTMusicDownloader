@@ -1,17 +1,8 @@
 // src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authApi from '../api/auth';
-import { clearAuthTokens } from '../api/client';
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  role: 'administrator' | 'member' | 'visitor';
-  is_active: boolean;
-  created_at: string;
-  last_login_at: string | null;
-}
+import type { User } from '../api/auth';
+import { clearAccessToken, refreshAccessToken } from '../api/client';
 
 interface AuthContextType {
   user: User | null;
@@ -28,11 +19,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load user on mount
+  // On mount there's no access token in memory yet (it's never persisted
+  // across reloads by design) -- try to silently re-acquire one via the
+  // httpOnly refresh_token cookie before deciding the user is logged out.
   useEffect(() => {
     const loadUser = async () => {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
+      const restored = await refreshAccessToken();
+      if (!restored) {
         setIsLoading(false);
         return;
       }
@@ -42,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(currentUser);
       } catch (error) {
         console.error('Failed to load user:', error);
-        clearAuthTokens();
+        clearAccessToken();
       } finally {
         setIsLoading(false);
       }
