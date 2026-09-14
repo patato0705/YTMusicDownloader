@@ -227,7 +227,8 @@
       "artists": "Artistes",
       "albums": "Albums",
       "tracks": "Titres",
-      "diskUsage": "Espace disque"
+      "diskUsage": "Espace disque",
+      "diskUsageInfo": "Estimé à partir d'une taille moyenne par titre, pas de la taille réelle des fichiers."
     },
     "empty": {
       "artists": "Aucun artiste suivi",

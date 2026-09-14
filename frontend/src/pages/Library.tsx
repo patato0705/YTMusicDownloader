@@ -172,18 +172,19 @@ export default function Library(): JSX.Element {
             <StatCard
               icon={<AlbumsIcon />}
               label={t('library.stats.albums')}
-              value={formatNumber(stats.albums?.downloaded || 0)}
+              value={formatNumber(stats.albums?.completed || 0)}
             />
             <StatCard
               icon={<TracksIcon />}
               label={t('library.stats.tracks')}
-              value={formatNumber(stats.tracks?.total || 0)}
+              value={formatNumber(stats.tracks?.downloaded || 0)}
             />
             <StatCard
               icon={<ActivityIcon />}
               label={t('library.stats.diskUsage')}
               value={loading ? <Spinner size="sm" /> : `${stats?.storage?.estimated_gb?.toFixed(1) || 0} GB`}
               loading={loading}
+              info={t('library.stats.diskUsageInfo')}
             />
           </div>
         )}

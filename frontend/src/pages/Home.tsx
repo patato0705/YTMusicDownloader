@@ -167,7 +167,7 @@ export default function Home(): JSX.Element {
           <StatCard
             icon={<TracksIcon />}
             label={t('library.stats.tracks')}
-            value={loading ? <Spinner size="sm" /> : formatNumber(stats?.tracks?.downloaded || 0)}
+            value={loading ? <Spinner size="sm" /> : formatNumber(stats?.tracks?.total || 0)}
             loading={loading}
           />
           <StatCard
@@ -175,6 +175,7 @@ export default function Home(): JSX.Element {
             label={t('library.stats.diskUsage')}
             value={loading ? <Spinner size="sm" /> : `${stats?.storage?.estimated_gb?.toFixed(1) || 0} GB`}
             loading={loading}
+            info={t('library.stats.diskUsageInfo')}
           />
         </div>
 

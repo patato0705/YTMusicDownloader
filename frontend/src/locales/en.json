@@ -227,7 +227,8 @@
       "artists": "Artists",
       "albums": "Albums",
       "tracks": "Tracks",
-      "diskUsage": "Disk Usage"
+      "diskUsage": "Disk Usage",
+      "diskUsageInfo": "Estimated from an average track size, not your actual file sizes."
     },
     "empty": {
       "artists": "No followed artists yet",
