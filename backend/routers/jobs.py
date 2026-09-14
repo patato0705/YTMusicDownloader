@@ -347,7 +347,7 @@ def get_job_stats(
     - Users see only their own stats
     """
     try:
-        from sqlalchemy import func
+        from sqlalchemy import and_, func, or_
 
         query = session.query(Job.status, func.count(Job.id))
 
@@ -372,9 +372,30 @@ def get_job_stats(
             pending_query = pending_query.filter(Job.user_id == current_user.id)
         stats["pending_scheduled"] = pending_query.scalar() or 0
 
+        # Breakdown of the in-flight work by job type. The count above lumps
+        # everything together, so a finished album can still show a non-zero
+        # badge while its per-track lyrics jobs drain -- callers use this to
+        # say what those jobs actually are.
+        now = time_utils.now_utc()
+        active_query = session.query(Job.type, func.count(Job.id)).filter(
+            or_(
+                Job.status == "reserved",
+                and_(
+                    Job.status == "queued",
+                    or_(Job.scheduled_at.is_(None), Job.scheduled_at <= now),
+                ),
+            )
+        )
+        if current_user.role != config.ROLE_ADMINISTRATOR:
+            active_query = active_query.filter(Job.user_id == current_user.id)
+        active_by_type = {
+            job_type: count for job_type, count in active_query.group_by(Job.type).all()
+        }
+
         return {
             "ok": True,
             "stats": stats,
+            "active_by_type": active_by_type,
             "total": sum(v for k, v in stats.items() if k != "pending_scheduled"),
         }
     

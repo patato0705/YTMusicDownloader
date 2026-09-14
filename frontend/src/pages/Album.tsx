@@ -12,7 +12,7 @@ import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { formatDuration, getPrimaryArtist } from '../utils';
-import { usePolling } from '../hooks/usePolling';
+import { useJobActivity } from '../contexts/JobActivityContext';
 import type { Track } from '../types';
 
 export default function Album(): JSX.Element {
@@ -31,6 +31,7 @@ export default function Album(): JSX.Element {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
+  const { revision, refresh: refreshJobs } = useJobActivity();
   const isAdmin = user?.role === 'administrator';
 
   useEffect(() => {
@@ -62,28 +63,26 @@ export default function Album(): JSX.Element {
     return () => { cancelled = true; };
   }, [albumId]);
 
-  // While this album is set to download and any track hasn't finished
-  // (or failed) yet, refresh track statuses every few seconds so the badges
-  // update live instead of requiring a manual reload.
-  //
-  // NOTE: the album object from getAlbum() has no `mode` field -- it's only
-  // on the top-level response (see the effect above), which is exactly what
-  // isFollowing already tracks. Checking album?.mode here was always
-  // undefined, so polling never actually started.
-  const hasActiveDownloads =
-    isFollowing && tracks.some((tr) => tr.status !== 'done' && tr.status !== 'failed');
+  // Refresh track statuses whenever the job queue moves, so the badges follow
+  // the download live instead of requiring a manual reload.
+  // Skipped for albums served from YTMusic (see routers/albums.py): they have
+  // no download to follow, and refetching would mean an external call each time.
+  useEffect(() => {
+    if (!albumId || revision === 0 || source !== 'database') return;
 
-  usePolling((isActive) => {
-    if (!albumId) return;
+    let cancelled = false;
+
     getAlbum(albumId)
       .then((data) => {
-        if (!isActive()) return;
+        if (cancelled) return;
         setAlbum(data.album);
         setTracks(data.tracks || []);
         setIsFollowing(data.mode === 'download');
       })
       .catch((err) => console.error('Failed to refresh album:', err));
-  }, 4000, hasActiveDownloads);
+
+    return () => { cancelled = true; };
+  }, [albumId, revision, source]);
 
   const handleDownload = async () => {
     if (!albumId) return;
@@ -92,6 +91,7 @@ export default function Album(): JSX.Element {
     try {
       const result = await downloadAlbum(albumId);
       setIsFollowing(true);
+      refreshJobs();
       const message = result?.artist_subscription_created
         ? t('album.downloadQueuedWithArtist')
         : t('album.downloadQueued');

@@ -39,6 +39,8 @@ export interface EnqueueJobResponse {
 export interface JobStats {
   ok: boolean;
   stats: Record<string, number>;
+  /** In-flight jobs grouped by type, e.g. { download_track: 2, download_lyrics: 5 } */
+  active_by_type?: Record<string, number>;
   total: number;
 }
 
