@@ -13,6 +13,8 @@ export {
   normalizeSearchResults,
   filterAlbums,
   categorizeAlbums,
+  getAlbumStatus,
+  getArtistStatus,
   getPrimaryArtist,
   formatDuration,
   formatDurationLong,

@@ -12,7 +12,8 @@ import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
-import { categorizeAlbums } from '../utils';
+import { categorizeAlbums, getAlbumStatus } from '../utils';
+import { useJobActivity } from '../contexts/JobActivityContext';
 import type { Album, Artist as ArtistType } from '../types';
 
 export default function Artist(): JSX.Element {
@@ -32,6 +33,7 @@ export default function Artist(): JSX.Element {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
+  const { revision } = useJobActivity();
   const isAdmin = user?.role === 'administrator';
 
   useEffect(() => {
@@ -69,6 +71,26 @@ export default function Artist(): JSX.Element {
 
     return () => { cancelled = true; };
   }, [artistId]);
+
+  // Keep the album grid's status badges in step with the job queue.
+  // Only for fully-followed artists: for the others this endpoint goes out to
+  // YTMusic (see routers/artists.py), which is far too costly to repeat here.
+  useEffect(() => {
+    if (!artistId || revision === 0 || source !== 'database') return;
+
+    let cancelled = false;
+
+    getArtist(artistId)
+      .then((data) => {
+        if (cancelled) return;
+        setArtist(data.artist || data);
+        setAlbums([...(data.albums || []), ...(data.singles || [])]);
+        setSubscriptionMode(data.subscription_mode ?? null);
+      })
+      .catch((err) => console.error('Failed to refresh artist:', err));
+
+    return () => { cancelled = true; };
+  }, [artistId, revision, source]);
 
   const handleFollow = async () => {
     if (!artistId) return;
@@ -171,20 +193,6 @@ export default function Artist(): JSX.Element {
 
   const { albums: regularAlbums, singles } = categorizeAlbums(albums);
   const artistThumbnailUrl = getImageUrl(artist.image_local || artist.thumbnail);
-
-  const getAlbumStatus = (album: any): 'downloaded' | 'in_library' | undefined => {
-    // Album has local data — it's in the DB
-    if ((album.image_local || album.tracks_total != null || album.in_database) && album.mode !== 'metadata') {
-      // Check download_status from API first (artist endpoint provides this)
-      if (album.download_status === 'completed') return 'downloaded';
-      // Fallback to track counts (library endpoint provides these)
-      const total = album.tracks_total ?? 0;
-      const downloaded = album.tracks_downloaded ?? 0;
-      if (total > 0 && downloaded >= total) return 'downloaded';
-      return 'in_library';
-    }
-    return undefined; // Not yet synced to DB
-  };
 
   return (
     <div className="relative min-h-screen">
@@ -310,6 +318,7 @@ export default function Artist(): JSX.Element {
                   title={album.title}
                   thumbnail={getImageUrl(album.image_local || album.thumbnail)}
                   type="album"
+                  albumType={album.type}
                   year={album.year}
                   mediaStatus={getAlbumStatus(album)}
                   onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
@@ -331,6 +340,7 @@ export default function Artist(): JSX.Element {
                   title={album.title}
                   thumbnail={getImageUrl(album.image_local || album.thumbnail)}
                   type="album"
+                  albumType={album.type}
                   year={album.year}
                   mediaStatus={getAlbumStatus(album)}
                   onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}

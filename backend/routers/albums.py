@@ -261,6 +261,13 @@ def download_album(
                 except Exception as e:
                     logger.exception(f"Failed to enqueue job for track {track_id}")
 
+        # Reflect the queued work on the album row right away. Without this the
+        # album keeps its previous status (usually NULL -> "idle") until the
+        # first track finishes, so clients polling album status see nothing
+        # happening for the whole first download.
+        if queued_count:
+            subs_svc.check_and_update_album_download_status(db, album_id)
+
         # Commit mode change + download jobs
         db.commit()
 

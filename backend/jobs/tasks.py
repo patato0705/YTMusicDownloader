@@ -172,7 +172,16 @@ def download_track(
         # Update status to "downloading"
         track.status = "downloading"
         session.add(track)
-        
+
+        # Roll that up to the album now, not just when the track finishes -
+        # otherwise an album in progress reports "pending" to the API.
+        # The flush matters: the session is autoflush=False (see db.py), so
+        # without it the aggregate below still counts this track as "new".
+        if track_album_id:
+            from ..services import subscriptions as subs_svc
+            session.flush()
+            subs_svc.check_and_update_album_download_status(session, track_album_id)
+
         def commit_status():
             session.commit()
         
@@ -656,6 +665,11 @@ def import_album(
                     except Exception as e:
                         logger.exception(f"Failed to queue download for track {track['id']}")
             
+            if queued:
+                from ..services import subscriptions as subs_svc
+                subs_svc.check_and_update_album_download_status(session, album_id)
+                session.commit()
+
             logger.info(f"Queued {queued} download jobs for album {album_id}")
         
         except Exception as e:

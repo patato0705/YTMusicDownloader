@@ -11,8 +11,8 @@ import { StatCard } from '../components/ui/StatCard';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
 import { SearchInput } from '../components/ui/SearchInput';
-import { formatNumber, parseApiError } from '../utils';
-import { usePolling } from '../hooks/usePolling';
+import { formatNumber, parseApiError, getAlbumStatus, getArtistStatus } from '../utils';
+import { useJobActivity } from '../contexts/JobActivityContext';
 import type { Artist } from '../types';
 
 // Icon components
@@ -33,6 +33,7 @@ export default function Library(): JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { revision } = useJobActivity();
 
   useEffect(() => {
     let cancelled = false;
@@ -64,20 +65,25 @@ export default function Library(): JSX.Element {
     return () => { cancelled = true; };
   }, []);
 
-  // While any followed album is actively downloading, refresh album data
-  // every few seconds so status badges update without a manual reload.
-  const hasActiveDownloads = albums.some(
-    (album) => album.download_status === 'downloading' || album.download_status === 'pending'
-  );
+  // Refresh whenever the job queue moves, so status badges follow downloads
+  // started from anywhere - including ones this page hasn't heard of yet.
+  // Artists are refreshed too: their badge comes from their track counts.
+  useEffect(() => {
+    if (revision === 0) return;
 
-  usePolling((isActive) => {
-    getLibraryAlbums()
-      .then((albumsResponse) => {
-        if (!isActive()) return;
+    let cancelled = false;
+
+    Promise.all([getLibraryAlbums(), getLibraryArtists(), getLibraryStats()])
+      .then(([albumsResponse, artistsResponse, statsResponse]) => {
+        if (cancelled) return;
         setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
+        setArtists((artistsResponse as any)?.artists || artistsResponse || []);
+        setStats(statsResponse || {});
       })
-      .catch((err) => console.error('Failed to refresh library albums:', err));
-  }, 4000, hasActiveDownloads);
+      .catch((err) => console.error('Failed to refresh library:', err));
+
+    return () => { cancelled = true; };
+  }, [revision]);
 
   if (loading) {
     return (
@@ -129,7 +135,7 @@ export default function Library(): JSX.Element {
   
   const filteredAlbums = activeTab === 'artists' ? [] : albums.filter(album =>
     album.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    album.artist_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    (album.artist_name || album.artist?.name)?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Update display logic
@@ -270,7 +276,7 @@ export default function Library(): JSX.Element {
                       title={artist.name}
                       thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
                       type="artist"
-                      mediaStatus="in_library"
+                      mediaStatus={getArtistStatus(artist, albums)}
                       onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
                     />
                   ))}
@@ -285,23 +291,20 @@ export default function Library(): JSX.Element {
                   {t('library.albums')}
                 </SectionHeader>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                  {displayedAlbums.map((album) => {
-                    const isDownloading = album.download_status === 'downloading' || album.download_status === 'pending';
-                    const isDownloaded = album.tracks_total != null && album.tracks_total > 0 && album.tracks_downloaded === album.tracks_total;
-                    return (
-                      <MediaCard
-                        key={album.id}
-                        id={album.id}
-                        title={album.title}
-                        subtitle={album.artist_name}
-                        thumbnail={getImageUrl(album.image_local || album.thumbnail)}
-                        type="album"
-                        year={album.year}
-                        mediaStatus={isDownloading ? 'downloading' : isDownloaded ? 'downloaded' : 'in_library'}
-                        onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
-                      />
-                    );
-                  })}
+                  {displayedAlbums.map((album) => (
+                    <MediaCard
+                      key={album.id}
+                      id={album.id}
+                      title={album.title}
+                      subtitle={album.artist_name || album.artist?.name}
+                      thumbnail={getImageUrl(album.image_local || album.thumbnail)}
+                      type="album"
+                      albumType={album.type}
+                      year={album.year}
+                      mediaStatus={getAlbumStatus(album)}
+                      onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+                    />
+                  ))}
                 </div>
               </section>
             )}
