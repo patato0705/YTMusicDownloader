@@ -350,7 +350,15 @@ def download_track(
             else:
                 track.status = "failed"
                 session.add(track)
-                
+
+                # Roll it up to the album, as the success path does - otherwise
+                # the album keeps the "downloading" it got when this track
+                # started. Flush first: the session is autoflush=False.
+                if track.album_id:
+                    from ..services import subscriptions as subs_svc
+                    session.flush()
+                    subs_svc.check_and_update_album_download_status(session, track.album_id)
+
                 def commit_failed_status():
                     session.commit()
                 

@@ -186,7 +186,11 @@ export const MediaRow: React.FC<MediaRowProps> = ({
           <div className="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
             <div
               className={`h-full rounded-full transition-[width] duration-500 ${
-                complete ? 'bg-emerald-500' : 'bg-blue-600 dark:bg-red-600'
+                complete
+                  ? 'bg-emerald-500'
+                  : mediaStatus === 'failed'
+                    ? 'bg-red-600 dark:bg-rose-500'
+                    : 'bg-blue-600 dark:bg-red-600'
               }`}
               style={{ width: `${progress}%` }}
             />

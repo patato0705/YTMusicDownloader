@@ -52,6 +52,13 @@ export const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
     className: 'bg-slate-500 dark:bg-zinc-600',
     path: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
   },
+  // Dark mode already uses red as its accent (see in_library), so this leans
+  // on the "!" glyph and a pinker shade to stay tellable apart from it
+  failed: {
+    labelKey: 'mediaCard.status.failed',
+    className: 'bg-red-600 dark:bg-rose-500',
+    path: 'M12 8v5m0 3.5h.01',
+  },
 };
 
 /** Release type of an album, falling back to "Album" for anything unexpected */

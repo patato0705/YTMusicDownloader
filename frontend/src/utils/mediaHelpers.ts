@@ -216,6 +216,9 @@ export function getAlbumStatus(album: any): MediaStatus {
     return downloaded > 0 && downloaded < total ? 'downloading' : 'queued';
   }
 
+  // Nothing left to try and at least one track didn't make it
+  if (album.download_status === 'failed') return 'failed';
+
   // Metadata-only albums are never downloaded, and unsynced ones have no state yet
   if (album.mode === 'metadata') return undefined;
   if (!album.image_local && album.tracks_total == null && !album.in_database) return undefined;
@@ -241,6 +244,8 @@ export function getArtistStatus(artist: any, albums: any[] = []): MediaStatus {
     .map(getAlbumStatus);
   if (albumStatuses.includes('downloading')) return 'downloading';
   if (albumStatuses.includes('queued')) return 'queued';
+  // The artist payload carries its own failed count, for pages without the album list
+  if (albumStatuses.includes('failed') || (artist.tracks_failed ?? 0) > 0) return 'failed';
 
   const total = artist.tracks_total ?? 0;
   const downloaded = artist.tracks_downloaded ?? 0;

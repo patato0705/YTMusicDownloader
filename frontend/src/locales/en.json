@@ -29,7 +29,8 @@
       "downloaded": "On disk",
       "inLibrary": "In library",
       "downloading": "Downloading",
-      "queued": "Queued"
+      "queued": "Queued",
+      "failed": "Failed"
     }
   },
   "auth": {

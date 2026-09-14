@@ -28,7 +28,7 @@ export interface Artist {
 export type AlbumType = 'Album' | 'Single' | 'EP';
 
 /** Badge shown on a MediaCard - undefined means "nothing to show" */
-export type MediaStatus = 'downloaded' | 'in_library' | 'downloading' | 'queued' | undefined;
+export type MediaStatus = 'downloaded' | 'in_library' | 'downloading' | 'queued' | 'failed' | undefined;
 
 export interface Album {
   id: string;
