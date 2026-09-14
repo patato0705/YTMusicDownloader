@@ -383,7 +383,7 @@ export default function Library(): JSX.Element {
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4">
                   <span className="text-4xl">🔍</span>
                 </div>
-                <h3 className="text-xl font-semibold mb-2">{t('library.noMatches')}</h3>
+                <h3 className="text-xl font-semibold text-foreground mb-2">{t('library.noMatches')}</h3>
                 <p className="text-muted-foreground">
                   {t('library.noMatchesDescription')} <span className="font-semibold text-foreground">"{searchQuery}"</span>
                 </p>

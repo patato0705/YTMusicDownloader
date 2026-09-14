@@ -195,7 +195,7 @@ export default function SearchBar({ placeholder }: { placeholder?: string }) {
           ) : (
             <div className="p-8 text-center">
               <div className="text-4xl mb-3">🔍</div>
-              <p className="text-sm text-foreground text-muted-foreground">{t('browse.noResults')}</p>
+              <p className="text-sm text-muted-foreground">{t('browse.noResults')}</p>
             </div>
           )}
         </div>
