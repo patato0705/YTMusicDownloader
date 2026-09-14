@@ -15,26 +15,8 @@ import {
   normalizeSearchResults,
   filterAlbums,
 } from '../utils';
+import { useDebounce } from '../hooks/useDebounce';
 import type { SearchResults } from '../types';
-
-/**
- * Debounce hook - delays updating a value until after a specified delay
- */
-function useDebounce<T>(value: T, delay: number = 500): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-}
 
 const VALID_FILTERS = ['all', 'artists', 'albums', 'tracks'] as const;
 type FilterType = typeof VALID_FILTERS[number];

@@ -255,6 +255,7 @@ def list_tracks(
     album_id: Optional[str] = Query(None, description="Filter by album ID"),
     status_filter: Optional[str] = Query(None, pattern="^(done|failed|downloading|new)$", description="Filter by track status"),
     lyrics: Optional[str] = Query(None, pattern="^(synced|plain|any)$", description="Filter by lyrics type (synced, plain, any)"),
+    q: Optional[str] = Query(None, max_length=200, description="Case-insensitive substring match on track title"),
     limit: int = Query(100, ge=1, le=1000, description="Max results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     db: Session = Depends(get_db),
@@ -267,6 +268,7 @@ def list_tracks(
     - album_id: Filter by album (optional)
     - status: Filter by status (done, failed, downloading, new)
     - lyrics: Filter by lyrics type (synced, plain, any)
+    - q: Case-insensitive substring match on the track title
     - limit: Max results (default 100, max 1000)
     - offset: Pagination offset (default 0)
 
@@ -290,6 +292,13 @@ def list_tracks(
                 query = query.filter(Track.lyrics != None)  # noqa: E711
             else:
                 query = query.filter(Track.lyrics == lyrics)
+
+        q = (q or "").strip()
+        if q:
+            # Escape LIKE wildcards so a literal "%" or "_" in the query doesn't
+            # match everything
+            escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query = query.filter(Track.title.ilike(f"%{escaped}%", escape="\\"))
         
         # Get total count
         total = query.count()

@@ -242,6 +242,12 @@
     "emptyDescription": "Start building your collection by browsing and following your favorite artists!",
     "noMatches": "No matches found",
     "noMatchesDescription": "No items in your library match",
+    "trackMatch": {
+      "one": "Contains \"{title}\"",
+      "many": "Contains \"{title}\" and {count} more matching tracks",
+      "artistOne": "Has \"{title}\" on {album}",
+      "artistMany": "Has \"{title}\" and {count} more matching tracks"
+    },
     "stats": {
       "title": "Statistics",
       "artists": "Artists",

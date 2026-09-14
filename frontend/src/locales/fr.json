@@ -242,6 +242,12 @@
     "emptyDescription": "Commencez à construire votre collection en explorant et en suivant vos artistes favoris !",
     "noMatches": "Aucun résultat",
     "noMatchesDescription": "Aucun élément dans votre bibliothèque ne correspond à",
+    "trackMatch": {
+      "one": "Contient \"{title}\"",
+      "many": "Contient \"{title}\" et {count} autres titres correspondants",
+      "artistOne": "A \"{title}\" sur {album}",
+      "artistMany": "A \"{title}\" et {count} autres titres correspondants"
+    },
     "stats": {
       "title": "Statistiques",
       "artists": "Artistes",

@@ -16,6 +16,8 @@ interface MediaCardProps {
   albumType?: string;
   year?: string;
   mediaStatus?: MediaStatus;
+  /** Why this item is in the results when it didn't match by name (e.g. a track inside it did) */
+  matchHint?: string;
   onClick?: () => void;
   className?: string;
 }
@@ -72,6 +74,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
   albumType,
   year,
   mediaStatus,
+  matchHint,
   onClick,
   className = '',
 }) => {
@@ -153,6 +156,12 @@ const MediaCard: React.FC<MediaCardProps> = ({
         </h3>
 
         {meta && <p className="text-xs text-muted-foreground truncate">{meta}</p>}
+
+        {matchHint && (
+          <p className="text-xs text-blue-600 dark:text-red-400 truncate" title={matchHint}>
+            {matchHint}
+          </p>
+        )}
       </div>
     </button>
   );

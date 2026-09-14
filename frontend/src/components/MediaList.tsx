@@ -74,6 +74,8 @@ interface MediaRowProps {
   tracksDownloaded?: number;
   /** ISO timestamp of when the item joined the library */
   date?: string | null;
+  /** Why this item is in the results when it didn't match by name (e.g. a track inside it did) */
+  matchHint?: string;
   onClick?: () => void;
 }
 
@@ -96,6 +98,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   tracksTotal,
   tracksDownloaded,
   date,
+  matchHint,
   onClick,
 }) => {
   const { t, locale } = useI18n();
@@ -155,6 +158,11 @@ export const MediaRow: React.FC<MediaRowProps> = ({
             {t('library.meta.trackCount', { count: tracksText })}
           </span>
         </p>
+        {matchHint && (
+          <p className="text-xs text-blue-600 dark:text-red-400 truncate" title={matchHint}>
+            {matchHint}
+          </p>
+        )}
       </div>
 
       {/* Large-screen columns */}

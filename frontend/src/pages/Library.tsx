@@ -1,8 +1,9 @@
 // src/pages/Library.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
-import { getLibraryArtists, getLibraryAlbums, getLibraryStats } from '../api/library';
+import { getLibraryArtists, getLibraryAlbums, getLibraryStats, searchLibraryTracks } from '../api/library';
+import type { LibraryTrack } from '../api/library';
 import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
 import { MediaList, MediaRow } from '../components/MediaList';
@@ -15,6 +16,7 @@ import { SearchInput } from '../components/ui/SearchInput';
 import { ViewToggle, type ViewMode } from '../components/ui/ViewToggle';
 import { formatNumber, parseApiError, getAlbumStatus, getArtistStatus } from '../utils';
 import { useJobActivity } from '../contexts/JobActivityContext';
+import { useDebounce } from '../hooks/useDebounce';
 import type { Artist } from '../types';
 
 // Icon components
@@ -26,6 +28,31 @@ const LibraryIcon = () => <span className="text-2xl">📚</span>;
 const SearchIcon = () => <span className="text-2xl">🔍</span>;
 
 const VIEW_STORAGE_KEY = 'library.view';
+const TRACK_SEARCH_DEBOUNCE_MS = 250;
+
+/** Tracks matching the search, grouped by the album / artist they belong to */
+interface TrackMatches {
+  /** The query these results answer - lets the UI tell fresh results from stale ones */
+  query: string;
+  byAlbum: Map<string, LibraryTrack[]>;
+  byArtist: Map<string, LibraryTrack[]>;
+}
+
+const NO_TRACK_MATCHES: TrackMatches = { query: '', byAlbum: new Map(), byArtist: new Map() };
+
+function groupTrackMatches(query: string, tracks: LibraryTrack[]): TrackMatches {
+  const byAlbum = new Map<string, LibraryTrack[]>();
+  const byArtist = new Map<string, LibraryTrack[]>();
+
+  for (const track of tracks) {
+    const albumId = track.album?.id;
+    const artistId = track.artist?.id;
+    if (albumId) byAlbum.set(albumId, [...(byAlbum.get(albumId) || []), track]);
+    if (artistId) byArtist.set(artistId, [...(byArtist.get(artistId) || []), track]);
+  }
+
+  return { query, byAlbum, byArtist };
+}
 
 function loadViewMode(): ViewMode {
   try {
@@ -43,7 +70,9 @@ export default function Library(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'artists' | 'albums'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [trackMatches, setTrackMatches] = useState<TrackMatches>(NO_TRACK_MATCHES);
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
+  const debouncedQuery = useDebounce(searchQuery.trim(), TRACK_SEARCH_DEBOUNCE_MS);
   const navigate = useNavigate();
   const { t } = useI18n();
   const { revision } = useJobActivity();
@@ -106,6 +135,59 @@ export default function Library(): JSX.Element {
     return () => { cancelled = true; };
   }, [revision]);
 
+  // Tracks aren't listed on this page, so a title-only search goes to the
+  // server and the matching albums / artists are surfaced instead.
+  useEffect(() => {
+    if (!debouncedQuery) {
+      setTrackMatches(NO_TRACK_MATCHES);
+      return;
+    }
+
+    let cancelled = false;
+
+    searchLibraryTracks(debouncedQuery)
+      .then((response) => {
+        if (!cancelled) setTrackMatches(groupTrackMatches(debouncedQuery, response?.tracks || []));
+      })
+      .catch((err) => {
+        console.error('Failed to search library tracks:', err);
+        if (!cancelled) setTrackMatches({ ...NO_TRACK_MATCHES, query: debouncedQuery });
+      });
+
+    return () => { cancelled = true; };
+  }, [debouncedQuery, revision]);
+
+  // Results are only shown once they answer the current input, so a query the
+  // user has moved on from never leaks stale hints. A refetch triggered by the
+  // job poller keeps the previous results on screen until the new ones land,
+  // instead of blanking them on every tick.
+  const trackMatchesReady = trackMatches.query === searchQuery.trim();
+  const albumTrackMatches = trackMatchesReady ? trackMatches.byAlbum : NO_TRACK_MATCHES.byAlbum;
+  const artistTrackMatches = trackMatchesReady ? trackMatches.byArtist : NO_TRACK_MATCHES.byArtist;
+
+  const albumTitleById = useMemo(
+    () => new Map<string, string>(albums.map((album) => [album.id, album.title])),
+    [albums]
+  );
+
+  const albumMatchHint = (albumId: string): string | undefined => {
+    const matches = albumTrackMatches.get(albumId);
+    if (!matches?.length) return undefined;
+    return matches.length === 1
+      ? t('library.trackMatch.one', { title: matches[0].title })
+      : t('library.trackMatch.many', { title: matches[0].title, count: matches.length - 1 });
+  };
+
+  const artistMatchHint = (artistId: string): string | undefined => {
+    const matches = artistTrackMatches.get(artistId);
+    if (!matches?.length) return undefined;
+    const first = matches[0];
+    const albumTitle = first.album?.title || albumTitleById.get(first.album?.id || '') || '';
+    return matches.length === 1
+      ? t('library.trackMatch.artistOne', { title: first.title, album: albumTitle })
+      : t('library.trackMatch.artistMany', { title: first.title, count: matches.length - 1 });
+  };
+
   if (loading) {
     return (
       <div className="relative min-h-screen">
@@ -149,14 +231,19 @@ export default function Library(): JSX.Element {
 
   const hasContent = artists.length > 0 || albums.length > 0;
 
-  // Filter content based on active tab and search query
+  // Filter content based on active tab and search query. Name matches are
+  // done locally; an item whose name doesn't match still shows up when one of
+  // its tracks does, with a hint saying which one.
+  const query = searchQuery.toLowerCase();
+
   const filteredArtists = activeTab === 'albums' ? [] : artists.filter(artist =>
-    artist.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    artist.name?.toLowerCase().includes(query) || artistTrackMatches.has(artist.id)
   );
   
   const filteredAlbums = activeTab === 'artists' ? [] : albums.filter(album =>
-    album.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (album.artist_name || album.artist?.name)?.toLowerCase().includes(searchQuery.toLowerCase())
+    album.title?.toLowerCase().includes(query) ||
+    (album.artist_name || album.artist?.name)?.toLowerCase().includes(query) ||
+    albumTrackMatches.has(album.id)
   );
 
   // Update display logic
@@ -304,6 +391,7 @@ export default function Library(): JSX.Element {
                         thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
                         type="artist"
                         mediaStatus={getArtistStatus(artist, albums)}
+                        matchHint={artistMatchHint(artist.id)}
                         onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
                       />
                     ))}
@@ -322,6 +410,7 @@ export default function Library(): JSX.Element {
                         tracksTotal={artist.tracks_total}
                         tracksDownloaded={artist.tracks_downloaded}
                         date={artist.followed_at}
+                        matchHint={artistMatchHint(artist.id)}
                         onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
                       />
                     ))}
@@ -349,6 +438,7 @@ export default function Library(): JSX.Element {
                         albumType={album.type}
                         year={album.year}
                         mediaStatus={getAlbumStatus(album)}
+                        matchHint={albumMatchHint(album.id)}
                         onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
                       />
                     ))}
@@ -369,6 +459,7 @@ export default function Library(): JSX.Element {
                         tracksTotal={album.tracks_total}
                         tracksDownloaded={album.tracks_downloaded}
                         date={album.created_at}
+                        matchHint={albumMatchHint(album.id)}
                         onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
                       />
                     ))}
@@ -377,8 +468,8 @@ export default function Library(): JSX.Element {
               </section>
             )}
 
-            {/* No results from search */}
-            {searchQuery && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
+            {/* No results from search - wait for the track lookup so it doesn't flash */}
+            {searchQuery && trackMatchesReady && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
               <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-12 border border-slate-200/50 dark:border-white/10 text-center">
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4">
                   <span className="text-4xl">🔍</span>

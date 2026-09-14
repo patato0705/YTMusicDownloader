@@ -196,6 +196,13 @@ export async function getLibraryTracks(
 }
 
 /**
+ * Find library tracks whose title contains the query (case-insensitive)
+ */
+export async function searchLibraryTracks(query: string, limit = 200): Promise<TracksResponse> {
+  return api.get<TracksResponse>('/library/tracks', { q: query, limit, offset: 0 });
+}
+
+/**
  * Get overall library statistics
  */
 export async function getLibraryStats(): Promise<LibraryStats> {
