@@ -31,6 +31,7 @@ export interface Setting {
   type: 'int' | 'bool' | 'string' | 'json';
   description: string | null;
   allowed_values: SettingOption[] | null;
+  min: number | null; // lower bound for int settings
   updated_at: string | null;
   updated_by: number | null;
 }
@@ -182,14 +183,6 @@ export const Settings = {
   },
   setMaxConcurrent: async (count: number): Promise<void> => {
     await updateSetting('download.max_concurrent', count);
-  },
-
-  getAudioQuality: async (): Promise<string> => {
-    const setting = await getSetting('download.audio_quality');
-    return setting.value as string;
-  },
-  setAudioQuality: async (quality: 'best' | 'high' | 'medium'): Promise<void> => {
-    await updateSetting('download.audio_quality', quality);
   },
 
   // Features

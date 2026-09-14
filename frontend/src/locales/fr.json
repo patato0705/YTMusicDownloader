@@ -269,7 +269,8 @@
     "numberOfArtists": "Nombre d'artistes à suivre",
     "trackTopArtists": "Suivre les meilleurs artistes",
     "storageWarning": "Des nombres plus élevés suivent plus d'artistes mais nécessitent plus de stockage et de temps de synchronisation",
-    "artistCountError": "Le nombre d'artistes doit être compris entre 1 et 100"
+    "artistCountError": "Le nombre d'artistes doit être compris entre 1 et 100",
+    "disabled": "La fonctionnalité Charts est actuellement désactivée. Un administrateur peut l'activer depuis le panneau d'administration."
   },
   "jobs": {
     "title": "Tâches",
@@ -296,8 +297,69 @@
     },
     "settings": {
       "title": "Paramètres",
-      "save": "Enregistrer",
+      "save": "Enregistrer les paramètres",
       "saved": "Paramètres enregistrés avec succès",
+      "saveFailed": "Échec de l'enregistrement des paramètres",
+      "invalidNumber": "« {name} » doit être un nombre entier d'au moins {min}",
+      "categories": {
+        "auth": "Authentification",
+        "download": "Téléchargements",
+        "features": "Fonctionnalités",
+        "scheduler": "Planificateur",
+        "ytmusic": "YouTube Music"
+      },
+      "keys": {
+        "auth": {
+          "registration_enabled": {
+            "label": "Inscription publique",
+            "description": "Autoriser n'importe qui à créer un compte depuis la page d'inscription."
+          }
+        },
+        "download": {
+          "max_concurrent": {
+            "label": "Téléchargements simultanés max.",
+            "description": "Nombre maximum de téléchargements exécutés en même temps."
+          }
+        },
+        "features": {
+          "lyrics_enabled": {
+            "label": "Téléchargement des paroles",
+            "description": "Récupérer automatiquement les paroles depuis LRCLIB pour chaque titre téléchargé."
+          },
+          "synced_lyrics_only": {
+            "label": "Paroles synchronisées uniquement",
+            "description": "Ne conserver que les paroles synchronisées ; les paroles simples (non synchronisées) sont rejetées et réessayées plus tard."
+          },
+          "charts_enabled": {
+            "label": "Charts",
+            "description": "Activer la page Charts et les abonnements aux charts."
+          }
+        },
+        "scheduler": {
+          "sync_interval_hours": {
+            "label": "Intervalle de synchronisation des artistes (heures)",
+            "description": "Fréquence à laquelle chaque artiste suivi est vérifié pour de nouvelles sorties."
+          },
+          "job_cleanup_days": {
+            "label": "Conservation des tâches (jours)",
+            "description": "Les tâches terminées plus anciennes que cette durée sont supprimées. Les tâches en échec sont conservées."
+          },
+          "token_cleanup_days": {
+            "label": "Intervalle de nettoyage des jetons (jours)",
+            "description": "Fréquence à laquelle les jetons de connexion expirés sont purgés de la base de données."
+          },
+          "lyrics_retry_interval_hours": {
+            "label": "Intervalle de nouvelle tentative des paroles (heures)",
+            "description": "Fréquence à laquelle les titres sans paroles ou avec des paroles non synchronisées sont réessayés."
+          }
+        },
+        "ytmusic": {
+          "language": {
+            "label": "Langue YouTube Music",
+            "description": "Langue des données récupérées depuis YouTube Music (biographies d'artistes, descriptions d'albums, …)."
+          }
+        }
+      },
       "maintenance": "Maintenance",
       "cleanupTitle": "Nettoyage de la bibliothèque",
       "cleanupDescription": "Supprimer les titres, albums et artistes orphelins qui ne sont plus associés à aucun abonnement.",
@@ -322,7 +384,13 @@
       "inactive": "Inactif",
       "delete": "Supprimer",
       "deleteTitle": "Supprimer l'utilisateur",
-      "confirmDelete": "Supprimer l'utilisateur \"{username}\" ? Cette action est irréversible."
+      "confirmDelete": "Supprimer l'utilisateur \"{username}\" ? Cette action est irréversible.",
+      "noResults": "Aucun utilisateur trouvé",
+      "created": "Utilisateur créé avec succès",
+      "deleted": "Utilisateur supprimé avec succès",
+      "activated": "Utilisateur activé",
+      "deactivated": "Utilisateur désactivé",
+      "roleUpdated": "Rôle mis à jour avec succès"
     },
     "charts": {
       "selectCountry": "Sélectionner un pays",

@@ -3,8 +3,10 @@
 Scheduler for periodic sync tasks.
 
 Responsibilities:
-1. Sync followed artists for new releases (daily)
-2. Clean up old completed jobs (weekly)
+1. Sync followed artists for new releases (every `scheduler.sync_interval_hours`)
+2. Clean up old completed jobs (daily, keeping `scheduler.job_cleanup_days`)
+3. Clean up expired refresh tokens (every `scheduler.token_cleanup_days`)
+4. Retry/upgrade missing lyrics (every `scheduler.lyrics_retry_interval_hours`)
 
 Note: Album subscriptions are handled on-demand (follow album → immediate import)
 """
@@ -29,23 +31,29 @@ class Scheduler:
     Simple threaded scheduler for periodic tasks.
     
     Tasks:
-    - sync_monitored_artists: Check followed artists for new releases (every 6 hours)
+    - sync_monitored_artists: Check followed artists for new releases
     - cleanup_jobs: Remove old completed jobs (daily)
     """
 
     def __init__(
         self,
-        sync_interval_seconds: Optional[int] = None,
+        sync_check_interval_seconds: Optional[int] = None,
         cleanup_interval_seconds: Optional[int] = None,
         token_cleanup_interval_seconds: Optional[int] = None,
         thread_name: str = "scheduler-thread",
         settings_refresh_interval: int = 300  # Refresh settings every 5 minutes
     ) -> None:
-        # Store initial intervals (will be refreshed from DB once it's ready)
-        self.sync_interval_seconds: int = sync_interval_seconds or 21600  # 6 hours default
-        self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours default
+        # How often we *look* for artists that are due. The per-artist cadence is
+        # `scheduler.sync_interval_hours`, applied as a cutoff on last_synced_at.
+        # Looking more often than that keeps the real cadence close to the
+        # setting: polling exactly every N hours would usually find the artist
+        # synced a few seconds *after* the cutoff and skip it until 2N.
+        self.sync_check_interval_seconds: int = sync_check_interval_seconds or 600  # 10 minutes
+        self.sync_interval_hours: int = 6  # refreshed from DB
+        # Fixed cadences (the settings only control retention / age):
+        self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours
         self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours default
-        self.lyrics_retry_interval_seconds: int = 43200  # 12 hours default
+        self.lyrics_retry_interval_seconds: int = 86400  # 24 hours default
         self.settings_refresh_interval: int = settings_refresh_interval
 
         self._thread_name = thread_name
@@ -71,8 +79,8 @@ class Scheduler:
             self._thread = threading.Thread(target=self._run_loop, name=self._thread_name, daemon=True)
             self._thread.start()
             logger.info(
-                "Scheduler started (sync_interval=%ss, cleanup_interval=%ss)",
-                self.sync_interval_seconds,
+                "Scheduler started (sync_check_interval=%ss, cleanup_interval=%ss)",
+                self.sync_check_interval_seconds,
                 self.cleanup_interval_seconds
             )
 
@@ -85,41 +93,32 @@ class Scheduler:
         try:
             session = SessionLocal()
             
-            # Get sync interval from settings (in hours, convert to seconds)
+            # Get sync interval from settings (in hours)
             sync_hours = settings_module.get_setting(
                 session, 
                 "scheduler.sync_interval_hours", 
                 default=6
             )
-            self.sync_interval_seconds = int(sync_hours) * 3600
-            
-            # Get cleanup interval from settings (in days, convert to seconds)
-            cleanup_days = settings_module.get_setting(
-                session,
-                "scheduler.job_cleanup_days",
-                default=3
-            )
-            self.cleanup_interval_seconds = int(cleanup_days) * 86400
-            
+            self.sync_interval_hours = max(1, int(sync_hours))
+
             # Get token cleanup interval from settings (in days, convert to seconds)
             token_cleanup_days = settings_module.get_setting(
                 session,
                 "scheduler.token_cleanup_days",
                 default=1
             )
-            self.token_cleanup_interval_seconds = int(token_cleanup_days) * 86400
+            self.token_cleanup_interval_seconds = max(1, int(token_cleanup_days)) * 86400
 
             # Get lyrics retry interval from settings (in hours, convert to seconds)
             lyrics_retry_hours = settings_module.get_setting(
                 session,
                 "scheduler.lyrics_retry_interval_hours",
-                default=12
+                default=24
             )
-            self.lyrics_retry_interval_seconds = int(lyrics_retry_hours) * 3600
+            self.lyrics_retry_interval_seconds = max(1, int(lyrics_retry_hours)) * 3600
 
             logger.debug(
-                f"Settings refreshed: sync_interval={self.sync_interval_seconds}s, "
-                f"cleanup_interval={self.cleanup_interval_seconds}s, "
+                f"Settings refreshed: sync_interval={self.sync_interval_hours}h, "
                 f"token_cleanup_interval={self.token_cleanup_interval_seconds}s, "
                 f"lyrics_retry_interval={self.lyrics_retry_interval_seconds}s"
             )
@@ -168,10 +167,10 @@ class Scheduler:
             self._refresh_settings_from_db()
             self._last_settings_refresh = time.time()
             logger.info(
-                "Scheduler settings loaded (sync_interval=%ss, cleanup_interval=%ss, token_cleanup_interval=%ss)",
-                self.sync_interval_seconds,
-                self.cleanup_interval_seconds,
-                self.token_cleanup_interval_seconds
+                "Scheduler settings loaded (sync_interval=%sh, token_cleanup_interval=%ss, lyrics_retry_interval=%ss)",
+                self.sync_interval_hours,
+                self.token_cleanup_interval_seconds,
+                self.lyrics_retry_interval_seconds
             )
         except Exception:
             logger.exception("Failed to load initial settings from database, using defaults")
@@ -192,8 +191,8 @@ class Scheduler:
                 except Exception:
                     logger.exception("Unexpected error in _refresh_settings_from_db")
             
-            # Check if artist sync is due
-            if now - self._last_sync >= self.sync_interval_seconds:
+            # Check if any artist sync is due
+            if now - self._last_sync >= self.sync_check_interval_seconds:
                 try:
                     self.sync_monitored_artists()
                     self._last_sync = now
@@ -235,19 +234,12 @@ class Scheduler:
         session: Optional[Session] = None
         try:
             session = SessionLocal()
-            
-            # Get sync interval from settings (in hours)
-            sync_interval_hours = settings_module.get_setting(
-                session,
-                "scheduler.sync_interval_hours",
-                default=6
-            )
-            
+
             # Get artists that need syncing (followed=True and last_synced_at is old)
             try:
                 artists = subs_svc.get_monitored_artists_needing_sync(
                     session=session,
-                    sync_interval_hours=int(sync_interval_hours)
+                    sync_interval_hours=self.sync_interval_hours
                 ) or []
             except Exception:
                 logger.exception("Failed fetching monitored artists")
@@ -257,13 +249,36 @@ class Scheduler:
                 logger.debug("No monitored artists need syncing")
                 return
 
-            logger.info(f"Found {len(artists)} monitored artist(s) needing sync")
+            # We look for due artists far more often than they are synced, so
+            # skip any artist whose sync job is still waiting in the queue.
+            from .models import Job
+            from sqlalchemy import select, and_
+            pending_payloads = session.execute(
+                select(Job.payload).where(
+                    and_(
+                        Job.type == "sync_artist",
+                        Job.status.in_(["queued", "reserved"]),
+                    )
+                )
+            ).scalars().all()
+            already_queued = {
+                p.get("artist_id") for p in pending_payloads if isinstance(p, dict)
+            }
+
+            skipped = sum(1 for a in artists if str(getattr(a, "id", "")) in already_queued)
+            if skipped == len(artists):
+                logger.debug(f"{skipped} artist(s) due for sync already have a job queued")
+                return
+            logger.info(f"Found {len(artists)} monitored artist(s) needing sync ({skipped} already queued)")
 
             enqueued_count = 0
             for artist in artists:
                 try:
                     artist_id = getattr(artist, "id", None)
                     if not artist_id:
+                        continue
+                    if str(artist_id) in already_queued:
+                        logger.debug(f"Sync already queued for artist {artist_id}, skipping")
                         continue
 
                     # Enqueue sync_artist job
@@ -307,7 +322,7 @@ class Scheduler:
             days_old = settings_module.get_setting(
                 session,
                 "scheduler.job_cleanup_days",
-                default=7
+                default=3
             )
             
             # Delete jobs older than specified days

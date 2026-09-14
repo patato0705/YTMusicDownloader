@@ -6,6 +6,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { ChartArtistGrid } from '../components/ui/ChartArtistGrid';
 import * as chartsApi from '../api/charts';
 import { getCountry } from '../config/charts';
+import { parseApiError } from '../utils';
 import type { ChartSubscription, Chart } from '../api/charts';
 
 export default function Charts(): JSX.Element {
@@ -45,7 +46,11 @@ export default function Charts(): JSX.Element {
         if (!cancelled) setCharts(chartData);
       } catch (err: any) {
         console.error('Failed to load charts:', err);
-        if (!cancelled) setError(err.message || 'Failed to load charts');
+        if (!cancelled) {
+          setError(err?.status === 403
+            ? t('charts.disabled')
+            : parseApiError(err, 'Failed to load charts'));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

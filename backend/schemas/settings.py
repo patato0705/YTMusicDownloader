@@ -16,6 +16,7 @@ class SettingResponse(BaseModel):
     type: str  # "string", "int", "bool", "json"
     description: Optional[str] = None
     allowed_values: Optional[List[Dict[str, str]]] = None
+    min: Optional[int] = None  # lower bound for int settings
     updated_at: Optional[datetime] = None
     updated_by: Optional[int] = None
 

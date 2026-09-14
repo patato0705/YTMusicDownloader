@@ -22,21 +22,25 @@ DEFAULT_SETTINGS = {
     "scheduler.sync_interval_hours": {
         "value": 6,
         "type": "int",
-        "description": "Hours between artist sync checks",
+        "min": 1,
+        "description": "Hours between new-release checks for each followed artist",
     },
     "scheduler.job_cleanup_days": {
         "value": 3,
         "type": "int",
+        "min": 1,
         "description": "Days to keep completed jobs",
     },
     "scheduler.token_cleanup_days": {
         "value": 1,
         "type": "int",
+        "min": 1,
         "description": "Days between expired token cleanup",
     },
     "scheduler.lyrics_retry_interval_hours": {
         "value": 24,
         "type": "int",
+        "min": 1,
         "description": "Hours between lyrics recovery/upgrade checks",
     },
 
@@ -51,14 +55,10 @@ DEFAULT_SETTINGS = {
     "download.max_concurrent": {
         "value": 3,
         "type": "int",
+        "min": 1,
         "description": "Maximum concurrent downloads",
     },
-    "download.audio_quality": {
-        "value": "best",
-        "type": "string",
-        "description": "Audio quality preference (best, high, medium)",
-    },
-    
+
     # Feature flags
     "features.lyrics_enabled": {
         "value": True,
@@ -110,6 +110,47 @@ def get_allowed_values(key: str) -> Optional[List[Dict[str, str]]]:
         return None
     values = config.get("allowed_values")
     return list(values) if values else None
+
+
+def get_min_value(key: str) -> Optional[int]:
+    """Return the lower bound for an int setting, or None if unconstrained."""
+    config = DEFAULT_SETTINGS.get(key)
+    if not config:
+        return None
+    return config.get("min")
+
+
+def validate_value(key: str, setting_type: str, value: Any) -> Any:
+    """
+    Check `value` against the constraints declared for `key` and return it
+    coerced to the setting's type. Raises ValueError on a bad value.
+    """
+    allowed = get_allowed_values(key)
+    if allowed is not None:
+        valid = [opt["value"] for opt in allowed]
+        if str(value) not in valid:
+            raise ValueError(
+                f"Invalid value for {key}: must be one of {', '.join(valid)}"
+            )
+
+    if setting_type == "int":
+        if isinstance(value, bool) or value is None:
+            raise ValueError(f"Invalid value for {key}: must be an integer")
+        if isinstance(value, float) and not value.is_integer():
+            raise ValueError(f"Invalid value for {key}: must be an integer")
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid value for {key}: must be an integer")
+        minimum = get_min_value(key)
+        if minimum is not None and value < minimum:
+            raise ValueError(f"Invalid value for {key}: must be at least {minimum}")
+
+    elif setting_type == "bool":
+        if not isinstance(value, bool):
+            raise ValueError(f"Invalid value for {key}: must be true or false")
+
+    return value
 
 
 def ensure_defaults(session: Session) -> None:
@@ -166,14 +207,6 @@ def set_setting(
     Returns:
         Updated Setting instance
     """
-    allowed = get_allowed_values(key)
-    if allowed is not None:
-        valid = [opt["value"] for opt in allowed]
-        if str(value) not in valid:
-            raise ValueError(
-                f"Invalid value for {key}: must be one of {', '.join(valid)}"
-            )
-
     setting = session.get(Setting, key)
 
     if not setting:
@@ -192,6 +225,7 @@ def set_setting(
 
         session.add(setting)
 
+    value = validate_value(key, setting.type, value)
     setting.set_value(value)
     setting.updated_at = now_utc()
     setting.updated_by = user_id

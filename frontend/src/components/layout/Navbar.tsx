@@ -6,7 +6,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { UserMenu } from './UserMenu';
 import { LanguageSelector } from '../ui/LanguageSelector';
-import * as adminApi from '../../api/admin';
+import { getFeatures } from '../../api/features';
 import { useJobActivity } from '../../contexts/JobActivityContext';
 
 export default function Navbar(): JSX.Element {
@@ -23,8 +23,8 @@ export default function Navbar(): JSX.Element {
   useEffect(() => {
     const checkChartsEnabled = async () => {
       try {
-        const enabled = await adminApi.Settings.areChartsEnabled();
-        setChartsEnabled(enabled);
+        const { charts_enabled } = await getFeatures();
+        setChartsEnabled(charts_enabled);
       } catch (err) {
         console.error('Failed to check charts setting:', err);
         setChartsEnabled(false);

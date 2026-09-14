@@ -316,16 +316,19 @@ def download_track(
                 session.rollback()
                 logger.warning(f"Failed to update album download status: {e}")
         
-        # Queue lyrics download job
+        # Queue lyrics download job (unless the feature is switched off)
         try:
-            from .jobqueue import enqueue_job
-            enqueue_job(
-                session,
-                job_type="download_lyrics",
-                payload={"track_id": track_id},
-                priority=5
-            )
-            logger.debug(f"Queued lyrics download for track {track_id}")
+            if get_setting(session, "features.lyrics_enabled", True):
+                from .jobqueue import enqueue_job
+                enqueue_job(
+                    session,
+                    job_type="download_lyrics",
+                    payload={"track_id": track_id},
+                    priority=5
+                )
+                logger.debug(f"Queued lyrics download for track {track_id}")
+            else:
+                logger.debug(f"Lyrics feature disabled, not queuing lyrics for track {track_id}")
         except Exception as e:
             logger.warning(f"Failed to queue lyrics job for track {track_id}: {e}")
         
@@ -409,6 +412,11 @@ def download_lyrics(
         import requests
         from pathlib import Path
         from urllib.parse import urlencode
+
+        # Jobs queued before the feature was switched off: drop them quietly.
+        # The scheduler's retry sweep picks the track up again once re-enabled.
+        if not get_setting(session, "features.lyrics_enabled", True):
+            return {"ok": True, "message": "Lyrics feature disabled, skipped"}
 
         # ===== TRANSACTION 1: Get track info =====
         track = session.get(Track, str(track_id))

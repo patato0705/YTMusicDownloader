@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.db import get_session
 from backend.dependencies import require_auth, require_admin
+from backend.routers.features import require_charts_enabled
 from backend.services import charts as charts_svc
 from backend.jobs.jobqueue import enqueue_job
 from backend.schemas.charts import (
@@ -32,7 +33,13 @@ from backend.models import User, Artist
 
 logger = logging.getLogger("routers.charts")
 
-router = APIRouter(prefix="/api/charts", tags=["Charts"])
+# Every chart endpoint (admin ones included) is switched off by the
+# `features.charts_enabled` setting.
+router = APIRouter(
+    prefix="/api/charts",
+    tags=["Charts"],
+    dependencies=[Depends(require_charts_enabled)],
+)
 
 
 # ============================================================================

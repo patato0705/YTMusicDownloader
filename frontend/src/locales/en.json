@@ -269,7 +269,8 @@
     "numberOfArtists": "Number of Artists to Track",
     "trackTopArtists": "Track top artists",
     "storageWarning": "Higher numbers track more artists but require more storage and sync time",
-    "artistCountError": "Number of artists must be between 1 and 100"
+    "artistCountError": "Number of artists must be between 1 and 100",
+    "disabled": "The charts feature is currently disabled. An administrator can turn it on in the admin panel."
   },
   "jobs": {
     "title": "Jobs",
@@ -296,8 +297,69 @@
     },
     "settings": {
       "title": "Settings",
-      "save": "Save",
+      "save": "Save settings",
       "saved": "Settings saved successfully",
+      "saveFailed": "Failed to save settings",
+      "invalidNumber": "\"{name}\" must be a whole number of at least {min}",
+      "categories": {
+        "auth": "Authentication",
+        "download": "Downloads",
+        "features": "Features",
+        "scheduler": "Scheduler",
+        "ytmusic": "YouTube Music"
+      },
+      "keys": {
+        "auth": {
+          "registration_enabled": {
+            "label": "Public registration",
+            "description": "Allow anyone to create an account from the registration page."
+          }
+        },
+        "download": {
+          "max_concurrent": {
+            "label": "Max concurrent downloads",
+            "description": "Maximum number of downloads running at the same time."
+          }
+        },
+        "features": {
+          "lyrics_enabled": {
+            "label": "Lyrics download",
+            "description": "Automatically fetch lyrics from LRCLIB for every downloaded track."
+          },
+          "synced_lyrics_only": {
+            "label": "Synced lyrics only",
+            "description": "Only keep time-synced lyrics; plain (unsynced) lyrics are rejected and retried later."
+          },
+          "charts_enabled": {
+            "label": "Charts",
+            "description": "Enable the Charts page and chart subscriptions."
+          }
+        },
+        "scheduler": {
+          "sync_interval_hours": {
+            "label": "Artist sync interval (hours)",
+            "description": "How often each followed artist is checked for new releases."
+          },
+          "job_cleanup_days": {
+            "label": "Job retention (days)",
+            "description": "Completed jobs older than this are deleted. Failed jobs are kept."
+          },
+          "token_cleanup_days": {
+            "label": "Token cleanup interval (days)",
+            "description": "How often expired sign-in tokens are purged from the database."
+          },
+          "lyrics_retry_interval_hours": {
+            "label": "Lyrics retry interval (hours)",
+            "description": "How often tracks with missing or unsynced lyrics are retried."
+          }
+        },
+        "ytmusic": {
+          "language": {
+            "label": "YouTube Music language",
+            "description": "Language of the data fetched from YouTube Music (artist bios, album descriptions, …)."
+          }
+        }
+      },
       "maintenance": "Maintenance",
       "cleanupTitle": "Library Cleanup",
       "cleanupDescription": "Remove orphaned tracks, albums, and artists that are no longer associated with any subscription.",
@@ -322,7 +384,13 @@
       "inactive": "Inactive",
       "delete": "Delete",
       "deleteTitle": "Delete User",
-      "confirmDelete": "Delete user \"{username}\"? This action cannot be undone."
+      "confirmDelete": "Delete user \"{username}\"? This action cannot be undone.",
+      "noResults": "No users found",
+      "created": "User created successfully",
+      "deleted": "User deleted successfully",
+      "activated": "User activated",
+      "deactivated": "User deactivated",
+      "roleUpdated": "Role updated successfully"
     },
     "charts": {
       "selectCountry": "Select a Country",

@@ -245,6 +245,7 @@ def get_all_settings(
         SettingResponse(
             **setting,
             allowed_values=settings_module.get_allowed_values(setting["key"]),
+            min=settings_module.get_min_value(setting["key"]),
         )
         for setting in settings_list
     ]
@@ -274,6 +275,7 @@ def get_setting(
                 type=default_config["type"],
                 description=default_config["description"],
                 allowed_values=settings_module.get_allowed_values(key),
+                min=settings_module.get_min_value(key),
                 updated_at=None,
                 updated_by=None,
             )
@@ -286,6 +288,7 @@ def get_setting(
     return SettingResponse(
         **setting.to_dict(),
         allowed_values=settings_module.get_allowed_values(key),
+        min=settings_module.get_min_value(key),
     )
 
 
@@ -318,6 +321,7 @@ def update_setting(
         return SettingResponse(
             **setting.to_dict(),
             allowed_values=settings_module.get_allowed_values(key),
+            min=settings_module.get_min_value(key),
         )
     
     except Exception as e:
