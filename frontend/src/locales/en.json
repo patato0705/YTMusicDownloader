@@ -18,6 +18,20 @@
     "all": "All",
     "searchMusic": "Search music..."
   },
+  "mediaCard": {
+    "type": {
+      "album": "Album",
+      "ep": "EP",
+      "single": "Single",
+      "track": "Track"
+    },
+    "status": {
+      "downloaded": "On disk",
+      "inLibrary": "In library",
+      "downloading": "Downloading",
+      "queued": "Queued"
+    }
+  },
   "auth": {
     "login": {
       "title": "Sign In",
@@ -87,7 +101,14 @@
     "charts": "Charts",
     "import": "Import",
     "admin": "Admin Panel",
-    "activeJobs": "{count} active"
+    "activeJobs": "{count} active",
+    "jobTypes": {
+      "download_track": "tracks",
+      "download_lyrics": "lyrics",
+      "sync_artist": "artist syncs",
+      "sync_chart": "chart syncs",
+      "import_album": "album imports"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -247,13 +268,11 @@
     "title": "Admin",
     "panel": "Panel",
     "subtitle": "Manage application settings and users",
-
     "tabs": {
       "settings": "Settings",
       "charts": "Charts",
       "users": "Users"
     },
-
     "settings": {
       "title": "Settings",
       "save": "Save",
@@ -265,7 +284,6 @@
       "cleanupDone": "Cleanup complete",
       "cleanupNone": "No orphaned items found"
     },
-
     "users": {
       "search": "Search for users",
       "showing": "Showing",

@@ -18,6 +18,20 @@
     "all": "Tout",
     "searchMusic": "Rechercher de la musique..."
   },
+  "mediaCard": {
+    "type": {
+      "album": "Album",
+      "ep": "EP",
+      "single": "Single",
+      "track": "Titre"
+    },
+    "status": {
+      "downloaded": "Sur le disque",
+      "inLibrary": "Dans la bibliothèque",
+      "downloading": "Téléchargement",
+      "queued": "En attente"
+    }
+  },
   "auth": {
     "login": {
       "title": "Connexion",
@@ -87,7 +101,14 @@
     "admin": "Administration",
     "charts": "Charts",
     "import": "Importer",
-    "activeJobs": "{count} en cours"
+    "activeJobs": "{count} en cours",
+    "jobTypes": {
+      "download_track": "titres",
+      "download_lyrics": "paroles",
+      "sync_artist": "synchros d'artiste",
+      "sync_chart": "synchros de charts",
+      "import_album": "imports d'album"
+    }
   },
   "settings": {
     "title": "Paramètres",
@@ -247,13 +268,11 @@
     "title": "Admin",
     "panel": "Panneau",
     "subtitle": "Gérer les paramètres de l'application et les utilisateurs",
-
     "tabs": {
       "settings": "Paramètres",
       "charts": "Charts",
       "users": "Utilisateurs"
     },
-
     "settings": {
       "title": "Paramètres",
       "save": "Enregistrer",
@@ -265,7 +284,6 @@
       "cleanupDone": "Nettoyage terminé",
       "cleanupNone": "Aucun élément orphelin trouvé"
     },
-
     "users": {
       "search": "Rechercher des utilisateurs",
       "showing": "Affichage de",

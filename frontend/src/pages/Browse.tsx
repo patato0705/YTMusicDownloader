@@ -320,6 +320,7 @@ export default function Browse(): JSX.Element {
                           subtitle={formatted.subtitle}
                           thumbnail={getImageUrl(formatted.thumbnail)}
                           type="album"
+                          albumType={formatted.albumType}
                           year={formatted.year}
                           onClick={() => navigate(`/albums/${encodeURIComponent(formatted.id)}`)}
                         />

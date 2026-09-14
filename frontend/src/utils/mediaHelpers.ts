@@ -1,5 +1,5 @@
 // src/utils/mediaHelpers.ts
-import type { Artist, Album, Track, FormattedMedia, Thumbnail } from '../types';
+import type { Artist, Album, Track, FormattedMedia, MediaStatus, Thumbnail } from '../types';
 
 /**
  * Extracts the best quality thumbnail from various possible formats
@@ -82,6 +82,7 @@ export function formatAlbum(item: any): FormattedMedia {
     subtitle: artistName,
     thumbnail: getBestThumbnail(item),
     year: item.year || '',
+    albumType: item.type || item.album_type || '',
   };
 }
 
@@ -192,6 +193,60 @@ export function filterAlbums(albums: Album[]): Album[] {
     const type = (album.type ?? album.resultType ?? '').toString().toLowerCase();
     return !type.includes('playlist') && !type.includes('mix');
   });
+}
+
+/**
+ * Badge to show on an album card.
+ * Handles both payload shapes: the artist endpoint reports `download_status`,
+ * the library endpoint reports track counts.
+ */
+export function getAlbumStatus(album: any): MediaStatus {
+  if (!album) return undefined;
+
+  if (album.download_status === 'downloading') return 'downloading';
+
+  // "pending" means tracks are queued with none being fetched right now. That
+  // is also what the worker reports in the gap between two tracks of the same
+  // album - and refreshes land precisely on those gaps, since they're triggered
+  // by a job finishing. So an album with tracks already on disk and more to go
+  // keeps the spinner; only one that hasn't started shows as queued.
+  if (album.download_status === 'pending') {
+    const total = album.tracks_total ?? 0;
+    const downloaded = album.tracks_downloaded ?? 0;
+    return downloaded > 0 && downloaded < total ? 'downloading' : 'queued';
+  }
+
+  // Metadata-only albums are never downloaded, and unsynced ones have no state yet
+  if (album.mode === 'metadata') return undefined;
+  if (!album.image_local && album.tracks_total == null && !album.in_database) return undefined;
+
+  if (album.download_status === 'completed') return 'downloaded';
+
+  const total = album.tracks_total ?? 0;
+  const downloaded = album.tracks_downloaded ?? 0;
+  if (total > 0 && downloaded >= total) return 'downloaded';
+
+  return 'in_library';
+}
+
+/**
+ * Badge to show on a followed artist card. The artist payload carries aggregated
+ * track counts; `albums` (when available) tells us whether a download is running.
+ */
+export function getArtistStatus(artist: any, albums: any[] = []): MediaStatus {
+  if (!artist) return undefined;
+
+  const albumStatuses = albums
+    .filter((album) => (album.artist?.id ?? album.artist_id) === artist.id)
+    .map(getAlbumStatus);
+  if (albumStatuses.includes('downloading')) return 'downloading';
+  if (albumStatuses.includes('queued')) return 'queued';
+
+  const total = artist.tracks_total ?? 0;
+  const downloaded = artist.tracks_downloaded ?? 0;
+  if (total > 0 && downloaded >= total) return 'downloaded';
+
+  return 'in_library';
 }
 
 /**
