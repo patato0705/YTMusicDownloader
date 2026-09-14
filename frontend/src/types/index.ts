@@ -18,6 +18,11 @@ export interface Artist {
   image_local?: string | null;
   subscribers?: string;
   resultType?: string;
+  // Library endpoint extras
+  albums_count?: number;
+  tracks_total?: number;
+  tracks_downloaded?: number;
+  followed_at?: string | null;
 }
 
 export type AlbumType = 'Album' | 'Single' | 'EP';
@@ -39,6 +44,10 @@ export interface Album {
   playlist_id?: string;
   playlistId?: string;
   resultType?: string;
+  // Library endpoint extras
+  tracks_total?: number;
+  tracks_downloaded?: number;
+  created_at?: string | null;
 }
 
 export interface Track {

@@ -5,12 +5,14 @@ import { useI18n } from '../contexts/I18nContext';
 import { getLibraryArtists, getLibraryAlbums, getLibraryStats } from '../api/library';
 import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
+import { MediaList, MediaRow } from '../components/MediaList';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
 import { StatCard } from '../components/ui/StatCard';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
 import { SearchInput } from '../components/ui/SearchInput';
+import { ViewToggle, type ViewMode } from '../components/ui/ViewToggle';
 import { formatNumber, parseApiError, getAlbumStatus, getArtistStatus } from '../utils';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import type { Artist } from '../types';
@@ -23,6 +25,16 @@ const ActivityIcon = () => <span className="text-2xl">⚡</span>;
 const LibraryIcon = () => <span className="text-2xl">📚</span>;
 const SearchIcon = () => <span className="text-2xl">🔍</span>;
 
+const VIEW_STORAGE_KEY = 'library.view';
+
+function loadViewMode(): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'list' ? 'list' : 'grid';
+  } catch {
+    return 'grid';
+  }
+}
+
 export default function Library(): JSX.Element {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<any[]>([]);
@@ -31,9 +43,18 @@ export default function Library(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'artists' | 'albums'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
   const navigate = useNavigate();
   const { t } = useI18n();
   const { revision } = useJobActivity();
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, viewMode);
+    } catch {
+      // Storage unavailable - the choice just won't survive a reload
+    }
+  }, [viewMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,16 +272,20 @@ export default function Library(): JSX.Element {
                 </button>
               </div>
 
-              {/* Search bar */}
-              <SearchInput
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder={t('library.searchPlaceholder')}
-                size="md"
-                showClearButton
-                onClear={() => setSearchQuery('')}
-                className="w-full md:w-96"
-              />
+              {/* Search bar + view switch - the input stretches to the toggle's height */}
+              <div className="flex items-stretch gap-3 w-full md:w-auto">
+                <SearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder={t('library.searchPlaceholder')}
+                  size="md"
+                  showClearButton
+                  onClear={() => setSearchQuery('')}
+                  className="flex-1 md:flex-none md:w-96"
+                  inputClassName="h-full"
+                />
+                <ViewToggle value={viewMode} onChange={setViewMode} />
+              </div>
             </div>
 
             {/* Followed Artists */}
@@ -269,19 +294,39 @@ export default function Library(): JSX.Element {
                 <SectionHeader>
                   {t('library.artists')}
                 </SectionHeader>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                  {displayedArtists.map((artist) => (
-                    <MediaCard
-                      key={artist.id}
-                      id={artist.id}
-                      title={artist.name}
-                      thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
-                      type="artist"
-                      mediaStatus={getArtistStatus(artist, albums)}
-                      onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
-                    />
-                  ))}
-                </div>
+                {viewMode === 'grid' ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                    {displayedArtists.map((artist) => (
+                      <MediaCard
+                        key={artist.id}
+                        id={artist.id}
+                        title={artist.name}
+                        thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
+                        type="artist"
+                        mediaStatus={getArtistStatus(artist, albums)}
+                        onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <MediaList kind="artist">
+                    {displayedArtists.map((artist) => (
+                      <MediaRow
+                        key={artist.id}
+                        id={artist.id}
+                        title={artist.name}
+                        thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
+                        type="artist"
+                        mediaStatus={getArtistStatus(artist, albums)}
+                        albumsCount={artist.albums_count}
+                        tracksTotal={artist.tracks_total}
+                        tracksDownloaded={artist.tracks_downloaded}
+                        date={artist.followed_at}
+                        onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
+                      />
+                    ))}
+                  </MediaList>
+                )}
               </section>
             )}
 
@@ -291,22 +336,44 @@ export default function Library(): JSX.Element {
                 <SectionHeader>
                   {t('library.albums')}
                 </SectionHeader>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                  {displayedAlbums.map((album) => (
-                    <MediaCard
-                      key={album.id}
-                      id={album.id}
-                      title={album.title}
-                      subtitle={album.artist_name || album.artist?.name}
-                      thumbnail={getImageUrl(album.image_local || album.thumbnail)}
-                      type="album"
-                      albumType={album.type}
-                      year={album.year}
-                      mediaStatus={getAlbumStatus(album)}
-                      onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
-                    />
-                  ))}
-                </div>
+                {viewMode === 'grid' ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                    {displayedAlbums.map((album) => (
+                      <MediaCard
+                        key={album.id}
+                        id={album.id}
+                        title={album.title}
+                        subtitle={album.artist_name || album.artist?.name}
+                        thumbnail={getImageUrl(album.image_local || album.thumbnail)}
+                        type="album"
+                        albumType={album.type}
+                        year={album.year}
+                        mediaStatus={getAlbumStatus(album)}
+                        onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <MediaList kind="album">
+                    {displayedAlbums.map((album) => (
+                      <MediaRow
+                        key={album.id}
+                        id={album.id}
+                        title={album.title}
+                        subtitle={album.artist_name || album.artist?.name}
+                        thumbnail={getImageUrl(album.image_local || album.thumbnail)}
+                        type="album"
+                        albumType={album.type}
+                        year={album.year}
+                        mediaStatus={getAlbumStatus(album)}
+                        tracksTotal={album.tracks_total}
+                        tracksDownloaded={album.tracks_downloaded}
+                        date={album.created_at}
+                        onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+                      />
+                    ))}
+                  </MediaList>
+                )}
               </section>
             )}
 

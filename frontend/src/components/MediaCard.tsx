@@ -20,10 +20,10 @@ interface MediaCardProps {
   className?: string;
 }
 
-const PLACEHOLDER = '/assets/placeholder-music.png';
+export const PLACEHOLDER = '/assets/placeholder-music.png';
 
 /** Status pip shown on the artwork - one entry per status, so the markup stays in one place */
-const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
+export const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
   labelKey: string;
   className: string;
   iconClassName?: string;
@@ -53,7 +53,7 @@ const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
 };
 
 /** Release type of an album, falling back to "Album" for anything unexpected */
-function albumTypeKey(albumType?: string): string {
+export function albumTypeKey(albumType?: string): string {
   switch (albumType?.trim().toLowerCase()) {
     case 'single':
       return 'mediaCard.type.single';

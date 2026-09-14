@@ -218,6 +218,26 @@
     "albums": "Followed Albums",
     "tracks": "Downloaded Tracks",
     "searchPlaceholder": "Search your library...",
+    "view": {
+      "grid": "Grid view",
+      "list": "List view"
+    },
+    "columns": {
+      "name": "Name",
+      "artist": "Artist",
+      "type": "Type",
+      "year": "Year",
+      "tracks": "Tracks",
+      "albums": "Albums",
+      "added": "Added",
+      "followed": "Followed",
+      "status": "Status"
+    },
+    "meta": {
+      "albumCount": "{count} albums",
+      "albumCountOne": "1 album",
+      "trackCount": "{count} tracks"
+    },
     "emptyTitle": "Your library is empty",
     "emptyDescription": "Start building your collection by browsing and following your favorite artists!",
     "noMatches": "No matches found",

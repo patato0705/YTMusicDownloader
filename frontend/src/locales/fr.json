@@ -218,6 +218,26 @@
     "albums": "Albums suivis",
     "tracks": "Titres téléchargés",
     "searchPlaceholder": "Rechercher dans votre bibliothèque...",
+    "view": {
+      "grid": "Vue grille",
+      "list": "Vue liste"
+    },
+    "columns": {
+      "name": "Nom",
+      "artist": "Artiste",
+      "type": "Type",
+      "year": "Année",
+      "tracks": "Titres",
+      "albums": "Albums",
+      "added": "Ajouté",
+      "followed": "Suivi depuis",
+      "status": "Statut"
+    },
+    "meta": {
+      "albumCount": "{count} albums",
+      "albumCountOne": "1 album",
+      "trackCount": "{count} titres"
+    },
     "emptyTitle": "Votre bibliothèque est vide",
     "emptyDescription": "Commencez à construire votre collection en explorant et en suivant vos artistes favoris !",
     "noMatches": "Aucun résultat",

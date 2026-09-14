@@ -10,6 +10,8 @@ interface SearchInputProps {
   autoFocus?: boolean;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  /** Extra classes on the <input> itself (the wrapper gets `className`) */
+  inputClassName?: string;
   showClearButton?: boolean;
   loading?: boolean;
 }
@@ -23,6 +25,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   autoFocus = false,
   size = 'md',
   className = '',
+  inputClassName = '',
   showClearButton = false,
   loading = false,
 }) => {
@@ -53,7 +56,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
         onFocus={onFocus}
         placeholder={placeholder}
         autoFocus={autoFocus}
-        className={`w-full ${sizeClasses[size]} glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300 ${size === 'lg' ? 'shadow-lg' : ''}`}
+        className={`w-full ${sizeClasses[size]} glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300 ${size === 'lg' ? 'shadow-lg' : ''} ${inputClassName}`}
         aria-label="search"
       />
       
