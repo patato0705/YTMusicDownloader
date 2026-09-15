@@ -123,6 +123,9 @@ class Track(Base):
     lyrics_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     file_path: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
     status: Mapped[str] = mapped_column(String(64), default="new", nullable=False)
+    # Why the download last failed. Jobs carry the same message but get
+    # cleaned up; this one stays with the track until a later attempt clears it.
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     artist_valid: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
@@ -143,6 +146,7 @@ class Track(Base):
             "lyrics_local": getattr(self, "lyrics_local", None),
             "file_path": getattr(self, "file_path", None),
             "status": getattr(self, "status", None),
+            "last_error": getattr(self, "last_error", None),
             "artist_valid": bool(getattr(self, "artist_valid", True)),
             "created_at": created_at_iso,
         }

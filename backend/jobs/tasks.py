@@ -171,6 +171,7 @@ def download_track(
         
         # Update status to "downloading"
         track.status = "downloading"
+        track.last_error = None
         session.add(track)
 
         # Roll that up to the album now, not just when the track finishes -
@@ -267,6 +268,7 @@ def download_track(
         if not track:
             raise RuntimeError(f"Track {track_id} disappeared after commit")
         track.status = "done"
+        track.last_error = None
         track.file_path = str(file_path)
         session.add(track)
         
@@ -349,6 +351,7 @@ def download_track(
                 logger.error(f"Track {track_id} not found when marking failed")
             else:
                 track.status = "failed"
+                track.last_error = tracks_svc.truncate_error(e)
                 session.add(track)
 
                 # Roll it up to the album, as the success path does - otherwise

@@ -403,8 +403,15 @@ export default function Album(): JSX.Element {
                         <td className="px-4 md:px-6 py-4 text-center">
                           {(() => {
                             const { styles, label, icon } = getStatusConfig(track.status);
+                            // Failed tracks carry the download error; surface it on hover.
+                            const errorTitle = track.status === 'failed' && track.last_error
+                              ? `${t('album.downloadError')}: ${track.last_error}`
+                              : undefined;
                             return (
-                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border backdrop-blur-sm ${styles}`}>
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border backdrop-blur-sm ${errorTitle ? 'cursor-help' : ''} ${styles}`}
+                                title={errorTitle}
+                              >
                                 {icon}
                                 <span>{label}</span>
                               </span>

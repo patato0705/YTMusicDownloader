@@ -43,6 +43,7 @@ def _track_to_dict(t: Track) -> Dict[str, Any]:
         "album_id": getattr(t, "album_id", None),
         "file_path": getattr(t, "file_path", None),
         "status": getattr(t, "status", None),
+        "last_error": getattr(t, "last_error", None),
         "lyrics": getattr(t, "lyrics", None),
         "lyrics_local": getattr(t, "lyrics_local", None),
         "artist_valid": bool(getattr(t, "artist_valid", False)),
@@ -208,7 +209,7 @@ def mark_failed(
         raise HTTPException(status_code=400, detail="track_id required")
     try:
         err_msg = body.get("error") if isinstance(body, dict) else None
-        t = tracks_svc.update_track_status(session=db, track_id=str(track_id), status="failed")
+        t = tracks_svc.update_track_status(session=db, track_id=str(track_id), status="failed", error=err_msg)
         if t is None:
             raise HTTPException(status_code=404, detail="track not found")
         try:

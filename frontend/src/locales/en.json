@@ -188,6 +188,7 @@
   },
   "album": {
     "album": "Album",
+    "downloadError": "Download error",
     "type": "Type",
     "unknownArtist": "Unknown Artist",
     "track": "track",

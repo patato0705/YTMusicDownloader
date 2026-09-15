@@ -123,14 +123,29 @@ def list_tracks_for_album_from_db(
     return result
 
 
+# yt-dlp messages can run for pages; keep enough for debugging, not the whole trace.
+MAX_ERROR_LENGTH = 2000
+
+
+def truncate_error(error: Optional[Any]) -> Optional[str]:
+    if not error:
+        return None
+    text = str(error).strip()
+    return text[:MAX_ERROR_LENGTH] if text else None
+
+
 def update_track_status(
     session: Session,
     track_id: str,
     status: str,
     file_path: Optional[str] = None,
+    error: Optional[str] = None,
 ) -> Optional[Track]:
     """
     Update track status and optionally file_path.
+
+    ``error`` is stored on the track when status is "failed"; any other
+    status clears the previous error.
     
     Returns:
         Track instance if found and updated, None otherwise
@@ -142,6 +157,7 @@ def update_track_status(
             return None
         
         track.status = status
+        track.last_error = truncate_error(error) if status == "failed" else None
         if file_path is not None:
             track.file_path = file_path
         

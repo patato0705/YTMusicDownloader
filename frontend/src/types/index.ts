@@ -64,6 +64,7 @@ export interface Track {
   track_number?: number;
   isExplicit?: boolean;
   status?: TrackStatus;
+  last_error?: string | null;
   videoId?: string;
   resultType?: string;
   raw?: any;
