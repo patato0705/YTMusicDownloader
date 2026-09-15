@@ -220,9 +220,29 @@
     "artist": "Artist",
     "duration": "Duration",
     "status": "Status",
+    "lyrics": "Lyrics",
     "noTracks": "No Tracks",
     "noTracksDescription": "This album doesn't have any tracks available yet.",
     "notFound": "Album not found"
+  },
+  "lyrics": {
+    "open": "View or edit lyrics",
+    "saved": "Lyrics saved",
+    "clear": "Remove lyrics",
+    "searchLrclib": "Search on LRCLIB",
+    "searchLrclibHint": "Opens lrclib.net with the artist and title. Copy the LRC text from a matching result and paste it below.",
+    "placeholder": "Paste LRC (synced) or plain lyrics here...",
+    "empty": "No lyrics on disk for this track.",
+    "notDownloaded": "Lyrics can be added once the audio file is downloaded.",
+    "readOnly": "Only members and administrators can edit lyrics.",
+    "formatHint": "Lines starting with [mm:ss.xx] are treated as synced lyrics.",
+    "willSaveAs": "Will be saved as {kind} lyrics.",
+    "willClear": "Saving with empty text removes the lyrics file; the next retry sweep will query LRCLIB again.",
+    "kind": {
+      "synced": "Synced",
+      "plain": "Plain",
+      "none": "None"
+    }
   },
   "library": {
     "title": "Library",

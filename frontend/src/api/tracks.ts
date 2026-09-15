@@ -23,12 +23,21 @@ export interface DownloadTrackRequest {
   [key: string]: any;
 }
 
-export interface EnsureLyricsRequest {
-  artists?: string[];
-  title?: string;
-  album?: string;
-  duration?: number;
-  dest_audio_path?: string;
+export interface TrackLyrics {
+  ok: boolean;
+  track_id: string;
+  lyrics: 'synced' | 'plain' | null;
+  lyrics_local: string | null;
+  /** Raw .lrc text, null when no file exists on disk */
+  content: string | null;
+  /** False until the audio file is downloaded (nowhere to put the .lrc yet) */
+  editable: boolean;
+}
+
+export interface UpdateTrackLyricsResponse {
+  ok: boolean;
+  track: Track;
+  content: string | null;
 }
 
 export interface MarkDoneRequest {
@@ -67,14 +76,30 @@ export async function downloadTrack(
 }
 
 /**
- * Enqueue a job to fetch synchronized lyrics for the track
- * Returns { ok: true, job_id: <int> }
+ * Fetch lyrics from LRCLIB for the track now. Bumps an already-queued
+ * retry forward instead of duplicating it.
+ * Returns { ok: true, job_id: <int>, queued: boolean }
  */
-export async function ensureLyrics(
+export async function ensureLyrics(trackId: string): Promise<{ ok: boolean; job_id: number; queued: boolean }> {
+  return api.post(`/tracks/${encodeURIComponent(trackId)}/ensure_lyrics`);
+}
+
+/**
+ * Read the track's .lrc file from disk
+ */
+export async function getTrackLyrics(trackId: string): Promise<TrackLyrics> {
+  return api.get<TrackLyrics>(`/tracks/${encodeURIComponent(trackId)}/lyrics`);
+}
+
+/**
+ * Overwrite the track's .lrc file. Empty content removes it and marks the
+ * track as having no lyrics (the scheduler will retry LRCLIB later).
+ */
+export async function updateTrackLyrics(
   trackId: string,
-  metadata?: EnsureLyricsRequest
-): Promise<any> {
-  return api.post(`/tracks/${encodeURIComponent(trackId)}/ensure_lyrics`, metadata);
+  content: string
+): Promise<UpdateTrackLyricsResponse> {
+  return api.put<UpdateTrackLyricsResponse>(`/tracks/${encodeURIComponent(trackId)}/lyrics`, { content });
 }
 
 /**

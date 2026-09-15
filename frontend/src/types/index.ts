@@ -65,12 +65,18 @@ export interface Track {
   isExplicit?: boolean;
   status?: TrackStatus;
   last_error?: string | null;
+  lyrics?: LyricsKind;
+  lyrics_local?: string | null;
+  file_path?: string | null;
   videoId?: string;
   resultType?: string;
   raw?: any;
 }
 
 export type TrackStatus = 'new' | 'downloading' | 'done' | 'failed';
+
+/** What kind of .lrc a downloaded track has on disk; null/undefined = none yet */
+export type LyricsKind = 'synced' | 'plain' | null;
 
 // ============================================================================
 // SEARCH TYPES

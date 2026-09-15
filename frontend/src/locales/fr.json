@@ -220,9 +220,29 @@
     "artist": "Artiste",
     "duration": "Durée",
     "status": "Statut",
+    "lyrics": "Paroles",
     "noTracks": "Aucun titre",
     "noTracksDescription": "Cet album n'a pas encore de titres disponibles.",
     "notFound": "Album introuvable"
+  },
+  "lyrics": {
+    "open": "Voir ou modifier les paroles",
+    "saved": "Paroles enregistrées",
+    "clear": "Supprimer les paroles",
+    "searchLrclib": "Rechercher sur LRCLIB",
+    "searchLrclibHint": "Ouvre lrclib.net avec l'artiste et le titre. Copiez le texte LRC d'un résultat correspondant et collez-le ci-dessous.",
+    "placeholder": "Collez ici des paroles LRC (synchronisées) ou en texte brut...",
+    "empty": "Aucune parole sur le disque pour ce titre.",
+    "notDownloaded": "Les paroles pourront être ajoutées une fois le fichier audio téléchargé.",
+    "readOnly": "Seuls les membres et administrateurs peuvent modifier les paroles.",
+    "formatHint": "Les lignes commençant par [mm:ss.xx] sont considérées comme synchronisées.",
+    "willSaveAs": "Sera enregistré comme paroles {kind}.",
+    "willClear": "Enregistrer un texte vide supprime le fichier de paroles ; la prochaine vérification interrogera à nouveau LRCLIB.",
+    "kind": {
+      "synced": "Synchronisées",
+      "plain": "Texte brut",
+      "none": "Aucune"
+    }
   },
   "library": {
     "title": "Bibliothèque",

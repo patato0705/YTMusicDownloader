@@ -11,6 +11,8 @@ import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
+import { LyricsBadge } from '../components/ui/LyricsBadge';
+import { LyricsModal } from '../components/ui/LyricsModal';
 import { formatDuration, getPrimaryArtist } from '../utils';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import type { Track } from '../types';
@@ -28,11 +30,16 @@ export default function Album(): JSX.Element {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [source, setSource] = useState<string>('');
+  const [lyricsTrack, setLyricsTrack] = useState<Track | null>(null);
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
   const { revision, refresh: refreshJobs } = useJobActivity();
   const isAdmin = user?.role === 'administrator';
+  const canEditLyrics = isAdmin || user?.role === 'member';
+  // Lyrics only exist for tracks we've downloaded, so the column is pointless
+  // on albums served straight from YTMusic.
+  const showLyrics = source === 'database';
 
   useEffect(() => {
     if (!albumId) return;
@@ -236,6 +243,18 @@ export default function Album(): JSX.Element {
         variant="danger"
       />
 
+      {lyricsTrack && (
+        <LyricsModal
+          track={lyricsTrack}
+          canEdit={canEditLyrics}
+          onClose={() => setLyricsTrack(null)}
+          onSaved={(updated) => {
+            setTracks((prev) => prev.map((tr) => (tr.id === updated.id ? { ...tr, ...updated } : tr)));
+            setToast({ message: t('lyrics.saved'), type: 'success' });
+          }}
+        />
+      )}
+
       {/* Main content */}
       <div className="relative z-10 space-y-12 pb-12">
         {/* Album header */}
@@ -375,6 +394,11 @@ export default function Album(): JSX.Element {
                       <th className="px-4 md:px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider w-24">
                         {t('album.duration')}
                       </th>
+                      {showLyrics && (
+                        <th className="px-4 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider w-28">
+                          {t('album.lyrics')}
+                        </th>
+                      )}
                       <th className="px-4 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider w-28">
                         {t('album.status')}
                       </th>
@@ -400,6 +424,15 @@ export default function Album(): JSX.Element {
                         <td className="px-4 md:px-6 py-4 text-sm text-muted-foreground text-right font-mono">
                           {formatDuration(track.duration_seconds || track.duration)}
                         </td>
+                        {showLyrics && (
+                          <td className="px-4 md:px-6 py-4 text-center">
+                            <LyricsBadge
+                              kind={track.lyrics}
+                              title={t('lyrics.open')}
+                              onClick={() => setLyricsTrack(track)}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 md:px-6 py-4 text-center">
                           {(() => {
                             const { styles, label, icon } = getStatusConfig(track.status);

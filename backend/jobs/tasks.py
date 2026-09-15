@@ -387,6 +387,160 @@ def download_track(
 
 
 # ============================================================================
+# HELPER: LRCLIB LOOKUP
+# ============================================================================
+
+_LRCLIB_HEADERS = {"User-Agent": "YTMusicDownloader v0.1 (https://github.com/patato0705/YTMusicDownloader)"}
+
+# YTMusic and LRCLIB (mostly Spotify-sourced) durations routinely disagree by
+# a second; anything beyond this is treated as a different version/edit.
+LRCLIB_DURATION_TOLERANCE = 2
+
+
+class LrclibUnavailable(Exception):
+    """LRCLIB answered with a rate-limit/5xx or didn't answer at all."""
+
+
+def _norm(text: Optional[str]) -> str:
+    """Case/accent/punctuation-insensitive form for comparing titles and artists."""
+    import re
+    import unicodedata
+    text = unicodedata.normalize("NFKD", text or "")
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _lrclib_get(url: str, timeout: int) -> Optional[Dict[str, Any]]:
+    """
+    GET an LRCLIB endpoint. Returns the parsed JSON, None on 404, and raises
+    LrclibUnavailable for anything transient (429/5xx/network) so callers
+    retry soon instead of recording a misleading "not found".
+    """
+    import requests
+    try:
+        response = requests.get(url, timeout=timeout, headers=_LRCLIB_HEADERS)
+    except requests.RequestException as e:
+        raise LrclibUnavailable(str(e)) from e
+    if response.status_code == 200:
+        return response.json()
+    if response.status_code == 404:
+        return None
+    raise LrclibUnavailable(f"HTTP {response.status_code}")
+
+
+def _pick_search_candidate(
+    results: Any,
+    track_name: str,
+    artist_name: str,
+    album_name: str,
+    duration: int,
+) -> Optional[Dict[str, Any]]:
+    """
+    Choose the best synced record from /api/search results.
+
+    /api/get returns a single record for the exact signature and happily
+    returns a plain-only one even when a synced upload of the same song
+    exists under "Foo - Single" or with a duration 1s off. So we look
+    through the search results ourselves: same title, same (or containing)
+    artist, duration within LRCLIB_DURATION_TOLERANCE, not instrumental.
+    Ties go to an exact album match, then the closest duration, then the
+    oldest (lowest id) upload.
+    """
+    if not isinstance(results, list):
+        return None
+    want_title = _norm(track_name)
+    want_artist = _norm(artist_name)
+    want_album = _norm(album_name)
+
+    ranked = []
+    for c in results:
+        if not isinstance(c, dict) or not c.get("syncedLyrics") or c.get("instrumental"):
+            continue
+        if _norm(c.get("trackName")) != want_title:
+            continue
+        cand_artist = _norm(c.get("artistName"))
+        if not (cand_artist == want_artist or want_artist in cand_artist or cand_artist in want_artist):
+            continue
+        try:
+            delta = abs(float(c.get("duration") or 0) - float(duration))
+        except (TypeError, ValueError):
+            continue
+        if duration and delta > LRCLIB_DURATION_TOLERANCE:
+            continue
+        album_rank = 0 if _norm(c.get("albumName")) == want_album else 1
+        ranked.append((album_rank, delta, int(c.get("id") or 0), c))
+
+    if not ranked:
+        return None
+    ranked.sort(key=lambda r: r[:3])
+    return ranked[0][3]
+
+
+def _lrclib_lookup(
+    track_name: str,
+    artist_name: str,
+    album_name: str,
+    duration: int,
+) -> Dict[str, Any]:
+    """
+    Find lyrics on LRCLIB for a track.
+
+    Order: /api/get-cached (cheap) -> /api/get -> /api/search fallback (only
+    when no synced lyrics yet). Returns {"synced": str|None, "plain":
+    str|None, "found": bool, "source": str}. Raises LrclibUnavailable when
+    LRCLIB is down/rate-limiting.
+    """
+    from urllib.parse import urlencode
+
+    params = {
+        "track_name": track_name,
+        "artist_name": artist_name,
+        "album_name": album_name,
+        "duration": duration,
+    }
+    synced = None
+    plain = None
+    found = False
+    source = ""
+
+    # get-cached is best-effort; a hiccup there just means we ask /api/get
+    try:
+        data = _lrclib_get(f"https://lrclib.net/api/get-cached?{urlencode(params)}", timeout=10)
+    except LrclibUnavailable as e:
+        logger.debug(f"LRCLIB get-cached unavailable: {e}")
+        data = None
+    if data:
+        found = True
+        source = "get-cached"
+        synced = data.get("syncedLyrics")
+        plain = data.get("plainLyrics")
+
+    if not synced:
+        data = _lrclib_get(f"https://lrclib.net/api/get?{urlencode(params)}", timeout=15)
+        if data:
+            found = True
+            source = "get"
+            synced = data.get("syncedLyrics")
+            plain = data.get("plainLyrics") or plain
+
+    if not synced:
+        search_params = {"track_name": track_name, "artist_name": artist_name}
+        results = _lrclib_get(f"https://lrclib.net/api/search?{urlencode(search_params)}", timeout=15)
+        best = _pick_search_candidate(results, track_name, artist_name, album_name, duration)
+        if best:
+            found = True
+            source = f"search#{best.get('id')}"
+            synced = best.get("syncedLyrics")
+            plain = best.get("plainLyrics") or plain
+            logger.info(
+                f"LRCLIB search matched {artist_name} - {track_name}: "
+                f"album={best.get('albumName')!r} duration={best.get('duration')} (ours={duration})"
+            )
+
+    return {"synced": synced, "plain": plain, "found": found, "source": source}
+
+
+# ============================================================================
 # TASK: DOWNLOAD LYRICS
 # ============================================================================
 
@@ -400,7 +554,7 @@ def download_lyrics(
 
     Flow:
     1. Get track info from DB
-    2. Query LRCLIB API (cached first, then full)
+    2. Query LRCLIB API (see _lrclib_lookup: cached, full, then search fallback)
     3. Save .lrc file next to audio file
     4. Update Track.lyrics and Track.lyrics_local
 
@@ -420,9 +574,7 @@ def download_lyrics(
         return {"ok": False, "error": "track_id required"}
 
     try:
-        import requests
         from pathlib import Path
-        from urllib.parse import urlencode
 
         # Jobs queued before the feature was switched off: drop them quietly.
         # The scheduler's retry sweep picks the track up again once re-enabled.
@@ -471,59 +623,26 @@ def download_lyrics(
         logger.info(f"Fetching lyrics for: {artist_name} - {track_name} (mode={mode})")
 
         # ===== NO TRANSACTION: Fetch lyrics from API =====
-        # Build query parameters
-        params = {
-            "track_name": track_name,
-            "artist_name": artist_name,
-            "album_name": album_name,
-            "duration": duration,
-        }
-
-        # Try cached endpoint first
-        synced_lyrics = None
-        plain_lyrics = None
-        lrclib_headers = {"User-Agent": "YTMusicDownloader v0.1 (https://github.com/patato0705/YTMusicDownloader)"}
         try:
-            cached_url = f"https://lrclib.net/api/get-cached?{urlencode(params)}"
-            logger.debug(f"Trying cached LRCLIB: {cached_url}")
-
-            response = requests.get(cached_url, timeout=10, headers=lrclib_headers)
-            if response.status_code == 200:
-                data = response.json()
-                synced_lyrics = data.get("syncedLyrics")
-                plain_lyrics = data.get("plainLyrics")
-                if synced_lyrics:
-                    logger.info(f"Found synced lyrics in cache for track {track_id}")
-        except Exception as e:
-            logger.debug(f"Cached LRCLIB failed: {e}")
-
-        # If not in cache, try full endpoint
-        if not synced_lyrics:
-            try:
-                full_url = f"https://lrclib.net/api/get?{urlencode(params)}"
-                logger.debug(f"Trying full LRCLIB: {full_url}")
-
-                response = requests.get(full_url, timeout=15, headers=lrclib_headers)
-                if response.status_code == 200:
-                    data = response.json()
-                    synced_lyrics = data.get("syncedLyrics")
-                    plain_lyrics = data.get("plainLyrics") or plain_lyrics
-                    if synced_lyrics:
-                        logger.info(f"Found synced lyrics for track {track_id}")
-                elif response.status_code == 404:
-                    logger.info(f"No lyrics found for track {track_id}")
-                    return {
-                        "ok": False,
-                        "error": "Lyrics not found",
-                        "retry_delay_seconds": 86400,  # Retry in 24 hours
-                    }
-            except Exception as e:
-                logger.exception(f"Full LRCLIB request failed: {e}")
-                return {
-                    "ok": False,
-                    "error": f"LRCLIB request failed: {str(e)}",
-                    "retry_delay_seconds": 3600,  # Retry in 1 hour
-                }
+            found = _lrclib_lookup(track_name, artist_name, album_name, duration)
+        except LrclibUnavailable as e:
+            logger.warning(f"LRCLIB unavailable for track {track_id}: {e}")
+            return {
+                "ok": False,
+                "error": f"LRCLIB unavailable: {e}",
+                "retry_delay_seconds": 3600,  # Retry in 1 hour
+            }
+        synced_lyrics = found["synced"]
+        plain_lyrics = found["plain"]
+        if not found["found"]:
+            logger.info(f"No lyrics found for track {track_id}")
+            return {
+                "ok": False,
+                "error": "Lyrics not found",
+                "retry_delay_seconds": 86400,  # Retry in 24 hours
+            }
+        if synced_lyrics:
+            logger.info(f"Found synced lyrics for track {track_id} via {found['source']}")
 
         # Determine which lyrics to save
         if synced_lyrics:
