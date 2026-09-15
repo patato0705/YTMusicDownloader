@@ -4,9 +4,10 @@ Scheduler for periodic sync tasks.
 
 Responsibilities:
 1. Sync followed artists for new releases (every `scheduler.sync_interval_hours`)
-2. Clean up old completed jobs (daily, keeping `scheduler.job_cleanup_days`)
-3. Clean up expired refresh tokens (every `scheduler.token_cleanup_days`)
-4. Retry/upgrade missing lyrics (every `scheduler.lyrics_retry_interval_hours`)
+2. Re-sync followed charts (every `scheduler.chart_sync_interval_hours`)
+3. Clean up old completed jobs (daily, keeping `scheduler.job_cleanup_days`)
+4. Clean up expired refresh tokens (every `scheduler.token_cleanup_days`)
+5. Retry/upgrade missing lyrics (every `scheduler.lyrics_retry_interval_hours`)
 
 Note: Album subscriptions are handled on-demand (follow album → immediate import)
 """
@@ -20,7 +21,8 @@ from sqlalchemy.orm import Session
 
 from .db import SessionLocal
 from .jobs.jobqueue import enqueue_job, cleanup_old_jobs
-from .services import subscriptions as subs_svc, auth as auth_svc
+from .services import subscriptions as subs_svc, auth as auth_svc, charts as charts_svc
+from .routers import features
 from . import settings as settings_module
 
 logger = logging.getLogger("scheduler")
@@ -32,6 +34,7 @@ class Scheduler:
     
     Tasks:
     - sync_monitored_artists: Check followed artists for new releases
+    - sync_charts: Re-sync followed charts to follow new top-N entrants
     - cleanup_jobs: Remove old completed jobs (daily)
     """
 
@@ -50,6 +53,9 @@ class Scheduler:
         # synced a few seconds *after* the cutoff and skip it until 2N.
         self.sync_check_interval_seconds: int = sync_check_interval_seconds or 600  # 10 minutes
         self.sync_interval_hours: int = 6  # refreshed from DB
+        # Same pattern for charts: `scheduler.chart_sync_interval_hours` is a
+        # cutoff on ChartSubscription.last_synced_at, checked on the artist cadence.
+        self.chart_sync_interval_hours: int = 168  # refreshed from DB
         # Fixed cadences (the settings only control retention / age):
         self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours
         self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours default
@@ -101,6 +107,13 @@ class Scheduler:
             )
             self.sync_interval_hours = max(1, int(sync_hours))
 
+            chart_sync_hours = settings_module.get_setting(
+                session,
+                "scheduler.chart_sync_interval_hours",
+                default=168
+            )
+            self.chart_sync_interval_hours = max(1, int(chart_sync_hours))
+
             # Get token cleanup interval from settings (in days, convert to seconds)
             token_cleanup_days = settings_module.get_setting(
                 session,
@@ -119,6 +132,7 @@ class Scheduler:
 
             logger.debug(
                 f"Settings refreshed: sync_interval={self.sync_interval_hours}h, "
+                f"chart_sync_interval={self.chart_sync_interval_hours}h, "
                 f"token_cleanup_interval={self.token_cleanup_interval_seconds}s, "
                 f"lyrics_retry_interval={self.lyrics_retry_interval_seconds}s"
             )
@@ -191,13 +205,17 @@ class Scheduler:
                 except Exception:
                     logger.exception("Unexpected error in _refresh_settings_from_db")
             
-            # Check if any artist sync is due
+            # Check if any artist or chart sync is due
             if now - self._last_sync >= self.sync_check_interval_seconds:
                 try:
                     self.sync_monitored_artists()
-                    self._last_sync = now
                 except Exception:
                     logger.exception("Unexpected error in sync_monitored_artists")
+                try:
+                    self.sync_charts()
+                except Exception:
+                    logger.exception("Unexpected error in sync_charts")
+                self._last_sync = now
             
             # Check if job cleanup is due
             if now - self._last_cleanup >= self.cleanup_interval_seconds:
@@ -301,6 +319,55 @@ class Scheduler:
                     logger.exception(f"Error processing monitored artist {artist}")
 
             logger.info(f"Processed {len(artists)} monitored artists (enqueued {enqueued_count} jobs)")
+
+        finally:
+            if session:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+
+    def sync_charts(self) -> None:
+        """
+        Enqueue sync_chart jobs for enabled charts not synced within
+        chart_sync_interval_hours. Skipped entirely while the charts feature is off.
+        """
+        session: Optional[Session] = None
+        try:
+            session = SessionLocal()
+
+            if not features.charts_enabled(session):
+                logger.debug("Charts feature disabled, skipping chart sync")
+                return
+
+            try:
+                subscriptions = charts_svc.get_chart_subscriptions_needing_sync(
+                    session=session,
+                    sync_interval_hours=self.chart_sync_interval_hours,
+                )
+            except Exception:
+                logger.exception("Failed fetching chart subscriptions needing sync")
+                return
+
+            if not subscriptions:
+                logger.debug("No charts need syncing")
+                return
+
+            enqueued_count = 0
+            for sub in subscriptions:
+                try:
+                    # enqueue_chart_sync reuses a job that is already waiting
+                    if charts_svc.pending_sync_job(session, sub.country_code):
+                        logger.debug(f"Sync already queued for chart {sub.country_code}, skipping")
+                        continue
+                    charts_svc.enqueue_chart_sync(session, sub.country_code)
+                    session.commit()
+                    enqueued_count += 1
+                except Exception:
+                    session.rollback()
+                    logger.exception(f"Failed to enqueue sync job for chart {sub.country_code}")
+
+            logger.info(f"Processed {len(subscriptions)} chart(s) due for sync (enqueued {enqueued_count} jobs)")
 
         finally:
             if session:

@@ -7,6 +7,7 @@ Endpoints:
 - POST /api/charts/{country_code}/follow - Follow a chart (admin only)
 - DELETE /api/charts/{country_code}/follow - Unfollow a chart (admin only)
 - PATCH /api/charts/{country_code} - Update chart subscription (admin only)
+- POST /api/charts/{country_code}/sync - Queue a sync now (admin only)
 - GET /api/charts - List all chart subscriptions
 """
 from __future__ import annotations
@@ -20,7 +21,6 @@ from backend.db import get_session
 from backend.dependencies import require_auth, require_admin
 from backend.routers.features import require_charts_enabled
 from backend.services import charts as charts_svc
-from backend.jobs.jobqueue import enqueue_job
 from backend.schemas.charts import (
     FollowChartRequest,
     UpdateChartRequest,
@@ -107,7 +107,7 @@ def list_chart_subscriptions(
     session: Session = Depends(get_session),
 ) -> List[ChartSubscriptionResponse]:
     """
-    List all chart subscriptions (admin only).
+    List all chart subscriptions.
     
     Args:
         include_disabled: Include disabled subscriptions
@@ -153,24 +153,19 @@ def follow_chart(
         
         logger.info(f"Chart {country_code} followed by user {current_user.username}")
         
-        # Queue sync job
+        # Queue sync job; the subscription is already saved, so a queueing
+        # failure must not fail the request.
         try:
-            job = enqueue_job(
-                session,
-                job_type="sync_chart",
-                payload={"country_code": country_code},
-                priority=20,
-                user_id=current_user.id,
-            )
+            charts_svc.enqueue_chart_sync(session, country_code, user_id=current_user.id)
             session.commit()
-            logger.info(f"Queued sync_chart job {job.id} for {country_code}")
-        except Exception as e:
+        except Exception:
+            session.rollback()
             logger.exception(f"Failed to queue sync_chart job for {country_code}")
-            # Don't fail the request if job queueing fails
         
         return ChartSubscriptionResponse.model_validate(subscription)
         
     except ValueError as e:
+        session.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -267,21 +262,15 @@ def update_chart(
         
         session.commit()
         
-        # If top_n increased, queue a sync job
+        # If top_n increased, queue a sync job so the extra artists get followed
         new_top_n = subscription.top_n_artists
-        if data.top_n_artists is not None and new_top_n > old_top_n:
+        if subscription.enabled and new_top_n > old_top_n:
             logger.info(f"Chart {country_code} top_n increased from {old_top_n} to {new_top_n}, queueing sync")
             try:
-                job = enqueue_job(
-                    session,
-                    job_type="sync_chart",
-                    payload={"country_code": country_code},
-                    priority=20,
-                    user_id=current_user.id,
-                )
+                charts_svc.enqueue_chart_sync(session, country_code, user_id=current_user.id)
                 session.commit()
-                logger.info(f"Queued sync_chart job {job.id} for {country_code}")
-            except Exception as e:
+            except Exception:
+                session.rollback()
                 logger.exception(f"Failed to queue sync_chart job for {country_code}")
         
         logger.info(f"Chart {country_code} updated by user {current_user.username}")
@@ -304,3 +293,44 @@ def update_chart(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update chart: {str(e)}",
         )
+
+
+@router.post("/{country_code}/sync", response_model=MessageResponse, status_code=status.HTTP_202_ACCEPTED)
+def sync_chart_now(
+    country_code: str = Path(..., min_length=2, max_length=2, description="2-letter country code"),
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> MessageResponse:
+    """
+    Queue a sync of a followed chart right away (admin only).
+    
+    The sync fetches the current chart and follows any of the top N artists
+    that are not followed yet. A sync already waiting in the queue is reused.
+    """
+    country_code = country_code.upper()
+    
+    subscription = charts_svc.get_chart_subscription(session, country_code)
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Chart subscription for {country_code} not found",
+        )
+    if not subscription.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Chart {country_code} is disabled; enable it before syncing",
+        )
+    
+    try:
+        job = charts_svc.enqueue_chart_sync(session, country_code, user_id=current_user.id)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logger.exception(f"Failed to queue sync_chart job for {country_code}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to queue chart sync: {str(e)}",
+        )
+    
+    logger.info(f"Chart {country_code} sync requested by user {current_user.username} (job {job.id})")
+    return MessageResponse(message=f"Chart {country_code} sync queued (job {job.id})")

@@ -5,12 +5,13 @@ Charts service - handles chart subscriptions and sync operations.
 from __future__ import annotations
 import logging
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 
-from ..models import ChartSubscription, ChartSnapshot, Artist, ArtistSubscription
+from ..models import ChartSubscription, ChartSnapshot, ArtistSubscription, Job
+from ..jobs.jobqueue import enqueue_job
 from ..ytm_service import adapter as ytm_adapter
 from ..time_utils import now_utc
 
@@ -110,8 +111,6 @@ def update_chart_subscription(
     if not subscription:
         raise ValueError(f"Chart subscription for {country_code} not found")
     
-    old_top_n = subscription.top_n_artists
-    
     if top_n_artists is not None:
         if not 1 <= top_n_artists <= 40:
             raise ValueError("top_n_artists must be between 1 and 40")
@@ -124,8 +123,6 @@ def update_chart_subscription(
     session.flush()
     
     logger.info(f"Updated chart subscription: {country_code}")
-    
-    # Return both the subscription and whether top_n increased
     return subscription
 
 
@@ -162,6 +159,69 @@ def update_sync_status(
     subscription.last_error = error if not success else None
     
     session.add(subscription)
+
+
+def get_chart_subscriptions_needing_sync(
+    session: Session,
+    sync_interval_hours: int,
+) -> List[ChartSubscription]:
+    """Enabled subscriptions that were never synced or not within the interval."""
+    cutoff = now_utc() - timedelta(hours=max(1, int(sync_interval_hours)))
+    stmt = (
+        select(ChartSubscription)
+        .where(
+            ChartSubscription.enabled == True,
+            or_(
+                ChartSubscription.last_synced_at.is_(None),
+                ChartSubscription.last_synced_at < cutoff,
+            ),
+        )
+        .order_by(ChartSubscription.country_code)
+    )
+    return list(session.execute(stmt).scalars().all())
+
+
+def pending_sync_job(session: Session, country_code: str) -> Optional[Job]:
+    """Return the sync_chart job for this country still waiting to run, if any."""
+    country_code = country_code.upper()
+    stmt = select(Job).where(
+        Job.type == "sync_chart",
+        Job.status.in_(["queued", "reserved"]),
+    )
+    for job in session.execute(stmt).scalars().all():
+        payload = job.payload if isinstance(job.payload, dict) else {}
+        if str(payload.get("country_code", "")).upper() == country_code:
+            return job
+    return None
+
+
+def enqueue_chart_sync(
+    session: Session,
+    country_code: str,
+    user_id: Optional[int] = None,
+) -> Job:
+    """
+    Queue a sync_chart job for a country, reusing one that is already waiting.
+    
+    Does not commit; callers own the transaction.
+    """
+    country_code = country_code.upper()
+    existing = pending_sync_job(session, country_code)
+    if existing:
+        logger.debug(f"sync_chart job {existing.id} already pending for {country_code}")
+        return existing
+    
+    job = enqueue_job(
+        session,
+        job_type="sync_chart",
+        payload={"country_code": country_code},
+        priority=20,
+        user_id=user_id,
+        commit=False,
+    )
+    session.flush()
+    logger.info(f"Queued sync_chart job {job.id} for {country_code}")
+    return job
 
 
 # ============================================================================

@@ -43,6 +43,12 @@ DEFAULT_SETTINGS = {
         "min": 1,
         "description": "Hours between lyrics recovery/upgrade checks",
     },
+    "scheduler.chart_sync_interval_hours": {
+        "value": 168,
+        "type": "int",
+        "min": 1,
+        "description": "Hours between re-syncs of each followed chart",
+    },
 
     # Registration settings
     "auth.registration_enabled": {
