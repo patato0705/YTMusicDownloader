@@ -269,14 +269,15 @@
     "errorTitle": "Error Loading Charts",
     "noCharts": "No Charts Followed",
     "noChartsDescription": "No music charts are currently being tracked. Contact an administrator to follow charts from different countries.",
-    "topNArtists": "Top {n} Artists",
+    "followingTopN": "Following the top {n} of {total}",
+    "followedArtist": "Followed artist",
     "lastUpdated": "Last updated: {date}",
     "followChart": "Follow Chart",
     "musicChart": "Music Chart",
     "numberOfArtists": "Number of Artists to Track",
     "trackTopArtists": "Track top artists",
     "storageWarning": "Higher numbers track more artists but require more storage and sync time",
-    "artistCountError": "Number of artists must be between 1 and 100",
+    "artistCountError": "Number of artists must be between 1 and {max}",
     "disabled": "The charts feature is currently disabled. An administrator can turn it on in the admin panel."
   },
   "jobs": {
@@ -358,6 +359,10 @@
           "lyrics_retry_interval_hours": {
             "label": "Lyrics retry interval (hours)",
             "description": "How often tracks with missing or unsynced lyrics are retried."
+          },
+          "chart_sync_interval_hours": {
+            "label": "Chart sync interval (hours)",
+            "description": "How often each followed chart is re-fetched to follow new top-N artists."
           }
         },
         "ytmusic": {
@@ -400,22 +405,47 @@
       "roleUpdated": "Role updated successfully"
     },
     "charts": {
-      "selectCountry": "Select a Country",
-      "followChart": "Follow Chart",
+      "selectCountry": "Select a country…",
+      "followChart": "Follow a chart",
+      "previewTop": "Top {n} artists preview",
       "unfollowChart": "Unfollow",
-      "currentSubscriptions": "Current Chart Subscriptions",
+      "syncNow": "Sync now",
+      "syncDisabledHint": "Enable the chart to sync it",
+      "preview": "Preview",
+      "hidePreview": "Hide",
+      "previewFollowing": "Following the top {n} of {total} artists. Followed artists are marked with a check.",
+      "apply": "Apply",
+      "enable": "Enable",
+      "disable": "Disable",
+      "currentSubscriptions": "Current chart subscriptions",
       "country": "Country",
-      "topArtists": "Top Artists",
+      "topArtists": "Top artists",
       "status": "Status",
-      "lastSynced": "Last Synced",
+      "lastSynced": "Last synced",
       "actions": "Actions",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "neverSynced": "Never",
       "noSubscriptions": "No charts followed yet",
       "followed": "Chart followed successfully",
-      "unfollowed": "Chart unfollowed successfully",
-      "updated": "Chart updated successfully"
+      "unfollowed": "Chart unfollowed",
+      "updated": "Chart updated",
+      "enabledToast": "Chart sync enabled",
+      "disabledToast": "Chart sync disabled",
+      "syncQueued": "Chart sync queued",
+      "confirm": {
+        "unfollowTitle": "Unfollow chart",
+        "unfollow": "Stop following the {country} chart? Artists already followed from it stay followed.",
+        "disableTitle": "Disable chart",
+        "disable": "Disable the {country} chart? It will no longer be re-synced and will be hidden from the Charts page. Followed artists are unaffected.",
+        "enableTitle": "Enable chart",
+        "enable": "Enable the {country} chart? It will be re-synced periodically and shown on the Charts page again.",
+        "topNTitle": "Change top artists",
+        "topNIncrease": "Follow the top {to} artists of the {country} chart instead of the top {from}? A sync is queued right away and the additional artists are followed with their full discography.",
+        "topNDecrease": "Follow the top {to} artists of the {country} chart instead of the top {from}? Artists already followed stay followed.",
+        "syncTitle": "Sync chart",
+        "sync": "Sync the {country} chart now? Any of its top {n} artists not followed yet will be followed with their full discography."
+      }
     }
   },
   "playlist": {

@@ -14,7 +14,19 @@ export default function Charts(): JSX.Element {
   const [charts, setCharts] = useState<Record<string, Chart>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+
+  const hero = (
+    <PageHero
+      title={
+        <>
+          <span className="text-foreground">{t('charts.music')} </span>
+          <span className="text-gradient">{t('nav.charts')}</span>
+        </>
+      }
+      subtitle={t('charts.heroSubtitle')}
+    />
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -66,15 +78,7 @@ export default function Charts(): JSX.Element {
         <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
         
         <div className="relative z-10 space-y-8 pb-12">
-          <PageHero
-            title={
-              <>
-                <span className="text-foreground">Music </span>
-                <span className="text-gradient">Charts</span>
-              </>
-            }
-            subtitle={t('charts.heroSubtitle')}
-          />
+          {hero}
           
           <div className="relative z-10 text-center">
             <Spinner size="lg" className="mx-auto mb-4 text-blue-600 dark:text-red-500"/>
@@ -92,15 +96,7 @@ export default function Charts(): JSX.Element {
         <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
         
         <div className="relative z-10 space-y-8 pb-12">
-          <PageHero
-            title={
-              <>
-                <span className="text-foreground">Music </span>
-                <span className="text-gradient">Charts</span>
-              </>
-            }
-            subtitle={t('charts.heroSubtitle')}
-          />
+          {hero}
           
           <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-6 border border-red-500/20">
             <div className="flex items-center gap-3">
@@ -125,15 +121,7 @@ export default function Charts(): JSX.Element {
         <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
         
         <div className="relative z-10 space-y-8 pb-12">
-          <PageHero
-            title={
-              <>
-                <span className="text-foreground">Music </span>
-                <span className="text-gradient">Charts</span>
-              </>
-            }
-            subtitle={t('charts.heroSubtitle')}
-          />
+          {hero}
           
           <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-16 border border-slate-200/50 dark:border-white/10 text-center">
             <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
@@ -157,15 +145,7 @@ export default function Charts(): JSX.Element {
       
       {/* Main content */}
       <div className="relative z-10 space-y-8 pb-12">
-        <PageHero
-          title={
-            <>
-              <span className="text-foreground">{t('charts.music')} </span>
-              <span className="text-gradient">{t('nav.charts')}</span>
-            </>
-          }
-          subtitle="Discover trending artists from around the world"
-        />
+        {hero}
 
         {/* Chart Cards Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -174,9 +154,6 @@ export default function Charts(): JSX.Element {
             const chart = charts[subscription.country_code];
 
             if (!chart || !country) return null;
-
-            // Limit to top_n_artists
-            const displayedArtists = chart.artists.slice(0, subscription.top_n_artists);
 
             return (
               <div 
@@ -192,22 +169,22 @@ export default function Charts(): JSX.Element {
                         {country.name}
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        {t('charts.topNArtists', { n: subscription.top_n_artists })}
+                        {t('charts.followingTopN', { n: subscription.top_n_artists, total: chart.artists.length })}
                       </p>
                     </div>
                   </div>
                 </div>
 
                 {/* Artists Grid */}
-                <ChartArtistGrid 
-                  artists={displayedArtists} 
+                <ChartArtistGrid
+                  artists={chart.artists}
                   maxHeight="280px"
                 />
 
                 {/* Last sync info */}
                 {subscription.last_synced_at && (
                   <p className="text-xs text-muted-foreground mt-4 text-center">
-                    {t('charts.lastUpdated', { date: new Date(subscription.last_synced_at).toLocaleString() })}
+                    {t('charts.lastUpdated', { date: new Date(subscription.last_synced_at).toLocaleString(locale) })}
                   </p>
                 )}
               </div>

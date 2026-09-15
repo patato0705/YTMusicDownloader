@@ -269,14 +269,15 @@
     "errorTitle": "Erreur de chargement des charts",
     "noCharts": "Aucun chart suivi",
     "noChartsDescription": "Aucun chart musical n'est actuellement suivi. Contactez un administrateur pour suivre les charts de différents pays.",
-    "topNArtists": "Top {n} Artistes",
+    "followingTopN": "Top {n} suivi sur {total}",
+    "followedArtist": "Artiste suivi",
     "lastUpdated": "Dernière mise à jour : {date}",
     "followChart": "Suivre le chart",
     "musicChart": "Chart Musical",
     "numberOfArtists": "Nombre d'artistes à suivre",
     "trackTopArtists": "Suivre les meilleurs artistes",
     "storageWarning": "Des nombres plus élevés suivent plus d'artistes mais nécessitent plus de stockage et de temps de synchronisation",
-    "artistCountError": "Le nombre d'artistes doit être compris entre 1 et 100",
+    "artistCountError": "Le nombre d'artistes doit être compris entre 1 et {max}",
     "disabled": "La fonctionnalité Charts est actuellement désactivée. Un administrateur peut l'activer depuis le panneau d'administration."
   },
   "jobs": {
@@ -358,6 +359,10 @@
           "lyrics_retry_interval_hours": {
             "label": "Intervalle de nouvelle tentative des paroles (heures)",
             "description": "Fréquence à laquelle les titres sans paroles ou avec des paroles non synchronisées sont réessayés."
+          },
+          "chart_sync_interval_hours": {
+            "label": "Intervalle de synchronisation des charts (heures)",
+            "description": "Fréquence à laquelle chaque chart suivi est rechargé pour suivre les nouveaux artistes de son top."
           }
         },
         "ytmusic": {
@@ -400,9 +405,18 @@
       "roleUpdated": "Rôle mis à jour avec succès"
     },
     "charts": {
-      "selectCountry": "Sélectionner un pays",
-      "followChart": "Suivre le chart",
+      "selectCountry": "Sélectionner un pays…",
+      "followChart": "Suivre un chart",
+      "previewTop": "Aperçu du top {n} artistes",
       "unfollowChart": "Ne plus suivre",
+      "syncNow": "Synchroniser",
+      "syncDisabledHint": "Activez le chart pour le synchroniser",
+      "preview": "Aperçu",
+      "hidePreview": "Masquer",
+      "previewFollowing": "Top {n} suivi sur {total} artistes. Les artistes suivis sont marqués d'une coche.",
+      "apply": "Appliquer",
+      "enable": "Activer",
+      "disable": "Désactiver",
       "currentSubscriptions": "Abonnements aux charts actuels",
       "country": "Pays",
       "topArtists": "Meilleurs artistes",
@@ -414,8 +428,24 @@
       "neverSynced": "Jamais",
       "noSubscriptions": "Aucun chart suivi pour le moment",
       "followed": "Chart suivi avec succès",
-      "unfollowed": "Chart non suivi avec succès",
-      "updated": "Chart mis à jour avec succès"
+      "unfollowed": "Chart retiré des abonnements",
+      "updated": "Chart mis à jour",
+      "enabledToast": "Synchronisation du chart activée",
+      "disabledToast": "Synchronisation du chart désactivée",
+      "syncQueued": "Synchronisation du chart planifiée",
+      "confirm": {
+        "unfollowTitle": "Ne plus suivre le chart",
+        "unfollow": "Ne plus suivre le chart {country} ? Les artistes déjà suivis grâce à ce chart restent suivis.",
+        "disableTitle": "Désactiver le chart",
+        "disable": "Désactiver le chart {country} ? Il ne sera plus resynchronisé et n'apparaîtra plus sur la page Charts. Les artistes suivis ne sont pas affectés.",
+        "enableTitle": "Activer le chart",
+        "enable": "Activer le chart {country} ? Il sera resynchronisé périodiquement et de nouveau affiché sur la page Charts.",
+        "topNTitle": "Modifier le nombre d'artistes",
+        "topNIncrease": "Suivre le top {to} du chart {country} au lieu du top {from} ? Une synchronisation est lancée immédiatement et les artistes supplémentaires sont suivis avec leur discographie complète.",
+        "topNDecrease": "Suivre le top {to} du chart {country} au lieu du top {from} ? Les artistes déjà suivis restent suivis.",
+        "syncTitle": "Synchroniser le chart",
+        "sync": "Synchroniser le chart {country} maintenant ? Les artistes de son top {n} qui ne sont pas encore suivis le seront avec leur discographie complète."
+      }
     }
   },
   "playlist": {
