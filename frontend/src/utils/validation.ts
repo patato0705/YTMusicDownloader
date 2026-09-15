@@ -5,14 +5,15 @@
 // t() in the component) so this stays a plain, framework-agnostic check --
 // components map the reason code to a translated string.
 
-export type UsernameError = 'too_short' | 'too_long' | null;
+export type UsernameError = 'too_short' | 'too_long' | 'invalid_chars' | null;
 export type PasswordError = 'too_short' | null;
 
-/** Matches the backend's RegisterRequest/CreateUserRequest length bounds. */
+/** Matches the backend's RegisterRequest/CreateUserRequest length bounds and charset rule. */
 export function getUsernameError(username: string): UsernameError {
   if (!username) return null;
   if (username.length < 3) return 'too_short';
   if (username.length > 64) return 'too_long';
+  if (!/^[A-Za-z0-9_-]+$/.test(username)) return 'invalid_chars';
   return null;
 }
 

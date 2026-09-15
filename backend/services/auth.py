@@ -18,6 +18,10 @@ Functions:
 - get_user_by_id() - Fetch user by ID
 - update_last_login() - Update user's last_login_at
 - ensure_first_admin() - Create first admin user on startup
+
+Exceptions:
+- UsernameTakenError / EmailTakenError - raised by create_user() on conflicts
+  (subclass ValueError so generic handlers keep working)
 """
 from __future__ import annotations
 import logging
@@ -35,6 +39,14 @@ from ..time_utils import now_utc
 from .. import config
 
 logger = logging.getLogger("services.auth")
+
+
+class UsernameTakenError(ValueError):
+    """Username is already registered."""
+
+
+class EmailTakenError(ValueError):
+    """Email is already registered."""
 
 
 # ============================================================================
@@ -304,7 +316,9 @@ def create_user(
         Created User instance
     
     Raises:
-        ValueError: If username/email already exists or invalid role
+        UsernameTakenError: If username already exists
+        EmailTakenError: If email already exists
+        ValueError: If inputs are missing or role is invalid
     """
     # Validate inputs
     if not username or not email or not password:
@@ -315,11 +329,11 @@ def create_user(
     
     # Check for existing username
     if get_user_by_username(session, username):
-        raise ValueError(f"Username '{username}' already exists")
+        raise UsernameTakenError(f"Username '{username}' already exists")
     
     # Check for existing email
     if get_user_by_email(session, email):
-        raise ValueError(f"Email '{email}' already exists")
+        raise EmailTakenError(f"Email '{email}' already exists")
     
     # Hash password
     password_hash = hash_password(password)

@@ -57,6 +57,8 @@ export const Register: React.FC = () => {
       setUsernameError(t('auth.errors.usernameTooShort'));
     } else if (reason === 'too_long') {
       setUsernameError(t('auth.errors.usernameTooLong'));
+    } else if (reason === 'invalid_chars') {
+      setUsernameError(t('auth.errors.usernameInvalidChars'));
     } else {
       setUsernameError('');
     }
@@ -127,6 +129,10 @@ export const Register: React.FC = () => {
       setUsernameError(t('auth.errors.usernameTooLong'));
       return;
     }
+    if (getUsernameError(username) === 'invalid_chars') {
+      setUsernameError(t('auth.errors.usernameInvalidChars'));
+      return;
+    }
 
     // Validate password length
     if (password.length < 8) {
@@ -156,25 +162,26 @@ export const Register: React.FC = () => {
         let hasFieldError = false;
         data.detail.forEach((e: any) => {
           const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
-          const msg = e.msg || 'Invalid value';
 
+          // Form validation mirrors the backend rules, so this is only a safety
+          // net — show a localized generic message rather than Pydantic's English msg
           if (field === 'username') {
-            setUsernameError(msg);
+            setUsernameError(t('auth.errors.usernameInvalid'));
             hasFieldError = true;
           } else if (field === 'email') {
-            setEmailError(msg);
+            setEmailError(t('auth.errors.emailInvalid'));
             hasFieldError = true;
           } else if (field === 'password') {
-            setPasswordError(msg);
+            setPasswordError(t('auth.errors.passwordInvalid'));
             hasFieldError = true;
           }
         });
         if (!hasFieldError) setError(t('auth.errors.registrationFailed'));
       } else if (err?.status === 403) {
         setError(t('auth.register.disabled.message'));
-      } else if (err?.status === 400 && typeof data?.detail === 'string' && data.detail.startsWith('Username')) {
+      } else if (err?.status === 409 && data?.detail === 'username_taken') {
         setUsernameError(t('auth.errors.usernameTaken'));
-      } else if (err?.status === 400 && typeof data?.detail === 'string' && data.detail.startsWith('Email')) {
+      } else if (err?.status === 409 && data?.detail === 'email_taken') {
         setEmailError(t('auth.errors.emailTaken'));
       } else {
         setError(t('auth.errors.registrationFailed'));

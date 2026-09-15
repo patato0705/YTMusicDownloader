@@ -121,6 +121,10 @@ def register(
         
         return UserResponse.model_validate(user)
     
+    except auth_svc.UsernameTakenError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username_taken")
+    except auth_svc.EmailTakenError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="email_taken")
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
