@@ -6,7 +6,6 @@ import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import * as authApi from '../../api/auth';
-import { parseApiError } from '../../utils';
 
 export const Login: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -63,8 +62,7 @@ export const Login: React.FC = () => {
         navigate('/');
       }
     } catch (err: any) {
-      // Parse and display API error with i18n support
-      setError(parseApiError(err, t('auth.errors.invalidCredentials')));
+      setError(t(err?.status === 401 ? 'auth.errors.invalidCredentials' : 'auth.errors.loginFailed'));
     } finally {
       setIsLoading(false);
     }

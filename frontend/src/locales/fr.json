@@ -96,7 +96,11 @@
       "usernameTooShort": "Le nom d'utilisateur doit contenir au moins 3 caractères",
       "usernameTooLong": "Le nom d'utilisateur doit contenir au plus 64 caractères",
       "registrationFailed": "Échec de l'inscription",
-      "changePasswordFailed": "Échec du changement de mot de passe"
+      "changePasswordFailed": "Échec du changement de mot de passe",
+      "currentPasswordIncorrect": "Le mot de passe actuel est incorrect",
+      "loginFailed": "Échec de la connexion. Veuillez réessayer.",
+      "usernameTaken": "Ce nom d'utilisateur est déjà utilisé",
+      "emailTaken": "Cette adresse email est déjà utilisée"
     }
   },
   "nav": {

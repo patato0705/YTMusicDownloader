@@ -247,8 +247,8 @@ export default function AdminPanel(): JSX.Element {
       await loadUsers();
       setToast({ 
         message: currentStatus 
-          ? (t('admin.users.deactivated') || 'User deactivated') 
-          : (t('admin.users.activated') || 'User activated'), 
+          ? t('admin.users.deactivated') 
+          : t('admin.users.activated'), 
         type: 'success' 
       });
     } catch (err: any) {
@@ -260,7 +260,7 @@ export default function AdminPanel(): JSX.Element {
     try {
       await adminApi.updateUserRole(userId, newRole);
       await loadUsers();
-      setToast({ message: t('admin.users.roleUpdated') || 'Role updated successfully', type: 'success' });
+      setToast({ message: t('admin.users.roleUpdated'), type: 'success' });
     } catch (err: any) {
       setToast({ message: parseApiError(err), type: 'error' });
     }
@@ -276,7 +276,7 @@ export default function AdminPanel(): JSX.Element {
     try {
       await adminApi.deleteUser(deleteConfirm.userId);
       await loadUsers();
-      setToast({ message: t('admin.users.deleted') || 'User deleted successfully', type: 'success' });
+      setToast({ message: t('admin.users.deleted'), type: 'success' });
     } catch (err: any) {
       setToast({ message: parseApiError(err), type: 'error' });
     } finally {
@@ -856,7 +856,7 @@ export default function AdminPanel(): JSX.Element {
               <SearchInput
                 value={searchQuery}
                 onChange={setSearchQuery}
-                placeholder={t('admin.users.search') || 'Search by username or email...'}
+                placeholder={t('admin.users.search')}
                 showClearButton
                 onClear={() => setSearchQuery('')}
               />
@@ -867,9 +867,9 @@ export default function AdminPanel(): JSX.Element {
               value={statusFilter}
               onChange={(value) => setStatusFilter(value as any)}
               options={[
-                { value: 'all', label: t('admin.users.allStatuses') || 'All Statuses' },
-                { value: 'active', label: t('admin.users.active') || 'Active' },
-                { value: 'inactive', label: t('admin.users.inactive') || 'Inactive' },
+                { value: 'all', label: t('admin.users.allStatuses') },
+                { value: 'active', label: t('admin.users.active') },
+                { value: 'inactive', label: t('admin.users.inactive') },
               ]}
             />
 
@@ -878,7 +878,7 @@ export default function AdminPanel(): JSX.Element {
               value={roleFilter}
               onChange={(value) => setRoleFilter(value as any)}
               options={[
-                { value: 'all', label: t('admin.users.allRoles') || 'All Roles' },
+                { value: 'all', label: t('admin.users.allRoles') },
                 { value: 'administrator', label: 'Administrator' },
                 { value: 'member', label: 'Member' },
                 { value: 'visitor', label: 'Visitor' },
@@ -896,7 +896,7 @@ export default function AdminPanel(): JSX.Element {
 
           {/* Results count */}
           <div className="text-sm text-muted-foreground">
-            {t('admin.users.showing') || 'Showing'} {filteredUsers.length} {t('admin.users.of') || 'of'} {users.length} {t('admin.users.users') || 'users'}
+            {t('admin.users.showing')} {filteredUsers.length} {t('admin.users.of')} {users.length} {t('admin.users.users')}
           </div>
         </div>
 
@@ -929,7 +929,7 @@ export default function AdminPanel(): JSX.Element {
                     <td colSpan={5} className="px-6 py-12 text-center">
                       <div className="text-muted-foreground">
                         <span className="text-4xl mb-2 block">👥</span>
-                        <p>{t('admin.users.noResults') || 'No users found'}</p>
+                        <p>{t('admin.users.noResults')}</p>
                       </div>
                     </td>
                   </tr>
@@ -1021,7 +1021,7 @@ export default function AdminPanel(): JSX.Element {
           onClose={() => setShowCreateModal(false)}
           onSuccess={() => {
             loadUsers();
-            setToast({ message: t('admin.users.created') || 'User created successfully', type: 'success' });
+            setToast({ message: t('admin.users.created'), type: 'success' });
           }}
         />
       )}
@@ -1029,15 +1029,14 @@ export default function AdminPanel(): JSX.Element {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={!!deleteConfirm}
-        title={t('admin.users.deleteTitle') || 'Delete User'}
+        title={t('admin.users.deleteTitle')}
         message={
           deleteConfirm
-            ? (t('admin.users.confirmDelete', { username: deleteConfirm.username }) || 
-               `Are you sure you want to delete user "${deleteConfirm.username}"? This action cannot be undone.`)
+            ? t('admin.users.confirmDelete', { username: deleteConfirm.username })
             : ''
         }
-        confirmText={t('admin.users.delete') || 'Delete'}
-        cancelText={t('common.cancel') || 'Cancel'}
+        confirmText={t('admin.users.delete')}
+        cancelText={t('common.cancel')}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirm(null)}
         variant="danger"

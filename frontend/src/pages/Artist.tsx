@@ -218,7 +218,7 @@ export default function Artist(): JSX.Element {
       <ConfirmDialog
         isOpen={deleteConfirm}
         title={t('artist.deleteTitle')}
-        message={t('artist.deleteMessage', { name: artist.name }) || `Are you sure you want to delete "${artist.name}" and all associated albums, tracks, and files? This cannot be undone.`}
+        message={t('artist.deleteMessage', { name: artist.name })}
         confirmText={t('common.delete')}
         cancelText={t('common.cancel')}
         onConfirm={handleDelete}

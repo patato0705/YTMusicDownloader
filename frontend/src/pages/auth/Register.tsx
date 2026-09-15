@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import * as authApi from '../../api/auth';
-import { parseApiError, getUsernameError, isValidEmail, getPasswordError } from '../../utils';
+import { getUsernameError, isValidEmail, getPasswordError } from '../../utils';
 
 export const Register: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -169,9 +169,15 @@ export const Register: React.FC = () => {
             hasFieldError = true;
           }
         });
-        if (!hasFieldError) setError(parseApiError(err, t('auth.errors.registrationFailed')));
+        if (!hasFieldError) setError(t('auth.errors.registrationFailed'));
+      } else if (err?.status === 403) {
+        setError(t('auth.register.disabled.message'));
+      } else if (err?.status === 400 && typeof data?.detail === 'string' && data.detail.startsWith('Username')) {
+        setUsernameError(t('auth.errors.usernameTaken'));
+      } else if (err?.status === 400 && typeof data?.detail === 'string' && data.detail.startsWith('Email')) {
+        setEmailError(t('auth.errors.emailTaken'));
       } else {
-        setError(parseApiError(err, t('auth.errors.registrationFailed')));
+        setError(t('auth.errors.registrationFailed'));
       }
     } finally {
       setIsLoading(false);

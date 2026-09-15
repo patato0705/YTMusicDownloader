@@ -228,7 +228,7 @@ export default function Album(): JSX.Element {
       <ConfirmDialog
         isOpen={deleteConfirm}
         title={t('album.deleteTitle')}
-        message={t('album.deleteMessage', { title: album.title }) || `Are you sure you want to delete "${album.title}" and all associated tracks and files? This cannot be undone.`}
+        message={t('album.deleteMessage', { title: album.title })}
         confirmText={t('common.delete')}
         cancelText={t('common.cancel')}
         onConfirm={handleDelete}

@@ -27,9 +27,9 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
   const validateUsername = (value: string) => {
     const reason = getUsernameError(value);
     if (reason === 'too_short') {
-      setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
+      setUsernameError(t('auth.errors.usernameTooShort'));
     } else if (reason === 'too_long') {
-      setUsernameError(t('auth.errors.usernameTooLong') || 'Username must be at most 64 characters');
+      setUsernameError(t('auth.errors.usernameTooLong'));
     } else {
       setUsernameError('');
     }
@@ -38,7 +38,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
   // Validate email
   const validateEmail = (value: string) => {
     if (value && !isValidEmail(value)) {
-      setEmailError(t('auth.errors.invalidEmail') || 'Please enter a valid email address');
+      setEmailError(t('auth.errors.invalidEmail'));
     } else {
       setEmailError('');
     }
@@ -62,29 +62,29 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
 
     // Validate all fields
     if (!username) {
-      setUsernameError(t('auth.errors.usernameRequired') || 'Username is required');
+      setUsernameError(t('auth.errors.usernameRequired'));
       return;
     }
     if (username.length < 3) {
-      setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
+      setUsernameError(t('auth.errors.usernameTooShort'));
       return;
     }
     if (username.length > 64) {
-      setUsernameError(t('auth.errors.usernameTooLong') || 'Username must be at most 64 characters');
+      setUsernameError(t('auth.errors.usernameTooLong'));
       return;
     }
 
     if (!email) {
-      setEmailError(t('auth.errors.emailRequired') || 'Email is required');
+      setEmailError(t('auth.errors.emailRequired'));
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailError(t('auth.errors.invalidEmail') || 'Please enter a valid email address');
+      setEmailError(t('auth.errors.invalidEmail'));
       return;
     }
 
     if (!password) {
-      setPasswordError(t('auth.errors.passwordRequired') || 'Password is required');
+      setPasswordError(t('auth.errors.passwordRequired'));
       return;
     }
     if (password.length < 8) {

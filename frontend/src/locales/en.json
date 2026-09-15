@@ -96,7 +96,11 @@
       "usernameTooShort": "Username must be at least 3 characters",
       "usernameTooLong": "Username must be at most 64 characters",
       "registrationFailed": "Registration failed",
-      "changePasswordFailed": "Failed to change password"
+      "changePasswordFailed": "Failed to change password",
+      "currentPasswordIncorrect": "Current password is incorrect",
+      "loginFailed": "Login failed. Please try again.",
+      "usernameTaken": "This username is already taken",
+      "emailTaken": "This email is already in use"
     }
   },
   "nav": {
