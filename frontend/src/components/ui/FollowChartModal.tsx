@@ -3,10 +3,11 @@ import React, { useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../ui/Button';
 import * as chartsApi from '../../api/charts';
+import { CHART_MAX_ARTISTS } from '../../config/charts';
 import type { ChartCountry } from '../../config/charts';
+import { parseApiError } from '../../utils';
 
-const MAX_ARTISTS = 40;
-const QUICK_SELECT_VALUES = [5, 10, 20, 30, 40];
+const QUICK_SELECT_VALUES = [5, 10, 20, 30, CHART_MAX_ARTISTS];
 
 interface FollowChartModalProps {
   country: ChartCountry;
@@ -15,19 +16,19 @@ interface FollowChartModalProps {
 }
 
 export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onClose, onSuccess }) => {
-  const [topNArtists, setTopNArtists] = useState(MAX_ARTISTS);
+  const [topNArtists, setTopNArtists] = useState(CHART_MAX_ARTISTS);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { t } = useI18n();
 
-  const sliderPercent = ((topNArtists - 1) / (MAX_ARTISTS - 1)) * 100;
+  const sliderPercent = ((topNArtists - 1) / (CHART_MAX_ARTISTS - 1)) * 100;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (topNArtists < 1 || topNArtists > MAX_ARTISTS) {
-      setError(t('charts.artistCountError'));
+    if (topNArtists < 1 || topNArtists > CHART_MAX_ARTISTS) {
+      setError(t('charts.artistCountError', { max: CHART_MAX_ARTISTS }));
       return;
     }
 
@@ -38,7 +39,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to follow chart');
+      setError(parseApiError(err, 'Failed to follow chart'));
     } finally {
       setLoading(false);
     }
@@ -100,7 +101,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
               <input
                 type="range"
                 min="1"
-                max={MAX_ARTISTS}
+                max={CHART_MAX_ARTISTS}
                 value={topNArtists}
                 onChange={(e) => setTopNArtists(parseInt(e.target.value))}
                 className="w-full h-2 rounded-full appearance-none cursor-pointer"
@@ -110,7 +111,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
               />
               <div className="flex justify-between mt-1.5">
                 <span className="text-xs text-muted-foreground">1</span>
-                <span className="text-xs text-muted-foreground">{MAX_ARTISTS}</span>
+                <span className="text-xs text-muted-foreground">{CHART_MAX_ARTISTS}</span>
               </div>
             </div>
 

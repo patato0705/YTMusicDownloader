@@ -11,6 +11,7 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   variant?: 'danger' | 'warning' | 'info';
+  isLoading?: boolean;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -22,6 +23,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   onCancel,
   variant = 'danger',
+  isLoading = false,
 }) => {
   if (!isOpen) return null;
 
@@ -59,6 +61,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             onClick={onCancel}
             variant="ghost"
             className="flex-1"
+            disabled={isLoading}
           >
             {cancelText}
           </Button>
@@ -66,6 +69,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             onClick={onConfirm}
             variant={variant === 'danger' ? 'danger' : 'primary'}
             className="flex-1"
+            isLoading={isLoading}
           >
             {confirmText}
           </Button>

@@ -4,6 +4,9 @@
  * Covers major music markets globally
  */
 
+/** Most artists a chart subscription can follow (mirrors the backend limit). */
+export const CHART_MAX_ARTISTS = 40;
+
 export interface ChartCountry {
   code: string;
   name: string;

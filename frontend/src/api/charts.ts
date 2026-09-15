@@ -83,6 +83,13 @@ export async function unfollowChart(countryCode: string): Promise<MessageRespons
 }
 
 /**
+ * Queue a sync of a followed chart right now (admin only)
+ */
+export async function syncChart(countryCode: string): Promise<MessageResponse> {
+  return api.post<MessageResponse>(`/charts/${countryCode}/sync`);
+}
+
+/**
  * Update chart subscription (admin only)
  */
 export async function updateChart(
