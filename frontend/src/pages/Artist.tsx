@@ -35,6 +35,8 @@ export default function Artist(): JSX.Element {
   const { user } = useAuth();
   const { revision } = useJobActivity();
   const isAdmin = user?.role === 'administrator';
+  // Visitors are read-only: follow/unfollow is a member+ action on the backend
+  const canFollow = isAdmin || user?.role === 'member';
 
   useEffect(() => {
     if (!artistId) return;
@@ -264,24 +266,26 @@ export default function Artist(): JSX.Element {
               </p>
 
               <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={handleFollow}
-                  isLoading={actionLoading}
-                  variant={subscriptionMode === 'full' ? 'secondary' : 'primary'}
-                  size="lg"
-                >
-                  {subscriptionMode === 'full' ? (
-                    <>
-                      <span className="mr-2">✓</span>
-                      {t('artist.unfollow')}
-                    </>
-                  ) : (
-                    <>
-                      <span className="mr-2">+</span>
-                      {t('artist.follow')}
-                    </>
-                  )}
-                </Button>
+                {canFollow && (
+                  <Button
+                    onClick={handleFollow}
+                    isLoading={actionLoading}
+                    variant={subscriptionMode === 'full' ? 'secondary' : 'primary'}
+                    size="lg"
+                  >
+                    {subscriptionMode === 'full' ? (
+                      <>
+                        <span className="mr-2">✓</span>
+                        {t('artist.unfollow')}
+                      </>
+                    ) : (
+                      <>
+                        <span className="mr-2">+</span>
+                        {t('artist.follow')}
+                      </>
+                    )}
+                  </Button>
+                )}
 
                 <Button
                   onClick={() => navigate(-1)}

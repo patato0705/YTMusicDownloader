@@ -1,5 +1,6 @@
 // src/components/ui/StatCard.tsx
-import React, { useState } from 'react';
+import React from 'react';
+import { InfoTooltip } from './InfoTooltip';
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -21,8 +22,6 @@ export const StatCard: React.FC<StatCardProps> = ({
   className = '',
   info,
 }) => {
-  const [showInfo, setShowInfo] = useState(false);
-
   return (
     <div className={`relative group overflow-hidden rounded-xl glass border-slate-200 dark:border-white/10 p-6 hover:border-blue-400/50 dark:hover:border-red-600/50 transition-all duration-300 ${className}`}>
       {/* Hover glow effect */}
@@ -42,33 +41,7 @@ export const StatCard: React.FC<StatCardProps> = ({
 
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <span>{label}</span>
-          {info && (
-            <span
-              className="relative inline-flex"
-              onMouseEnter={() => setShowInfo(true)}
-              onMouseLeave={() => setShowInfo(false)}
-            >
-              <button
-                type="button"
-                onClick={() => setShowInfo((v) => !v)}
-                onFocus={() => setShowInfo(true)}
-                onBlur={() => setShowInfo(false)}
-                aria-label={info}
-                className="flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 dark:border-white/20 text-[10px] leading-none text-muted-foreground hover:text-blue-600 dark:hover:text-red-400 hover:border-blue-400/50 dark:hover:border-red-600/50 transition-colors"
-              >
-                i
-              </button>
-              {showInfo && (
-                <span
-                  role="tooltip"
-                  className="absolute z-20 bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 px-3 py-2 rounded-lg bg-slate-900 dark:bg-black text-white text-xs leading-snug shadow-lg pointer-events-none"
-                >
-                  {info}
-                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-black" />
-                </span>
-              )}
-            </span>
-          )}
+          {info && <InfoTooltip label={info} content={info} />}
         </div>
       </div>
     </div>

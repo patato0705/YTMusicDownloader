@@ -126,13 +126,15 @@ def list_jobs(
 @router.post("/enqueue", response_model=EnqueueResponse, status_code=status.HTTP_201_CREATED)
 def enqueue_job_endpoint(
     req: EnqueueRequest,
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> EnqueueResponse:
     """
-    Enqueue a new job.
+    Enqueue a raw job (any type/payload/priority).
     
-    Permissions: All authenticated users
+    Permissions: Administrators only. This is a generic queue endpoint that
+    bypasses the role checks on the typed endpoints (album download, artist
+    follow, chart sync, ...), so it must not be open to members or visitors.
     The job will be associated with the current user.
     """
     if not req.type or not req.type.strip():

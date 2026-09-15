@@ -436,7 +436,18 @@
       "deleted": "Utilisateur supprimé avec succès",
       "activated": "Utilisateur activé",
       "deactivated": "Utilisateur désactivé",
-      "roleUpdated": "Rôle mis à jour avec succès"
+      "roleUpdated": "Rôle mis à jour avec succès",
+      "roles": {
+        "visitor": "Visiteur",
+        "member": "Membre",
+        "administrator": "Administrateur"
+      },
+      "roleInfo": {
+        "title": "Ce que chaque rôle peut faire",
+        "visitor": "Lecture seule (rôle par défaut des nouveaux comptes). Peut parcourir la bibliothèque, les artistes, les albums, les classements et les paroles, mais ne peut rien modifier.",
+        "member": "Tout ce qu'un visiteur peut faire, plus : suivre et ne plus suivre des artistes, télécharger des albums, et ajouter, modifier ou supprimer des paroles.",
+        "administrator": "Tout ce qu'un membre peut faire, plus : supprimer des albums et des artistes, et gérer le panneau d'administration (utilisateurs, abonnements aux classements et paramètres de l'application)."
+      }
     },
     "charts": {
       "selectCountry": "Sélectionner un pays…",

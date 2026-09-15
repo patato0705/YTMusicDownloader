@@ -436,7 +436,18 @@
       "deleted": "User deleted successfully",
       "activated": "User activated",
       "deactivated": "User deactivated",
-      "roleUpdated": "Role updated successfully"
+      "roleUpdated": "Role updated successfully",
+      "roles": {
+        "visitor": "Visitor",
+        "member": "Member",
+        "administrator": "Administrator"
+      },
+      "roleInfo": {
+        "title": "What each role can do",
+        "visitor": "Read-only (default for new accounts). Can browse the library, artists, albums, charts and lyrics, but cannot change anything.",
+        "member": "Everything a visitor can do, plus: follow and unfollow artists, download albums, and add, edit or remove lyrics.",
+        "administrator": "Everything a member can do, plus: delete albums and artists, and manage the admin panel (users, chart subscriptions and app settings)."
+      }
     },
     "charts": {
       "selectCountry": "Select a country…",

@@ -36,7 +36,8 @@ export default function Album(): JSX.Element {
   const { user } = useAuth();
   const { revision, refresh: refreshJobs } = useJobActivity();
   const isAdmin = user?.role === 'administrator';
-  const canEditLyrics = isAdmin || user?.role === 'member';
+  // Visitors are read-only: downloading and editing lyrics are member+ actions
+  const canModify = isAdmin || user?.role === 'member';
   // Lyrics only exist for tracks we've downloaded, so the column is pointless
   // on albums served straight from YTMusic.
   const showLyrics = source === 'database';
@@ -246,7 +247,7 @@ export default function Album(): JSX.Element {
       {lyricsTrack && (
         <LyricsModal
           track={lyricsTrack}
-          canEdit={canEditLyrics}
+          canEdit={canModify}
           onClose={() => setLyricsTrack(null)}
           onSaved={(updated) => {
             setTracks((prev) => prev.map((tr) => (tr.id === updated.id ? { ...tr, ...updated } : tr)));
@@ -329,25 +330,28 @@ export default function Album(): JSX.Element {
 
               {/* Action buttons */}
               <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={handleDownload}
-                  isLoading={actionLoading}
-                  variant={isFollowing ? 'secondary' : 'primary'}
-                  size="lg"
-                  disabled={isFollowing}
-                >
-                  {isFollowing ? (
-                    <>
-                      <span className="mr-2">✓</span>
-                      {t('album.following')}
-                    </>
-                  ) : (
-                    <>
-                      <span className="mr-2">⬇️</span>
-                      {t('album.download')}
-                    </>
-                  )}
-                </Button>
+                {/* Visitors only get the (inert) "following" indicator */}
+                {(canModify || isFollowing) && (
+                  <Button
+                    onClick={handleDownload}
+                    isLoading={actionLoading}
+                    variant={isFollowing ? 'secondary' : 'primary'}
+                    size="lg"
+                    disabled={isFollowing}
+                  >
+                    {isFollowing ? (
+                      <>
+                        <span className="mr-2">✓</span>
+                        {t('album.following')}
+                      </>
+                    ) : (
+                      <>
+                        <span className="mr-2">⬇️</span>
+                        {t('album.download')}
+                      </>
+                    )}
+                  </Button>
+                )}
                 
                 <Button
                   onClick={() => navigate(-1)}

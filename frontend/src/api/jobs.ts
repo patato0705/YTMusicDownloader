@@ -22,33 +22,12 @@ export interface Job {
   user_id?: number;
 }
 
-export interface EnqueueJobRequest {
-  type: string;
-  payload?: any;
-  scheduled_at?: string;
-  priority?: number;
-  max_attempts?: number;
-}
-
-export interface EnqueueJobResponse {
-  ok: boolean;
-  job_id: number;
-  message?: string;
-}
-
 export interface JobStats {
   ok: boolean;
   stats: Record<string, number>;
   /** In-flight jobs grouped by type, e.g. { download_track: 2, download_lyrics: 5 } */
   active_by_type?: Record<string, number>;
   total: number;
-}
-
-/**
- * Enqueue a new job
- */
-export async function enqueueJob(request: EnqueueJobRequest): Promise<EnqueueJobResponse> {
-  return api.post<EnqueueJobResponse>('/jobs/enqueue', request);
 }
 
 /**

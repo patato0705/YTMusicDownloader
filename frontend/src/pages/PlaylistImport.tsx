@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
+import { useAuth } from '../contexts/AuthContext';
 import { getPlaylist } from '../api/playlists';
 import { followArtist } from '../api/artists';
 import { downloadAlbum } from '../api/albums';
@@ -186,6 +187,9 @@ export default function PlaylistImport(): JSX.Element {
 
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { user } = useAuth();
+  // Visitors are read-only: follow/download are member+ actions on the backend
+  const canModify = user?.role === 'administrator' || user?.role === 'member';
 
   const hasResults = allTracks.length > 0;
   const isBulkRunning = bulkProgress !== null;
@@ -533,7 +537,7 @@ export default function PlaylistImport(): JSX.Element {
               </div>
 
               {/* Bulk action buttons / progress */}
-              {activeFilter === 'artists' && uniqueArtists.length > 0 && (
+              {canModify && activeFilter === 'artists' && uniqueArtists.length > 0 && (
                 <div className="flex items-center gap-2">
                   {bulkProgress && bulkProgress.type === 'artists' ? (
                     <div className="flex items-center gap-3 px-4 py-2 rounded-xl glass">
@@ -569,7 +573,7 @@ export default function PlaylistImport(): JSX.Element {
                   )}
                 </div>
               )}
-              {activeFilter === 'albums' && uniqueAlbums.length > 0 && (
+              {canModify && activeFilter === 'albums' && uniqueAlbums.length > 0 && (
                 <div className="flex items-center gap-2">
                   {bulkProgress && bulkProgress.type === 'albums' ? (
                     <div className="flex items-center gap-3 px-4 py-2 rounded-xl glass">
@@ -638,16 +642,18 @@ export default function PlaylistImport(): JSX.Element {
                                   </p>
                                 </div>
 
-                                {/* Follow button */}
-                                <Button
-                                  onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleFollowArtist(artist.id); }}
-                                  disabled={isFollowed || isLoading || isBulkRunning}
-                                  isLoading={isLoading}
-                                  variant={isFollowed ? 'secondary' : 'primary'}
-                                  size="sm"
-                                >
-                                  {isFollowed ? `✓ ${t('playlist.followed')}` : t('artist.follow')}
-                                </Button>
+                                {/* Follow button (visitors only see the inert "followed" state) */}
+                                {(canModify || isFollowed) && (
+                                  <Button
+                                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleFollowArtist(artist.id); }}
+                                    disabled={isFollowed || isLoading || isBulkRunning}
+                                    isLoading={isLoading}
+                                    variant={isFollowed ? 'secondary' : 'primary'}
+                                    size="sm"
+                                  >
+                                    {isFollowed ? `✓ ${t('playlist.followed')}` : t('artist.follow')}
+                                  </Button>
+                                )}
                               </div>
                             </div>
 
@@ -742,16 +748,18 @@ export default function PlaylistImport(): JSX.Element {
                                   </p>
                                 </div>
 
-                                {/* Download button */}
-                                <Button
-                                  onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleDownloadAlbum(album.id); }}
-                                  disabled={isDownloaded || isLoading || isBulkRunning}
-                                  isLoading={isLoading}
-                                  variant={isDownloaded ? 'secondary' : 'primary'}
-                                  size="sm"
-                                >
-                                  {isDownloaded ? `✓ ${t('playlist.downloaded')}` : t('album.download')}
-                                </Button>
+                                {/* Download button (visitors only see the inert "downloaded" state) */}
+                                {(canModify || isDownloaded) && (
+                                  <Button
+                                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleDownloadAlbum(album.id); }}
+                                    disabled={isDownloaded || isLoading || isBulkRunning}
+                                    isLoading={isLoading}
+                                    variant={isDownloaded ? 'secondary' : 'primary'}
+                                    size="sm"
+                                  >
+                                    {isDownloaded ? `✓ ${t('playlist.downloaded')}` : t('album.download')}
+                                  </Button>
+                                )}
                               </div>
                             </div>
 

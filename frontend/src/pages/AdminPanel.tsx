@@ -14,6 +14,7 @@ import { Select } from '../components/ui/Select';
 import { FollowChartModal } from '../components/ui/FollowChartModal';
 import { ChartArtistGrid } from '../components/ui/ChartArtistGrid';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
+import { InfoTooltip } from '../components/ui/InfoTooltip';
 import * as adminApi from '../api/admin';
 import * as chartsApi from '../api/charts';
 import { cleanupLibrary } from '../api/library';
@@ -24,6 +25,17 @@ import { CHART_COUNTRIES, CHART_MAX_ARTISTS, getCountry } from '../config/charts
 import type { Setting, User } from '../api/admin';
 import type { ChartSubscription, Chart } from '../api/charts';
 import { parseApiError } from '../utils';
+
+type Role = User['role'];
+
+// Lowest to highest privilege
+const ROLES: Role[] = ['visitor', 'member', 'administrator'];
+
+const roleColors: Record<Role, string> = {
+  administrator: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
+  member: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+  visitor: 'bg-slate-500/20 text-slate-600 dark:text-slate-400',
+};
 
 // Every mutation on a chart subscription goes through a ConfirmDialog first.
 type ChartAction =
@@ -840,11 +852,21 @@ export default function AdminPanel(): JSX.Element {
   };
 
   const renderUsersTab = () => {
-    const roleColors: Record<string, string> = {
-      administrator: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
-      member: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
-      visitor: 'bg-slate-500/20 text-slate-600 dark:text-slate-400',
-    };
+    const roleOptions = ROLES.map(role => ({ value: role, label: t(`admin.users.roles.${role}`) }));
+
+    // Shown in the info bubble next to the "Role" column header
+    const roleInfo = (
+      <div className="space-y-3">
+        {ROLES.map(role => (
+          <div key={role}>
+            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold mb-1 ${roleColors[role]}`}>
+              {t(`admin.users.roles.${role}`)}
+            </span>
+            <p className="text-xs leading-snug text-muted-foreground">{t(`admin.users.roleInfo.${role}`)}</p>
+          </div>
+        ))}
+      </div>
+    );
 
     return (
       <div className="space-y-6">
@@ -879,9 +901,7 @@ export default function AdminPanel(): JSX.Element {
               onChange={(value) => setRoleFilter(value as any)}
               options={[
                 { value: 'all', label: t('admin.users.allRoles') },
-                { value: 'administrator', label: 'Administrator' },
-                { value: 'member', label: 'Member' },
-                { value: 'visitor', label: 'Visitor' },
+                ...roleOptions,
               ]}
             />
 
@@ -913,7 +933,10 @@ export default function AdminPanel(): JSX.Element {
                     {t('admin.users.email')}
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {t('admin.users.role')}
+                    <span className="inline-flex items-center gap-1.5">
+                      {t('admin.users.role')}
+                      <InfoTooltip label={t('admin.users.roleInfo.title')} content={roleInfo} />
+                    </span>
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     {t('admin.users.status')}
@@ -946,11 +969,7 @@ export default function AdminPanel(): JSX.Element {
                         <Select
                           value={u.role}
                           onChange={(value) => changeUserRole(u.id, value)}
-                          options={[
-                            { value: 'visitor', label: 'Visitor' },
-                            { value: 'member', label: 'Member' },
-                            { value: 'administrator', label: 'Administrator' },
-                          ]}
+                          options={roleOptions}
                           disabled={u.id === user?.id}
                           className={`text-xs font-medium ${roleColors[u.role]} border-0 py-1`}
                         />
