@@ -56,6 +56,7 @@
       "hasAccount": "Vous avez déjà un compte ?",
       "login": "Se connecter ici",
       "usernameHint": "Le nom d'utilisateur doit contenir entre 3 et 64 caractères",
+      "mailPlaceholder": "vous@exemple.com",
       "disabled": {
         "title": "Inscription désactivée",
         "message": "L'inscription publique est actuellement désactivée. Veuillez contacter un administrateur pour obtenir un accès.",
@@ -91,7 +92,11 @@
       "invalidCredentials": "Nom d'utilisateur ou mot de passe invalide",
       "passwordMismatch": "Les mots de passe ne correspondent pas",
       "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
-      "sessionExpired": "Session expirée. Veuillez vous reconnecter."
+      "sessionExpired": "Session expirée. Veuillez vous reconnecter.",
+      "usernameTooShort": "Le nom d'utilisateur doit contenir au moins 3 caractères",
+      "usernameTooLong": "Le nom d'utilisateur doit contenir au plus 64 caractères",
+      "registrationFailed": "Échec de l'inscription",
+      "changePasswordFailed": "Échec du changement de mot de passe"
     }
   },
   "nav": {

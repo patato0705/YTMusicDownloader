@@ -54,9 +54,9 @@ export const Register: React.FC = () => {
   const validateUsername = (name: string) => {
     const reason = getUsernameError(name);
     if (reason === 'too_short') {
-      setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
+      setUsernameError(t('auth.errors.usernameTooShort'));
     } else if (reason === 'too_long') {
-      setUsernameError(t('auth.errors.usernameTooLong') || 'Username must be at most 64 characters');
+      setUsernameError(t('auth.errors.usernameTooLong'));
     } else {
       setUsernameError('');
     }
@@ -65,7 +65,7 @@ export const Register: React.FC = () => {
   // Validate email format
   const validateEmail = (value: string) => {
     if (value && !isValidEmail(value)) {
-      setEmailError(t('auth.errors.invalidEmail') || 'Please enter a valid email address');
+      setEmailError(t('auth.errors.invalidEmail'));
     } else {
       setEmailError('');
     }
@@ -99,32 +99,32 @@ export const Register: React.FC = () => {
 
     // Check for empty fields
     if (!username) {
-      setUsernameError(t('auth.errors.usernameRequired') || 'Username is required');
+      setUsernameError(t('auth.errors.usernameRequired'));
       return;
     }
 
     if (!email) {
-      setEmailError(t('auth.errors.emailRequired') || 'Email is required');
+      setEmailError(t('auth.errors.emailRequired'));
       return;
     }
 
     if (!password) {
-      setPasswordError(t('auth.errors.passwordRequired') || 'Password is required');
+      setPasswordError(t('auth.errors.passwordRequired'));
       return;
     }
 
     if (!confirmPassword) {
-      setConfirmError(t('auth.errors.confirmPasswordRequired') || 'Please confirm your password');
+      setConfirmError(t('auth.errors.confirmPasswordRequired'));
       return;
     }
 
     // Validate username length
     if (username.length < 3) {
-      setUsernameError(t('auth.errors.usernameTooShort') || 'Username must be at least 3 characters');
+      setUsernameError(t('auth.errors.usernameTooShort'));
       return;
     }
     if (username.length > 64) {
-      setUsernameError(t('auth.errors.usernameTooLong') || 'Username must be at most 64 characters');
+      setUsernameError(t('auth.errors.usernameTooLong'));
       return;
     }
 
@@ -169,9 +169,9 @@ export const Register: React.FC = () => {
             hasFieldError = true;
           }
         });
-        if (!hasFieldError) setError(parseApiError(err, t('auth.errors.registrationFailed') || 'Registration failed'));
+        if (!hasFieldError) setError(parseApiError(err, t('auth.errors.registrationFailed')));
       } else {
-        setError(parseApiError(err, t('auth.errors.registrationFailed') || 'Registration failed'));
+        setError(parseApiError(err, t('auth.errors.registrationFailed')));
       }
     } finally {
       setIsLoading(false);
@@ -213,16 +213,16 @@ export const Register: React.FC = () => {
                 <span className="text-4xl">🔒</span>
               </div>
               <h1 className="text-3xl font-bold mb-3">
-                <span className="text-gradient">{t('auth.register.disabled.title') || 'Registration Disabled'}</span>
+                <span className="text-gradient">{t('auth.register.disabled.title')}</span>
               </h1>
               <p className="text-muted-foreground mb-6">
-                {t('auth.register.disabled.message') || 'Public registration is currently disabled. Please contact an administrator for access.'}
+                {t('auth.register.disabled.message')}
               </p>
             </div>
 
             <Link to="/login">
               <Button variant="primary" size="lg" className="w-full">
-                {t('auth.register.disabled.goToLogin') || 'Go to Login'}
+                {t('auth.register.disabled.goToLogin')}
               </Button>
             </Link>
           </div>
@@ -303,7 +303,7 @@ export const Register: React.FC = () => {
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground mt-1.5">
-                  {t('auth.register.usernameHint') || '3-64 characters'}
+                  {t('auth.register.usernameHint')}
                 </p>
               )}
             </div>

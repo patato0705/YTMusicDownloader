@@ -50,17 +50,17 @@ export const ChangePassword: React.FC = () => {
 
     // Check for empty fields
     if (!currentPassword) {
-      setCurrentPasswordError(t('auth.errors.currentPasswordRequired') || 'Current password is required');
+      setCurrentPasswordError(t('auth.errors.currentPasswordRequired'));
       return;
     }
 
     if (!newPassword) {
-      setPasswordError(t('auth.errors.newPasswordRequired') || 'New password is required');
+      setPasswordError(t('auth.errors.newPasswordRequired'));
       return;
     }
 
     if (!confirmPassword) {
-      setConfirmError(t('auth.errors.confirmPasswordRequired') || 'Please confirm your password');
+      setConfirmError(t('auth.errors.confirmPasswordRequired'));
       return;
     }
 
@@ -87,7 +87,7 @@ export const ChangePassword: React.FC = () => {
       navigate('/');
     } catch (err: any) {
       // Server errors go to the top error box
-      setError(parseApiError(err, t('auth.errors.changePasswordFailed') || 'Failed to change password'));
+      setError(parseApiError(err, t('auth.errors.changePasswordFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -116,7 +116,7 @@ export const ChangePassword: React.FC = () => {
             <div className="h-px flex-1 bg-gradient-to-l from-transparent to-blue-500 dark:to-red-500" />
           </div>
           <p className="text-muted-foreground text-lg">
-            {t('auth.changePassword.subtitle') || 'Keep your account secure'}
+            {t('auth.changePassword.subtitle')}
           </p>
         </div>
 
@@ -127,7 +127,7 @@ export const ChangePassword: React.FC = () => {
               <span className="text-2xl">⚠️</span>
               <div>
                 <h3 className="font-semibold text-yellow-600 dark:text-yellow-400 mb-1">
-                  {t('auth.changePassword.required') || 'Action Required'}
+                  {t('auth.changePassword.required')}
                 </h3>
                 <p className="text-sm text-yellow-600/80 dark:text-yellow-400/80">{message}</p>
               </div>
@@ -285,12 +285,12 @@ export const ChangePassword: React.FC = () => {
             <span className="text-lg">💡</span>
             <div className="text-xs text-muted-foreground">
               <p className="font-semibold text-foreground mb-1">
-                {t('auth.changePassword.tips.title') || 'Password Tips'}
+                {t('auth.changePassword.tips.title')}
               </p>
               <ul className="space-y-1">
-                <li>• {t('auth.changePassword.tips.length') || 'Use at least 8 characters'}</li>
-                <li>• {t('auth.changePassword.tips.mix') || 'Mix uppercase, lowercase, numbers'}</li>
-                <li>• {t('auth.changePassword.tips.unique') || 'Don\'t reuse old passwords'}</li>
+                <li>• {t('auth.changePassword.tips.length')}</li>
+                <li>• {t('auth.changePassword.tips.mix')}</li>
+                <li>• {t('auth.changePassword.tips.unique')}</li>
               </ul>
             </div>
           </div>

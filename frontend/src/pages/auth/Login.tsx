@@ -35,12 +35,12 @@ export const Login: React.FC = () => {
 
     // Check for empty fields
     if (!username) {
-      setUsernameError(t('auth.errors.usernameRequired') || 'Username is required');
+      setUsernameError(t('auth.errors.usernameRequired'));
       return;
     }
 
     if (!password) {
-      setPasswordError(t('auth.errors.passwordRequired') || 'Password is required');
+      setPasswordError(t('auth.errors.passwordRequired'));
       return;
     }
 
@@ -56,7 +56,7 @@ export const Login: React.FC = () => {
         navigate('/change-password', { 
           state: { 
             forced: true, 
-            message: t('auth.changePassword.defaultWarning') || 'Please change the default password'
+            message: t('auth.changePassword.defaultWarning')
           } 
         });
       } else {
@@ -64,7 +64,7 @@ export const Login: React.FC = () => {
       }
     } catch (err: any) {
       // Parse and display API error with i18n support
-      setError(parseApiError(err, t('auth.errors.invalidCredentials') || 'Invalid username or password'));
+      setError(parseApiError(err, t('auth.errors.invalidCredentials')));
     } finally {
       setIsLoading(false);
     }
