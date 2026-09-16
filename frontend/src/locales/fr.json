@@ -298,7 +298,7 @@
     },
     "export": {
       "button": "Exporter la bibliothèque",
-      "description": "Télécharge la liste des artistes, albums isolés et classements suivis en JSON. Un administrateur peut l'importer sur une autre instance."
+      "description": "Télécharge la liste des artistes, albums isolés et charts suivis en JSON. Un administrateur peut l'importer sur une autre instance."
     }
   },
   "charts": {
@@ -449,9 +449,9 @@
       },
       "roleInfo": {
         "title": "Ce que chaque rôle peut faire",
-        "visitor": "Lecture seule (rôle par défaut des nouveaux comptes). Peut parcourir la bibliothèque, les artistes, les albums, les classements et les paroles, mais ne peut rien modifier.",
+        "visitor": "Lecture seule (rôle par défaut des nouveaux comptes). Peut parcourir la bibliothèque, les artistes, les albums, les charts et les paroles, mais ne peut rien modifier.",
         "member": "Tout ce qu'un visiteur peut faire, plus : suivre et ne plus suivre des artistes, télécharger des albums, et ajouter, modifier ou supprimer des paroles.",
-        "administrator": "Tout ce qu'un membre peut faire, plus : supprimer des albums et des artistes, et gérer le panneau d'administration (utilisateurs, abonnements aux classements et paramètres de l'application)."
+        "administrator": "Tout ce qu'un membre peut faire, plus : supprimer des albums et des artistes, et gérer le panneau d'administration (utilisateurs, abonnements aux charts et paramètres de l'application)."
       }
     },
     "charts": {
@@ -513,8 +513,8 @@
             "description": "Artistes et albums isolés suivis. À l'import, la nouvelle instance les suit à nouveau et télécharge leur musique."
           },
           "charts": {
-            "label": "Classements",
-            "description": "Classements suivis. À l'import, la nouvelle instance les suit à nouveau et continue de suivre automatiquement leurs meilleurs artistes."
+            "label": "Charts",
+            "description": "Charts suivis. À l'import, la nouvelle instance les suit à nouveau et continue de suivre automatiquement leurs meilleurs artistes."
           },
           "catalog": {
             "label": "Catalogue",
@@ -535,7 +535,7 @@
       },
       "import": {
         "title": "Importer",
-        "description": "Restaure une sauvegarde ou importe l'export de bibliothèque de quelqu'un. Rien de déjà présent n'est modifié : les artistes, albums et classements manquants sont suivis et leurs téléchargements lancés ; les utilisateurs existants ne sont jamais écrasés.",
+        "description": "Restaure une sauvegarde ou importe l'export de bibliothèque de quelqu'un. Rien de déjà présent n'est modifié : les artistes, albums et charts manquants sont suivis et leurs téléchargements lancés ; les utilisateurs existants ne sont jamais écrasés.",
         "choose": "Choisir un fichier",
         "previewing": "Analyse…",
         "previewTitle": "Aperçu — rien n'a encore été appliqué",
@@ -554,9 +554,9 @@
         "albumsQueued": "Albums à télécharger",
         "albumsCovered": "Albums gérés par la synchro de l'artiste",
         "albumsExisting": "Albums déjà dans la bibliothèque",
-        "chartsCreated": "Classements à suivre",
-        "chartsExisting": "Classements déjà suivis",
-        "chartsSkipped": "Classements ignorés",
+        "chartsCreated": "Charts à suivre",
+        "chartsExisting": "Charts déjà suivis",
+        "chartsSkipped": "Charts ignorés",
         "catalogRows": "Lignes du catalogue (artistes / albums / titres)",
         "tracksOnDisk": "Titres trouvés sur le disque",
         "tracksToDownload": "Titres à télécharger",
@@ -567,11 +567,11 @@
         "albumsToImport": "Albums à récupérer (titres ou pochette manquants)"
       },
       "warnings": {
-        "charts_disabled": "Les classements sont désactivés sur cette instance ; les abonnements ont été ignorés.",
+        "charts_disabled": "Les charts sont désactivés sur cette instance ; les abonnements ont été ignorés.",
         "settings_ignored": "Certains paramètres sont inconnus de cette version et ont été ignorés.",
         "invalid_setting": "Un paramètre a une valeur invalide et a été ignoré.",
         "users_skipped": "Certains utilisateurs existent déjà ici et n'ont pas été modifiés.",
-        "invalid_chart": "Un abonnement à un classement n'a pas pu être créé."
+        "invalid_chart": "Un abonnement à un chart n'a pas pu être créé."
       }
     }
   },

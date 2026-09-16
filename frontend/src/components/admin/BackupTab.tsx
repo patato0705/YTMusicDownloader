@@ -1,29 +1,26 @@
-// src/components/BackupPanel.tsx
+// src/components/admin/BackupTab.tsx
 /**
- * Admin panel > Backup tab: download a full backup, or import an export file
+ * Admin panel > Backup: download a full backup, or import an export file
  * (library manifest or backup). Importing always previews first via a dry
  * run; the numbers shown are exactly what the confirmed run will do.
  */
 import React, { useRef, useState } from 'react';
-import { useI18n } from '../contexts/I18nContext';
-import { Button } from './ui/Button';
-import { SectionHeader } from './ui/SectionHeader';
-import { ToggleSwitch } from './ui/ToggleSwitch';
+import { useI18n } from '../../contexts/I18nContext';
+import { Button } from '../ui/Button';
+import { SectionHeader } from '../ui/SectionHeader';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 import {
   exportBackup,
   importDocument,
   downloadJson,
   exportFilename,
   readExportFile,
-} from '../api/export';
-import type { BackupOptions, ExportDocument, ImportResult } from '../api/export';
-import { parseApiError } from '../utils';
+} from '../../api/export';
+import type { BackupOptions, ExportDocument, ImportResult } from '../../api/export';
+import { parseApiError } from '../../utils';
+import type { AdminTabProps } from './AdminTabShell';
 
-interface BackupPanelProps {
-  onToast: (message: string, type: 'success' | 'error') => void;
-}
-
-export const BackupPanel: React.FC<BackupPanelProps> = ({ onToast }) => {
+export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
   const { t } = useI18n();
 
   // Export
