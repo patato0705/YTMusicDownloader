@@ -75,8 +75,14 @@ def list_followed_artists(
         
         result = []
         for artist, subscription in rows:
-            # Get albums count
-            albums_count = db.query(func.count(Album.id)).filter(Album.artist_id == artist.id).scalar() or 0
+            # Only count followed (download-mode) albums: light-mode artists keep
+            # metadata-only album rows that aren't part of the library
+            albums_count = (
+                db.query(func.count(Album.id))
+                .filter(Album.artist_id == artist.id, Album.mode == "download")
+                .scalar()
+                or 0
+            )
 
             # Get tracks stats
             tracks_query = (
@@ -86,7 +92,7 @@ def list_followed_artists(
                     func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
                 )
                 .join(Album, Track.album_id == Album.id)
-                .filter(Album.artist_id == artist.id)
+                .filter(Album.artist_id == artist.id, Album.mode == "download")
             )
 
             tracks_stats = tracks_query.first()
