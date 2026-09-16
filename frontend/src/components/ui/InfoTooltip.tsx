@@ -22,7 +22,8 @@ const MARGIN = 8;  // minimum distance from the viewport edges
  */
 export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, className = '' }) => {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0, arrowLeft: 0, placement: 'top' as 'top' | 'bottom' });
+  // null until the bubble has been measured, so it is never painted at (0, 0)
+  const [position, setPosition] = useState<{ top: number; left: number; arrowLeft: number; placement: 'top' | 'bottom' } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
@@ -45,7 +46,10 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
   };
 
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPosition(null);
+      return;
+    }
     updatePosition();
     window.addEventListener('scroll', updatePosition, true);
     window.addEventListener('resize', updatePosition);
@@ -102,17 +106,21 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
         <div
           ref={bubbleRef}
           role="tooltip"
-          className="fixed z-50 w-72 max-w-[calc(100vw-16px)] px-4 py-3 glass rounded-xl border border-slate-200/50 dark:border-white/10 shadow-xl text-sm font-normal normal-case tracking-normal text-foreground text-left pointer-events-none animate-in fade-in duration-150"
-          style={{ top: `${position.top}px`, left: `${position.left}px` }}
+          className="fixed z-50 w-72 max-w-[calc(100vw-16px)] px-4 py-3 glass rounded-xl border border-slate-200/50 dark:border-white/10 shadow-xl text-sm font-normal normal-case tracking-normal text-foreground text-left pointer-events-none transition-opacity duration-150"
+          style={
+            position
+              ? { top: `${position.top}px`, left: `${position.left}px`, opacity: 1 }
+              : { top: 0, left: 0, opacity: 0, visibility: 'hidden' }
+          }
         >
           {content}
           <span
             className={`absolute border-[6px] border-transparent -translate-x-1/2 ${
-              position.placement === 'top'
-                ? 'top-full border-t-slate-200/80 dark:border-t-white/10'
-                : 'bottom-full border-b-slate-200/80 dark:border-b-white/10'
+              position?.placement === 'bottom'
+                ? 'bottom-full border-b-slate-200/80 dark:border-b-white/10'
+                : 'top-full border-t-slate-200/80 dark:border-t-white/10'
             }`}
-            style={{ left: `${position.arrowLeft}px` }}
+            style={{ left: `${position?.arrowLeft ?? 0}px` }}
           />
         </div>,
         document.body,
