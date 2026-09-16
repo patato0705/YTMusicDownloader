@@ -200,6 +200,7 @@ def set_setting(
     key: str,
     value: Any,
     user_id: Optional[int] = None,
+    commit: bool = True,
 ) -> Setting:
     """
     Update or create a setting.
@@ -209,6 +210,8 @@ def set_setting(
         key: Setting key
         value: New value (will be type-converted based on setting type)
         user_id: User making the change (for audit)
+        commit: Whether to commit immediately (callers batching several
+            changes in one transaction pass False)
     
     Returns:
         Updated Setting instance
@@ -237,8 +240,9 @@ def set_setting(
     setting.updated_by = user_id
     
     session.add(setting)
-    session.commit()
-    session.refresh(setting)
+    if commit:
+        session.commit()
+        session.refresh(setting)
     
     logger.info(f"Setting updated: {key} = {value} (by user {user_id})")
     

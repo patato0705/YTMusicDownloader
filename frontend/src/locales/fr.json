@@ -295,6 +295,10 @@
       "artists": "Aucun artiste suivi",
       "albums": "Aucun album suivi",
       "tracks": "Aucun titre téléchargé"
+    },
+    "export": {
+      "button": "Exporter la bibliothèque",
+      "description": "Télécharge la liste des artistes, albums isolés et classements suivis en JSON. Un administrateur peut l'importer sur une autre instance."
     }
   },
   "charts": {
@@ -335,7 +339,8 @@
     "tabs": {
       "settings": "Paramètres",
       "charts": "Charts",
-      "users": "Utilisateurs"
+      "users": "Utilisateurs",
+      "backup": "Sauvegarde"
     },
     "settings": {
       "title": "Paramètres",
@@ -490,6 +495,83 @@
         "topNDecrease": "Suivre le top {to} du chart {country} au lieu du top {from} ? Les artistes déjà suivis restent suivis.",
         "syncTitle": "Synchroniser le chart",
         "sync": "Synchroniser le chart {country} maintenant ? Les artistes de son top {n} qui ne sont pas encore suivis le seront avec leur discographie complète."
+      }
+    },
+    "backup": {
+      "sections": {
+        "library": "bibliothèque",
+        "catalog": "catalogue",
+        "users": "utilisateurs",
+        "settings": "paramètres"
+      },
+      "export": {
+        "title": "Exporter une sauvegarde",
+        "description": "Télécharge l'état de cette instance en JSON. Les fichiers musicaux restent dans le dossier data : copiez-le avec cette sauvegarde pour migrer.",
+        "options": {
+          "library": {
+            "label": "Bibliothèque",
+            "description": "Artistes et albums isolés suivis. À l'import, la nouvelle instance les suit à nouveau et télécharge leur musique."
+          },
+          "charts": {
+            "label": "Classements",
+            "description": "Classements suivis. À l'import, la nouvelle instance les suit à nouveau et continue de suivre automatiquement leurs meilleurs artistes."
+          },
+          "catalog": {
+            "label": "Catalogue",
+            "description": "Utile uniquement si vous copiez aussi le dossier data (vos fichiers musicaux) sur la nouvelle instance : l'import reconnaîtra alors les fichiers déjà présents au lieu de tout retélécharger. Peut être désactivé sinon."
+          },
+          "users": {
+            "label": "Utilisateurs",
+            "description": "Comptes, rôles et empreintes de mot de passe. Chacun garde son mot de passe sur la nouvelle instance."
+          },
+          "settings": {
+            "label": "Paramètres",
+            "description": "Paramètres de l'application (planificateur, téléchargements, fonctionnalités)."
+          }
+        },
+        "usersWarning": "Ce fichier contiendra des empreintes de mot de passe. Gardez-le privé.",
+        "button": "Télécharger la sauvegarde",
+        "failed": "Échec de l'export"
+      },
+      "import": {
+        "title": "Importer",
+        "description": "Restaure une sauvegarde ou importe l'export de bibliothèque de quelqu'un. Rien de déjà présent n'est modifié : les artistes, albums et classements manquants sont suivis et leurs téléchargements lancés ; les utilisateurs existants ne sont jamais écrasés.",
+        "choose": "Choisir un fichier",
+        "previewing": "Analyse…",
+        "previewTitle": "Aperçu — rien n'a encore été appliqué",
+        "resultTitle": "Import appliqué",
+        "confirm": "Confirmer l'import",
+        "done": "Import terminé. Les téléchargements tournent en arrière-plan.",
+        "failed": "Échec de l'import",
+        "errors": {
+          "invalid_json": "Ce fichier n'est pas un JSON valide.",
+          "not_export_file": "Ce fichier n'est pas un export de cette application."
+        }
+      },
+      "summary": {
+        "artistsFollowed": "Artistes à suivre",
+        "artistsExisting": "Artistes déjà suivis",
+        "albumsQueued": "Albums à télécharger",
+        "albumsCovered": "Albums gérés par la synchro de l'artiste",
+        "albumsExisting": "Albums déjà dans la bibliothèque",
+        "chartsCreated": "Classements à suivre",
+        "chartsExisting": "Classements déjà suivis",
+        "chartsSkipped": "Classements ignorés",
+        "catalogRows": "Lignes du catalogue (artistes / albums / titres)",
+        "tracksOnDisk": "Titres trouvés sur le disque",
+        "tracksToDownload": "Titres à télécharger",
+        "usersCreated": "Utilisateurs à créer",
+        "usersSkipped": "Utilisateurs ignorés (déjà existants)",
+        "settingsApplied": "Paramètres à appliquer",
+        "settingsIgnored": "Paramètres ignorés (inconnus)",
+        "albumsToImport": "Albums à récupérer (titres ou pochette manquants)"
+      },
+      "warnings": {
+        "charts_disabled": "Les classements sont désactivés sur cette instance ; les abonnements ont été ignorés.",
+        "settings_ignored": "Certains paramètres sont inconnus de cette version et ont été ignorés.",
+        "invalid_setting": "Un paramètre a une valeur invalide et a été ignoré.",
+        "users_skipped": "Certains utilisateurs existent déjà ici et n'ont pas été modifiés.",
+        "invalid_chart": "Un abonnement à un classement n'a pas pu être créé."
       }
     }
   },

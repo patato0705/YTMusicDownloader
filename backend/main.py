@@ -140,6 +140,7 @@ def create_app() -> FastAPI:
         "artists",
         "auth",
         "charts",
+        "export",
         "features",
         "health",
         "jobs",

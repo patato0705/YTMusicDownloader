@@ -15,6 +15,7 @@ import { FollowChartModal } from '../components/ui/FollowChartModal';
 import { ChartArtistGrid } from '../components/ui/ChartArtistGrid';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { InfoTooltip } from '../components/ui/InfoTooltip';
+import { BackupPanel } from '../components/BackupPanel';
 import * as adminApi from '../api/admin';
 import * as chartsApi from '../api/charts';
 import { cleanupLibrary } from '../api/library';
@@ -45,7 +46,7 @@ type ChartAction =
   | { kind: 'sync'; sub: ChartSubscription };
 
 export default function AdminPanel(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<'users' | 'charts' | 'settings'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'charts' | 'settings' | 'backup'>('users');
   const [settings, setSettings] = useState<Setting[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,6 +141,7 @@ export default function AdminPanel(): JSX.Element {
         } else if (activeTab === 'charts') {
           await loadChartSubscriptions();
         }
+        // 'backup' loads nothing up front
       } catch (err: any) {
         console.error('Failed to load data:', err);
         if (!cancelled) setError(parseApiError(err, 'Failed to load data'));
@@ -1150,11 +1152,22 @@ export default function AdminPanel(): JSX.Element {
           >
             ⚙️ {t('admin.tabs.settings')}
           </button>
+          <button
+            onClick={() => setActiveTab('backup')}
+            className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
+              activeTab === 'backup'
+                ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
+                : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
+            }`}
+          >
+            💾 {t('admin.tabs.backup')}
+          </button>
         </div>
 
         {/* Tab content */}
         {activeTab === 'users' ? renderUsersTab() 
           : activeTab === 'charts' ? renderChartsTab()
+          : activeTab === 'backup' ? <BackupPanel onToast={(message, type) => setToast({ message, type })} />
           : renderSettingsTab()}
       </div>
     </div>

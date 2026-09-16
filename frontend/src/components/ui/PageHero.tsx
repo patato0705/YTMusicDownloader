@@ -9,6 +9,8 @@ interface PageHeroProps {
   title: React.ReactNode;
   subtitle?: string;
   children?: React.ReactNode;
+  /** Pinned to the top-right corner (e.g. a page-level action button) */
+  actions?: React.ReactNode;
   className?: string;
 }
 
@@ -17,6 +19,7 @@ export const PageHero: React.FC<PageHeroProps> = ({
   title, 
   subtitle,
   children,
+  actions,
   className = '' 
 }) => {
   return (
@@ -25,6 +28,12 @@ export const PageHero: React.FC<PageHeroProps> = ({
       <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 dark:bg-red-900/15 rounded-full blur-3xl animate-pulse" />
       <div className="absolute bottom-0 left-0 w-96 h-96 bg-indigo-500/8 dark:bg-red-800/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
       
+      {actions && (
+        <div className="absolute top-4 right-4 md:top-6 md:right-6 z-20">
+          {actions}
+        </div>
+      )}
+
       <div className="relative z-10">
         {badge && (
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-6">

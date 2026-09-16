@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { getLibraryArtists, getLibraryAlbums, getLibraryStats, searchLibraryTracks } from '../api/library';
+import { exportLibrary, downloadJson, exportFilename } from '../api/export';
 import type { LibraryTrack } from '../api/library';
 import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
@@ -72,6 +73,7 @@ export default function Library(): JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [trackMatches, setTrackMatches] = useState<TrackMatches>(NO_TRACK_MATCHES);
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
+  const [exporting, setExporting] = useState(false);
   const debouncedQuery = useDebounce(searchQuery.trim(), TRACK_SEARCH_DEBOUNCE_MS);
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -246,6 +248,20 @@ export default function Library(): JSX.Element {
     albumTrackMatches.has(album.id)
   );
 
+  // Followed artists/albums/charts as a JSON file: shareable, and importable
+  // by an admin on another instance (Admin panel > Backup).
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      downloadJson(await exportLibrary(), exportFilename('library'));
+    } catch (err: any) {
+      console.error('Failed to export library:', err);
+      setError(parseApiError(err, 'Failed to export library'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Update display logic
   const displayedArtists = filteredArtists;
   const displayedAlbums = filteredAlbums;
@@ -267,6 +283,21 @@ export default function Library(): JSX.Element {
             </>
           }
           subtitle={t('library.heroSubtitle')}
+          actions={hasContent && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              isLoading={exporting}
+              className="gap-2 glass"
+              title={t('library.export.description')}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2" />
+              </svg>
+              {t('library.export.button')}
+            </Button>
+          )}
         />
 
         {/* Stats */}

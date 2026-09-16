@@ -295,6 +295,10 @@
       "artists": "No followed artists yet",
       "albums": "No followed albums yet",
       "tracks": "No downloaded tracks yet"
+    },
+    "export": {
+      "button": "Export library",
+      "description": "Download the list of followed artists, standalone albums and charts as a JSON file. An admin can import it on another instance."
     }
   },
   "charts": {
@@ -335,7 +339,8 @@
     "tabs": {
       "settings": "Settings",
       "charts": "Charts",
-      "users": "Users"
+      "users": "Users",
+      "backup": "Backup"
     },
     "settings": {
       "title": "Settings",
@@ -490,6 +495,83 @@
         "topNDecrease": "Follow the top {to} artists of the {country} chart instead of the top {from}? Artists already followed stay followed.",
         "syncTitle": "Sync chart",
         "sync": "Sync the {country} chart now? Any of its top {n} artists not followed yet will be followed with their full discography."
+      }
+    },
+    "backup": {
+      "sections": {
+        "library": "library",
+        "catalog": "catalog",
+        "users": "users",
+        "settings": "settings"
+      },
+      "export": {
+        "title": "Export backup",
+        "description": "Download this instance's state as a JSON file. The music files themselves live in the data folder: copy it alongside this backup to migrate.",
+        "options": {
+          "library": {
+            "label": "Library",
+            "description": "Followed artists and standalone albums. On import, the new instance follows them again and downloads their music."
+          },
+          "charts": {
+            "label": "Charts",
+            "description": "Followed charts. On import, the new instance follows them again and keeps auto-following their top artists."
+          },
+          "catalog": {
+            "label": "Catalog",
+            "description": "Only useful if you also copy the data folder (your music files) to the new instance: the import will then recognise the files already there instead of downloading everything again. Can be left off otherwise."
+          },
+          "users": {
+            "label": "Users",
+            "description": "User accounts, roles and password hashes. Everyone keeps their password on the new instance."
+          },
+          "settings": {
+            "label": "Settings",
+            "description": "Application settings (scheduler, downloads, feature flags)."
+          }
+        },
+        "usersWarning": "This file will contain password hashes. Keep it private.",
+        "button": "Download backup",
+        "failed": "Failed to export backup"
+      },
+      "import": {
+        "title": "Import",
+        "description": "Restore a backup or import someone's library export. Nothing already on this instance is changed: missing artists, albums and charts are followed and their downloads queued; existing users are never overwritten.",
+        "choose": "Choose file",
+        "previewing": "Analysing…",
+        "previewTitle": "Preview — nothing has been applied yet",
+        "resultTitle": "Import applied",
+        "confirm": "Confirm import",
+        "done": "Import complete. Downloads are running in the background.",
+        "failed": "Import failed",
+        "errors": {
+          "invalid_json": "This file is not valid JSON.",
+          "not_export_file": "This file is not an export from this app."
+        }
+      },
+      "summary": {
+        "artistsFollowed": "Artists to follow",
+        "artistsExisting": "Artists already followed",
+        "albumsQueued": "Albums to download",
+        "albumsCovered": "Albums handled by artist sync",
+        "albumsExisting": "Albums already in library",
+        "chartsCreated": "Charts to follow",
+        "chartsExisting": "Charts already followed",
+        "chartsSkipped": "Charts skipped",
+        "catalogRows": "Catalog rows (artists / albums / tracks)",
+        "tracksOnDisk": "Tracks found on disk",
+        "tracksToDownload": "Tracks to download",
+        "usersCreated": "Users to create",
+        "usersSkipped": "Users skipped (already exist)",
+        "settingsApplied": "Settings to apply",
+        "settingsIgnored": "Settings ignored (unknown)",
+        "albumsToImport": "Albums to re-fetch (missing tracks or cover)"
+      },
+      "warnings": {
+        "charts_disabled": "Charts are disabled on this instance; chart subscriptions were skipped.",
+        "settings_ignored": "Some settings are not known to this version and were ignored.",
+        "invalid_setting": "A setting has an invalid value and was ignored.",
+        "users_skipped": "Some users already exist here and were left untouched.",
+        "invalid_chart": "A chart subscription could not be created."
       }
     }
   },
