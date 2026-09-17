@@ -79,18 +79,20 @@ export default function AdminPanel(): JSX.Element {
         />
 
         {/* Tab navigation */}
-        <div className="flex items-center gap-2 glass rounded-2xl p-2 w-fit">
+        {/* Phones: four equal tabs with the icon above the label; sm+: the usual row */}
+        <div className="flex items-center gap-1 sm:gap-2 glass rounded-2xl p-2 w-full sm:w-fit">
           {tabs.filter(tab => tab.visible).map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
+              className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-2 sm:px-6 py-2 sm:py-3 rounded-xl text-xs sm:text-base font-medium whitespace-nowrap transition-all duration-300 ${
                 activeTab === tab.id
                   ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
                   : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
               }`}
             >
-              {tab.icon} {t(`admin.tabs.${tab.id}`)}
+              <span>{tab.icon}</span>
+              <span>{t(`admin.tabs.${tab.id}`)}</span>
             </button>
           ))}
         </div>

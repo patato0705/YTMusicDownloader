@@ -29,7 +29,7 @@ export const PageHero: React.FC<PageHeroProps> = ({
       <div className="absolute bottom-0 left-0 w-96 h-96 bg-indigo-500/8 dark:bg-red-800/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
       
       {actions && (
-        <div className="absolute top-4 right-4 md:top-6 md:right-6 z-20">
+        <div className="relative z-20 flex justify-end mb-4 md:absolute md:top-6 md:right-6 md:mb-0">
           {actions}
         </div>
       )}

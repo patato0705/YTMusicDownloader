@@ -92,7 +92,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
           title={t('settings.changeLanguage')}
         >
           <span>{currentLanguage.flag}</span>
-          <span>{currentLanguage.code.toUpperCase()}</span>
+          <span className="hidden lg:inline">{currentLanguage.code.toUpperCase()}</span>
           <svg
             className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
             fill="none"

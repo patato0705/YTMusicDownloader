@@ -198,15 +198,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
 
             <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
               {categorySettings.map(setting => (
-                <div key={setting.key} className="flex items-center justify-between py-3 border-b border-slate-200 dark:border-white/10 last:border-0">
-                  <div className="flex-1 mr-4">
+                <div key={setting.key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-3 border-b border-slate-200 dark:border-white/10 last:border-0">
+                  <div className="flex-1 basis-40 min-w-0">
                     <label className="font-semibold text-foreground block mb-1">
                       {settingLabel(setting)}
                     </label>
                     <p className="text-sm text-muted-foreground">{settingDescription(setting)}</p>
                   </div>
 
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 ml-auto">
                     {setting.type === 'bool' ? (
                       <ToggleSwitch
                         checked={!!editedSettings[setting.key]}
@@ -266,8 +266,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
           <SectionHeader>{t('admin.settings.maintenance')}</SectionHeader>
 
           <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
-            <div className="flex items-center justify-between py-3">
-              <div className="flex-1 mr-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-3">
+              <div className="flex-1 basis-40 min-w-0">
                 <label className="font-semibold text-foreground block mb-1">
                   {t('admin.settings.cleanupTitle')}
                 </label>
@@ -275,7 +275,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                   {t('admin.settings.cleanupDescription')}
                 </p>
               </div>
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 ml-auto">
                 <Button
                   onClick={handleCleanup}
                   isLoading={cleanupLoading}

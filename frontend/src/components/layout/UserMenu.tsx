@@ -105,7 +105,7 @@ export const UserMenu: React.FC<{
         <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${roleGradients[user.role]} flex items-center justify-center text-white font-semibold shadow-lg group-hover:scale-110 transition-transform`}>
           {user.username[0].toUpperCase()}
         </div>
-        <div className="hidden sm:block text-left">
+        <div className="hidden sm:max-md:block lg:block text-left">
           <div className="text-sm font-medium text-slate-700 dark:text-zinc-200">{user.username}</div>
           <div className="text-xs text-muted-foreground capitalize">{user.role}</div>
         </div>

@@ -35,6 +35,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       root.classList.remove('dark');
     }
 
+    // Tint the mobile browser chrome to match (values mirror --color-background)
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'dark' ? '#09090b' : '#f8fafc');
+
     localStorage.setItem('theme', theme);
   }, [theme]);
 

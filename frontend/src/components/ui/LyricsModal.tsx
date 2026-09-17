@@ -101,11 +101,11 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
       onClick={() => { if (!dirty) onClose(); }}
     >
       <div
-        className="glass rounded-3xl p-6 md:p-8 max-w-2xl w-full border-gradient shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
+        className="glass rounded-3xl p-6 md:p-8 max-w-2xl w-full border-gradient shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-5">
+        <div className="flex items-start justify-between gap-4 mb-5 shrink-0">
           <div className="min-w-0">
             <h2 className="text-2xl font-bold text-gradient truncate">{track.title}</h2>
             <p className="text-sm text-muted-foreground truncate mt-0.5">{getPrimaryArtist(track)}</p>
@@ -136,7 +136,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
           href={lrclibSearchUrl(track)}
           target="_blank"
           rel="noopener noreferrer"
-          className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10 flex items-center gap-3 mb-4 hover:border-blue-500/40 dark:hover:border-red-500/40 transition-colors group"
+          className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10 flex items-center gap-3 mb-4 shrink-0 hover:border-blue-500/40 dark:hover:border-red-500/40 transition-colors group"
         >
           <span className="text-2xl leading-none">🔎</span>
           <div className="min-w-0 flex-1">
@@ -154,14 +154,14 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
             <Spinner size="lg" className="text-blue-600 dark:text-red-500" />
           </div>
         ) : (
-          <div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex-1 flex flex-col">
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               readOnly={!isEditing}
               spellCheck={false}
               placeholder={isEditing ? t('lyrics.placeholder') : t('lyrics.empty')}
-              className="flex-1 min-h-[16rem] w-full resize-none rounded-2xl p-4 font-mono text-sm leading-relaxed bg-white/60 dark:bg-black/30 border border-slate-200/50 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 read-only:opacity-80"
+              className="flex-1 min-h-[16rem] [@media(max-height:500px)]:min-h-[6rem] w-full resize-none rounded-2xl p-4 font-mono text-sm leading-relaxed bg-white/60 dark:bg-black/30 border border-slate-200/50 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 read-only:opacity-80"
             />
             <div className="flex items-center justify-between gap-3 mt-2 px-1 min-h-[1.25rem]">
               <p className="text-xs text-muted-foreground">
@@ -185,7 +185,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
         )}
 
         {/* Actions */}
-        <div className="flex gap-3 pt-5">
+        <div className="flex gap-3 pt-5 shrink-0">
           <Button type="button" variant="ghost" onClick={onClose} disabled={saving} className="flex-1">
             {isEditing ? t('common.cancel') : t('common.close')}
           </Button>

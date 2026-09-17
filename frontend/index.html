@@ -3,10 +3,25 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!-- Kept in sync with the active theme by ThemeContext; colours the browser chrome on mobile -->
+    <meta name="theme-color" content="#f8fafc" />
+    <script>
+      // Apply the saved theme before first paint. Avoids a light flash when
+      // loading in dark mode, and hands mobile browsers the right theme-color
+      // from the start (Safari only re-reads it on toolbar transitions).
+      (function () {
+        try {
+          var theme = localStorage.getItem('theme')
+            || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          if (theme === 'dark') document.documentElement.classList.add('dark');
+          document.querySelector('meta[name="theme-color"]').content =
+            theme === 'dark' ? '#09090b' : '#f8fafc';
+        } catch (e) {}
+      })();
+    </script>
     <title>Music Manager</title>
   </head>
-  <!-- important: on applique les classes utilitaires au body pour forcer Tailwind à les générer -->
-  <body class="bg-gray-50 text-gray-900">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

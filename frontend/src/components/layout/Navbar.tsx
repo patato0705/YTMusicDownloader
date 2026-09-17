@@ -127,7 +127,7 @@ export default function Navbar(): JSX.Element {
 
                   {/* Desktop navigation */}
                   {isAuthenticated && (
-                    <div className="hidden md:flex space-x-1 ml-6">
+                    <div className="hidden md:flex space-x-1 ml-2 lg:ml-6">
                       <Link to="/" className={navLinkClass('/')}>
                         {t('nav.home')}
                       </Link>
@@ -147,7 +147,7 @@ export default function Navbar(): JSX.Element {
                 </div>
 
                 {/* Right side - Desktop: Theme + Language + User, Mobile: User only */}
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1 lg:space-x-2">
                   {/* Active jobs indicator */}
                   {isAuthenticated && activeJobCount > 0 && (
                     <div

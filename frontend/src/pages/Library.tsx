@@ -399,7 +399,7 @@ export default function Library(): JSX.Element {
                   size="md"
                   showClearButton
                   onClear={() => setSearchQuery('')}
-                  className="flex-1 md:flex-none md:w-96"
+                  className="flex-1 md:flex-none md:w-64 lg:w-96"
                   inputClassName="h-full"
                 />
                 <ViewToggle value={viewMode} onChange={setViewMode} />

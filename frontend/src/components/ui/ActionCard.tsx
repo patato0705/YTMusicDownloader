@@ -20,13 +20,13 @@ export const ActionCard: React.FC<ActionCardProps> = ({
   className = ''
 }) => {
   return (
-    <Link to={to}>
-      <div className={`relative group overflow-hidden rounded-xl glass p-6 border-slate-200 dark:border-white/10 hover:border-blue-400/50 dark:hover:border-red-600/50 transition-all duration-300 hover-lift ${className}`}>
+    <Link to={to} className="block h-full">
+      <div className={`relative group h-full overflow-hidden rounded-xl glass p-6 border-slate-200 dark:border-white/10 hover:border-blue-400/50 dark:hover:border-red-600/50 transition-all duration-300 hover-lift ${className}`}>
         {/* Background gradient */}
         <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
         
         {/* Content */}
-        <div className="relative z-10">
+        <div className="relative z-10 flex flex-col h-full">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4 group-hover:scale-110 transition-transform duration-300">
             {icon}
           </div>
@@ -40,7 +40,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({
           </p>
           
           {/* Arrow indicator */}
-          <div className="mt-4 flex items-center gap-2 text-blue-600 dark:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="mt-auto pt-4 flex items-center gap-2 text-blue-600 dark:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
             <span className="text-sm font-medium">Get started</span>
             <span className="group-hover:translate-x-1 transition-transform">→</span>
           </div>

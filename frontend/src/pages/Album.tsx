@@ -386,24 +386,24 @@ export default function Album(): JSX.Element {
                 <table className="w-full">
                   <thead className="bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
                     <tr>
-                      <th className="px-4 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-12">
+                      <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-10 md:w-12">
                         #
                       </th>
-                      <th className="px-4 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         {t('album.title')}
                       </th>
-                      <th className="px-4 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">
+                      <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">
                         {t('album.artist')}
                       </th>
-                      <th className="px-4 md:px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider w-24">
+                      <th className="px-3 md:px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell sm:w-24">
                         {t('album.duration')}
                       </th>
                       {showLyrics && (
-                        <th className="px-4 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider w-28">
+                        <th className="px-3 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider sm:w-28">
                           {t('album.lyrics')}
                         </th>
                       )}
-                      <th className="px-4 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider w-28">
+                      <th className="px-3 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider sm:w-28">
                         {t('album.status')}
                       </th>
                     </tr>
@@ -414,22 +414,25 @@ export default function Album(): JSX.Element {
                         key={track.id}
                         className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group"
                       >
-                        <td className="px-4 md:px-6 py-4 text-sm text-muted-foreground font-medium">
+                        <td className="px-3 md:px-6 py-4 text-sm text-muted-foreground font-medium">
                           {track.track_number || index + 1}
                         </td>
-                        <td className="px-4 md:px-6 py-4">
+                        <td className="px-3 md:px-6 py-4">
                           <div className="font-semibold text-foreground group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors">
                             {track.title}
                           </div>
+                          <div className="sm:hidden text-xs text-muted-foreground font-mono mt-0.5">
+                            {formatDuration(track.duration_seconds || track.duration)}
+                          </div>
                         </td>
-                        <td className="px-4 md:px-6 py-4 text-sm text-muted-foreground hidden lg:table-cell">
+                        <td className="px-3 md:px-6 py-4 text-sm text-muted-foreground hidden lg:table-cell">
                           {getPrimaryArtist(track)}
                         </td>
-                        <td className="px-4 md:px-6 py-4 text-sm text-muted-foreground text-right font-mono">
+                        <td className="px-3 md:px-6 py-4 text-sm text-muted-foreground text-right font-mono hidden sm:table-cell">
                           {formatDuration(track.duration_seconds || track.duration)}
                         </td>
                         {showLyrics && (
-                          <td className="px-4 md:px-6 py-4 text-center">
+                          <td className="px-3 md:px-6 py-4 text-center">
                             <LyricsBadge
                               kind={track.lyrics}
                               title={t('lyrics.open')}
@@ -437,7 +440,7 @@ export default function Album(): JSX.Element {
                             />
                           </td>
                         )}
-                        <td className="px-4 md:px-6 py-4 text-center">
+                        <td className="px-3 md:px-6 py-4 text-center">
                           {(() => {
                             const { styles, label, icon } = getStatusConfig(track.status);
                             // Failed tracks carry the download error; surface it on hover.
@@ -447,10 +450,10 @@ export default function Album(): JSX.Element {
                             return (
                               <span
                                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border backdrop-blur-sm ${errorTitle ? 'cursor-help' : ''} ${styles}`}
-                                title={errorTitle}
+                                title={errorTitle ?? label}
                               >
                                 {icon}
-                                <span>{label}</span>
+                                <span className="hidden sm:inline">{label}</span>
                               </span>
                             );
                           })()}
