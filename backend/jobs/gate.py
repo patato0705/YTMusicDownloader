@@ -98,7 +98,16 @@ def pause_downloads(session: Session, reason: str) -> datetime:
 
 
 def note_download_succeeded(session: Session) -> None:
-    """Reset the pause escalation once a download gets through. Commits if needed."""
+    """
+    Reset the pause escalation once a download gets through. Commits if
+    needed. Ignored while a pause is in force: with several workers, one
+    tripping the limit while the others are mid-download is the normal
+    case, and those downloads started *before* the block -- them finishing
+    says nothing about whether it has lifted. Without this the streak was
+    wiped within a second of every pause and never escalated past 10 min.
+    """
+    if downloads_paused_until(session):
+        return
     if _int_setting(session, "download.pause_streak", 0) > 0:
         set_setting(session, "download.pause_streak", 0)
         logger.info("Download succeeded; rate-limit pause escalation reset")
