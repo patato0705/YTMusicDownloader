@@ -104,6 +104,12 @@ _YOUTUBE_THROTTLE_MARKERS = (
     "confirm you're not a bot",
     "http error 429",
     "too many requests",
+    # "unable to download video data: HTTP Error 403: Forbidden": the
+    # googlevideo CDN refusing this IP/session outright, which is what too
+    # many concurrent downloads get before (or instead of) the bot check.
+    # A stale yt-dlp signature gives the same 403 -- also global, not
+    # per-video, so pausing is right either way.
+    "http error 403",
 )
 
 
