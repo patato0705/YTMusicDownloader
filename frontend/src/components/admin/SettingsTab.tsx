@@ -3,14 +3,14 @@
  * Admin panel > Settings: edit application settings grouped by category,
  * plus the library cleanup maintenance action.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../ui/Button';
 import { SectionHeader } from '../ui/SectionHeader';
 import { Select } from '../ui/Select';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import * as adminApi from '../../api/admin';
-import type { Setting } from '../../api/admin';
+import type { Setting, YoutubeCookiesStatus } from '../../api/admin';
 import { cleanupLibrary } from '../../api/library';
 import type { CleanupResult } from '../../api/library';
 import { parseApiError } from '../../utils';
@@ -32,6 +32,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
   const [saveLoading, setSaveLoading] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
 
+  // YouTube account cookies (fallback jar for age-restricted tracks)
+  const [cookies, setCookies] = useState<YoutubeCookiesStatus | null>(null);
+  const [cookiesBusy, setCookiesBusy] = useState(false);
+  const cookiesFileRef = useRef<HTMLInputElement>(null);
+
   // t() hands back the key itself when a translation is missing; settings are
   // defined on the backend, so fall back to the backend's English text.
   const tr = (key: string, fallback: string): string => {
@@ -49,8 +54,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
   }, [locale]);
 
   const loadSettings = async () => {
-    const settingsArray = await adminApi.getAllSettings();
+    const [settingsArray, cookiesStatus] = await Promise.all([
+      adminApi.getAllSettings(),
+      adminApi.getYoutubeCookies(),
+    ]);
     setSettings(settingsArray);
+    setCookies(cookiesStatus);
 
     // Initialize edited settings
     const initial: Record<string, any> = {};
@@ -120,14 +129,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
   const invalidIntSetting = (setting: Setting): boolean => {
     if (setting.type !== 'int') return false;
     const value = editedSettings[setting.key];
-    return !Number.isInteger(value) || (setting.min != null && value < setting.min);
+    return (
+      !Number.isInteger(value) ||
+      (setting.min != null && value < setting.min) ||
+      (setting.max != null && value > setting.max)
+    );
   };
 
   const saveSettings = async () => {
     const invalid = settings.find(invalidIntSetting);
     if (invalid) {
+      const params = { name: settingLabel(invalid), min: invalid.min ?? 0, max: invalid.max ?? 0 };
       onToast(
-        t('admin.settings.invalidNumber', { name: settingLabel(invalid), min: invalid.min ?? 0 }),
+        t(invalid.max != null ? 'admin.settings.invalidNumberRange' : 'admin.settings.invalidNumber', params),
         'error',
       );
       return;
@@ -179,6 +193,41 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
     }
   };
 
+  const handleCookiesFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setCookiesBusy(true);
+    try {
+      const content = await file.text();
+      setCookies(await adminApi.uploadYoutubeCookies(content));
+      onToast(t('admin.settings.cookies.uploaded'), 'success');
+    } catch (err: any) {
+      onToast(parseApiError(err, t('admin.settings.cookies.uploadFailed')), 'error');
+    } finally {
+      setCookiesBusy(false);
+    }
+  };
+
+  const handleCookiesDelete = async () => {
+    setCookiesBusy(true);
+    try {
+      await adminApi.deleteYoutubeCookies();
+      setCookies({ present: false, cookie_count: 0, size_bytes: 0, modified_at: null });
+      onToast(t('admin.settings.cookies.deleted'), 'success');
+    } catch (err: any) {
+      onToast(parseApiError(err), 'error');
+    } finally {
+      setCookiesBusy(false);
+    }
+  };
+
+  const cookiesStatusText = (): string => {
+    if (!cookies?.present) return t('admin.settings.cookies.none');
+    const when = cookies.modified_at ? new Date(cookies.modified_at).toLocaleString(locale) : '';
+    return t('admin.settings.cookies.present', { count: cookies.cookie_count, date: when });
+  };
+
   // Group settings by category
   const grouped: Record<string, Setting[]> = {};
   settings.forEach(setting => {
@@ -216,6 +265,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                       <input
                         type="number"
                         min={setting.min ?? undefined}
+                        max={setting.max ?? undefined}
                         step={1}
                         value={editedSettings[setting.key] ?? ''}
                         onChange={(e) => handleSettingChange(setting.key, e.target.value, setting.type)}
@@ -246,6 +296,42 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                   </div>
                 </div>
               ))}
+
+              {category === 'download' && (
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-3">
+                  <div className="flex-1 basis-40 min-w-0">
+                    <label className="font-semibold text-foreground block mb-1">
+                      {t('admin.settings.cookies.label')}
+                    </label>
+                    <p className="text-sm text-muted-foreground">{t('admin.settings.cookies.description')}</p>
+                    <p className={`text-sm mt-1 ${cookies?.present ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                      {cookiesStatusText()}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0 ml-auto flex items-center gap-2">
+                    <input
+                      ref={cookiesFileRef}
+                      type="file"
+                      accept="text/plain,.txt"
+                      onChange={handleCookiesFile}
+                      className="hidden"
+                      id="youtube-cookies-file"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => cookiesFileRef.current?.click()}
+                      disabled={cookiesBusy}
+                    >
+                      {cookies?.present ? t('admin.settings.cookies.replace') : t('admin.settings.cookies.upload')}
+                    </Button>
+                    {cookies?.present && (
+                      <Button variant="outline" onClick={handleCookiesDelete} disabled={cookiesBusy}>
+                        {t('admin.settings.cookies.remove')}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         ))}

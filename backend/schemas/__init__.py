@@ -38,6 +38,8 @@ from .jobs import (
 from .settings import (
     SettingResponse,
     SettingUpdateRequest,
+    YoutubeCookiesStatus,
+    YoutubeCookiesUpload,
 )
 
 # YTMusic API schemas (external API, not our database)
@@ -62,6 +64,8 @@ from .common import (
 )
 
 __all__ = [
+    "YoutubeCookiesStatus",
+    "YoutubeCookiesUpload",
     # Auth
     "LoginRequest",
     "RegisterRequest",

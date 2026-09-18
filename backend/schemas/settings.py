@@ -17,6 +17,7 @@ class SettingResponse(BaseModel):
     description: Optional[str] = None
     allowed_values: Optional[List[Dict[str, str]]] = None
     min: Optional[int] = None  # lower bound for int settings
+    max: Optional[int] = None  # upper bound for int settings
     updated_at: Optional[datetime] = None
     updated_by: Optional[int] = None
 
@@ -37,3 +38,15 @@ class SettingUpdateRequest(BaseModel):
             ]
         }
     }
+
+class YoutubeCookiesStatus(BaseModel):
+    """State of the admin-uploaded YouTube account cookie jar"""
+    present: bool
+    cookie_count: int = 0
+    size_bytes: int = 0
+    modified_at: Optional[datetime] = None
+
+
+class YoutubeCookiesUpload(BaseModel):
+    """A Netscape-format cookies.txt, as exported by a browser extension"""
+    content: str = Field(..., min_length=1, max_length=512 * 1024)

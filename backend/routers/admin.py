@@ -10,6 +10,11 @@ User Management:
 - POST /api/admin/users/{user_id}/activate - Activate user
 - DELETE /api/admin/users/{user_id} - Permanently delete user
 
+YouTube account cookies (fallback for age-restricted videos only):
+- GET /api/admin/youtube-cookies - Whether a jar is uploaded, and its size/age
+- PUT /api/admin/youtube-cookies - Upload a Netscape cookies.txt
+- DELETE /api/admin/youtube-cookies - Remove it
+
 Settings Management:
 - GET /api/admin/settings - Get all settings
 - GET /api/admin/settings/{key} - Get specific setting
@@ -34,7 +39,10 @@ from backend.schemas import (
     SettingResponse,
     SettingUpdateRequest,
     MessageResponse,
+    YoutubeCookiesStatus,
+    YoutubeCookiesUpload,
 )
+from backend import config
 from backend.models import User, Setting
 
 logger = logging.getLogger("routers.admin")
@@ -250,6 +258,7 @@ def get_all_settings(
             **setting,
             allowed_values=settings_module.get_allowed_values(setting["key"]),
             min=settings_module.get_min_value(setting["key"]),
+            max=settings_module.get_max_value(setting["key"]),
         )
         for setting in settings_list
     ]
@@ -280,6 +289,7 @@ def get_setting(
                 description=default_config["description"],
                 allowed_values=settings_module.get_allowed_values(key),
                 min=settings_module.get_min_value(key),
+                max=settings_module.get_max_value(key),
                 updated_at=None,
                 updated_by=None,
             )
@@ -293,6 +303,7 @@ def get_setting(
         **setting.to_dict(),
         allowed_values=settings_module.get_allowed_values(key),
         min=settings_module.get_min_value(key),
+        max=settings_module.get_max_value(key),
     )
 
 
@@ -326,6 +337,7 @@ def update_setting(
             **setting.to_dict(),
             allowed_values=settings_module.get_allowed_values(key),
             min=settings_module.get_min_value(key),
+            max=settings_module.get_max_value(key),
         )
     
     except Exception as e:
@@ -364,3 +376,102 @@ def delete_setting(
     )
     
     return MessageResponse(message=message)
+
+# ============================================================================
+# YOUTUBE ACCOUNT COOKIES
+# ============================================================================
+
+def _count_netscape_cookies(content: str) -> int:
+    """
+    Number of well-formed cookie lines in a Netscape cookies.txt. Raises
+    ValueError if the text isn't one at all, or has no youtube.com cookies
+    (a jar for the wrong site would just silently never help).
+    """
+    count = 0
+    youtube = 0
+    for raw in content.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split("\t")
+        if len(fields) != 7:
+            raise ValueError("not a Netscape cookies.txt: expected 7 tab-separated fields per cookie line")
+        count += 1
+        if fields[0].lstrip(".").endswith("youtube.com"):
+            youtube += 1
+    if count == 0:
+        raise ValueError("no cookies found in file")
+    if youtube == 0:
+        raise ValueError("no youtube.com cookies in file (export while on youtube.com)")
+    return count
+
+
+def _youtube_cookies_status() -> YoutubeCookiesStatus:
+    path = config.YDL_USER_COOKIEFILE
+    try:
+        st = path.stat()
+    except FileNotFoundError:
+        return YoutubeCookiesStatus(present=False)
+    from datetime import datetime, timezone
+    try:
+        count = _count_netscape_cookies(path.read_text(encoding="utf-8", errors="replace"))
+    except ValueError:
+        count = 0
+    return YoutubeCookiesStatus(
+        present=True,
+        cookie_count=count,
+        size_bytes=st.st_size,
+        modified_at=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc),
+    )
+
+
+@router.get("/youtube-cookies", response_model=YoutubeCookiesStatus)
+def get_youtube_cookies(current_user: User = Depends(require_admin)) -> YoutubeCookiesStatus:
+    """
+    Whether an account cookie jar is uploaded (admin only). Never returns the
+    cookies themselves: they're a login session.
+    """
+    return _youtube_cookies_status()
+
+
+@router.put("/youtube-cookies", response_model=YoutubeCookiesStatus)
+def upload_youtube_cookies(
+    payload: YoutubeCookiesUpload,
+    current_user: User = Depends(require_admin),
+) -> YoutubeCookiesStatus:
+    """
+    Store a browser-exported cookies.txt as the account jar. Used only as a
+    fallback for age-restricted tracks (see jobs.tasks.download_track).
+    """
+    try:
+        count = _count_netscape_cookies(payload.content)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    path = config.YDL_USER_COOKIEFILE
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(payload.content if payload.content.endswith("\n") else payload.content + "\n", encoding="utf-8")
+        tmp.chmod(0o600)  # a login session: keep it off other users of the box
+        tmp.replace(path)
+    except OSError as e:
+        logger.exception("Failed to write YouTube account cookies")
+        raise HTTPException(status_code=500, detail=f"Failed to save cookies: {e}")
+
+    logger.info("YouTube account cookies uploaded by user %s (%d cookies)", current_user.id, count)
+    return _youtube_cookies_status()
+
+
+@router.delete("/youtube-cookies", response_model=MessageResponse)
+def delete_youtube_cookies(current_user: User = Depends(require_admin)) -> MessageResponse:
+    """Remove the account jar; age-restricted tracks will fail again until a new one is uploaded."""
+    path = config.YDL_USER_COOKIEFILE
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No account cookies uploaded")
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete cookies: {e}")
+    logger.info("YouTube account cookies deleted by user %s", current_user.id)
+    return MessageResponse(message="YouTube account cookies deleted")

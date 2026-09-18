@@ -4,12 +4,19 @@
 #
 # yt-dlp is deliberately NOT pinned here: YouTube breaks it often enough that
 # pinning it would mean the app silently going stale between image releases.
-# deploy/entrypoint.sh runs `pip install -U yt-dlp` at container startup so a
-# restart alone can pick up an upstream fix, no rebuild required.
+# deploy/entrypoint.sh runs `pip install -U "yt-dlp[default,deno]"` at container
+# startup so a restart alone can pick up an upstream fix, no rebuild required.
+#
+# The extras matter: YouTube extraction now needs a JavaScript runtime plus
+# yt-dlp's challenge-solver scripts (github.com/yt-dlp/yt-dlp/wiki/EJS).
+# "default" pulls the yt-dlp-ejs solver at the exact version this yt-dlp
+# wants, "deno" a deno binary from PyPI -- so the three always move together.
+# Without them the `web` client is skipped: some formats go missing and
+# age-restricted videos fail even with valid account cookies.
 fastapi==0.141.1
 uvicorn[standard]==0.52.4
 ytmusicapi==1.12.2
-yt-dlp
+yt-dlp[default,deno]
 requests==2.34.2
 SQLAlchemy==2.0.52
 pydantic==2.13.5

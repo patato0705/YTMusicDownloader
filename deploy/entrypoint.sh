@@ -42,6 +42,20 @@ chown "$PUID:$PGID" /data 2>/dev/null || true
 
 echo "[entrypoint] App will run as PUID=$PUID PGID=$PGID"
 
+# Number of yt-dlp download worker processes supervisord starts (see the
+# worker-download program in supervisord.conf). This is only the ceiling:
+# how many of them actually take jobs is the download.max_concurrent
+# setting in the admin panel (default 1), so 3 idle-capable processes cost
+# nothing but a little RAM. Anything that isn't a positive integer falls
+# back to 3 rather than letting supervisord refuse to start on a bad value.
+# Keep the default in step with backend/config.py DOWNLOAD_WORKERS.
+DOWNLOAD_WORKERS="${DOWNLOAD_WORKERS:-3}"
+case "$DOWNLOAD_WORKERS" in
+    ''|*[!0-9]*|0) DOWNLOAD_WORKERS=3 ;;
+esac
+export DOWNLOAD_WORKERS
+echo "[entrypoint] Download workers: $DOWNLOAD_WORKERS"
+
 # yt-dlp is deliberately left unpinned in requirements.txt (see the comment
 # there) because YouTube breaks it often. Pulling the latest release here
 # means a container restart alone can pick up an upstream fix -- no image
@@ -49,9 +63,11 @@ echo "[entrypoint] App will run as PUID=$PUID PGID=$PGID"
 # outage) this just logs and continues with whatever was baked into the
 # image, rather than blocking startup. Runs as root, before supervisord,
 # since it needs to write to site-packages.
+# The extras pull the matching challenge-solver (yt-dlp-ejs) and a deno
+# runtime -- see the note in backend/requirements.txt.
 echo "[entrypoint] Updating yt-dlp..."
-if pip install --no-cache-dir --disable-pip-version-check -U yt-dlp; then
-    echo "[entrypoint] yt-dlp update OK: $(yt-dlp --version 2>/dev/null || echo unknown)"
+if pip install --no-cache-dir --disable-pip-version-check -U "yt-dlp[default,deno]"; then
+    echo "[entrypoint] yt-dlp update OK: $(yt-dlp --version 2>/dev/null || echo unknown), deno $(deno --version 2>/dev/null | head -1 || echo missing)"
 else
     echo "[entrypoint] yt-dlp update failed, continuing with the version baked into the image" >&2
 fi

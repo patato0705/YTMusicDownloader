@@ -32,6 +32,7 @@ export interface Setting {
   description: string | null;
   allowed_values: SettingOption[] | null;
   min: number | null; // lower bound for int settings
+  max: number | null; // upper bound for int settings
   updated_at: string | null;
   updated_by: number | null;
 }
@@ -138,6 +139,30 @@ export async function updateSetting(key: string, value: any): Promise<Setting> {
  * Delete a setting (admin only)
  * Resets to default if it's a default setting
  */
+export interface YoutubeCookiesStatus {
+  present: boolean;
+  cookie_count: number;
+  size_bytes: number;
+  modified_at: string | null;
+}
+
+/**
+ * YouTube account cookies (a browser-exported cookies.txt). Only ever used
+ * as a fallback for age-restricted tracks; the backend never sends the
+ * cookies back, just whether a jar is there.
+ */
+export async function getYoutubeCookies(): Promise<YoutubeCookiesStatus> {
+  return api.get<YoutubeCookiesStatus>('/admin/youtube-cookies');
+}
+
+export async function uploadYoutubeCookies(content: string): Promise<YoutubeCookiesStatus> {
+  return api.put<YoutubeCookiesStatus>('/admin/youtube-cookies', { content });
+}
+
+export async function deleteYoutubeCookies(): Promise<MessageResponse> {
+  return api.delete<MessageResponse>('/admin/youtube-cookies');
+}
+
 export async function deleteSetting(key: string): Promise<MessageResponse> {
   return api.delete<MessageResponse>(`/admin/settings/${key}`);
 }
