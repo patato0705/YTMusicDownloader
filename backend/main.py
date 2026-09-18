@@ -50,7 +50,7 @@ def create_app() -> FastAPI:
     """
     # configure logging early
     log_local = os.environ.get("LOG_LOCAL_TIME", "1") not in ("0", "false", "False")
-    configure_logging(level=logging.INFO, use_local_time=log_local)
+    configure_logging(level=logging.INFO, use_local_time=log_local, process_name="web")
 
     version = "0.1"
     try:
@@ -223,7 +223,7 @@ if __name__ == "__main__":
     import uvicorn
 
     # ensure logging configured for direct run
-    configure_logging(level=logging.INFO, use_local_time=(os.environ.get("LOG_LOCAL_TIME", "1") not in ("0", "false", "False")))
+    configure_logging(level=logging.INFO, use_local_time=(os.environ.get("LOG_LOCAL_TIME", "1") not in ("0", "false", "False")), process_name="web")
     host = os.environ.get("HOST", config.HOST)
     port = int(os.environ.get("PORT", config.PORT))
     logger.info("Starting uvicorn on %s:%s", host, port)
