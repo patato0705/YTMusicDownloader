@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from . import config
 from .models import Setting
 from .time_utils import now_utc
 
@@ -59,10 +60,45 @@ DEFAULT_SETTINGS = {
     
     # Download settings
     "download.max_concurrent": {
-        "value": 3,
+        # How many of the download worker processes actually take jobs; the
+        # rest idle. Every parallel stream from one IP raises the odds of
+        # YouTube rate-limiting or bot-checking, so the default is one and
+        # the ceiling is the number of processes supervisord started
+        # (config.DOWNLOAD_WORKERS). Workers re-read this on every poll, so
+        # a change in the admin panel applies within seconds, no restart.
+        "value": 1,
         "type": "int",
         "min": 1,
+        "max": lambda: config.DOWNLOAD_WORKERS,
         "description": "Maximum concurrent downloads",
+    },
+    "download.rate_limit_pause_minutes": {
+        # When a download still hits YouTube's rate limit after a cookie
+        # reset, *all* download workers stop taking jobs for this long
+        # (jobs.gate.pause_downloads) -- with several workers, the others
+        # carrying on is exactly how a soft limit turns into a ban.
+        "value": 10,
+        "type": "int",
+        "min": 1,
+        "description": "Minutes to pause all downloads after hitting YouTube's rate limit",
+    },
+    "download.pause_streak": {
+        # How many rate-limit pauses in a row without a successful download
+        # in between; each one doubles the pause (jobs.gate.pause_downloads).
+        "value": 0,
+        "type": "int",
+        "min": 0,
+        "internal": True,
+        "description": "Consecutive rate-limit pauses (set automatically)",
+    },
+    "download.paused_until": {
+        # ISO timestamp set by jobs.gate.pause_downloads; empty when not
+        # paused. Bookkeeping, not a preference: hidden from the settings UI
+        # (internal=True), surfaced read-only via /api/jobs/stats/summary.
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Downloads are paused until this time (set automatically on rate limit)",
     },
 
     # Feature flags
@@ -126,6 +162,25 @@ def get_min_value(key: str) -> Optional[int]:
     return config.get("min")
 
 
+def get_max_value(key: str) -> Optional[int]:
+    """
+    Return the upper bound for an int setting, or None if unconstrained.
+    A bound may be declared as a callable for values only known at runtime
+    (e.g. how many worker processes this container was started with).
+    """
+    config_ = DEFAULT_SETTINGS.get(key)
+    if not config_:
+        return None
+    maximum = config_.get("max")
+    return maximum() if callable(maximum) else maximum
+
+
+def is_internal(key: str) -> bool:
+    """True for settings that are app bookkeeping rather than user preferences."""
+    config_ = DEFAULT_SETTINGS.get(key)
+    return bool(config_ and config_.get("internal"))
+
+
 def validate_value(key: str, setting_type: str, value: Any) -> Any:
     """
     Check `value` against the constraints declared for `key` and return it
@@ -151,6 +206,9 @@ def validate_value(key: str, setting_type: str, value: Any) -> Any:
         minimum = get_min_value(key)
         if minimum is not None and value < minimum:
             raise ValueError(f"Invalid value for {key}: must be at least {minimum}")
+        maximum = get_max_value(key)
+        if maximum is not None and value > maximum:
+            raise ValueError(f"Invalid value for {key}: must be at most {maximum}")
 
     elif setting_type == "bool":
         if not isinstance(value, bool):
@@ -249,11 +307,11 @@ def set_setting(
     return setting
 
 
-def get_all_settings(session: Session) -> List[Dict[str, Any]]:
-    """Get all settings as list of dicts"""
+def get_all_settings(session: Session, include_internal: bool = False) -> List[Dict[str, Any]]:
+    """Get all settings as list of dicts (internal bookkeeping keys left out by default)"""
     stmt = select(Setting).order_by(Setting.key)
     settings = session.execute(stmt).scalars().all()
-    return [s.to_dict() for s in settings]
+    return [s.to_dict() for s in settings if include_internal or not is_internal(s.key)]
 
 
 def delete_setting(session: Session, key: str) -> bool:

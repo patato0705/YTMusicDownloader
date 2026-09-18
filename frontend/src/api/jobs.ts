@@ -27,6 +27,13 @@ export interface JobStats {
   stats: Record<string, number>;
   /** In-flight jobs grouped by type, e.g. { download_track: 2, download_lyrics: 5 } */
   active_by_type?: Record<string, number>;
+  /** Download throttle state (backend/jobs/gate.py) */
+  downloads?: {
+    active_workers: number;
+    max_workers: number;
+    /** ISO time until which all downloads are paused after a YouTube rate limit, or null */
+    paused_until: string | null;
+  };
   total: number;
 }
 

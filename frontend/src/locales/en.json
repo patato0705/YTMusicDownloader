@@ -116,6 +116,7 @@
     "import": "Import",
     "admin": "Admin Panel",
     "activeJobs": "{count} active",
+    "rateLimited": "Rate-limited by YouTube — downloads paused until {time}",
     "jobTypes": {
       "download_track": "tracks",
       "download_lyrics": "lyrics",
@@ -348,6 +349,7 @@
       "saved": "Settings saved successfully",
       "saveFailed": "Failed to save settings",
       "invalidNumber": "\"{name}\" must be a whole number of at least {min}",
+      "invalidNumberRange": "\"{name}\" must be a whole number between {min} and {max}",
       "categories": {
         "auth": "Authentication",
         "download": "Downloads",
@@ -365,7 +367,11 @@
         "download": {
           "max_concurrent": {
             "label": "Max concurrent downloads",
-            "description": "Maximum number of downloads running at the same time."
+            "description": "Tracks downloaded from YouTube at the same time. Metadata and lyrics already run in parallel; this only adds download streams, and every extra one from a single IP raises the odds of being rate-limited. Applies without a restart; the ceiling is the DOWNLOAD_WORKERS environment variable."
+          },
+          "rate_limit_pause_minutes": {
+            "label": "Rate-limit pause",
+            "description": "Minutes all downloads stop for when YouTube rate-limits or bot-checks us, so the other workers don't turn a temporary limit into a ban. Doubles on each consecutive pause (up to 16x) until a download succeeds again."
           }
         },
         "features": {
@@ -410,6 +416,18 @@
             "description": "Language of the data fetched from YouTube Music (artist bios, album descriptions, …)."
           }
         }
+      },
+      "cookies": {
+        "label": "YouTube account cookies",
+        "description": "A cookies.txt exported from a browser signed in to a YouTube account (use a throwaway account, not your main one). Used only to fetch age-restricted tracks; never for ordinary downloads and never to get around a rate limit, so the account sees just a handful of requests.",
+        "none": "No account cookies uploaded — age-restricted tracks will fail.",
+        "present": "Uploaded: {count} cookies, {date}",
+        "upload": "Upload cookies.txt",
+        "replace": "Replace",
+        "remove": "Remove",
+        "uploaded": "Account cookies saved",
+        "uploadFailed": "That doesn't look like a cookies.txt file",
+        "deleted": "Account cookies removed"
       },
       "maintenance": "Maintenance",
       "cleanupTitle": "Library Cleanup",

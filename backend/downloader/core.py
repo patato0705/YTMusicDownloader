@@ -19,16 +19,18 @@ logger = logging.getLogger("downloader.core")
 if not logging.getLogger().handlers:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 
-def _cleanup_partial_files(directory: Union[str, Path]) -> None:
-    d = Path(str(directory))
-    if not d.exists() or not d.is_dir():
-        return
-    for f in d.iterdir():
-        try:
-            if f.name.endswith(".part"):
-                f.unlink(missing_ok=True)
-        except Exception:
-            logger.debug("Ignoring leftover partial file %s", f, exc_info=True)
+def _job_download_dir(video_id: str) -> Path:
+    """
+    Scratch directory for one download. Each download gets its own so that
+    several download workers (deploy/supervisord.conf) can run at once
+    without clobbering each other's song.* / .part files. Wiped before use
+    so a retry never picks up a stale file from a previous attempt.
+    """
+    d = Path(str(DOWNLOAD_DIR)) / safe_name(video_id)
+    if d.exists():
+        shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def safe_name(s: Optional[str]) -> str:
@@ -65,6 +67,7 @@ def download_track_by_videoid(
     year: Optional[Union[str, int]] = None,
     cover_path_override: Optional[Union[str, Path]] = None,
     skip_metadata: bool = True,  # NEW: Skip metadata extraction
+    cookiefile: Optional[Union[str, Path]] = None,
 ) -> tuple[str, Optional[str]]:
     """
     Downloads track (yt-dlp), puts final file under MUSIC_DIR/{artist}/{album}/
@@ -79,18 +82,45 @@ def download_track_by_videoid(
         year: Release year for metadata
         cover_path_override: Path to already existing cover (used if valid)
         skip_metadata: If True, skip metadata extraction (faster, fewer requests)
+        cookiefile: yt-dlp cookie jar to read from and write back to
+            (default: config.YDL_COOKIEFILE). Concurrent download workers
+            each pass their own -- see jobs.tasks.
 
     Returns:
         tuple: (final_track_path, final_cover_path or None)
     """
-    _cleanup_partial_files(DOWNLOAD_DIR)
+    job_dir = _job_download_dir(video_id)
+    try:
+        return _download_into(
+            job_dir, video_id, artist_name, album_name, track_title, track_number,
+            year, cover_path_override, skip_metadata, cookiefile,
+        )
+    finally:
+        shutil.rmtree(job_dir, ignore_errors=True)
 
+
+def _download_into(
+    job_dir: Path,
+    video_id: str,
+    artist_name: Optional[str],
+    album_name: Optional[str],
+    track_title: Optional[str],
+    track_number: Optional[int],
+    year: Optional[Union[str, int]],
+    cover_path_override: Optional[Union[str, Path]],
+    skip_metadata: bool,
+    cookiefile: Optional[Union[str, Path]],
+) -> tuple[str, Optional[str]]:
     url = f"https://www.youtube.com/watch?v={video_id}"
-    outtmpl = str(Path(str(DOWNLOAD_DIR)) / "song.%(ext)s")
+    outtmpl = str(job_dir / "song.%(ext)s")
     ydl_opts: Dict[str, Any] = {
         "format": YDL_FORMAT or "bestaudio/best",
-        'cookiefile': YDL_COOKIEFILE,
+        "cookiefile": str(cookiefile or YDL_COOKIEFILE),
         "outtmpl": outtmpl,
+        # Route yt-dlp's own messages through logging so they reach the log
+        # file, not just stdout. Its progress lines arrive at DEBUG (i.e.
+        # dropped at INFO); its "ERROR: [youtube] ..." lines at ERROR.
+        "logger": logging.getLogger("yt_dlp"),
         "quiet": False,
         "no_warnings": True,
         "noplaylist": True,
@@ -127,7 +157,7 @@ def download_track_by_videoid(
         logger.exception("yt-dlp failed for %s", url)
         raise
 
-    downloaded_file = _find_downloaded_file(DOWNLOAD_DIR)
+    downloaded_file = _find_downloaded_file(job_dir)
     if not downloaded_file:
         raise FileNotFoundError("Downloaded file not found in downloads directory")
 

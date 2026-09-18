@@ -67,6 +67,23 @@ VALID_ROLES = [ROLE_ADMINISTRATOR, ROLE_MEMBER, ROLE_VISITOR]
 YDL_FORMAT = "m4a/bestaudio/best"
 YDL_PREFERRED_CODEC = "m4a"
 YDL_COOKIEFILE = Path("/config/ytcookies.txt")
+# Optional cookies exported from a signed-in YouTube account (uploaded via the
+# admin panel). Used ONLY as a fallback for age-restricted videos, never for
+# ordinary downloads and never to get around a rate limit -- keeping its
+# request count tiny is what keeps the account from being flagged.
+YDL_USER_COOKIEFILE = Path("/config/ytcookies-user.txt")
+
+# Number of download worker *processes* supervisord starts (deploy/entrypoint.sh
+# exports it; deploy/supervisord.conf reads it as numprocs). This is the
+# ceiling: how many of them actually take jobs is the runtime-tunable
+# download.max_concurrent setting. The 3 mirrors the entrypoint default.
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, "") or default))
+    except ValueError:
+        return default
+
+DOWNLOAD_WORKERS = _positive_int_env("DOWNLOAD_WORKERS", 3)
 
 # Server / docker
 PORT = int(os.environ.get("PORT", 8000))

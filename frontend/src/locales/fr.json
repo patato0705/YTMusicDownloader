@@ -116,6 +116,7 @@
     "charts": "Charts",
     "import": "Importer",
     "activeJobs": "{count} en cours",
+    "rateLimited": "Limité par YouTube — téléchargements en pause jusqu'à {time}",
     "jobTypes": {
       "download_track": "titres",
       "download_lyrics": "paroles",
@@ -348,6 +349,7 @@
       "saved": "Paramètres enregistrés avec succès",
       "saveFailed": "Échec de l'enregistrement des paramètres",
       "invalidNumber": "« {name} » doit être un nombre entier d'au moins {min}",
+      "invalidNumberRange": "« {name} » doit être un nombre entier entre {min} et {max}",
       "categories": {
         "auth": "Authentification",
         "download": "Téléchargements",
@@ -365,7 +367,11 @@
         "download": {
           "max_concurrent": {
             "label": "Téléchargements simultanés max.",
-            "description": "Nombre maximum de téléchargements exécutés en même temps."
+            "description": "Pistes téléchargées depuis YouTube en même temps. Les métadonnées et les paroles sont déjà traitées en parallèle ; ceci n'ajoute que des flux de téléchargement, et chaque flux supplémentaire depuis une même IP augmente le risque de limitation. Appliqué sans redémarrage ; le plafond est la variable d'environnement DOWNLOAD_WORKERS."
+          },
+          "rate_limit_pause_minutes": {
+            "label": "Pause après limitation",
+            "description": "Minutes pendant lesquelles tous les téléchargements s'arrêtent quand YouTube nous limite ou nous soupçonne d'être un robot, pour que les autres workers ne transforment pas une limite temporaire en bannissement. Double à chaque pause consécutive (jusqu'à 16x) jusqu'au prochain téléchargement réussi."
           }
         },
         "features": {
@@ -410,6 +416,18 @@
             "description": "Langue des données récupérées depuis YouTube Music (biographies d'artistes, descriptions d'albums, …)."
           }
         }
+      },
+      "cookies": {
+        "label": "Cookies de compte YouTube",
+        "description": "Un fichier cookies.txt exporté depuis un navigateur connecté à un compte YouTube (utilisez un compte jetable, pas votre compte principal). Servi uniquement pour récupérer les pistes soumises à une limite d'âge ; jamais pour les téléchargements ordinaires ni pour contourner une limitation, le compte ne voit donc qu'une poignée de requêtes.",
+        "none": "Aucun cookie de compte importé — les pistes soumises à une limite d'âge échoueront.",
+        "present": "Importé : {count} cookies, {date}",
+        "upload": "Importer cookies.txt",
+        "replace": "Remplacer",
+        "remove": "Supprimer",
+        "uploaded": "Cookies de compte enregistrés",
+        "uploadFailed": "Ce fichier ne ressemble pas à un cookies.txt",
+        "deleted": "Cookies de compte supprimés"
       },
       "maintenance": "Maintenance",
       "cleanupTitle": "Nettoyage de la bibliothèque",

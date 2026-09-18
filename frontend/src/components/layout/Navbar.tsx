@@ -17,7 +17,7 @@ export default function Navbar(): JSX.Element {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [chartsEnabled, setChartsEnabled] = useState(false);
-  const { activeJobCount, activeByType } = useJobActivity();
+  const { activeJobCount, activeByType, downloadsPausedUntil } = useJobActivity();
 
   // Check if charts feature is enabled
   useEffect(() => {
@@ -54,6 +54,12 @@ export default function Navbar(): JSX.Element {
     t('nav.activeJobs', { count: String(activeJobCount) }),
     jobBreakdown,
   ].filter(Boolean).join('\n');
+
+  const pausedTooltip = downloadsPausedUntil
+    ? t('nav.rateLimited', {
+        time: new Date(downloadsPausedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      })
+    : '';
 
   // Handle scroll effect
   useEffect(() => {
@@ -148,6 +154,17 @@ export default function Navbar(): JSX.Element {
 
                 {/* Right side - Desktop: Theme + Language + User, Mobile: User only */}
                 <div className="flex items-center space-x-1 lg:space-x-2">
+                  {/* YouTube rate limit: downloads paused (backend/jobs/gate.py) */}
+                  {isAuthenticated && downloadsPausedUntil && (
+                    <div
+                      className="flex items-center justify-center w-7 h-7 rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 text-sm font-bold cursor-help"
+                      title={pausedTooltip}
+                      aria-label={pausedTooltip}
+                    >
+                      !
+                    </div>
+                  )}
+
                   {/* Active jobs indicator */}
                   {isAuthenticated && activeJobCount > 0 && (
                     <div

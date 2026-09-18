@@ -28,6 +28,8 @@ interface JobActivityContextType {
   activeByType: Record<string, number>;
   /** Bumped on every change to the queue - watch it to know when to refetch */
   revision: number;
+  /** Set while YouTube has rate-limited us and downloads are paused (ISO time the pause ends) */
+  downloadsPausedUntil: string | null;
   /** Poll immediately, e.g. straight after queueing a download */
   refresh: () => void;
 }
@@ -39,6 +41,7 @@ export const JobActivityProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [activeJobCount, setActiveJobCount] = useState(0);
   const [activeByType, setActiveByType] = useState<Record<string, number>>({});
   const [revision, setRevision] = useState(0);
+  const [downloadsPausedUntil, setDownloadsPausedUntil] = useState<string | null>(null);
 
   // Kept in refs so the polling loop below never needs to be torn down and
   // rebuilt (which would restart the timer) just because a count changed.
@@ -50,6 +53,7 @@ export const JobActivityProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!isAuthenticated) {
       setActiveJobCount(0);
       setActiveByType({});
+      setDownloadsPausedUntil(null);
       activeCountRef.current = 0;
       signatureRef.current = null;
       refreshRef.current = () => {};
@@ -86,13 +90,27 @@ export const JobActivityProvider: React.FC<{ children: React.ReactNode }> = ({ c
         // stuck for hours. pending_scheduled is exactly that not-yet-eligible
         // subset, so subtract it out.
         const readyToRun = (stats.queued || 0) - (stats.pending_scheduled || 0);
-        const count = Math.max(0, readyToRun) + (stats.reserved || 0);
+        let count = Math.max(0, readyToRun) + (stats.reserved || 0);
+        const byType: Record<string, number> = { ...(res?.active_by_type || {}) };
+
+        // While YouTube has us rate-limited, queued downloads are eligible
+        // as far as the queue knows but no worker will touch them
+        // (backend/jobs/gate.py). The red badge says why they're waiting;
+        // the spinner should only reflect what's actually running.
+        const pausedUntil = res?.downloads?.paused_until ?? null;
+        if (pausedUntil) {
+          count = Math.max(0, count - (byType.download_track || 0));
+          delete byType.download_track;
+        }
 
         activeCountRef.current = count;
         setActiveJobCount(count);
-        setActiveByType(res?.active_by_type || {});
+        setActiveByType(byType);
+        setDownloadsPausedUntil(pausedUntil);
 
-        const signature = JSON.stringify(stats);
+        // The pause is part of what pages show (tracks sitting in "new"),
+        // so a change to it counts as the queue moving too.
+        const signature = JSON.stringify([stats, pausedUntil]);
         if (signatureRef.current !== null && signature !== signatureRef.current) {
           setRevision((r) => r + 1);
         }
@@ -126,7 +144,7 @@ export const JobActivityProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   return (
     <JobActivityContext.Provider
-      value={{ activeJobCount, activeByType, revision, refresh: () => refreshRef.current() }}
+      value={{ activeJobCount, activeByType, revision, downloadsPausedUntil, refresh: () => refreshRef.current() }}
     >
       {children}
     </JobActivityContext.Provider>

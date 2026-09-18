@@ -52,6 +52,7 @@ def _job_to_dict(job: Job) -> Dict[str, Any]:
         "priority": job.priority,
         "scheduled_at": job.scheduled_at,
         "reserved_by": job.reserved_by,
+        "heartbeat_at": job.heartbeat_at,
         "started_at": job.started_at,
         "finished_at": job.finished_at,
         "created_at": job.created_at,
@@ -394,8 +395,20 @@ def get_job_stats(
             job_type: count for job_type, count in active_query.group_by(Job.type).all()
         }
 
+        # Download throttle state (jobs.gate): how many download workers are
+        # active and whether a rate-limit pause is in force. Global, not
+        # per-user, so it's the same for everyone.
+        from ..jobs import gate
+        paused_until = gate.downloads_paused_until(session)
+        downloads = {
+            "active_workers": gate.active_download_slots(session),
+            "max_workers": config.DOWNLOAD_WORKERS,
+            "paused_until": paused_until.isoformat() if paused_until else None,
+        }
+
         return {
             "ok": True,
+            "downloads": downloads,
             "stats": stats,
             "active_by_type": active_by_type,
             "total": sum(v for k, v in stats.items() if k != "pending_scheduled"),

@@ -30,7 +30,7 @@ from ..services import tracks as tracks_svc
 from ..services import charts as charts_svc
 from .. import downloader
 
-from ..config import YDL_COOKIEFILE
+from ..config import YDL_COOKIEFILE, YDL_USER_COOKIEFILE
 
 logger = logging.getLogger("jobs.tasks")
 
@@ -72,35 +72,122 @@ def _db_operation_with_retry(operation, max_retries=3, delay=0.1):
 # HELPER: YTCOOKIES MANAGEMENT FOR RATE LIMITING
 # ============================================================================
 
+def _youtube_cookiefile() -> Path:
+    """
+    The yt-dlp cookie jar this worker process uses.
+
+    yt-dlp both reads the jar and writes it back on exit, and these cookies
+    are an anonymous session yt-dlp creates by itself (nobody logs in). So
+    each download worker gets its own file, named after WORKER_NAME
+    (deploy/supervisord.conf): with a shared file, worker A resetting its
+    rate-limited session would race worker B rewriting the stale one back
+    a moment later. A process without WORKER_NAME (dev shell) keeps the
+    plain config.YDL_COOKIEFILE.
+    """
+    import os
+    worker = os.environ.get("WORKER_NAME", "").strip()
+    if not worker:
+        return YDL_COOKIEFILE
+    safe = "".join(c for c in worker if c.isalnum() or c in "-_") or "worker"
+    return YDL_COOKIEFILE.with_name(f"{YDL_COOKIEFILE.stem}-{safe}{YDL_COOKIEFILE.suffix}")
+
+
+# Substrings (lower-cased, straight apostrophes) of the yt-dlp errors that
+# mean "YouTube is throttling this IP/session", as opposed to a problem with
+# the one video. Keep this list current: when YouTube changes the wording,
+# the symptom is dozens of identical failures in a row with no "Paused all
+# downloads" line between them.
+_YOUTUBE_THROTTLE_MARKERS = (
+    "rate-limited by youtube",
+    "current session has been rate-limited",
+    "sign in to confirm you're not a bot",   # IP-level bot check, the usual one since 2024
+    "confirm you're not a bot",
+    "http error 429",
+    "too many requests",
+)
+
+
 def _is_youtube_rate_limit_error(error_msg: str) -> bool:
     """
-    Check if the error is YouTube's rate limit error.
+    Whether a yt-dlp error means YouTube is throttling us (rate limit or
+    bot check) rather than something wrong with this particular video.
     """
     if not error_msg:
         return False
-    
-    error_lower = str(error_msg).lower()
-    return (
-        "rate-limited by youtube" in error_lower or
-        "current session has been rate-limited" in error_lower or
-        ("this content isn't available" in error_lower and "try again later" in error_lower)
-    )
+
+    # yt-dlp quotes YouTube's message verbatim, curly apostrophe included
+    error_lower = str(error_msg).lower().replace("\u2019", "'")
+    if any(marker in error_lower for marker in _YOUTUBE_THROTTLE_MARKERS):
+        return True
+    return "this content isn't available" in error_lower and "try again later" in error_lower
+
+
+# yt-dlp errors that mean "this video needs a signed-in, age-verified
+# account" -- the one case the user's own cookie jar is used for.
+_YOUTUBE_AGE_GATE_MARKERS = (
+    "sign in to confirm your age",
+    "age-restricted",
+    "age restricted",
+    "inappropriate for some users",
+)
+
+
+def _is_youtube_age_gate_error(error_msg: str) -> bool:
+    if not error_msg:
+        return False
+    error_lower = str(error_msg).lower().replace("\u2019", "'")
+    return any(marker in error_lower for marker in _YOUTUBE_AGE_GATE_MARKERS)
+
+
+def _user_cookiefile_available() -> bool:
+    try:
+        return YDL_USER_COOKIEFILE.is_file() and YDL_USER_COOKIEFILE.stat().st_size > 0
+    except OSError:
+        return False
+
+
+class _user_cookie_lock:
+    """
+    Serialise use of the account cookie jar across worker processes.
+
+    yt-dlp writes the jar back on exit (Google rotates session cookies, so
+    that write-back is what keeps an uploaded jar valid over time), and two
+    workers doing so at once would corrupt it. Age-gated tracks are rare,
+    so waiting on the lock costs nothing in practice.
+    """
+
+    def __enter__(self):
+        import fcntl
+        self._fh = open(YDL_USER_COOKIEFILE.with_suffix(".lock"), "w")
+        fcntl.flock(self._fh, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        import fcntl
+        try:
+            fcntl.flock(self._fh, fcntl.LOCK_UN)
+        finally:
+            self._fh.close()
+        return False
 
 
 def _reset_youtube_cookies() -> bool:
     """
-    Delete the YouTube cookies file to reset the rate limit session.
+    Delete this worker's YouTube cookies file to reset the rate-limited
+    session; yt-dlp starts a fresh anonymous one and writes a new file on
+    the next download.
     
     Returns:
         True if cookies were deleted, False otherwise
     """
+    cookiefile = _youtube_cookiefile()
     try:
-        if YDL_COOKIEFILE.exists():
-            YDL_COOKIEFILE.unlink()
-            logger.info(f"Deleted YouTube cookies at {YDL_COOKIEFILE} to reset rate limit")
+        if cookiefile.exists():
+            cookiefile.unlink()
+            logger.info(f"Deleted YouTube cookies at {cookiefile} to reset rate limit")
             return True
         else:
-            logger.warning(f"YouTube cookies file not found at {YDL_COOKIEFILE}")
+            logger.warning(f"YouTube cookies file not found at {cookiefile}")
             return False
     except Exception as e:
         logger.exception(f"Failed to delete YouTube cookies: {e}")
@@ -123,7 +210,8 @@ def download_track(
     2. Get album/artist info for metadata
     3. Update status to "downloading" and COMMIT
     4. Call downloader.core.download_track_by_videoid() (no transaction held)
-    5. If rate-limited, delete cookies and retry
+    5. If rate-limited, reset this worker's cookies and retry; if the video
+       is age-restricted, retry with the admin-uploaded account cookies
     6. Update Track table with file_path and status, COMMIT
     7. Update Album cover if new cover path returned, COMMIT
     
@@ -190,63 +278,79 @@ def download_track(
         
         logger.info(f"Downloading track {track_id}: {track_title}")
         
-        # Perform download with retry on rate limit
-        max_download_attempts = 2  # Try once, if rate-limited reset cookies and try once more
-        last_error = None
+        # Perform download. Two fallbacks, each tried at most once:
+        #   - YouTube throttles us -> reset this worker's anonymous cookie
+        #     jar (fresh session) and retry;
+        #   - the video is age-gated -> retry with the account cookies the
+        #     admin uploaded, if any. That jar is used for nothing else: not
+        #     for ordinary downloads, and NOT to get past a rate limit, so
+        #     the account only ever sees a handful of requests.
+        dl_func = getattr(downloader.core, "download_track_by_videoid", None)
+        if dl_func is None:
+            raise AttributeError("downloader.core.download_track_by_videoid not found")
+
+        cookiefile = _youtube_cookiefile()
+        cookies_reset = False
+        user_jar_tried = False
         result = None
-        
-        for attempt in range(max_download_attempts):
+
+        while True:
             try:
-                dl_func = getattr(downloader.core, "download_track_by_videoid", None)
-                if dl_func is None:
-                    raise AttributeError("downloader.core.download_track_by_videoid not found")
-                
-                result = dl_func(
-                    video_id=track_id,
-                    artist_name=artist_name,
-                    album_name=album_name,
-                    track_title=track_title,
-                    track_number=track_number,
-                    year=year,
-                    cover_path_override=cover_path,
-                    skip_metadata=True,
-                )
-                
-                # Success! Break out of retry loop
+                if cookiefile == YDL_USER_COOKIEFILE:
+                    with _user_cookie_lock():
+                        result = dl_func(
+                            video_id=track_id,
+                            artist_name=artist_name,
+                            album_name=album_name,
+                            track_title=track_title,
+                            track_number=track_number,
+                            year=year,
+                            cover_path_override=cover_path,
+                            skip_metadata=True,
+                            cookiefile=cookiefile,
+                        )
+                else:
+                    result = dl_func(
+                        video_id=track_id,
+                        artist_name=artist_name,
+                        album_name=album_name,
+                        track_title=track_title,
+                        track_number=track_number,
+                        year=year,
+                        cover_path_override=cover_path,
+                        skip_metadata=True,
+                        cookiefile=cookiefile,
+                    )
                 break
-                
+
             except Exception as download_error:
-                last_error = download_error
                 error_msg = str(download_error)
-                
-                # Check if this is a YouTube rate limit error
-                if _is_youtube_rate_limit_error(error_msg):
-                    logger.warning(
-                        f"YouTube rate limit detected on attempt {attempt + 1}/{max_download_attempts} "
-                        f"for track {track_id}"
-                    )
-                    
-                    # If this is not the last attempt, reset cookies and retry
-                    if attempt < max_download_attempts - 1:
-                        cookies_deleted = _reset_youtube_cookies()
-                        
-                        if cookies_deleted:
-                            logger.info(f"Retrying download for track {track_id} after cookie reset")
-                            import time
-                            time.sleep(2)  # Brief pause before retry
-                            continue
-                        else:
-                            logger.error("Failed to reset cookies, not retrying")
-                            # Fall through to raise below
-                    
-                    # Last attempt or cookie deletion failed
-                    logger.error(
-                        f"YouTube rate limit persists for track {track_id}"
-                    )
-                
-                # Re-raise the error (either not a rate limit, or exhausted retries)
+
+                if _is_youtube_age_gate_error(error_msg):
+                    if not user_jar_tried and _user_cookiefile_available():
+                        user_jar_tried = True
+                        cookiefile = YDL_USER_COOKIEFILE
+                        logger.info(f"Track {track_id} is age-restricted; retrying with the account cookies")
+                        continue
+                    if not user_jar_tried:
+                        logger.warning(
+                            f"Track {track_id} is age-restricted and no account cookies are uploaded "
+                            f"(admin panel > Settings > Downloads)"
+                        )
+                    raise
+
+                if _is_youtube_rate_limit_error(error_msg) and cookiefile != YDL_USER_COOKIEFILE:
+                    logger.warning(f"YouTube rate limit detected for track {track_id}")
+                    if not cookies_reset and _reset_youtube_cookies():
+                        cookies_reset = True
+                        logger.info(f"Retrying download for track {track_id} after cookie reset")
+                        import time
+                        time.sleep(2)
+                        continue
+                    logger.error(f"YouTube rate limit persists for track {track_id}")
+
                 raise
-        
+
         # Handle tuple return (file_path, cover_path)
         file_path = None
         new_cover_path = None
@@ -278,6 +382,15 @@ def download_track(
         _db_operation_with_retry(commit_track_update)
         
         logger.info(f"Successfully downloaded track {track_id} to {file_path}")
+
+        # A success means YouTube is talking to us again: reset the pause
+        # escalation so the next throttle starts from the base duration.
+        try:
+            from .gate import note_download_succeeded
+            note_download_succeeded(session)
+        except Exception:
+            logger.debug("Failed to reset pause streak", exc_info=True)
+            session.rollback()
         
         # Update album cover
         if new_cover_path and album_id_final:
@@ -342,15 +455,22 @@ def download_track(
         }
         
     except Exception as e:
-        logger.exception(f"Download failed for track {track_id}")
-        
-        # Update track status to failed
+        error_msg = str(e)
+        throttled = _is_youtube_rate_limit_error(error_msg)
+        if throttled:
+            logger.warning(f"Download of track {track_id} hit YouTube's rate limit; requeued")
+        else:
+            logger.exception(f"Download failed for track {track_id}")
+
+        # Update track status. A rate limit says nothing about the track --
+        # it goes back to "new" (queued) so the UI shows it waiting rather
+        # than broken; the job's retry picks it up once the pause lifts.
         try:
             track = session.get(Track, str(track_id))  # Re-fetch
             if not track:
                 logger.error(f"Track {track_id} not found when marking failed")
             else:
-                track.status = "failed"
+                track.status = "new" if throttled else "failed"
                 track.last_error = tracks_svc.truncate_error(e)
                 session.add(track)
 
@@ -371,8 +491,30 @@ def download_track(
             session.rollback()
         
         # Check if this is a rate limit error for retry logic
-        error_msg = str(e)
-        if _is_youtube_rate_limit_error(error_msg):
+        if _is_youtube_age_gate_error(error_msg):
+            # Nothing will change until someone uploads account cookies (or
+            # the uploaded ones are from an account that isn't age-verified),
+            # so don't burn attempts every five minutes.
+            hint = (
+                "age-restricted; upload cookies from a signed-in YouTube account in the admin panel"
+                if not _user_cookiefile_available()
+                else "age-restricted even with the uploaded account cookies (is that account age-verified?)"
+            )
+            return {
+                "ok": False,
+                "error": f"Download failed: {hint} -- {error_msg}",
+                "retry_delay_seconds": 86400,
+            }
+        if throttled:
+            # Still limited after a fresh session: it's the IP, not the
+            # cookies. Stop every download worker for a while rather than
+            # letting the others keep hammering (jobs.gate).
+            try:
+                from .gate import pause_downloads
+                pause_downloads(session, reason=f"track {track_id}: {tracks_svc.truncate_error(e)}")
+            except Exception:
+                logger.exception("Failed to pause downloads after rate limit")
+                session.rollback()
             return {
                 "ok": False,
                 "error": f"Download failed: {error_msg}",
@@ -1200,6 +1342,8 @@ _TASK_MAP = {
     "sync_artist": sync_artist,
     "sync_chart": sync_chart,
 }
+
+ALL_JOB_TYPES = tuple(_TASK_MAP)
 
 
 def run_job_task(session: Session, job: Job) -> Dict[str, Any]:

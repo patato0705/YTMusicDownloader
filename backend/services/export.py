@@ -233,9 +233,12 @@ def build_users_section(session: Session) -> List[Dict[str, Any]]:
 
 def build_settings_section(session: Session) -> List[Dict[str, Any]]:
     settings = session.execute(select(Setting).order_by(Setting.key)).scalars().all()
+    # Internal keys (e.g. download.paused_until) are transient state, not
+    # preferences -- carrying them over to another install makes no sense.
     return [
         {"key": s.key, "type": s.type, "value": s.get_typed_value()}
         for s in settings
+        if not settings_module.is_internal(s.key)
     ]
 
 
