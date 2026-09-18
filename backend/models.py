@@ -172,6 +172,10 @@ class Job(Base):
     result: Mapped[Optional[Any]] = mapped_column(JSONCol, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     reserved_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Touched periodically by the worker holding the job; a "reserved" job
+    # whose heartbeat has gone stale belongs to a dead worker and gets
+    # requeued (see jobqueue.reclaim_orphaned_jobs).
+    heartbeat_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     
     user_id: Mapped[Optional[int]] = mapped_column(
         Integer,
@@ -196,6 +200,7 @@ class Job(Base):
             "result": getattr(self, "result", None),
             "created_at": created.isoformat() if (created := getattr(self, "created_at", None)) else None,
             "reserved_by": getattr(self, "reserved_by", None),
+            "heartbeat_at": hb.isoformat() if (hb := getattr(self, "heartbeat_at", None)) else None,
             "user_id": getattr(self, "user_id", None),  # NEW
         }
 

@@ -37,6 +37,7 @@ class JobOut(BaseModel):
     finished_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     reserved_by: Optional[str] = None
+    heartbeat_at: Optional[datetime] = None
     last_error: Optional[str] = None
     result: Optional[Any] = None
     payload: Optional[Any] = None

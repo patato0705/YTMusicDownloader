@@ -5,29 +5,43 @@ Simple job queue helpers for SQLite-compatible job processing.
 Functions:
 - enqueue_job() - Create a new job and commit
 - reserve_job() - Atomically reserve next job for processing
+- heartbeat_job() - Record that the worker holding a job is still alive
 - mark_job_done() - Mark job as successfully completed
 - mark_job_failed() - Mark job as failed (with optional retry)
-- reclaim_orphaned_jobs() - Requeue jobs left "reserved" by a crashed/killed worker
+- reclaim_orphaned_jobs() - Requeue jobs left "reserved" by a dead worker
 - cancel_job() - Cancel a queued or reserved job
 - cleanup_old_jobs() - Delete old completed jobs
 
 Notes:
 - All functions commit the session to make changes visible to worker processes
-- Designed for SQLite (no SELECT ... FOR UPDATE)
-- Reserve logic is best-effort with optimistic locking
+- Several worker processes poll this queue concurrently (see
+  deploy/supervisord.conf), so reserve_job() must be safe against two
+  workers picking the same row. It is: the claim is a conditional UPDATE
+  (... WHERE status = 'queued' AND attempts = <seen>) and only the worker
+  whose UPDATE hit a row wins. No SELECT ... FOR UPDATE needed, so this
+  works on SQLite as-is.
 """
 from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Sequence
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, update, and_, or_
 from sqlalchemy.orm import Session
 
-from ..models import Job
+from ..models import Job, Track
 from ..time_utils import now_utc
 
 logger = logging.getLogger("jobs.jobqueue")
+
+# How many lost reservation races to retry before giving up this poll.
+RESERVE_MAX_RACES = 5
+
+# A reserved job whose heartbeat is older than this is treated as abandoned.
+# Workers heartbeat every HEARTBEAT_INTERVAL_SECONDS (jobs/worker.py), so this
+# tolerates a few missed beats before pulling a job out from under a worker
+# that's merely slow.
+STALE_HEARTBEAT_SECONDS = 300
 
 
 def enqueue_job(
@@ -80,106 +94,184 @@ def enqueue_job(
     return job
 
 
-def reserve_job(session: Session, worker_name: str) -> Optional[Job]:
+def reserve_job(
+    session: Session,
+    worker_name: str,
+    job_types: Optional[Sequence[str]] = None,
+) -> Optional[Job]:
     """
     Reserve the next available job for processing.
-    
-    Atomically selects and marks a job as reserved:
-    1. Find oldest queued job where:
-       - status = "queued"
-       - attempts < max_attempts
-       - scheduled_at is NULL or <= now
-    2. Increment attempts
-    3. Set status = "reserved"
-    4. Set reserved_by = worker_name
-    5. Set started_at = now
-    6. Commit and return
-    
+
+    Picks the highest-priority, oldest job that is queued, under its attempt
+    limit and not scheduled for later, then claims it with a conditional
+    UPDATE so that concurrent workers can't both take it. If the claim loses
+    the race (0 rows updated) the next candidate is tried, up to a few times.
+
     Args:
         session: SQLAlchemy session
-        worker_name: Worker identifier (e.g., "worker-12345")
-    
+        worker_name: Worker identifier (e.g., "worker-download-0")
+        job_types: If given, only jobs of these types are considered. This is
+            how a worker gets scoped to a task family (downloads vs metadata)
+            -- see WORKER_JOB_TYPES in jobs/worker.py.
+
     Returns:
         Reserved Job instance, or None if no jobs available
     """
     now = now_utc()
-    
-    # Find candidate job (highest priority first, then oldest)
-    stmt = (
-        select(Job)
-        .where(
-            and_(
-                Job.status == "queued",
-                Job.attempts < Job.max_attempts,
-                (Job.scheduled_at == None) | (Job.scheduled_at <= now),
-            )
+
+    conditions = [
+        Job.status == "queued",
+        Job.attempts < Job.max_attempts,
+        (Job.scheduled_at == None) | (Job.scheduled_at <= now),
+    ]
+    if job_types:
+        conditions.append(Job.type.in_(list(job_types)))
+
+    # A lost race means another worker took the row between our SELECT and
+    # our UPDATE; there's usually a next candidate right behind it.
+    for _ in range(RESERVE_MAX_RACES):
+        stmt = (
+            select(Job.id, Job.attempts)
+            .where(and_(*conditions))
+            .order_by(Job.priority.desc(), Job.created_at.asc())
+            .limit(1)
         )
-        .order_by(Job.priority.desc(), Job.created_at.asc())
-        .limit(1)
-    )
-    
-    job = session.execute(stmt).scalars().first()
-    if not job:
-        return None
-    
-    # Atomically update the job
-    try:
-        job.attempts = (job.attempts or 0) + 1
-        job.status = "reserved"
-        job.reserved_by = worker_name
-        job.started_at = now
-        session.add(job)
-        session.commit()
+        row = session.execute(stmt).first()
+        if not row:
+            return None
+        job_id, seen_attempts = row
+
+        try:
+            claimed = session.execute(
+                update(Job)
+                .where(
+                    Job.id == job_id,
+                    Job.status == "queued",
+                    Job.attempts == seen_attempts,
+                )
+                .values(
+                    status="reserved",
+                    attempts=(seen_attempts or 0) + 1,
+                    reserved_by=worker_name,
+                    started_at=now,
+                    heartbeat_at=now,
+                )
+            ).rowcount
+            session.commit()
+        except Exception as e:
+            logger.exception(f"Failed to reserve job {job_id}: {e}")
+            session.rollback()
+            return None
+
+        if claimed != 1:
+            logger.debug(f"Lost race for job {job_id} to another worker, retrying")
+            continue
+
+        job = session.get(Job, job_id)
+        if job is None:  # cancelled/deleted under us; vanishingly rare
+            continue
         session.refresh(job)
-        
         logger.debug(
             f"Reserved job {job.id}: type={job.type}, "
             f"attempt={job.attempts}/{job.max_attempts}, "
             f"worker={worker_name}"
         )
         return job
-    except Exception as e:
-        logger.exception(f"Failed to reserve job {job.id}: {e}")
-        session.rollback()
-        return None
+
+    return None
 
 
-def reclaim_orphaned_jobs(session: Session, worker_name: str) -> int:
+def heartbeat_job(session: Session, job_id: int, worker_name: str) -> bool:
     """
-    Requeue any job still marked "reserved" from a previous run.
+    Refresh heartbeat_at on a job this worker is still running. Commits.
 
-    Only one worker process runs at a time (see deploy/supervisord.conf), so
-    if a job is "reserved" when a worker starts up, the worker that reserved
-    it is gone -- killed mid-job by a container restart, crash, or update --
-    and that job would otherwise sit "reserved" forever, never picked up
-    again and never showing as failed. Call this once, before the poll loop
-    starts.
+    Returns False if the job is no longer reserved by this worker (it was
+    cancelled, or reclaimed because this heartbeat arrived too late) --
+    the worker can't do much about that mid-task, but it gets logged.
+    """
+    updated = session.execute(
+        update(Job)
+        .where(Job.id == job_id, Job.status == "reserved", Job.reserved_by == worker_name)
+        .values(heartbeat_at=now_utc())
+    ).rowcount
+    session.commit()
+    return updated == 1
+
+
+def reclaim_orphaned_jobs(
+    session: Session,
+    worker_name: str,
+    stale_after_seconds: int = STALE_HEARTBEAT_SECONDS,
+) -> int:
+    """
+    Requeue "reserved" jobs whose worker is gone.
+
+    Two cases, both requeued:
+      - jobs reserved under *this* worker's name: this process is the only
+        one that should hold them, and it just started, so a previous
+        incarnation died mid-job (container restart, crash, update);
+      - jobs whose heartbeat is older than stale_after_seconds, whoever
+        holds them: that worker stopped heartbeating (see Worker in
+        jobs/worker.py), so it's dead or wedged.
+
+    Jobs currently held by *other* live workers are left alone -- with
+    several worker processes running, "reserved" no longer means orphaned.
 
     Args:
         session: SQLAlchemy session
-        worker_name: This worker's identifier, recorded in last_error for
-            whichever jobs it reclaims (for debugging)
+        worker_name: This worker's identifier
+        stale_after_seconds: Heartbeat age beyond which a job counts as
+            abandoned. Must comfortably exceed the worker's heartbeat
+            interval.
 
     Returns:
         Number of jobs reclaimed
     """
-    stmt = select(Job).where(Job.status == "reserved")
+    now = now_utc()
+    cutoff = now - timedelta(seconds=stale_after_seconds)
+    stmt = select(Job).where(
+        Job.status == "reserved",
+        or_(
+            Job.reserved_by == worker_name,
+            Job.heartbeat_at < cutoff,
+            # Reserved before heartbeats existed / never heartbeated at all
+            and_(Job.heartbeat_at == None, Job.started_at < cutoff),
+        ),
+    )
     orphaned = session.execute(stmt).scalars().all()
 
     if not orphaned:
         return 0
 
-    now = now_utc()
     for job in orphaned:
+        previous = job.reserved_by
         job.status = "queued"
         job.reserved_by = None
         job.started_at = None
-        job.last_error = f"Reclaimed by {worker_name}: orphaned by a previous worker that never finished it"
+        job.heartbeat_at = None
+        job.last_error = (
+            f"Reclaimed by {worker_name}: orphaned by {previous or 'unknown worker'}, "
+            f"which never finished it"
+        )
         session.add(job)
+
+        # The dead worker had already flipped its track to "downloading";
+        # without this it would sit there looking in-progress until the
+        # retry, which may be a while.
+        if job.type == "download_track":
+            track_id = (job.payload or {}).get("track_id") if isinstance(job.payload, dict) else None
+            track = session.get(Track, str(track_id)) if track_id else None
+            if track and track.status == "downloading":
+                track.status = "new"
+                session.add(track)
+                if track.album_id:
+                    from ..services import subscriptions as subs_svc
+                    session.flush()
+                    subs_svc.check_and_update_album_download_status(session, track.album_id)
 
     session.commit()
 
-    logger.warning(f"Reclaimed {len(orphaned)} orphaned job(s) left 'reserved' by a previous run")
+    logger.warning(f"Reclaimed {len(orphaned)} orphaned job(s) left 'reserved' by a dead worker")
     return len(orphaned)
 
 
@@ -249,6 +341,7 @@ def mark_job_failed(
         job.priority = job.priority - job.attempts
         job.scheduled_at = now + timedelta(seconds=retry_delay_seconds)
         job.reserved_by = None  # Clear reservation
+        job.heartbeat_at = None
         session.add(job)
         session.commit()
         

@@ -9,7 +9,6 @@ from typing import Generator, Optional
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
 
 from .config import DB_PATH, ensure_dirs
 from .models import Base  # requires backend/models.py to define Base
@@ -20,14 +19,20 @@ ensure_dirs()
 # SQLite URL
 sqlite_url = f"sqlite:///{str(DB_PATH)}"
 
-# create engine with optimized settings for SQLite concurrency
+# A regular connection pool, not StaticPool. StaticPool hands the same single
+# connection to every thread, which serialises every request in the web
+# process behind whichever one is running (and, when that one is writing,
+# behind the worker's write lock too). With WAL, readers never block on the
+# writer, so a handful of connections per process lets the API keep
+# answering while a big import is committing in the worker.
 engine = create_engine(
     sqlite_url,
     connect_args={
         "check_same_thread": False,
         "timeout": 30.0,  # 30 second timeout for lock acquisition
     },
-    poolclass=StaticPool,  # Single connection pool (optimal for SQLite)
+    pool_size=5,
+    max_overflow=10,
     pool_pre_ping=True,    # Verify connections before using
     future=True,
 )

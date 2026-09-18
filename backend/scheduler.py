@@ -8,6 +8,8 @@ Responsibilities:
 3. Clean up old completed jobs (daily, keeping `scheduler.job_cleanup_days`)
 4. Clean up expired refresh tokens (every `scheduler.token_cleanup_days`)
 5. Retry/upgrade missing lyrics (every `scheduler.lyrics_retry_interval_hours`)
+6. Requeue jobs abandoned by a dead worker and drop stale download scratch
+   dirs (every 5 minutes)
 
 Note: Album subscriptions are handled on-demand (follow album → immediate import)
 """
@@ -20,7 +22,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from .db import SessionLocal
-from .jobs.jobqueue import enqueue_job, cleanup_old_jobs
+from .jobs.jobqueue import enqueue_job, cleanup_old_jobs, reclaim_orphaned_jobs
 from .services import subscriptions as subs_svc, auth as auth_svc, charts as charts_svc
 from .routers import features
 from . import settings as settings_module
@@ -60,6 +62,7 @@ class Scheduler:
         self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours
         self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours default
         self.lyrics_retry_interval_seconds: int = 86400  # 24 hours default
+        self.stale_sweep_interval_seconds: int = 300
         self.settings_refresh_interval: int = settings_refresh_interval
 
         self._thread_name = thread_name
@@ -70,6 +73,7 @@ class Scheduler:
         self._last_cleanup = 0.0
         self._last_token_cleanup = 0.0
         self._last_lyrics_retry = 0.0
+        self._last_stale_sweep = 0.0
         self._last_settings_refresh = 0.0
         
         # Don't load settings here - database might not be ready yet
@@ -240,6 +244,13 @@ class Scheduler:
                     self._last_lyrics_retry = now
                 except Exception:
                     logger.exception("Unexpected error in retry_missing_lyrics")
+
+            if now - self._last_stale_sweep >= self.stale_sweep_interval_seconds:
+                try:
+                    self.sweep_stale_work()
+                    self._last_stale_sweep = now
+                except Exception:
+                    logger.exception("Unexpected error in sweep_stale_work")
 
             # Sleep for a short interval (check every minute)
             self._stopped.wait(timeout=60.0)
@@ -414,6 +425,54 @@ class Scheduler:
                 except Exception:
                     pass
         
+    def sweep_stale_work(self) -> None:
+        """
+        Requeue jobs whose worker stopped heartbeating, and delete download
+        scratch dirs nobody is writing to any more.
+
+        Workers reclaim their own orphaned jobs when they start, but that
+        needs the same worker name to come back: scale DOWNLOAD_WORKERS
+        down and the retired worker's in-flight job would sit "reserved"
+        forever. Its heartbeat goes stale within minutes, and this sweep
+        catches that from a process that always runs.
+        """
+        session: Optional[Session] = None
+        try:
+            session = SessionLocal()
+            # "scheduler" never reserves anything, so this only reclaims by
+            # stale heartbeat, never by owner name.
+            reclaimed = reclaim_orphaned_jobs(session, "scheduler")
+            if reclaimed:
+                logger.warning(f"Requeued {reclaimed} job(s) abandoned by a dead worker")
+        except Exception:
+            logger.exception("Failed to reclaim stale jobs")
+        finally:
+            if session:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+
+        # A worker killed mid-download leaves DOWNLOAD_DIR/<video_id>/ behind
+        # until that job retries (which wipes it); if the job was cancelled
+        # instead, nothing ever would. A live download touches its dir
+        # constantly, so an hour without writes means abandoned.
+        try:
+            import shutil
+            from . import config
+            cutoff = time.time() - 3600
+            removed = 0
+            for d in config.DOWNLOAD_DIR.iterdir():
+                if d.is_dir() and d.stat().st_mtime < cutoff:
+                    shutil.rmtree(d, ignore_errors=True)
+                    removed += 1
+            if removed:
+                logger.info(f"Removed {removed} stale download scratch dir(s)")
+        except FileNotFoundError:
+            pass
+        except Exception:
+            logger.exception("Failed to sweep download scratch dirs")
+
     def cleanup_expired_tokens(self) -> None:
         """
         Clean up expired refresh tokens.
@@ -576,7 +635,8 @@ def stop_default_scheduler() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    from .logging_config import configure_logging
+    configure_logging(process_name="scheduler")
     sched = Scheduler()
     try:
         sched.start()

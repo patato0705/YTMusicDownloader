@@ -21,6 +21,14 @@ services:
       # / `id -g` on your host gives different numbers.
       # - PUID=1000
       # - PGID=1000
+      # Ceiling on parallel YouTube downloads: how many download worker
+      # processes exist (default 3). How many actually run at once is the
+      # "Max concurrent downloads" setting in the admin panel (default 1,
+      # capped at this value, changeable without a restart). Only raise
+      # this if you want to be able to set that above 3 -- every extra
+      # parallel stream from one IP raises the odds of YouTube rate-limiting
+      # or bot-checking you.
+      # - DOWNLOAD_WORKERS=3
       # Only needed if you're running the frontend on a different origin
       # than this backend (a custom/split deployment). Comma-separated
       # exact origin(s), e.g. https://music.example.com. Leave unset for
