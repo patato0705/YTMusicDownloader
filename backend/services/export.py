@@ -403,6 +403,7 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             continue
 
         obj.file_path = None
+        obj.file_size = None
         obj.lyrics = None
         obj.lyrics_local = None
         obj.status = "new"

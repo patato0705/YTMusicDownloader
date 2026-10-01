@@ -290,7 +290,7 @@
       "albums": "Albums",
       "tracks": "Titres",
       "diskUsage": "Espace disque",
-      "diskUsageInfo": "Estimé à partir d'une taille moyenne par titre, pas de la taille réelle des fichiers."
+      "diskUsageInfo": "Taille totale des fichiers audio téléchargés. Les paroles et pochettes ne sont pas comptées."
     },
     "empty": {
       "artists": "Aucun artiste suivi",

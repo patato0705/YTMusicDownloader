@@ -96,8 +96,8 @@ export interface LibraryStats {
     with_lyrics: number;
   };
   storage?: {
-    estimated_mb: number;
-    estimated_gb: number;
+    bytes: number;
+    gb: number;
   };
   [key: string]: any;
 }

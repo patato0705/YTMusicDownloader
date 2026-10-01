@@ -399,9 +399,13 @@ def get_library_stats(
         tracks_with_synced = db.query(func.count(Track.id)).filter(Track.lyrics == "synced").scalar() or 0
         tracks_with_plain = db.query(func.count(Track.id)).filter(Track.lyrics == "plain").scalar() or 0
 
-        # Calculate storage
-        estimated_size_mb = int(tracks_downloaded) * 3
-        estimated_size_gb = round(estimated_size_mb / 1024, 2)
+        # Storage: sum of audio file sizes recorded at download time.
+        # Lyrics/covers are not counted (~0.5% of the total).
+        storage_bytes = int(
+            db.query(func.coalesce(func.sum(Track.file_size), 0))
+            .filter(Track.status == "done")
+            .scalar() or 0
+        )
 
         return {
             "artists": {
@@ -426,8 +430,8 @@ def get_library_stats(
                 "with_plain_lyrics": int(tracks_with_plain),
             },
             "storage": {
-                "estimated_mb": estimated_size_mb,
-                "estimated_gb": estimated_size_gb,
+                "bytes": storage_bytes,
+                "gb": round(storage_bytes / 1024 ** 3, 2),
             }
         }
     

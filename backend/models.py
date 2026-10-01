@@ -122,6 +122,9 @@ class Track(Base):
     lyrics: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, default=None)
     lyrics_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     file_path: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+    # Audio file size in bytes, recorded when the download completes so the
+    # library stats can sum real sizes instead of guessing.
+    file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(64), default="new", nullable=False)
     # Why the download last failed. Jobs carry the same message but get
     # cleaned up; this one stays with the track until a later attempt clears it.
@@ -145,6 +148,7 @@ class Track(Base):
             "lyrics": self.lyrics,
             "lyrics_local": getattr(self, "lyrics_local", None),
             "file_path": getattr(self, "file_path", None),
+            "file_size": getattr(self, "file_size", None),
             "status": getattr(self, "status", None),
             "last_error": getattr(self, "last_error", None),
             "artist_valid": bool(getattr(self, "artist_valid", True)),

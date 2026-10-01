@@ -4,6 +4,7 @@ Track entity CRUD operations and track-specific business logic.
 """
 from __future__ import annotations
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -160,6 +161,10 @@ def update_track_status(
         track.last_error = truncate_error(error) if status == "failed" else None
         if file_path is not None:
             track.file_path = file_path
+            try:
+                track.file_size = Path(file_path).stat().st_size
+            except OSError:
+                track.file_size = None
         
         session.add(track)
         logger.debug(f"Updated track {track_id} status to {status}")

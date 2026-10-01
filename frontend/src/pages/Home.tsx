@@ -173,7 +173,7 @@ export default function Home(): JSX.Element {
           <StatCard
             icon={<ActivityIcon />}
             label={t('library.stats.diskUsage')}
-            value={loading ? <Spinner size="sm" /> : `${stats?.storage?.estimated_gb?.toFixed(1) || 0} GB`}
+            value={loading ? <Spinner size="sm" /> : `${stats?.storage?.gb?.toFixed(1) || 0} GB`}
             loading={loading}
             info={t('library.stats.diskUsageInfo')}
           />

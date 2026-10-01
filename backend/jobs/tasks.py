@@ -380,6 +380,11 @@ def download_track(
         track.status = "done"
         track.last_error = None
         track.file_path = str(file_path)
+        try:
+            track.file_size = Path(file_path).stat().st_size
+        except OSError:
+            logger.warning(f"Could not stat downloaded file for track {track_id}: {file_path}")
+            track.file_size = None
         session.add(track)
         
         def commit_track_update():

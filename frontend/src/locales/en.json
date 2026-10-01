@@ -290,7 +290,7 @@
       "albums": "Albums",
       "tracks": "Tracks",
       "diskUsage": "Disk Usage",
-      "diskUsageInfo": "Estimated from an average track size, not your actual file sizes."
+      "diskUsageInfo": "Total size of the downloaded audio files. Lyrics and covers are not counted."
     },
     "empty": {
       "artists": "No followed artists yet",
