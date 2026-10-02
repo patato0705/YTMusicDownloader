@@ -1,5 +1,5 @@
 // src/pages/Library.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { getLibraryArtists, getLibraryAlbums, getLibraryStats, searchLibraryTracks } from '../api/library';
@@ -18,6 +18,7 @@ import { ViewToggle, type ViewMode } from '../components/ui/ViewToggle';
 import { formatNumber, parseApiError, getAlbumStatus, getArtistStatus } from '../utils';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import { useDebounce } from '../hooks/useDebounce';
+import { useProgressiveList } from '../hooks/useProgressiveList';
 import type { Artist } from '../types';
 
 // Icon components
@@ -30,6 +31,10 @@ const SearchIcon = () => <span className="text-2xl">🔍</span>;
 
 const VIEW_STORAGE_KEY = 'library.view';
 const TRACK_SEARCH_DEBOUNCE_MS = 250;
+/** Shortest gap between two refreshes triggered by the job queue */
+const REFRESH_MIN_GAP_MS = 5000;
+/** Cards mounted per scroll step - a multiple of every grid column count (2-5) */
+const PAGE_SIZE = 60;
 
 /** Tracks matching the search, grouped by the album / artist they belong to */
 interface TrackMatches {
@@ -87,55 +92,67 @@ export default function Library(): JSX.Element {
     }
   }, [viewMode]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Kept in a ref so the effects below don't refire on it
+  const fetchRef = useRef({ loaded: false, inFlight: false, queued: false, lastStartedAt: 0, unmounted: false });
 
-    (async () => {
-      setLoading(true);
+  const loadLibrary = useCallback(async () => {
+    const state = fetchRef.current;
+    if (state.unmounted) return;
+    if (state.inFlight) {
+      // Folded into one follow-up once the current fetch lands
+      state.queued = true;
+      return;
+    }
+
+    state.inFlight = true;
+    state.lastStartedAt = Date.now();
+
+    try {
+      const [artistsResponse, albumsResponse, statsResponse] = await Promise.all([
+        getLibraryArtists(),
+        getLibraryAlbums(),
+        getLibraryStats(),
+      ]);
+
+      if (state.unmounted) return;
+      setArtists((artistsResponse as any)?.artists || artistsResponse || []);
+      setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
+      setStats(statsResponse || {});
       setError(null);
-
-      try {
-        const [artistsResponse, albumsResponse, statsResponse] = await Promise.all([
-          getLibraryArtists(),
-          getLibraryAlbums(),
-          getLibraryStats(),
-        ]);
-
-        if (!cancelled) {
-          setArtists((artistsResponse as any)?.artists || artistsResponse || []);
-          setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
-          setStats(statsResponse || {});
-        }
-      } catch (err: any) {
-        console.error('Failed to load library:', err);
-        if (!cancelled) setError(parseApiError(err, 'Failed to load library'));
-      } finally {
-        if (!cancelled) setLoading(false);
+      state.loaded = true;
+    } catch (err: any) {
+      console.error('Failed to load library:', err);
+      // A failed background refresh keeps what's on screen
+      if (!state.unmounted && !state.loaded) setError(parseApiError(err, 'Failed to load library'));
+    } finally {
+      state.inFlight = false;
+      if (!state.unmounted) setLoading(false);
+      if (state.queued) {
+        state.queued = false;
+        window.setTimeout(loadLibrary, Math.max(0, state.lastStartedAt + REFRESH_MIN_GAP_MS - Date.now()));
       }
-    })();
-
-    return () => { cancelled = true; };
+    }
   }, []);
 
-  // Refresh whenever the job queue moves, so status badges follow downloads
-  // started from anywhere - including ones this page hasn't heard of yet.
-  // Artists are refreshed too: their badge comes from their track counts.
   useEffect(() => {
-    if (revision === 0) return;
+    const state = fetchRef.current;
+    state.unmounted = false;
+    return () => { state.unmounted = true; };
+  }, []);
 
-    let cancelled = false;
-
-    Promise.all([getLibraryAlbums(), getLibraryArtists(), getLibraryStats()])
-      .then(([albumsResponse, artistsResponse, statsResponse]) => {
-        if (cancelled) return;
-        setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
-        setArtists((artistsResponse as any)?.artists || artistsResponse || []);
-        setStats(statsResponse || {});
-      })
-      .catch((err) => console.error('Failed to refresh library:', err));
-
-    return () => { cancelled = true; };
-  }, [revision]);
+  // Load on mount, then refresh whenever the job queue moves, so status
+  // badges follow downloads started from anywhere - including ones this page
+  // hasn't heard of yet. Artists are refreshed too: their badge comes from
+  // their track counts.
+  // While downloads run the queue moves every few seconds, so refreshes are
+  // spaced at least REFRESH_MIN_GAP_MS apart and the bumps in between are
+  // batched into the next one.
+  useEffect(() => {
+    const { lastStartedAt } = fetchRef.current;
+    const delay = lastStartedAt ? Math.max(0, lastStartedAt + REFRESH_MIN_GAP_MS - Date.now()) : 0;
+    const timer = window.setTimeout(loadLibrary, delay);
+    return () => window.clearTimeout(timer);
+  }, [revision, loadLibrary]);
 
   // Tracks aren't listed on this page, so a title-only search goes to the
   // server and the matching albums / artists are surfaced instead.
@@ -171,6 +188,55 @@ export default function Library(): JSX.Element {
     () => new Map<string, string>(albums.map((album) => [album.id, album.title])),
     [albums]
   );
+
+  // An artist's badge depends on its albums - grouped once instead of
+  // scanning every album for every artist card
+  const albumsByArtist = useMemo(() => {
+    const byArtist = new Map<string, any[]>();
+    for (const album of albums) {
+      const artistId = album.artist?.id ?? album.artist_id;
+      if (!artistId) continue;
+      const artistAlbums = byArtist.get(artistId);
+      if (artistAlbums) artistAlbums.push(album);
+      else byArtist.set(artistId, [album]);
+    }
+    return byArtist;
+  }, [albums]);
+
+  // Filter content based on active tab and search query. Name matches are
+  // done locally; an item whose name doesn't match still shows up when one of
+  // its tracks does, with a hint saying which one.
+  const query = searchQuery.toLowerCase();
+
+  const filteredArtists = useMemo(
+    () => activeTab === 'albums' ? [] : artists.filter(artist =>
+      artist.name?.toLowerCase().includes(query) || artistTrackMatches.has(artist.id)
+    ),
+    [artists, activeTab, query, artistTrackMatches]
+  );
+
+  const filteredAlbums = useMemo(
+    () => activeTab === 'artists' ? [] : albums.filter(album =>
+      album.title?.toLowerCase().includes(query) ||
+      (album.artist_name || album.artist?.name)?.toLowerCase().includes(query) ||
+      albumTrackMatches.has(album.id)
+    ),
+    [albums, activeTab, query, albumTrackMatches]
+  );
+
+  // Large libraries hold thousands of albums: mount the cards a page at a
+  // time as the user scrolls, starting over on a new search or tab
+  const listResetKey = `${activeTab}|${query}`;
+  const {
+    visible: displayedArtists,
+    hasMore: moreArtists,
+    sentinelRef: artistsSentinelRef,
+  } = useProgressiveList(filteredArtists, PAGE_SIZE, listResetKey);
+  const {
+    visible: displayedAlbums,
+    hasMore: moreAlbums,
+    sentinelRef: albumsSentinelRef,
+  } = useProgressiveList(filteredAlbums, PAGE_SIZE, listResetKey);
 
   const albumMatchHint = (albumId: string): string | undefined => {
     const matches = albumTrackMatches.get(albumId);
@@ -233,21 +299,6 @@ export default function Library(): JSX.Element {
 
   const hasContent = artists.length > 0 || albums.length > 0;
 
-  // Filter content based on active tab and search query. Name matches are
-  // done locally; an item whose name doesn't match still shows up when one of
-  // its tracks does, with a hint saying which one.
-  const query = searchQuery.toLowerCase();
-
-  const filteredArtists = activeTab === 'albums' ? [] : artists.filter(artist =>
-    artist.name?.toLowerCase().includes(query) || artistTrackMatches.has(artist.id)
-  );
-  
-  const filteredAlbums = activeTab === 'artists' ? [] : albums.filter(album =>
-    album.title?.toLowerCase().includes(query) ||
-    (album.artist_name || album.artist?.name)?.toLowerCase().includes(query) ||
-    albumTrackMatches.has(album.id)
-  );
-
   // Followed artists/albums/charts as a JSON file: shareable, and importable
   // by an admin on another instance (Admin panel > Backup).
   const handleExport = async () => {
@@ -261,10 +312,6 @@ export default function Library(): JSX.Element {
       setExporting(false);
     }
   };
-
-  // Update display logic
-  const displayedArtists = filteredArtists;
-  const displayedAlbums = filteredAlbums;
 
   return (
     <div className="relative min-h-screen">
@@ -421,7 +468,7 @@ export default function Library(): JSX.Element {
                         title={artist.name}
                         thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
                         type="artist"
-                        mediaStatus={getArtistStatus(artist, albums)}
+                        mediaStatus={getArtistStatus(artist, albumsByArtist.get(artist.id))}
                         matchHint={artistMatchHint(artist.id)}
                         onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
                       />
@@ -436,7 +483,7 @@ export default function Library(): JSX.Element {
                         title={artist.name}
                         thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
                         type="artist"
-                        mediaStatus={getArtistStatus(artist, albums)}
+                        mediaStatus={getArtistStatus(artist, albumsByArtist.get(artist.id))}
                         albumsCount={artist.albums_count}
                         tracksTotal={artist.tracks_total}
                         tracksDownloaded={artist.tracks_downloaded}
@@ -447,6 +494,7 @@ export default function Library(): JSX.Element {
                     ))}
                   </MediaList>
                 )}
+                {moreArtists && <div ref={artistsSentinelRef} aria-hidden="true" />}
               </section>
             )}
 
@@ -496,6 +544,7 @@ export default function Library(): JSX.Element {
                     ))}
                   </MediaList>
                 )}
+                {moreAlbums && <div ref={albumsSentinelRef} aria-hidden="true" />}
               </section>
             )}
 

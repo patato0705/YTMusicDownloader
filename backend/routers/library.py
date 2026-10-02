@@ -56,10 +56,46 @@ def list_followed_artists(
     Returns list of artists with download stats.
     """
     try:
+        # Per-artist counts are aggregated in one pass each and joined in,
+        # rather than queried artist by artist.
+        # Only count followed (download-mode) albums: light-mode artists keep
+        # metadata-only album rows that aren't part of the library
+        albums_counts = (
+            db.query(
+                Album.artist_id.label("artist_id"),
+                func.count(Album.id).label("albums_count"),
+            )
+            .filter(Album.mode == "download")
+            .group_by(Album.artist_id)
+            .subquery()
+        )
+        tracks_counts = (
+            db.query(
+                Album.artist_id.label("artist_id"),
+                func.count(Track.id).label("total"),
+                func.sum(case((Track.status == "done", 1), else_=0)).label("downloaded"),
+                func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
+            )
+            .select_from(Track)
+            .join(Album, Track.album_id == Album.id)
+            .filter(Album.mode == "download")
+            .group_by(Album.artist_id)
+            .subquery()
+        )
+
         # Get all artists with active subscriptions
         query = (
-            db.query(Artist, ArtistSubscription)
+            db.query(
+                Artist,
+                ArtistSubscription,
+                albums_counts.c.albums_count,
+                tracks_counts.c.total,
+                tracks_counts.c.downloaded,
+                tracks_counts.c.failed,
+            )
             .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
+            .outerjoin(albums_counts, albums_counts.c.artist_id == Artist.id)
+            .outerjoin(tracks_counts, tracks_counts.c.artist_id == Artist.id)
             .filter(ArtistSubscription.enabled == True)
         )
 
@@ -73,32 +109,11 @@ def list_followed_artists(
         rows = query.all()
         
         result = []
-        for artist, subscription in rows:
-            # Only count followed (download-mode) albums: light-mode artists keep
-            # metadata-only album rows that aren't part of the library
-            albums_count = (
-                db.query(func.count(Album.id))
-                .filter(Album.artist_id == artist.id, Album.mode == "download")
-                .scalar()
-                or 0
-            )
-
-            # Get tracks stats
-            tracks_query = (
-                db.query(
-                    func.count(Track.id).label("total"),
-                    func.sum(case((Track.status == "done", 1), else_=0)).label("downloaded"),
-                    func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
-                )
-                .join(Album, Track.album_id == Album.id)
-                .filter(Album.artist_id == artist.id, Album.mode == "download")
-            )
-
-            tracks_stats = tracks_query.first()
-            stats = _safe_stats(tracks_stats, ['total', 'downloaded', 'failed'])
-            tracks_total = stats['total']
-            tracks_downloaded = stats['downloaded']
-            tracks_failed = stats['failed']
+        for artist, subscription, albums_count, total, downloaded, failed in rows:
+            albums_count = int(albums_count or 0)
+            tracks_total = int(total or 0)
+            tracks_downloaded = int(downloaded or 0)
+            tracks_failed = int(failed or 0)
 
             # Calculate download progress
             download_progress = 0.0
@@ -145,57 +160,67 @@ def list_followed_albums(
     sort_by: str = Query("title", pattern="^(title|year|created_at|download_progress)$"),
     order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: Optional[int] = Query(None, ge=1, description="Maximum number of albums to return"),
+    offset: int = Query(0, ge=0, description="Number of albums to skip (after sorting)"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     List all followed albums with download status.
-    
+
     Query params:
     - artist_id: Filter albums by artist (optional)
     - status: Filter by download status (completed, downloading, pending, failed)
     - sort_by: title, year, download_progress (default: title)
     - order: asc, desc (default: asc)
-    
+    - limit / offset: Page through the sorted list (optional)
+
     Returns list of albums with download stats.
     """
     try:
+        # Track counts for every album in one grouped pass, joined in below,
+        # rather than one query per album
+        tracks_counts = (
+            db.query(
+                Track.album_id.label("album_id"),
+                func.count(Track.id).label("total"),
+                func.sum(case((Track.status == "done", 1), else_=0)).label("downloaded"),
+                func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
+                func.sum(case((Track.lyrics != None, 1), else_=0)).label("with_lyrics"),  # noqa: E711
+            )
+            .group_by(Track.album_id)
+            .subquery()
+        )
+
         # Query albums directly (mode is now on the Album row)
-        albums_query = db.query(Album)
+        albums_query = (
+            db.query(
+                Album,
+                Artist.id,
+                Artist.name,
+                tracks_counts.c.total,
+                tracks_counts.c.downloaded,
+                tracks_counts.c.failed,
+                tracks_counts.c.with_lyrics,
+            )
+            .outerjoin(Artist, Artist.id == Album.artist_id)
+            .outerjoin(tracks_counts, tracks_counts.c.album_id == Album.id)
+        )
 
         if artist_id:
             albums_query = albums_query.filter(Album.artist_id == artist_id)
 
         albums_query = albums_query.filter(Album.mode == "download")
 
-        albums = albums_query.all()
+        rows = albums_query.all()
 
-        if not albums:
+        if not rows:
             return {"albums": [], "total": 0}
 
         result = []
-        for album in albums:
-            # Get artist info
-            artist = None
-            if album.artist_id:
-                artist = db.get(Artist, album.artist_id)
-
-            # Get tracks stats
-            tracks_query = (
-                db.query(
-                    func.count(Track.id).label("total"),
-                    func.sum(case((Track.status == "done", 1), else_=0)).label("downloaded"),
-                    func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
-                    func.sum(case((Track.lyrics != None, 1), else_=0)).label("with_lyrics"),
-                )
-                .filter(Track.album_id == album.id)
-            )
-
-            tracks_stats = tracks_query.first()
-            stats = _safe_stats(tracks_stats, ['total', 'downloaded', 'failed', 'with_lyrics'])
-            tracks_total = stats['total']
-            tracks_downloaded = stats['downloaded']
-            tracks_failed = stats['failed']
-            tracks_with_lyrics = stats['with_lyrics']
+        for album, artist_db_id, artist_name, total, downloaded, failed, with_lyrics in rows:
+            tracks_total = int(total or 0)
+            tracks_downloaded = int(downloaded or 0)
+            tracks_failed = int(failed or 0)
+            tracks_with_lyrics = int(with_lyrics or 0)
 
             # Calculate download progress
             download_progress = 0.0
@@ -213,9 +238,9 @@ def list_followed_albums(
                 "id": album.id,
                 "title": album.title,
                 "artist": {
-                    "id": artist.id if artist else None,
-                    "name": artist.name if artist else None,
-                } if artist else None,
+                    "id": artist_db_id,
+                    "name": artist_name,
+                } if artist_db_id else None,
                 "year": album.year,
                 "type": album.type or "Album",
                 "mode": album.mode,
@@ -240,8 +265,8 @@ def list_followed_albums(
             result.sort(key=lambda x: x["download_progress"], reverse=(order == "desc"))
         
         total = len(result)
-        if limit is not None:
-            result = result[:limit]
+        end = offset + limit if limit is not None else None
+        result = result[offset:end]
 
         return {
             "albums": result,
@@ -367,67 +392,51 @@ def get_library_stats(
         # Artists stats (count active subscriptions)
         artists_total = db.query(func.count(ArtistSubscription.id)).filter(ArtistSubscription.enabled == True).scalar() or 0
         
+        # Every count below is taken in a single pass over its table
+        def count_where(condition):
+            return func.sum(case((condition, 1), else_=0))
+
         # Albums stats (query Album table directly)
         # "total" counts every followed album, including ones only followed for
         # search/indexation (mode="metadata"). "downloaded" counts only albums
         # actually in the library (mode="download").
-        albums_total = db.query(func.count(Album.id)).scalar() or 0
-        albums_downloaded = db.query(func.count(Album.id)).filter(
-            Album.mode == "download"
-        ).scalar() or 0
-        albums_completed = db.query(func.count(Album.id)).filter(
-            Album.download_status == "completed"
-        ).scalar() or 0
-        albums_downloading = db.query(func.count(Album.id)).filter(
-            Album.download_status == "downloading"
-        ).scalar() or 0
-        albums_pending = db.query(func.count(Album.id)).filter(
-            Album.download_status == "pending"
-        ).scalar() or 0
-        albums_failed = db.query(func.count(Album.id)).filter(
-            Album.download_status == "failed"
-        ).scalar() or 0
-        
-        # Tracks stats
-        tracks_total = db.query(func.count(Track.id)).scalar() or 0
-        tracks_downloaded = db.query(func.count(Track.id)).filter(Track.status == "done").scalar() or 0
-        tracks_downloading = db.query(func.count(Track.id)).filter(Track.status == "downloading").scalar() or 0
-        tracks_failed = db.query(func.count(Track.id)).filter(Track.status == "failed").scalar() or 0
-        tracks_pending = db.query(func.count(Track.id)).filter(Track.status == "new").scalar() or 0
-        tracks_with_lyrics = db.query(func.count(Track.id)).filter(Track.lyrics != None).scalar() or 0  # noqa: E711
-        tracks_with_synced = db.query(func.count(Track.id)).filter(Track.lyrics == "synced").scalar() or 0
-        tracks_with_plain = db.query(func.count(Track.id)).filter(Track.lyrics == "plain").scalar() or 0
+        albums = db.query(
+            func.count(Album.id).label("total"),
+            count_where(Album.mode == "download").label("downloaded"),
+            count_where(Album.download_status == "completed").label("completed"),
+            count_where(Album.download_status == "downloading").label("downloading"),
+            count_where(Album.download_status == "pending").label("pending"),
+            count_where(Album.download_status == "failed").label("failed"),
+        ).one()
 
+        # Tracks stats
         # Storage: sum of audio file sizes recorded at download time.
         # Lyrics/covers are not counted (~0.5% of the total).
-        storage_bytes = int(
-            db.query(func.coalesce(func.sum(Track.file_size), 0))
-            .filter(Track.status == "done")
-            .scalar() or 0
-        )
+        tracks = db.query(
+            func.count(Track.id).label("total"),
+            count_where(Track.status == "done").label("downloaded"),
+            count_where(Track.status == "downloading").label("downloading"),
+            count_where(Track.status == "new").label("pending"),
+            count_where(Track.status == "failed").label("failed"),
+            count_where(Track.lyrics != None).label("with_lyrics"),  # noqa: E711
+            count_where(Track.lyrics == "synced").label("with_synced_lyrics"),
+            count_where(Track.lyrics == "plain").label("with_plain_lyrics"),
+            func.sum(case((Track.status == "done", Track.file_size), else_=0)).label("storage_bytes"),
+        ).one()
+
+        album_fields = ["total", "downloaded", "completed", "downloading", "pending", "failed"]
+        track_fields = [
+            "total", "downloaded", "downloading", "pending", "failed",
+            "with_lyrics", "with_synced_lyrics", "with_plain_lyrics",
+        ]
+        storage_bytes = int(tracks.storage_bytes or 0)
 
         return {
             "artists": {
                 "total": int(artists_total),
             },
-            "albums": {
-                "total": int(albums_total),
-                "downloaded": int(albums_downloaded),
-                "completed": int(albums_completed),
-                "downloading": int(albums_downloading),
-                "pending": int(albums_pending),
-                "failed": int(albums_failed),
-            },
-            "tracks": {
-                "total": int(tracks_total),
-                "downloaded": int(tracks_downloaded),
-                "downloading": int(tracks_downloading),
-                "pending": int(tracks_pending),
-                "failed": int(tracks_failed),
-                "with_lyrics": int(tracks_with_lyrics),
-                "with_synced_lyrics": int(tracks_with_synced),
-                "with_plain_lyrics": int(tracks_with_plain),
-            },
+            "albums": _safe_stats(albums, album_fields),
+            "tracks": _safe_stats(tracks, track_fields),
             "storage": {
                 "bytes": storage_bytes,
                 "gb": round(storage_bytes / 1024 ** 3, 2),
