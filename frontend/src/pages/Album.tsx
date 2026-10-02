@@ -7,6 +7,7 @@ import { getAlbum, downloadAlbum } from '../api/albums';
 import { deleteLibraryAlbum } from '../api/library';
 import { getImageUrl } from '../api/media';
 import { Spinner } from '../components/ui/Spinner';
+import { Artwork } from '../components/ui/Artwork';
 import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -25,7 +26,6 @@ export default function Album(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [imageError, setImageError] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -50,7 +50,6 @@ export default function Album(): JSX.Element {
     (async () => {
       setLoading(true);
       setError(null);
-      setImageError(false);
 
       try {
         const data = await getAlbum(albumId);
@@ -263,15 +262,12 @@ export default function Album(): JSX.Element {
           <div className="flex flex-col md:flex-row gap-8 items-start">
             {/* Album cover */}
             <div className="relative group">
-              <img
-                src={imageError ? '/assets/placeholder-music.png' : thumbnailUrl}
-                alt={album.title}
-                className="w-64 h-64 md:w-80 md:h-80 rounded-2xl object-cover bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
-                onError={() => {
-                  if (!imageError) {
-                    setImageError(true);
-                  }
-                }}
+              <Artwork
+                src={thumbnailUrl}
+                name={album.title}
+                seed={album.id || albumId}
+                loading="eager"
+                className="w-64 h-64 md:w-80 md:h-80 rounded-2xl bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
               {/* Glow effect */}
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 dark:from-red-500/20 dark:to-red-700/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />

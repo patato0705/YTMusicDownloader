@@ -3,6 +3,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../contexts/I18nContext';
 import { getImageUrl } from '../../api/media';
+import { Artwork } from './Artwork';
 import type { ChartArtist } from '../../api/charts';
 
 interface ChartArtistGridProps {
@@ -76,17 +77,12 @@ export const ChartArtistGrid: React.FC<ChartArtistGridProps> = ({
                     ? 'border-blue-500/70 dark:border-red-500/70'
                     : 'border-slate-300 dark:border-white/20'
                 }`}>
-                  {thumbnail ? (
-                    <img
-                      src={getImageUrl(thumbnail)}
-                      alt={artist.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-2xl">
-                      👤
-                    </div>
-                  )}
+                  <Artwork
+                    src={getImageUrl(thumbnail)}
+                    name={artist.name}
+                    seed={artist.id}
+                    className="w-full h-full"
+                  />
                 </div>
 
                 {/* Trend Indicator - Bottom Right */}

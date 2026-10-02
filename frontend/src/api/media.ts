@@ -12,11 +12,11 @@ import { api } from './client';
  * For images stored in /data directory (cover.jpg files)
  *
  * @param imagePath - Path like "/data/kroh/BUTTERFLY/cover.jpg" or "/config/covers/albumid.jpg"
- * @returns URL that can be used in <img src="">
+ * @returns URL that can be used in <img src="">, or '' when there's no image
  */
 export function getLocalImageUrl(imagePath: string | null | undefined): string {
   if (!imagePath) {
-    return '/assets/placeholder-music.png';
+    return '';
   }
   
   const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
@@ -45,11 +45,11 @@ export function getThumbnailUrl(url: string): string {
  * Use this for all image sources
  * 
  * @param imagePath - Can be local path ("/data/...") or external URL ("https://...")
- * @returns Appropriate URL for the image
+ * @returns Appropriate URL for the image, or '' when there's none (Artwork then draws its fallback)
  */
 export function getImageUrl(imagePath: string | null | undefined): string {
   if (!imagePath) {
-    return '/assets/placeholder-music.png';
+    return '';
   }
   
   // Check if it's an external URL (YouTube, Google, etc.)

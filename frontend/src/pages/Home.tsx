@@ -1,5 +1,5 @@
 // src/pages/Home.tsx
-import React, { useEffect, useState, memo, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/I18nContext';
@@ -10,6 +10,7 @@ import { PageHero } from '../components/ui/PageHero';
 import { getLibraryStats, getLibraryAlbums } from '../api/library';
 import { getImageUrl } from '../api/media';
 import { Spinner } from '../components/ui/Spinner';
+import { Artwork } from '../components/ui/Artwork';
 import { formatNumber } from '../utils';
 
 // Icon components — defined outside render so they're never recreated
@@ -21,20 +22,16 @@ const SearchIcon = () => <span className="text-2xl">🔍</span>;
 const LibraryIcon = () => <span className="text-2xl">📚</span>;
 
 /**
- * Isolated album card — each card manages its own image-error state
- * so one broken thumbnail never re-renders the rest of the grid.
+ * Isolated album card — memoized (and Artwork keeps its own image-error
+ * state) so one broken thumbnail never re-renders the rest of the grid.
  */
 const AlbumCard = memo(function AlbumCard({ album }: { album: any }) {
-  const [imgFailed, setImgFailed] = useState(false);
   const { t } = useI18n();
 
   const thumbnailUrl = getImageUrl(album.image_local || album.thumbnail);
-  const showImage = Boolean(thumbnailUrl) && !imgFailed;
   const progress = album.tracks_total > 0
     ? (album.tracks_downloaded / album.tracks_total) * 100
     : 0;
-
-  const handleError = useCallback(() => setImgFailed(true), []);
 
   return (
     <Link
@@ -43,23 +40,13 @@ const AlbumCard = memo(function AlbumCard({ album }: { album: any }) {
     >
       {/* Album art or placeholder */}
       <div className="relative aspect-square overflow-hidden">
-        {showImage ? (
-          <>
-            <img
-              src={thumbnailUrl}
-              alt={album.title}
-              loading="lazy"
-              decoding="async"
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-              onError={handleError}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-          </>
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 flex items-center justify-center">
-            <TracksIcon />
-          </div>
-        )}
+        <Artwork
+          src={thumbnailUrl}
+          name={album.title}
+          seed={album.id}
+          className="w-full h-full transition-transform duration-300 group-hover:scale-110"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
         {/* Progress indicator */}
         {progress < 100 && (

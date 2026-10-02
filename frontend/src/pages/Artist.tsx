@@ -8,6 +8,7 @@ import { deleteLibraryArtist } from '../api/library';
 import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
 import { Spinner } from '../components/ui/Spinner';
+import { Artwork } from '../components/ui/Artwork';
 import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -24,7 +25,6 @@ export default function Artist(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [subscriptionMode, setSubscriptionMode] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [artistImageError, setArtistImageError] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [unfollowConfirm, setUnfollowConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -46,7 +46,6 @@ export default function Artist(): JSX.Element {
     (async () => {
       setLoading(true);
       setError(null);
-      setArtistImageError(false);
 
       try {
         const data = await getArtist(artistId);
@@ -235,15 +234,12 @@ export default function Artist(): JSX.Element {
           <div className="flex flex-col md:flex-row gap-8 items-start">
             {/* Artist image */}
             <div className="relative group">
-              <img
-                src={artistImageError ? '/assets/placeholder-music.png' : artistThumbnailUrl}
-                alt={artist.name}
-                className="w-48 h-48 md:w-64 md:h-64 rounded-full object-cover bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
-                onError={() => {
-                  if (!artistImageError) {
-                    setArtistImageError(true);
-                  }
-                }}
+              <Artwork
+                src={artistThumbnailUrl}
+                name={artist.name}
+                seed={artist.id || artistId}
+                loading="eager"
+                className="w-48 h-48 md:w-64 md:h-64 rounded-full bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
               {/* Glow effect */}
               <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 dark:from-red-500/20 dark:to-red-700/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />

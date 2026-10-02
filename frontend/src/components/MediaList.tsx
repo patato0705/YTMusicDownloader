@@ -1,7 +1,8 @@
 // src/components/MediaList.tsx
-import React, { useState } from 'react';
+import React from 'react';
 import { useI18n } from '../contexts/I18nContext';
-import { STATUS_BADGES, albumTypeKey, PLACEHOLDER } from './MediaCard';
+import { STATUS_BADGES, albumTypeKey } from './MediaCard';
+import { Artwork } from './ui/Artwork';
 import type { MediaStatus } from '../types';
 
 export type MediaListKind = 'artist' | 'album';
@@ -87,6 +88,7 @@ function formatDate(iso: string | null | undefined, locale: string): string {
 }
 
 export const MediaRow: React.FC<MediaRowProps> = ({
+  id,
   title,
   subtitle,
   thumbnail,
@@ -102,8 +104,6 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   onClick,
 }) => {
   const { t, locale } = useI18n();
-  const [imageError, setImageError] = useState(false);
-
   const isArtist = type === 'artist';
   const status = mediaStatus ? STATUS_BADGES[mediaStatus] : undefined;
   const typeLabel = isArtist ? null : t(albumTypeKey(albumType));
@@ -133,16 +133,11 @@ export const MediaRow: React.FC<MediaRowProps> = ({
           isArtist ? 'rounded-full' : 'rounded-lg'
         }`}
       >
-        <img
-          src={imageError ? PLACEHOLDER : thumbnail || PLACEHOLDER}
-          alt={title}
-          loading="lazy"
-          className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-          onError={() => {
-            if (!imageError) {
-              setImageError(true);
-            }
-          }}
+        <Artwork
+          src={thumbnail}
+          name={title}
+          seed={id}
+          className="w-full h-full transition-transform duration-500 ease-out group-hover:scale-105"
         />
       </div>
 

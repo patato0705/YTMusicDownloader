@@ -1,6 +1,7 @@
 // src/components/MediaCard.tsx
-import React, { useState } from 'react';
+import React from 'react';
 import { useI18n } from '../contexts/I18nContext';
+import { Artwork } from './ui/Artwork';
 import type { MediaStatus } from '../types';
 
 export type { MediaStatus };
@@ -21,8 +22,6 @@ interface MediaCardProps {
   onClick?: () => void;
   className?: string;
 }
-
-export const PLACEHOLDER = '/assets/placeholder-music.png';
 
 /** Status pip shown on the artwork - one entry per status, so the markup stays in one place */
 export const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
@@ -74,6 +73,7 @@ export function albumTypeKey(albumType?: string): string {
 }
 
 const MediaCard: React.FC<MediaCardProps> = ({
+  id,
   title,
   subtitle,
   thumbnail,
@@ -86,8 +86,6 @@ const MediaCard: React.FC<MediaCardProps> = ({
   className = '',
 }) => {
   const { t } = useI18n();
-  const [imageError, setImageError] = useState(false);
-
   const isArtist = type === 'artist';
   const status = mediaStatus ? STATUS_BADGES[mediaStatus] : undefined;
   const meta = [subtitle, year].filter(Boolean).join(' · ');
@@ -115,16 +113,11 @@ const MediaCard: React.FC<MediaCardProps> = ({
         <div
           className={`relative aspect-square overflow-hidden bg-slate-200 dark:bg-zinc-800 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 transition-shadow duration-300 group-hover:shadow-xl group-hover:shadow-blue-500/10 dark:group-hover:shadow-red-500/10 ${shape}`}
         >
-          <img
-            src={imageError ? PLACEHOLDER : thumbnail || PLACEHOLDER}
-            alt={title}
-            loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-            onError={() => {
-              if (!imageError) {
-                setImageError(true);
-              }
-            }}
+          <Artwork
+            src={thumbnail}
+            name={title}
+            seed={id}
+            className="w-full h-full transition-transform duration-500 ease-out group-hover:scale-105"
           />
 
           {/* Subtle darkening on hover, keeps the badges readable */}

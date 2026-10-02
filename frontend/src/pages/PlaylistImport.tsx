@@ -7,6 +7,7 @@ import { getPlaylist } from '../api/playlists';
 import { followArtist } from '../api/artists';
 import { downloadAlbum } from '../api/albums';
 import { getImageUrl } from '../api/media';
+import { Artwork } from '../components/ui/Artwork';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
@@ -14,15 +15,13 @@ import { PageHero } from '../components/ui/PageHero';
 import { formatDuration, formatDurationLong } from '../utils';
 import type { PlaylistTrack } from '../api/playlists';
 
-function TrackThumb({ src, className = '' }: { src?: string | null; className?: string }) {
-  const [err, setErr] = React.useState(false);
-  const url = getImageUrl(src);
+function TrackThumb({ src, name, seed, className = '' }: { src?: string | null; name?: string | null; seed?: string | null; className?: string }) {
   return (
-    <img
-      src={err ? '/assets/placeholder-music.png' : url}
-      alt=""
-      className={`object-cover bg-slate-200 dark:bg-zinc-800 flex-shrink-0 ${className}`}
-      onError={() => { if (!err) setErr(true); }}
+    <Artwork
+      src={getImageUrl(src)}
+      name={name}
+      seed={seed}
+      className={`bg-slate-200 dark:bg-zinc-800 flex-shrink-0 ${className}`}
     />
   );
 }
@@ -476,6 +475,7 @@ export default function PlaylistImport(): JSX.Element {
                   {/* Playlist thumbnail */}
                   <TrackThumb
                     src={playlistThumbnail}
+                    name={playlistTitle}
                     className="w-24 h-24 rounded-2xl shadow-lg flex-shrink-0"
                   />
 
@@ -665,7 +665,7 @@ export default function PlaylistImport(): JSX.Element {
                                     key={`${artist.id}-${track.id}-${idx}`}
                                     className="flex items-center gap-3 px-4 md:px-6 pl-12 md:pl-14 py-2 text-sm"
                                   >
-                                    <TrackThumb src={track.cover} className="w-8 h-8 rounded" />
+                                    <TrackThumb src={track.cover} name={track.album?.name || track.title} seed={track.album?.id || track.id} className="w-8 h-8 rounded" />
                                     <div className="flex-[3] min-w-0">
                                       <p className="truncate text-foreground">{track.title}</p>
                                       {track.album?.name && (
@@ -771,7 +771,7 @@ export default function PlaylistImport(): JSX.Element {
                                     key={`${album.id}-${track.id}-${idx}`}
                                     className="flex items-center gap-3 px-4 md:px-6 pl-12 md:pl-14 py-2 text-sm"
                                   >
-                                    <TrackThumb src={track.cover} className="w-8 h-8 rounded" />
+                                    <TrackThumb src={track.cover} name={track.album?.name || track.title} seed={track.album?.id || track.id} className="w-8 h-8 rounded" />
                                     <div className="flex-[3] min-w-0">
                                       <p className="truncate text-foreground">{track.title}</p>
                                       <p className="sm:hidden text-xs text-muted-foreground truncate mt-0.5">
@@ -820,7 +820,7 @@ export default function PlaylistImport(): JSX.Element {
                         key={`${track.id}-${idx}`}
                         className="flex items-center gap-3 px-4 md:px-6 py-2.5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
                       >
-                        <TrackThumb src={track.cover} className="w-8 h-8 rounded" />
+                        <TrackThumb src={track.cover} name={track.album?.name || track.title} seed={track.album?.id || track.id} className="w-8 h-8 rounded" />
                         <div className="flex-[3] min-w-0">
                           <p className="font-semibold text-foreground truncate">
                             {track.title}
