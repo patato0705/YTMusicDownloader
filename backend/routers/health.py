@@ -62,7 +62,6 @@ def _check_fs() -> Dict[str, Any]:
         ("TEMP_DIR", config.TEMP_DIR),
         ("DOWNLOAD_DIR", config.DOWNLOAD_DIR),
         ("COVERS_DIR", config.COVERS_DIR),
-        ("LYRICS_DIR", config.LYRICS_DIR),
         ("MUSIC_DIR", config.MUSIC_DIR),
         ("LOG_DIR", config.LOG_DIR),
     ):

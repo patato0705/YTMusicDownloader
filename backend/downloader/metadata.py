@@ -4,8 +4,6 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..config import LYRICS_DIR
-
 
 def _safe_str(s: Optional[Any]) -> Optional[str]:
     if s is None:

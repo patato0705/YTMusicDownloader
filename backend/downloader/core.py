@@ -9,7 +9,7 @@ from pathlib import Path
 
 from yt_dlp import YoutubeDL
 
-from ..config import DOWNLOAD_DIR, COVERS_DIR, MUSIC_DIR, LYRICS_DIR, YDL_FORMAT, YDL_PREFERRED_CODEC, YDL_COOKIEFILE
+from ..config import DOWNLOAD_DIR, COVERS_DIR, MUSIC_DIR, YDL_FORMAT, YDL_PREFERRED_CODEC, YDL_COOKIEFILE
 
 # relative package imports (downloader.cover, downloader.embed expected)
 from . import cover as cover_mod  # type: ignore

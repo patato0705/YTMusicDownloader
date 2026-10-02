@@ -12,7 +12,6 @@ CONFIG_DIR = Path("/config")
 TEMP_DIR = Path("/config/temp")
 DOWNLOAD_DIR = Path("/config/temp/downloads")
 COVERS_DIR = Path("/config/temp/covers")
-LYRICS_DIR = Path("/config/temp/lyrics_raw")
 CACHE_DIR = Path("/config/cache")  # Cache directory 
 THUMBNAIL_CACHE_DIR = Path("/config/cache/thumbnails")  # Thumbnail cache
 DB_PATH = Path("/config/db.sqlite")
@@ -93,7 +92,7 @@ HOST = os.environ.get("HOST", "0.0.0.0")
 def ensure_dirs() -> None:
     import logging
     logger = logging.getLogger("config")
-    for p in (CONFIG_DIR, TEMP_DIR, DOWNLOAD_DIR, COVERS_DIR, LYRICS_DIR, LOG_DIR, MUSIC_DIR, CACHE_DIR, THUMBNAIL_CACHE_DIR):
+    for p in (CONFIG_DIR, TEMP_DIR, DOWNLOAD_DIR, COVERS_DIR, LOG_DIR, MUSIC_DIR, CACHE_DIR, THUMBNAIL_CACHE_DIR):
         try:
             Path(p).mkdir(parents=True, exist_ok=True)
         except Exception:
