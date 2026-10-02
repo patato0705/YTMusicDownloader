@@ -428,13 +428,7 @@
         "uploaded": "Cookies de compte enregistrés",
         "uploadFailed": "Ce fichier ne ressemble pas à un cookies.txt",
         "deleted": "Cookies de compte supprimés"
-      },
-      "maintenance": "Maintenance",
-      "cleanupTitle": "Nettoyage de la bibliothèque",
-      "cleanupDescription": "Supprimer les titres, albums et artistes orphelins qui ne sont plus associés à aucun abonnement.",
-      "cleanupButton": "Lancer le nettoyage",
-      "cleanupDone": "Nettoyage terminé",
-      "cleanupNone": "Aucun élément orphelin trouvé"
+      }
     },
     "users": {
       "search": "Rechercher des utilisateurs",

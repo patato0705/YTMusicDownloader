@@ -11,7 +11,7 @@ import { api } from './client';
  * client-side change is needed here to send it.
  * For images stored in /data directory (cover.jpg files)
  *
- * @param imagePath - Path like "/data/kroh/BUTTERFLY/cover.jpg" or "/config/temp/covers/albumid.jpg"
+ * @param imagePath - Path like "/data/kroh/BUTTERFLY/cover.jpg" or "/config/covers/albumid.jpg"
  * @returns URL that can be used in <img src="">
  */
 export function getLocalImageUrl(imagePath: string | null | undefined): string {

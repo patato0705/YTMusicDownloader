@@ -52,7 +52,7 @@ COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # create data dirs (will be mounted by compose typically)
-RUN mkdir -p /data /data/music /data/covers /config && chmod -R 0777 /data /config
+RUN mkdir -p /data /config && chmod -R 0777 /data /config
 
 # ensure backend package import works
 ENV PYTHONPATH=/app

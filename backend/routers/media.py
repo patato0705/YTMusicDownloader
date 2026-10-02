@@ -3,7 +3,7 @@
 Media endpoints for serving and caching thumbnails from external sources.
 
 Endpoints:
-- GET /api/media/images/{full_path:path} - Serve images from /config/temp/covers or /data directories.
+- GET /api/media/images/{full_path:path} - Serve images from /config/covers or /data directories.
 - GET /api/media/thumbnail/debug - Cache status debug endpoint (admin only).
 - GET /api/media/thumbnail - Proxy and cache thumbnail images from external sources.
 - GET /api/media/cache/clear - Clear thumbnail cache (admin only).
@@ -106,7 +106,7 @@ def get_local_image(
     full_path: str,
     current_user: User = Depends(get_current_user_flexible),
 ):
-    """Serve images from /config/temp/covers or /data directories.
+    """Serve images from /config/covers or /data directories.
 
     Requires auth like every other route, but via get_current_user_flexible()
     rather than the usual Authorization-header-only require_auth: the

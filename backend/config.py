@@ -11,7 +11,7 @@ from pathlib import Path
 CONFIG_DIR = Path("/config")
 TEMP_DIR = Path("/config/temp")
 DOWNLOAD_DIR = Path("/config/temp/downloads")
-COVERS_DIR = Path("/config/temp/covers")
+COVERS_DIR = Path("/config/covers")
 CACHE_DIR = Path("/config/cache")  # Cache directory 
 THUMBNAIL_CACHE_DIR = Path("/config/cache/thumbnails")  # Thumbnail cache
 DB_PATH = Path("/config/db.sqlite")

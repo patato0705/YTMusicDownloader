@@ -229,17 +229,3 @@ export async function deleteLibraryArtist(artistId: string): Promise<{ message: 
 export async function deleteLibraryAlbum(albumId: string): Promise<{ message: string }> {
   return api.delete(`/library/albums/${encodeURIComponent(albumId)}`);
 }
-
-export interface CleanupResult {
-  message: string;
-  orphaned_tracks_removed: number;
-  orphaned_albums_removed: number;
-  orphaned_artists_removed: number;
-}
-
-/**
- * Remove orphaned tracks, albums, and artists (admin only)
- */
-export async function cleanupLibrary(): Promise<CleanupResult> {
-  return api.post<CleanupResult>('/library/cleanup');
-}

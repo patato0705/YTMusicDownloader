@@ -1,7 +1,6 @@
 // src/components/admin/SettingsTab.tsx
 /**
- * Admin panel > Settings: edit application settings grouped by category,
- * plus the library cleanup maintenance action.
+ * Admin panel > Settings: edit application settings grouped by category.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
@@ -11,8 +10,6 @@ import { Select } from '../ui/Select';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import * as adminApi from '../../api/admin';
 import type { Setting, YoutubeCookiesStatus } from '../../api/admin';
-import { cleanupLibrary } from '../../api/library';
-import type { CleanupResult } from '../../api/library';
 import { parseApiError } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
 import type { AdminTabProps } from './AdminTabShell';
@@ -30,7 +27,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saveLoading, setSaveLoading] = useState(false);
-  const [cleanupLoading, setCleanupLoading] = useState(false);
 
   // YouTube account cookies (fallback jar for age-restricted tracks)
   const [cookies, setCookies] = useState<YoutubeCookiesStatus | null>(null);
@@ -169,27 +165,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
       onToast(parseApiError(err, t('admin.settings.saveFailed')), 'error');
     } finally {
       setSaveLoading(false);
-    }
-  };
-
-  const handleCleanup = async () => {
-    setCleanupLoading(true);
-    try {
-      const result: CleanupResult = await cleanupLibrary();
-      const total = result.orphaned_tracks_removed + result.orphaned_albums_removed + result.orphaned_artists_removed;
-      if (total === 0) {
-        onToast(t('admin.settings.cleanupNone'), 'success');
-      } else {
-        const parts: string[] = [];
-        if (result.orphaned_artists_removed > 0) parts.push(`${result.orphaned_artists_removed} artists`);
-        if (result.orphaned_albums_removed > 0) parts.push(`${result.orphaned_albums_removed} albums`);
-        if (result.orphaned_tracks_removed > 0) parts.push(`${result.orphaned_tracks_removed} tracks`);
-        onToast(`${t('admin.settings.cleanupDone')}: ${parts.join(', ')} removed`, 'success');
-      }
-    } catch (err: any) {
-      onToast(parseApiError(err), 'error');
-    } finally {
-      setCleanupLoading(false);
     }
   };
 
@@ -346,33 +321,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
             {t('admin.settings.save')}
           </Button>
         </div>
-
-        {/* Maintenance */}
-        <section>
-          <SectionHeader>{t('admin.settings.maintenance')}</SectionHeader>
-
-          <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-3">
-              <div className="flex-1 basis-40 min-w-0">
-                <label className="font-semibold text-foreground block mb-1">
-                  {t('admin.settings.cleanupTitle')}
-                </label>
-                <p className="text-sm text-muted-foreground">
-                  {t('admin.settings.cleanupDescription')}
-                </p>
-              </div>
-              <div className="flex-shrink-0 ml-auto">
-                <Button
-                  onClick={handleCleanup}
-                  isLoading={cleanupLoading}
-                  variant="outline"
-                >
-                  {t('admin.settings.cleanupButton')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
     </AdminTabShell>
   );

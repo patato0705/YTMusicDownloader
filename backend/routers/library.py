@@ -10,7 +10,6 @@ Endpoints:
 - GET /api/library/albums/{album_id}/progress - Detailed album download progress
 - DELETE /api/library/artists/{artist_id} - Delete artist from library (admin)
 - DELETE /api/library/albums/{album_id} - Delete album from library (admin)
-- POST /api/library/cleanup - Remove orphaned data (admin)
 """
 from __future__ import annotations
 import logging
@@ -691,10 +690,10 @@ def delete_album_from_library(
             db.delete(track)
             tracks_deleted += 1
 
-        # 2. Move album cover back to temp covers directory (for metadata display)
+        # 2. Move album cover back to the covers directory (for metadata display)
         if album.image_local:
-            cover_temp_dest = config.COVERS_DIR / f"{album.id}.jpg"
-            moved = move_cover_if_exists(album.image_local, cover_temp_dest)
+            cover_dest = config.COVERS_DIR / f"{album.id}.jpg"
+            moved = move_cover_if_exists(album.image_local, cover_dest)
             album.image_local = str(moved) if moved else None
         else:
             album.image_local = None
@@ -737,90 +736,3 @@ def delete_album_from_library(
         db.rollback()
         logger.exception(f"delete_album_from_library failed for {album_id}")
         raise HTTPException(status_code=500, detail=f"Failed to delete album: {e}")
-
-
-@router.post("/cleanup", status_code=status.HTTP_200_OK)
-def cleanup_orphaned_data(
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    Remove orphaned data from the library.
-
-    Cleans up:
-    - Tracks with no album (orphaned tracks)
-    - Albums with no artist and no subscription
-    - Artists with no albums and no subscription
-
-    Requires administrator role.
-    """
-    try:
-        orphaned_tracks = 0
-        orphaned_albums = 0
-        orphaned_artists = 0
-
-        # 1. Delete tracks with no album
-        tracks_no_album = db.query(Track).filter(
-            (Track.album_id == None) | ~Track.album_id.in_(db.query(Album.id))
-        ).all()
-        for track in tracks_no_album:
-            _delete_file_safe(track.file_path)
-            _delete_file_safe(track.lyrics_local)
-            db.delete(track)
-            orphaned_tracks += 1
-
-        # 2. Delete albums with no artist and no subscription
-        albums_no_owner = (
-            db.query(Album)
-            .filter(
-                (Album.artist_id == None) | ~Album.artist_id.in_(db.query(Artist.id))
-            )
-            .all()
-        )
-        for album in albums_no_owner:
-            # Keep album if it has a mode set (part of a subscription flow)
-            if album.mode is not None:
-                continue
-            # Delete tracks first
-            for track in db.query(Track).filter(Track.album_id == album.id).all():
-                _delete_file_safe(track.file_path)
-                _delete_file_safe(track.lyrics_local)
-                db.delete(track)
-                orphaned_tracks += 1
-            _delete_file_safe(album.image_local)
-            db.delete(album)
-            orphaned_albums += 1
-
-        # 3. Delete artists with no albums and no subscription
-        from sqlalchemy import exists
-        artists_empty = (
-            db.query(Artist)
-            .filter(
-                ~exists().where(Album.artist_id == Artist.id),
-                ~exists().where(ArtistSubscription.artist_id == Artist.id),
-            )
-            .all()
-        )
-        for artist in artists_empty:
-            _delete_file_safe(artist.image_local)
-            db.delete(artist)
-            orphaned_artists += 1
-
-        db.commit()
-
-        logger.info(
-            f"Cleanup complete: {orphaned_tracks} tracks, "
-            f"{orphaned_albums} albums, {orphaned_artists} artists removed"
-        )
-
-        return {
-            "message": "Cleanup complete.",
-            "orphaned_tracks_removed": orphaned_tracks,
-            "orphaned_albums_removed": orphaned_albums,
-            "orphaned_artists_removed": orphaned_artists,
-        }
-
-    except Exception as e:
-        db.rollback()
-        logger.exception("cleanup_orphaned_data failed")
-        raise HTTPException(status_code=500, detail=f"Cleanup failed: {e}")

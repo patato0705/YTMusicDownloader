@@ -428,13 +428,7 @@
         "uploaded": "Account cookies saved",
         "uploadFailed": "That doesn't look like a cookies.txt file",
         "deleted": "Account cookies removed"
-      },
-      "maintenance": "Maintenance",
-      "cleanupTitle": "Library Cleanup",
-      "cleanupDescription": "Remove orphaned tracks, albums, and artists that are no longer associated with any subscription.",
-      "cleanupButton": "Run Cleanup",
-      "cleanupDone": "Cleanup complete",
-      "cleanupNone": "No orphaned items found"
+      }
     },
     "users": {
       "search": "Search for users",
