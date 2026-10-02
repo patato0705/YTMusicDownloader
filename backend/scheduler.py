@@ -12,6 +12,7 @@ Responsibilities:
 6. Requeue jobs abandoned by a dead worker, fix up "queued"/"downloading"
    tracks that lost their job, and drop stale download scratch dirs
    (every 5 minutes)
+7. Delete thumbnail proxy cache files older than THUMBNAIL_CACHE_TTL (daily)
 
 Note: Album subscriptions are handled on-demand (follow album → immediate import)
 """
@@ -65,6 +66,7 @@ class Scheduler:
         self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours default
         self.lyrics_retry_interval_seconds: int = 86400  # 24 hours default
         self.stale_sweep_interval_seconds: int = 300
+        self.thumbnail_cleanup_interval_seconds: int = 86400
         self.settings_refresh_interval: int = settings_refresh_interval
 
         self._thread_name = thread_name
@@ -76,6 +78,7 @@ class Scheduler:
         self._last_token_cleanup = 0.0
         self._last_lyrics_retry = 0.0
         self._last_stale_sweep = 0.0
+        self._last_thumbnail_cleanup = 0.0
         self._last_settings_refresh = 0.0
         # Tracks the previous sweep found "queued" with no job (see
         # _requeue_orphaned_track_downloads)
@@ -256,6 +259,13 @@ class Scheduler:
                     self._last_stale_sweep = now
                 except Exception:
                     logger.exception("Unexpected error in sweep_stale_work")
+
+            if now - self._last_thumbnail_cleanup >= self.thumbnail_cleanup_interval_seconds:
+                try:
+                    self.cleanup_thumbnail_cache()
+                    self._last_thumbnail_cleanup = now
+                except Exception:
+                    logger.exception("Unexpected error in cleanup_thumbnail_cache")
 
             # Sleep for a short interval (check every minute)
             self._stopped.wait(timeout=60.0)
@@ -536,6 +546,30 @@ class Scheduler:
             f"Found {len(confirmed)} queued/downloading track(s) with no download job: "
             f"requeued {requeued}, released {len(released)}"
         )
+
+    def cleanup_thumbnail_cache(self) -> None:
+        """
+        Delete thumbnail proxy cache files (routers/media.py) older than
+        THUMBNAIL_CACHE_TTL. The proxy already refuses to serve them, so
+        running this daily only bounds how long dead files sit on disk.
+        """
+        from . import config
+        cutoff = time.time() - config.THUMBNAIL_CACHE_TTL
+        removed = 0
+        try:
+            for f in config.THUMBNAIL_CACHE_DIR.glob("*.jpg"):
+                try:
+                    if f.stat().st_mtime < cutoff:
+                        f.unlink()
+                        removed += 1
+                except FileNotFoundError:
+                    pass  # cleared from the admin endpoint meanwhile
+        except FileNotFoundError:
+            return
+        if removed:
+            logger.info(f"Removed {removed} expired thumbnail cache file(s)")
+        else:
+            logger.debug("No expired thumbnail cache files")
 
     def cleanup_expired_tokens(self) -> None:
         """

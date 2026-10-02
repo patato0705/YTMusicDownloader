@@ -6,7 +6,10 @@ Endpoints:
 - GET /api/media/images/{full_path:path} - Serve images from /config/covers or /data directories.
 - GET /api/media/thumbnail/debug - Cache status debug endpoint (admin only).
 - GET /api/media/thumbnail - Proxy and cache thumbnail images from external sources.
-- GET /api/media/cache/clear - Clear thumbnail cache (admin only).
+- DELETE /api/media/cache/clear - Clear thumbnail cache (admin only).
+
+Expired cache files are never served (see _is_cache_valid); deleting them
+is the scheduler's job (Scheduler.cleanup_thumbnail_cache).
 """
 import hashlib
 import logging
@@ -17,7 +20,6 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import Response, JSONResponse, FileResponse
-from starlette.background import BackgroundTask
 
 from ..config import THUMBNAIL_CACHE_DIR, THUMBNAIL_CACHE_TTL, MUSIC_DIR, COVERS_DIR
 from ..dependencies import require_admin, get_current_user_flexible
@@ -69,21 +71,6 @@ def _is_cache_valid(cache_path: Path) -> bool:
         return False
     file_age = time.time() - cache_path.stat().st_mtime
     return file_age < CACHE_TTL
-
-
-def _cleanup_old_cache():
-    """Background task to remove expired cache files."""
-    try:
-        now = time.time()
-        cleaned = 0
-        for cache_file in CACHE_DIR.glob("*.jpg"):
-            if now - cache_file.stat().st_mtime > CACHE_TTL:
-                cache_file.unlink(missing_ok=True)
-                cleaned += 1
-        if cleaned > 0:
-            logger.info(f"Cleaned up {cleaned} expired cache files")
-    except Exception as e:
-        logger.warning(f"Cache cleanup failed: {e}")
 
 
 def _evict_memory_cache():
@@ -209,7 +196,6 @@ async def get_thumbnail(
                     "Cache-Control": "public, max-age=604800",
                     "X-Cache-Status": "HIT-DISK",
                 },
-                background=BackgroundTask(_cleanup_old_cache),
             )
         
         # Fetch from source
@@ -253,7 +239,6 @@ async def get_thumbnail(
                 "Cache-Control": "public, max-age=604800",
                 "X-Cache-Status": "MISS",
             },
-            background=BackgroundTask(_cleanup_old_cache),
         )
     
     except httpx.TimeoutException:
