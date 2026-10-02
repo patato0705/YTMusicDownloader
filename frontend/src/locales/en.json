@@ -414,9 +414,9 @@
             "label": "Lyrics retry interval (hours)",
             "description": "How often tracks with missing or unsynced lyrics are retried."
           },
-          "chart_sync_interval_hours": {
-            "label": "Chart sync interval (hours)",
-            "description": "How often each followed chart is re-fetched to follow new top-N artists."
+          "chart_sync_interval_days": {
+            "label": "Chart sync interval (days)",
+            "description": "How often each followed chart is re-fetched to follow new top-N artists. YouTube Music only updates its charts weekly, so syncing more often than every 7 days rarely finds anything new."
           }
         },
         "ytmusic": {

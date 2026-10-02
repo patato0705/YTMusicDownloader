@@ -414,9 +414,9 @@
             "label": "Intervalle de nouvelle tentative des paroles (heures)",
             "description": "Fréquence à laquelle les titres sans paroles ou avec des paroles non synchronisées sont réessayés."
           },
-          "chart_sync_interval_hours": {
-            "label": "Intervalle de synchronisation des charts (heures)",
-            "description": "Fréquence à laquelle chaque chart suivi est rechargé pour suivre les nouveaux artistes de son top."
+          "chart_sync_interval_days": {
+            "label": "Intervalle de synchronisation des charts (jours)",
+            "description": "Fréquence à laquelle chaque chart suivi est rechargé pour suivre les nouveaux artistes de son top. YouTube Music ne met à jour ses charts qu'une fois par semaine : synchroniser plus souvent que tous les 7 jours trouve rarement du nouveau."
           }
         },
         "ytmusic": {

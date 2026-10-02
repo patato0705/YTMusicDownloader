@@ -4,7 +4,7 @@ Scheduler for periodic sync tasks.
 
 Responsibilities:
 1. Sync followed artists for new releases (every `scheduler.sync_interval_hours`)
-2. Re-sync followed charts (every `scheduler.chart_sync_interval_hours`)
+2. Re-sync followed charts (every `scheduler.chart_sync_interval_days`)
 3. Clean up old finished jobs, failed ones included (daily, keeping
    `scheduler.job_cleanup_days`)
 4. Clean up expired refresh tokens (daily)
@@ -58,9 +58,9 @@ class Scheduler:
         # synced a few seconds *after* the cutoff and skip it until 2N.
         self.sync_check_interval_seconds: int = sync_check_interval_seconds or 600  # 10 minutes
         self.sync_interval_hours: int = 6  # refreshed from DB
-        # Same pattern for charts: `scheduler.chart_sync_interval_hours` is a
+        # Same pattern for charts: `scheduler.chart_sync_interval_days` is a
         # cutoff on ChartSubscription.last_synced_at, checked on the artist cadence.
-        self.chart_sync_interval_hours: int = 168  # refreshed from DB
+        self.chart_sync_interval_days: int = 7  # refreshed from DB
         # Fixed cadences (the settings only control retention / age):
         self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours
         self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours
@@ -119,12 +119,12 @@ class Scheduler:
             )
             self.sync_interval_hours = max(1, int(sync_hours))
 
-            chart_sync_hours = settings_module.get_setting(
+            chart_sync_days = settings_module.get_setting(
                 session,
-                "scheduler.chart_sync_interval_hours",
-                default=168
+                "scheduler.chart_sync_interval_days",
+                default=7
             )
-            self.chart_sync_interval_hours = max(1, int(chart_sync_hours))
+            self.chart_sync_interval_days = max(1, int(chart_sync_days))
 
             # Get lyrics retry interval from settings (in hours, convert to seconds)
             lyrics_retry_hours = settings_module.get_setting(
@@ -136,7 +136,7 @@ class Scheduler:
 
             logger.debug(
                 f"Settings refreshed: sync_interval={self.sync_interval_hours}h, "
-                f"chart_sync_interval={self.chart_sync_interval_hours}h, "
+                f"chart_sync_interval={self.chart_sync_interval_days}d, "
                 f"lyrics_retry_interval={self.lyrics_retry_interval_seconds}s"
             )
             
@@ -184,9 +184,9 @@ class Scheduler:
             self._refresh_settings_from_db()
             self._last_settings_refresh = time.time()
             logger.info(
-                "Scheduler settings loaded (sync_interval=%sh, chart_sync_interval=%sh, lyrics_retry_interval=%ss)",
+                "Scheduler settings loaded (sync_interval=%sh, chart_sync_interval=%sd, lyrics_retry_interval=%ss)",
                 self.sync_interval_hours,
-                self.chart_sync_interval_hours,
+                self.chart_sync_interval_days,
                 self.lyrics_retry_interval_seconds
             )
         except Exception:
@@ -347,7 +347,7 @@ class Scheduler:
     def sync_charts(self) -> None:
         """
         Enqueue sync_chart jobs for enabled charts not synced within
-        chart_sync_interval_hours. Skipped entirely while the charts feature is off.
+        chart_sync_interval_days. Skipped entirely while the charts feature is off.
         """
         session: Optional[Session] = None
         try:
@@ -360,7 +360,7 @@ class Scheduler:
             try:
                 subscriptions = charts_svc.get_chart_subscriptions_needing_sync(
                     session=session,
-                    sync_interval_hours=self.chart_sync_interval_hours,
+                    sync_interval_hours=self.chart_sync_interval_days * 24,
                 )
             except Exception:
                 logger.exception("Failed fetching chart subscriptions needing sync")

@@ -38,11 +38,13 @@ DEFAULT_SETTINGS = {
         "min": 1,
         "description": "Hours between lyrics recovery/upgrade checks",
     },
-    "scheduler.chart_sync_interval_hours": {
-        "value": 168,
+    "scheduler.chart_sync_interval_days": {
+        # YouTube Music publishes its charts weekly, so syncing more often
+        # than every 7 days mostly fetches the same chart again.
+        "value": 7,
         "type": "int",
         "min": 1,
-        "description": "Hours between re-syncs of each followed chart",
+        "description": "Days between re-syncs of each followed chart (YouTube Music updates its charts weekly)",
     },
 
     # Registration settings
