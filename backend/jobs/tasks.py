@@ -992,7 +992,7 @@ def import_album(
 # TASK: SYNC ARTIST
 # ============================================================================
 
-def sync_artist(session: Session, artist_id: str) -> Dict[str, Any]:
+def sync_artist(session: Session, artist_id: str, download_banner: bool = True) -> Dict[str, Any]:
     """
     Sync an artist: fetch latest releases and update database.
     
@@ -1003,6 +1003,8 @@ def sync_artist(session: Session, artist_id: str) -> Dict[str, Any]:
     Args:
         session: SQLAlchemy session
         artist_id: Artist ID to sync
+        download_banner: False when the caller has just downloaded the banner
+            itself (chart sync), so it isn't fetched a second time
     
     Returns:
         Dict with sync results
@@ -1055,7 +1057,7 @@ def sync_artist(session: Session, artist_id: str) -> Dict[str, Any]:
     artist_obj = session.get(Artist, artist_id)
     banner_updated = False
     
-    if artist_obj:
+    if artist_obj and download_banner:
         try:
             banner_path = artists_svc.ensure_artist_banner(
                 session,
@@ -1237,10 +1239,11 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
     Flow:
     1. Fetch chart data and save snapshot
     2. Identify artists to follow (not already subscribed)
-    3. For each artist:
+    3. For each artist (committed one at a time):
        - Fetch artist metadata from YTMusic
        - Create artist subscription (mode="full")
-    4. Queue sync_artist jobs for each artist
+       - Download its banner
+    4. Queue sync_artist jobs for each artist (skipping the banner when step 3 got it)
     
     Args:
         session: SQLAlchemy session
@@ -1271,10 +1274,18 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
         return {**result, "jobs_queued": 0}
     
     # ===== TRANSACTION 2: Follow artists (create subscriptions in full mode) =====
+    # One short transaction per artist, never held across a network call:
+    # SQLite has a single writer, and keeping it for the whole loop would make
+    # the download workers' commits wait past busy_timeout. It also lets each
+    # artist show up in the library, with its banner, as soon as it's done.
     from ..services import subscriptions as subs_svc
+    
+    def commit():
+        session.commit()
     
     artists_followed = 0
     failed_artists = []
+    banners_downloaded = set()
     
     for artist_id in artist_ids:
         try:
@@ -1289,22 +1300,37 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
                 mode="full",
             )
             
+            _db_operation_with_retry(commit)
+            
             artists_followed += 1
             logger.debug(f"Followed artist {artist_id} ({artist_name}) from {country_code} chart in full mode")
             
         except Exception as e:
             logger.exception(f"Failed to follow artist {artist_id} from chart {country_code}")
+            session.rollback()
             failed_artists.append(artist_id)
             continue
-    
-    # Commit all follows and subscriptions
-    def commit_follows():
-        session.commit()
-    
-    _db_operation_with_retry(commit_follows)
+        
+        # Banner now rather than in sync_artist, which can wait a long time
+        # behind the other chart artists. The download happens outside any
+        # transaction; only setting image_local is committed.
+        artist_obj = session.get(Artist, artist_id)
+        try:
+            if artist_obj and artists_svc.ensure_artist_banner(
+                session,
+                artist_obj,
+                thumbnails=artist_data.get("thumbnails"),
+            ):
+                _db_operation_with_retry(commit)
+                banners_downloaded.add(artist_id)
+        except Exception:
+            # sync_artist will try again
+            logger.exception(f"Failed to download banner for chart artist {artist_id}")
+            session.rollback()
     
     logger.info(
-        f"Followed {artists_followed}/{len(artist_ids)} artists from {country_code} chart"
+        f"Followed {artists_followed}/{len(artist_ids)} artists from {country_code} chart "
+        f"({len(banners_downloaded)} banners downloaded)"
     )
     
     # ===== TRANSACTION 3: Queue sync_artist jobs =====
@@ -1319,7 +1345,11 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
             job = enqueue_job(
                 session,
                 job_type="sync_artist",
-                payload={"artist_id": artist_id},
+                payload={
+                    "artist_id": artist_id,
+                    # Already fetched above - only retried when that failed
+                    "download_banner": artist_id not in banners_downloaded,
+                },
                 priority=10,  # Lower priority than manual follows
             )
             jobs_queued += 1
