@@ -38,8 +38,8 @@ pnpm-debug.log*
 # =========================
 # BACKEND (Python / FastAPI)
 # =========================
-backend/__pycache__
-backend/*.pyc
+backend/**/__pycache__/
+backend/**/*.pyc
 backend/*.pyo
 backend/*.pyd
 backend/.pytest_cache/
