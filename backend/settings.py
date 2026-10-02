@@ -30,7 +30,7 @@ DEFAULT_SETTINGS = {
         "value": 3,
         "type": "int",
         "min": 1,
-        "description": "Days to keep completed jobs",
+        "description": "Days to keep finished jobs (done, failed, cancelled)",
     },
     "scheduler.token_cleanup_days": {
         "value": 1,

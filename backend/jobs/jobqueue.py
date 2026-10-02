@@ -12,7 +12,7 @@ Functions:
 - cancel_job() - Cancel a queued or reserved job
 - cancel_download_jobs() - Cancel the download jobs of a set of tracks
 - set_download_track_status() - Mirror a download job's state onto its track
-- cleanup_old_jobs() - Delete old completed jobs
+- cleanup_old_jobs() - Delete old finished jobs
 
 Notes:
 - All functions commit the session to make changes visible to worker processes
@@ -512,31 +512,25 @@ def set_download_track_status(
 def cleanup_old_jobs(
     session: Session,
     days_old: int = 7,
-    keep_failed: bool = True,
 ) -> int:
     """
-    Delete old completed jobs to prevent database bloat.
-    
+    Delete old finished jobs (done, failed, cancelled) to prevent database bloat.
+
     Args:
         session: SQLAlchemy session
-        days_old: Delete jobs older than this many days (default 7)
-        keep_failed: If True, don't delete failed jobs (for debugging)
-    
+        days_old: Delete jobs finished more than this many days ago (default 7)
+
     Returns:
         Number of jobs deleted
     """
     cutoff = now_utc() - timedelta(days=days_old)
-    
+
     query = session.query(Job).filter(
         Job.finished_at != None,
         Job.finished_at < cutoff,
+        Job.status.in_(["done", "failed", "cancelled"]),
     )
-    
-    if keep_failed:
-        query = query.filter(Job.status.in_(["done", "cancelled"]))
-    else:
-        query = query.filter(Job.status.in_(["done", "failed", "cancelled"]))
-    
+
     jobs_to_delete = query.all()
     count = len(jobs_to_delete)
     

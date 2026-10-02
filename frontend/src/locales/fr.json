@@ -408,7 +408,7 @@
           },
           "job_cleanup_days": {
             "label": "Conservation des tâches (jours)",
-            "description": "Les tâches terminées plus anciennes que cette durée sont supprimées. Les tâches en échec sont conservées."
+            "description": "Les tâches terminées (réussies, en échec ou annulées) plus anciennes que cette durée sont supprimées."
           },
           "token_cleanup_days": {
             "label": "Intervalle de nettoyage des jetons (jours)",

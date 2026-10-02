@@ -5,7 +5,8 @@ Scheduler for periodic sync tasks.
 Responsibilities:
 1. Sync followed artists for new releases (every `scheduler.sync_interval_hours`)
 2. Re-sync followed charts (every `scheduler.chart_sync_interval_hours`)
-3. Clean up old completed jobs (daily, keeping `scheduler.job_cleanup_days`)
+3. Clean up old finished jobs, failed ones included (daily, keeping
+   `scheduler.job_cleanup_days`)
 4. Clean up expired refresh tokens (every `scheduler.token_cleanup_days`)
 5. Retry/upgrade missing lyrics (every `scheduler.lyrics_retry_interval_hours`)
 6. Requeue jobs abandoned by a dead worker, fix up "queued"/"downloading"
@@ -38,7 +39,7 @@ class Scheduler:
     Tasks:
     - sync_monitored_artists: Check followed artists for new releases
     - sync_charts: Re-sync followed charts to follow new top-N entrants
-    - cleanup_jobs: Remove old completed jobs (daily)
+    - cleanup_jobs: Remove old finished jobs (daily)
     """
 
     def __init__(
@@ -393,8 +394,8 @@ class Scheduler:
 
     def cleanup_old_jobs(self) -> None:
         """
-        Clean up old completed jobs to prevent database bloat.
-        Keeps failed jobs for debugging.
+        Clean up old finished jobs (done, failed, cancelled) to prevent
+        database bloat.
         """
         session: Optional[Session] = None
         try:
@@ -411,11 +412,10 @@ class Scheduler:
             deleted = cleanup_old_jobs(
                 session=session,
                 days_old=int(days_old),
-                keep_failed=True,  # Keep failed jobs for debugging
             )
             
             if deleted > 0:
-                logger.info(f"Cleaned up {deleted} old completed jobs")
+                logger.info(f"Cleaned up {deleted} old finished jobs")
             else:
                 logger.debug("No old jobs to clean up")
         

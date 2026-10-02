@@ -408,7 +408,7 @@
           },
           "job_cleanup_days": {
             "label": "Job retention (days)",
-            "description": "Completed jobs older than this are deleted. Failed jobs are kept."
+            "description": "Finished jobs (completed, failed or cancelled) older than this are deleted."
           },
           "token_cleanup_days": {
             "label": "Token cleanup interval (days)",
