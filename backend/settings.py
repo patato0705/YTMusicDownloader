@@ -150,6 +150,12 @@ def get_allowed_values(key: str) -> Optional[List[Dict[str, str]]]:
     return list(values) if values else None
 
 
+def get_default_value(key: str) -> Any:
+    """Return the built-in default value for a setting key, or None if it has none."""
+    config_ = DEFAULT_SETTINGS.get(key)
+    return config_["value"] if config_ else None
+
+
 def get_min_value(key: str) -> Optional[int]:
     """Return the lower bound for an int setting, or None if unconstrained."""
     config = DEFAULT_SETTINGS.get(key)

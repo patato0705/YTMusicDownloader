@@ -363,6 +363,10 @@
       "saveFailed": "Failed to save settings",
       "invalidNumber": "\"{name}\" must be a whole number of at least {min}",
       "invalidNumberRange": "\"{name}\" must be a whole number between {min} and {max}",
+      "default": "Default",
+      "resetToDefault": "Reset to default ({value})",
+      "on": "On",
+      "off": "Off",
       "categories": {
         "auth": "Authentication",
         "download": "Downloads",

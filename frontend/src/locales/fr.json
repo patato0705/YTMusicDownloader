@@ -363,6 +363,10 @@
       "saveFailed": "Échec de l'enregistrement des paramètres",
       "invalidNumber": "« {name} » doit être un nombre entier d'au moins {min}",
       "invalidNumberRange": "« {name} » doit être un nombre entier entre {min} et {max}",
+      "default": "Défaut",
+      "resetToDefault": "Rétablir la valeur par défaut ({value})",
+      "on": "Activé",
+      "off": "Désactivé",
       "categories": {
         "auth": "Authentification",
         "download": "Téléchargements",

@@ -242,6 +242,16 @@ def get_user_stats(
 # SETTINGS MANAGEMENT ENDPOINTS
 # ============================================================================
 
+def _setting_meta(key: str) -> dict:
+    """What a SettingResponse carries besides the stored row: constraints and default."""
+    return {
+        "allowed_values": settings_module.get_allowed_values(key),
+        "min": settings_module.get_min_value(key),
+        "max": settings_module.get_max_value(key),
+        "default": settings_module.get_default_value(key),
+    }
+
+
 @router.get("/settings", response_model=list[SettingResponse])
 def get_all_settings(
     current_user: User = Depends(require_admin),
@@ -254,12 +264,7 @@ def get_all_settings(
     """
     settings_list = settings_module.get_all_settings(session)
     return [
-        SettingResponse(
-            **setting,
-            allowed_values=settings_module.get_allowed_values(setting["key"]),
-            min=settings_module.get_min_value(setting["key"]),
-            max=settings_module.get_max_value(setting["key"]),
-        )
+        SettingResponse(**setting, **_setting_meta(setting["key"]))
         for setting in settings_list
     ]
 
@@ -287,9 +292,7 @@ def get_setting(
                 value=default_config["value"],
                 type=default_config["type"],
                 description=default_config["description"],
-                allowed_values=settings_module.get_allowed_values(key),
-                min=settings_module.get_min_value(key),
-                max=settings_module.get_max_value(key),
+                **_setting_meta(key),
                 updated_at=None,
                 updated_by=None,
             )
@@ -301,9 +304,7 @@ def get_setting(
 
     return SettingResponse(
         **setting.to_dict(),
-        allowed_values=settings_module.get_allowed_values(key),
-        min=settings_module.get_min_value(key),
-        max=settings_module.get_max_value(key),
+        **_setting_meta(key),
     )
 
 
@@ -335,9 +336,7 @@ def update_setting(
 
         return SettingResponse(
             **setting.to_dict(),
-            allowed_values=settings_module.get_allowed_values(key),
-            min=settings_module.get_min_value(key),
-            max=settings_module.get_max_value(key),
+            **_setting_meta(key),
         )
     
     except Exception as e:

@@ -33,6 +33,7 @@ export interface Setting {
   allowed_values: SettingOption[] | null;
   min: number | null; // lower bound for int settings
   max: number | null; // upper bound for int settings
+  default: any; // built-in default value; null for keys without one
   updated_at: string | null;
   updated_by: number | null;
 }

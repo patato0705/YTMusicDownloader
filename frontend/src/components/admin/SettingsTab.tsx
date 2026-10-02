@@ -122,6 +122,23 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
     return option.label;
   };
 
+  // Compared as JSON so a json-typed setting matches by content, not identity.
+  // Keys without a built-in default never count as changed.
+  const isAtDefault = (setting: Setting): boolean =>
+    setting.default == null ||
+    JSON.stringify(editedSettings[setting.key]) === JSON.stringify(setting.default);
+
+  const defaultValueLabel = (setting: Setting): string => {
+    if (setting.type === 'bool') return t(setting.default ? 'admin.settings.on' : 'admin.settings.off');
+    const option = setting.allowed_values?.find(o => o.value === setting.default);
+    return option ? settingOptionLabel(setting, option) : String(setting.default);
+  };
+
+  // Like any other edit: the field takes the default, Save persists it
+  const resetToDefault = (setting: Setting) => {
+    setEditedSettings(prev => ({ ...prev, [setting.key]: setting.default }));
+  };
+
   const invalidIntSetting = (setting: Setting): boolean => {
     if (setting.type !== 'int') return false;
     const value = editedSettings[setting.key];
@@ -230,7 +247,18 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                     <p className="text-sm text-muted-foreground">{settingDescription(setting)}</p>
                   </div>
 
-                  <div className="flex-shrink-0 ml-auto">
+                  <div className="flex-shrink-0 ml-auto flex items-center gap-2">
+                    {!isAtDefault(setting) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => resetToDefault(setting)}
+                        title={t('admin.settings.resetToDefault', { value: defaultValueLabel(setting) })}
+                      >
+                        <span className="mr-1" aria-hidden="true">↺</span>
+                        {t('admin.settings.default')}
+                      </Button>
+                    )}
                     {setting.type === 'bool' ? (
                       <ToggleSwitch
                         checked={!!editedSettings[setting.key]}

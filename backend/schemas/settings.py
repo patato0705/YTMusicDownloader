@@ -18,6 +18,7 @@ class SettingResponse(BaseModel):
     allowed_values: Optional[List[Dict[str, str]]] = None
     min: Optional[int] = None  # lower bound for int settings
     max: Optional[int] = None  # upper bound for int settings
+    default: Any = None  # built-in default value; None for keys without one
     updated_at: Optional[datetime] = None
     updated_by: Optional[int] = None
 
