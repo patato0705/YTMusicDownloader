@@ -410,10 +410,6 @@
             "label": "Conservation des tâches (jours)",
             "description": "Les tâches terminées (réussies, en échec ou annulées) plus anciennes que cette durée sont supprimées."
           },
-          "token_cleanup_days": {
-            "label": "Intervalle de nettoyage des jetons (jours)",
-            "description": "Fréquence à laquelle les jetons de connexion expirés sont purgés de la base de données."
-          },
           "lyrics_retry_interval_hours": {
             "label": "Intervalle de nouvelle tentative des paroles (heures)",
             "description": "Fréquence à laquelle les titres sans paroles ou avec des paroles non synchronisées sont réessayés."

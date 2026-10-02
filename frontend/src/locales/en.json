@@ -410,10 +410,6 @@
             "label": "Job retention (days)",
             "description": "Finished jobs (completed, failed or cancelled) older than this are deleted."
           },
-          "token_cleanup_days": {
-            "label": "Token cleanup interval (days)",
-            "description": "How often expired sign-in tokens are purged from the database."
-          },
           "lyrics_retry_interval_hours": {
             "label": "Lyrics retry interval (hours)",
             "description": "How often tracks with missing or unsynced lyrics are retried."

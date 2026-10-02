@@ -32,12 +32,6 @@ DEFAULT_SETTINGS = {
         "min": 1,
         "description": "Days to keep finished jobs (done, failed, cancelled)",
     },
-    "scheduler.token_cleanup_days": {
-        "value": 1,
-        "type": "int",
-        "min": 1,
-        "description": "Days between expired token cleanup",
-    },
     "scheduler.lyrics_retry_interval_hours": {
         "value": 24,
         "type": "int",

@@ -7,7 +7,7 @@ Responsibilities:
 2. Re-sync followed charts (every `scheduler.chart_sync_interval_hours`)
 3. Clean up old finished jobs, failed ones included (daily, keeping
    `scheduler.job_cleanup_days`)
-4. Clean up expired refresh tokens (every `scheduler.token_cleanup_days`)
+4. Clean up expired refresh tokens (daily)
 5. Retry/upgrade missing lyrics (every `scheduler.lyrics_retry_interval_hours`)
 6. Requeue jobs abandoned by a dead worker, fix up "queued"/"downloading"
    tracks that lost their job, and drop stale download scratch dirs
@@ -63,8 +63,8 @@ class Scheduler:
         self.chart_sync_interval_hours: int = 168  # refreshed from DB
         # Fixed cadences (the settings only control retention / age):
         self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours
-        self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours default
-        self.lyrics_retry_interval_seconds: int = 86400  # 24 hours default
+        self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours
+        self.lyrics_retry_interval_seconds: int = 86400  # refreshed from DB
         self.stale_sweep_interval_seconds: int = 300
         self.thumbnail_cleanup_interval_seconds: int = 86400
         self.settings_refresh_interval: int = settings_refresh_interval
@@ -126,14 +126,6 @@ class Scheduler:
             )
             self.chart_sync_interval_hours = max(1, int(chart_sync_hours))
 
-            # Get token cleanup interval from settings (in days, convert to seconds)
-            token_cleanup_days = settings_module.get_setting(
-                session,
-                "scheduler.token_cleanup_days",
-                default=1
-            )
-            self.token_cleanup_interval_seconds = max(1, int(token_cleanup_days)) * 86400
-
             # Get lyrics retry interval from settings (in hours, convert to seconds)
             lyrics_retry_hours = settings_module.get_setting(
                 session,
@@ -145,7 +137,6 @@ class Scheduler:
             logger.debug(
                 f"Settings refreshed: sync_interval={self.sync_interval_hours}h, "
                 f"chart_sync_interval={self.chart_sync_interval_hours}h, "
-                f"token_cleanup_interval={self.token_cleanup_interval_seconds}s, "
                 f"lyrics_retry_interval={self.lyrics_retry_interval_seconds}s"
             )
             
@@ -193,9 +184,9 @@ class Scheduler:
             self._refresh_settings_from_db()
             self._last_settings_refresh = time.time()
             logger.info(
-                "Scheduler settings loaded (sync_interval=%sh, token_cleanup_interval=%ss, lyrics_retry_interval=%ss)",
+                "Scheduler settings loaded (sync_interval=%sh, chart_sync_interval=%sh, lyrics_retry_interval=%ss)",
                 self.sync_interval_hours,
-                self.token_cleanup_interval_seconds,
+                self.chart_sync_interval_hours,
                 self.lyrics_retry_interval_seconds
             )
         except Exception:
