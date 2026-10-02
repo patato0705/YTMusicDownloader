@@ -1159,31 +1159,19 @@ def sync_artist(session: Session, artist_id: str, download_banner: bool = True) 
     )
 
     # ===== TRANSACTION 5: Queue import_album jobs (full mode only) =====
-    from .jobqueue import enqueue_job
+    # Every download-mode album still without tracks: the ones just created,
+    # and any whose earlier import never landed, which nothing else would
+    # ever import again. The imports queued by the upgrade above were
+    # committed with the albums, so they're skipped here, not doubled.
     jobs_queued = 0
-
-    albums_to_import = []
     if sync_mode == "full":
-        albums_to_import.extend(new_albums)
-
-    for album_item in albums_to_import:
-        browse_id = album_item.get("id") or album_item.get("browseId")
-        if not browse_id:
-            continue
         try:
-            enqueue_job(
-                session,
-                job_type="import_album",
-                payload={
-                    "browse_id": browse_id,
-                    "artist_id": artist_id,
-                },
-                priority=20
-            )
-            jobs_queued += 1
-            logger.debug(f"Queued import_album job for {browse_id}")
-        except Exception as e:
-            logger.exception(f"Failed to queue import_album job for {browse_id}")
+            jobs_queued = subs_svc.queue_trackless_album_imports(session, artist_id)
+            _db_operation_with_retry(session.commit)
+        except Exception:
+            session.rollback()
+            jobs_queued = 0
+            logger.exception(f"Failed to queue import_album jobs for artist {artist_id}")
 
     if sync_mode == "full":
         logger.info(f"Queued {jobs_queued} import_album jobs for artist {artist_id}")

@@ -220,20 +220,50 @@ def upgrade_all_albums_to_download(
     if count > 0:
         logger.info(f"Upgraded {count} albums to download mode for artist {artist_id}")
 
-    trackless = session.execute(
+    queue_album_imports(
+        session,
+        {a.id for a in albums} | set(_trackless_download_album_ids(session, artist_id)),
+        artist_id=artist_id,
+        user_id=user_id,
+    )
+    return count
+
+
+def _trackless_download_album_ids(session: Session, artist_id: str) -> list[str]:
+    """The artist's download-mode albums that have no Track rows yet."""
+    return list(session.execute(
         select(Album.id).where(
             Album.artist_id == artist_id,
             Album.mode == "download",
             ~select(Track.id).where(Track.album_id == Album.id).exists(),
         )
-    ).scalars().all()
-    queue_album_imports(
+    ).scalars().all())
+
+
+def queue_trackless_album_imports(
+    session: Session,
+    artist_id: str,
+    user_id: Optional[int] = None,
+) -> int:
+    """
+    Queue an import_album for each of the artist's download-mode albums
+    that still has no tracks: just created by a sync, or an earlier import
+    that never landed (failed, or its worker died on the last attempt).
+    Track-based recovery (album retry, the scheduler's orphan sweep) can't
+    see those, and a sync only creates albums it hasn't seen before, so
+    without this they would stay empty for good.
+
+    Albums with an import already waiting or running are skipped (see
+    queue_album_imports), which only sees committed jobs: commit any
+    imports queued earlier in the transaction first. Does not commit.
+    Returns the number queued.
+    """
+    return queue_album_imports(
         session,
-        {a.id for a in albums} | set(trackless),
+        _trackless_download_album_ids(session, artist_id),
         artist_id=artist_id,
         user_id=user_id,
     )
-    return count
 
 
 def queue_album_imports(
