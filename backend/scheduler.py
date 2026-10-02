@@ -8,8 +8,9 @@ Responsibilities:
 3. Clean up old completed jobs (daily, keeping `scheduler.job_cleanup_days`)
 4. Clean up expired refresh tokens (every `scheduler.token_cleanup_days`)
 5. Retry/upgrade missing lyrics (every `scheduler.lyrics_retry_interval_hours`)
-6. Requeue jobs abandoned by a dead worker, requeue "queued" tracks that
-   lost their job, and drop stale download scratch dirs (every 5 minutes)
+6. Requeue jobs abandoned by a dead worker, fix up "queued"/"downloading"
+   tracks that lost their job, and drop stale download scratch dirs
+   (every 5 minutes)
 
 Note: Album subscriptions are handled on-demand (follow album → immediate import)
 """
@@ -481,12 +482,19 @@ class Scheduler:
 
     def _requeue_orphaned_track_downloads(self, session: Session) -> None:
         """
-        Give a new job to "queued" tracks whose job is gone.
+        Fix up "queued" and "downloading" tracks whose job is gone.
 
         Everything that creates or drops a download job updates the track in
         the same transaction, so this should find nothing; it's the safety net
         for whatever slips through (a job deleted by hand, a crash between
-        commits). Tracks of albums no longer downloaded go back to "available".
+        commits). A "queued" track gets a new job, or goes back to "available"
+        if its album is no longer downloaded.
+
+        A "downloading" track goes back to "available": its job was cancelled
+        mid-download (cancel_download_jobs lets the worker finish) and the
+        worker then died, so nothing will ever hand it back. If that worker is
+        in fact still going, it lands the file as usual and the track ends up
+        "done" anyway.
 
         A track is only acted on when two sweeps in a row find it orphaned:
         the jobs and tracks are read in two statements, not one snapshot, so a
@@ -496,24 +504,37 @@ class Scheduler:
         from .services import tracks as tracks_svc
 
         active = tracks_svc.active_download_track_ids(session)  # read first; see above
-        queued = session.query(Track).filter(Track.status == "queued").all()
-        orphans = {t.id: t for t in queued if t.id not in active}
+        candidates = session.query(Track).filter(Track.status.in_(("queued", "downloading"))).all()
+        orphans = {t.id: t for t in candidates if t.id not in active}
 
         confirmed = [t for tid, t in orphans.items() if tid in self._orphaned_track_ids]
         self._orphaned_track_ids = set(orphans) - {t.id for t in confirmed}
         if not confirmed:
             return
 
-        wanted = [t for t in confirmed if t.album and t.album.mode == "download"]
-        for track in confirmed:
-            if track not in wanted:
-                track.status = "available"
-                session.add(track)
+        wanted = [
+            t for t in confirmed
+            if t.status == "queued" and t.album and t.album.mode == "download"
+        ]
+        released = [t for t in confirmed if t not in wanted]
+        for track in released:
+            track.status = "available"
+            track.last_error = None
+            session.add(track)
         requeued = tracks_svc.queue_track_downloads(session, wanted)
+
+        # queue_track_downloads rolls up its own albums; the released ones
+        # would otherwise keep showing "pending"/"downloading"
+        released_albums = {t.album_id for t in released if t.album_id}
+        if released_albums:
+            session.flush()  # autoflush=False: the rollup has to see the new statuses
+            for album_id in released_albums:
+                subs_svc.check_and_update_album_download_status(session, album_id)
+
         session.commit()
         logger.warning(
-            f"Found {len(confirmed)} queued track(s) with no download job: "
-            f"requeued {requeued}, released {len(confirmed) - len(wanted)}"
+            f"Found {len(confirmed)} queued/downloading track(s) with no download job: "
+            f"requeued {requeued}, released {len(released)}"
         )
 
     def cleanup_expired_tokens(self) -> None:
