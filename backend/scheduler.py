@@ -446,7 +446,7 @@ class Scheduler:
             # stale heartbeat, never by owner name.
             reclaimed = reclaim_orphaned_jobs(session, "scheduler")
             if reclaimed:
-                logger.warning(f"Requeued {reclaimed} job(s) abandoned by a dead worker")
+                logger.warning(f"Reclaimed {reclaimed} job(s) abandoned by a dead worker")
             self._requeue_orphaned_track_downloads(session)
         except Exception:
             logger.exception("Failed to reclaim stale jobs")

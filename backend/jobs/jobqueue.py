@@ -208,7 +208,8 @@ def reclaim_orphaned_jobs(
     """
     Requeue "reserved" jobs whose worker is gone.
 
-    Two cases, both requeued:
+    Two cases, both requeued (or failed, if the dead worker's attempt was
+    the job's last):
       - jobs reserved under *this* worker's name: this process is the only
         one that should hold them, and it just started, so a previous
         incarnation died mid-job (container restart, crash, update);
@@ -245,16 +246,31 @@ def reclaim_orphaned_jobs(
     if not orphaned:
         return 0
 
+    failed = 0
     for job in orphaned:
         previous = job.reserved_by
-        job.status = "queued"
-        job.reserved_by = None
-        job.started_at = None
-        job.heartbeat_at = None
-        job.last_error = (
+        reason = (
             f"Reclaimed by {worker_name}: orphaned by {previous or 'unknown worker'}, "
             f"which never finished it"
         )
+        job.reserved_by = None
+        job.heartbeat_at = None
+
+        # reserve_job already counted the dead worker's attempt. Requeueing a
+        # job that used its last one would leave it "queued" but never
+        # reservable: a zombie that blocks every "already queued?" check.
+        if (job.attempts or 0) >= (job.max_attempts or 1):
+            job.status = "failed"
+            job.finished_at = now
+            job.last_error = f"{reason} (out of attempts)"
+            session.add(job)
+            set_download_track_status(session, job, "failed", error=job.last_error)
+            failed += 1
+            continue
+
+        job.status = "queued"
+        job.started_at = None
+        job.last_error = reason
         session.add(job)
 
         # The dead worker had already flipped its track to "downloading";
@@ -264,7 +280,10 @@ def reclaim_orphaned_jobs(
 
     session.commit()
 
-    logger.warning(f"Reclaimed {len(orphaned)} orphaned job(s) left 'reserved' by a dead worker")
+    logger.warning(
+        f"Reclaimed {len(orphaned)} orphaned job(s) left 'reserved' by a dead worker: "
+        f"requeued {len(orphaned) - failed}, failed {failed} out of attempts"
+    )
     return len(orphaned)
 
 
