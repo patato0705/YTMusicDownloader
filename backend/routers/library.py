@@ -22,6 +22,7 @@ from sqlalchemy import func, and_, or_, case
 from ..deps import get_db
 from ..models import Artist, Album, Track, ArtistSubscription
 from ..services import subscriptions as subs_svc
+from ..jobs.jobqueue import cancel_download_jobs
 from .. import config
 from ..downloader.cover import move_cover_if_exists
 
@@ -283,7 +284,7 @@ def list_tracks(
     current_user: User = Depends(require_auth),
     artist_id: Optional[str] = Query(None, description="Filter by artist ID"),
     album_id: Optional[str] = Query(None, description="Filter by album ID"),
-    status_filter: Optional[str] = Query(None, pattern="^(done|failed|downloading|new)$", description="Filter by track status"),
+    status_filter: Optional[str] = Query(None, pattern="^(available|queued|downloading|done|failed)$", description="Filter by track status"),
     lyrics: Optional[str] = Query(None, pattern="^(synced|plain|any)$", description="Filter by lyrics type (synced, plain, any)"),
     q: Optional[str] = Query(None, max_length=200, description="Case-insensitive substring match on track title"),
     limit: int = Query(100, ge=1, le=1000, description="Max results"),
@@ -296,7 +297,7 @@ def list_tracks(
     Query params:
     - artist_id: Filter by artist (optional)
     - album_id: Filter by album (optional)
-    - status: Filter by status (done, failed, downloading, new)
+    - status: Filter by status (available, queued, downloading, done, failed)
     - lyrics: Filter by lyrics type (synced, plain, any)
     - q: Case-insensitive substring match on the track title
     - limit: Max results (default 100, max 1000)
@@ -416,7 +417,7 @@ def get_library_stats(
             func.count(Track.id).label("total"),
             count_where(Track.status == "done").label("downloaded"),
             count_where(Track.status == "downloading").label("downloading"),
-            count_where(Track.status == "new").label("pending"),
+            count_where(Track.status == "queued").label("pending"),
             count_where(Track.status == "failed").label("failed"),
             count_where(Track.lyrics != None).label("with_lyrics"),  # noqa: E711
             count_where(Track.lyrics == "synced").label("with_synced_lyrics"),
@@ -487,7 +488,7 @@ def get_album_download_progress(
         downloaded = sum(1 for t in tracks if t.status == "done")
         downloading = sum(1 for t in tracks if t.status == "downloading")
         failed = sum(1 for t in tracks if t.status == "failed")
-        pending = sum(1 for t in tracks if t.status == "new")
+        pending = sum(1 for t in tracks if t.status == "queued")
         with_lyrics = sum(1 for t in tracks if t.lyrics is not None)
         
         progress = 0.0
@@ -596,6 +597,7 @@ def delete_artist_from_library(
             albums = db.query(Album).filter(Album.artist_id == artist_id).all()
             for album in albums:
                 tracks = db.query(Track).filter(Track.album_id == album.id).all()
+                cancel_download_jobs(db, [t.id for t in tracks], reason="artist deleted")
                 for track in tracks:
                     if _delete_file_safe(track.file_path):
                         files_deleted += 1
@@ -692,6 +694,7 @@ def delete_album_from_library(
 
         # 1. Delete all track files and lyrics from disk
         tracks = db.query(Track).filter(Track.album_id == album.id).all()
+        cancel_download_jobs(db, [t.id for t in tracks], reason="album deleted")
         for track in tracks:
             if _delete_file_safe(track.file_path):
                 files_deleted += 1

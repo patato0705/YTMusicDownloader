@@ -177,40 +177,11 @@ def follow_artist(
             mode="full",
         )
 
-        # If upgrading from light to full, upgrade all albums to download mode
-        # and queue import_album for albums that don't have tracks yet
-        imports_queued = 0
+        # If upgrading from light to full, upgrade all albums to download mode;
+        # that queues an import_album for each, which queues their downloads
         if old_mode == "light":
-            upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id)
-            db.flush()  # ensure mode changes are visible to the query below (autoflush=False)
+            upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id, user_id=current_user.id)
             logger.info(f"Upgraded {upgraded_count} albums to download mode for artist {artist_id}")
-
-            # Queue import_album for albums that have no tracks in DB
-            from sqlalchemy import select, func
-            from ..models import Album, Track
-            albums_needing_import = (
-                db.execute(
-                    select(Album.id).where(
-                        Album.artist_id == artist_id,
-                        Album.mode == "download",
-                    )
-                ).scalars().all()
-            )
-            for aid in albums_needing_import:
-                track_count = db.query(func.count(Track.id)).filter(Track.album_id == aid).scalar()
-                if not track_count:
-                    try:
-                        enqueue_job(
-                            db,
-                            job_type="import_album",
-                            payload={"browse_id": aid, "artist_id": artist_id},
-                            priority=20,
-                            user_id=current_user.id,
-                            commit=False,
-                        )
-                        imports_queued += 1
-                    except Exception as e:
-                        logger.exception(f"Failed to queue import_album for {aid}")
 
         db.commit()
         logger.info(f"Artist {artist_id} followed in full mode")
@@ -236,7 +207,6 @@ def follow_artist(
             },
             "mode": "full",
             "status": "syncing",
-            "imports_queued": imports_queued,
         }
         
     except HTTPException:
@@ -331,38 +301,8 @@ def update_artist_mode(
         
         # Update albums accordingly
         if mode == "full":
-            # Upgrade: metadata → download
-            upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id)
-            db.flush()  # ensure mode changes are visible to the query below (autoflush=False)
-
-            # Queue import_album for albums that have no tracks in DB
-            from sqlalchemy import select, func
-            from ..models import Album, Track
-            imports_queued = 0
-            albums_needing_import = (
-                db.execute(
-                    select(Album.id).where(
-                        Album.artist_id == artist_id,
-                        Album.mode == "download",
-                    )
-                ).scalars().all()
-            )
-            for aid in albums_needing_import:
-                track_count = db.query(func.count(Track.id)).filter(Track.album_id == aid).scalar()
-                if not track_count:
-                    try:
-                        enqueue_job(
-                            db,
-                            job_type="import_album",
-                            payload={"browse_id": aid, "artist_id": artist_id},
-                            priority=20,
-                            user_id=current_user.id,
-                            commit=False,
-                        )
-                        imports_queued += 1
-                    except Exception as e:
-                        logger.exception(f"Failed to queue import_album for {aid}")
-
+            # Upgrade: metadata → download (queues an import_album per album)
+            upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id, user_id=current_user.id)
             db.commit()
 
             # Queue sync job (picks up any brand-new albums from API)
@@ -383,7 +323,6 @@ def update_artist_mode(
                 "artist_id": artist_id,
                 "mode": "full",
                 "albums_upgraded": upgraded_count,
-                "imports_queued": imports_queued,
             }
         else:
             # Downgrade: download → metadata

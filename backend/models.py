@@ -125,7 +125,8 @@ class Track(Base):
     # Audio file size in bytes, recorded when the download completes so the
     # library stats can sum real sizes instead of guessing.
     file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    status: Mapped[str] = mapped_column(String(64), default="new", nullable=False)
+    # available | queued | downloading | done | failed -- see services/tracks.py
+    status: Mapped[str] = mapped_column(String(64), default="available", nullable=False)
     # Why the download last failed. Jobs carry the same message but get
     # cleaned up; this one stays with the track until a later attempt clears it.
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

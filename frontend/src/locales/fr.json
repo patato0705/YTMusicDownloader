@@ -221,6 +221,20 @@
     "artist": "Artiste",
     "duration": "Durée",
     "status": "Statut",
+    "trackStatus": {
+      "available": "Non téléchargé",
+      "queued": "En attente",
+      "paused": "En pause",
+      "downloading": "Téléchargement",
+      "done": "Sur le disque",
+      "failed": "Échoué"
+    },
+    "retryingAfter": "Nouvelle tentative prévue après : {error}",
+    "pausedUntil": "Téléchargements en pause jusqu'à {time} (limite de YouTube)",
+    "retry": "Réessayer les titres manquants",
+    "retryQueued": "{count} titre(s) mis en file de téléchargement",
+    "retryNothing": "Rien à réessayer : tous les titres sont sur le disque ou déjà en attente",
+    "retryFailed": "Impossible de mettre les titres en file d'attente",
     "lyrics": "Paroles",
     "noTracks": "Aucun titre",
     "noTracksDescription": "Cet album n'a pas encore de titres disponibles.",
@@ -326,8 +340,7 @@
       "reserved": "Réservé",
       "done": "Terminé",
       "failed": "Échoué",
-      "downloading": "Téléchargement",
-      "new": "Nouveau"
+      "cancelled": "Annulé"
     },
     "cancel": "Annuler la tâche",
     "retry": "Réessayer",

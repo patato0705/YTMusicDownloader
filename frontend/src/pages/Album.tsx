@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
-import { getAlbum, downloadAlbum } from '../api/albums';
+import { getAlbum, downloadAlbum, retryAlbum } from '../api/albums';
 import { deleteLibraryAlbum } from '../api/library';
 import { getImageUrl } from '../api/media';
 import { Spinner } from '../components/ui/Spinner';
@@ -26,6 +26,7 @@ export default function Album(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [retryLoading, setRetryLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -34,13 +35,22 @@ export default function Album(): JSX.Element {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
-  const { revision, refresh: refreshJobs } = useJobActivity();
+  const { revision, refresh: refreshJobs, downloadsPausedUntil } = useJobActivity();
   const isAdmin = user?.role === 'administrator';
   // Visitors are read-only: downloading and editing lyrics are member+ actions
   const canModify = isAdmin || user?.role === 'member';
-  // Lyrics only exist for tracks we've downloaded, so the column is pointless
-  // on albums served straight from YTMusic.
-  const showLyrics = source === 'database';
+  // Lyrics and download state only exist for tracks in our DB, so those
+  // columns are pointless on albums served straight from YTMusic.
+  const showTrackState = source === 'database';
+  // Tracks a retry would queue: failed ones, and any left without a job
+  const retryableCount = tracks.filter((tr) => tr.status === 'failed' || tr.status === 'available').length;
+
+  const applyAlbum = (data: any) => {
+    setAlbum(data.album);
+    setTracks(data.tracks || []);
+    setIsFollowing(data.mode === 'download');
+    setSource(data.source || '');
+  };
 
   useEffect(() => {
     if (!albumId) return;
@@ -53,12 +63,7 @@ export default function Album(): JSX.Element {
 
       try {
         const data = await getAlbum(albumId);
-        if (!cancelled) {
-          setAlbum(data.album);
-          setTracks(data.tracks || []);
-          setIsFollowing(data.mode === 'download');
-          setSource(data.source || '');
-        }
+        if (!cancelled) applyAlbum(data);
       } catch (err: any) {
         console.error('Failed to load album:', err);
         if (!cancelled) setError(err.message || t('common.error'));
@@ -81,10 +86,7 @@ export default function Album(): JSX.Element {
 
     getAlbum(albumId)
       .then((data) => {
-        if (cancelled) return;
-        setAlbum(data.album);
-        setTracks(data.tracks || []);
-        setIsFollowing(data.mode === 'download');
+        if (!cancelled) applyAlbum(data);
       })
       .catch((err) => console.error('Failed to refresh album:', err));
 
@@ -103,11 +105,36 @@ export default function Album(): JSX.Element {
         ? t('album.downloadQueuedWithArtist')
         : t('album.downloadQueued');
       setToast({ message, type: 'success' });
+      // The album is in the DB now: reload it so the tracks show as queued
+      // (an album served from YTMusic isn't refreshed by job activity)
+      getAlbum(albumId)
+        .then(applyAlbum)
+        .catch((err) => console.error('Failed to reload album:', err));
     } catch (err: any) {
       console.error('Download failed:', err);
       setToast({ message: err.message || t('album.downloadFailed'), type: 'error' });
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    if (!albumId) return;
+
+    setRetryLoading(true);
+    try {
+      const { tracks_queued } = await retryAlbum(albumId);
+      refreshJobs();
+      setToast(tracks_queued > 0
+        ? { message: t('album.retryQueued', { count: tracks_queued }), type: 'success' }
+        : { message: t('album.retryNothing'), type: 'success' });
+      const data = await getAlbum(albumId);
+      applyAlbum(data);
+    } catch (err: any) {
+      console.error('Retry failed:', err);
+      setToast({ message: err.message || t('album.retryFailed'), type: 'error' });
+    } finally {
+      setRetryLoading(false);
     }
   };
 
@@ -128,48 +155,67 @@ export default function Album(): JSX.Element {
     }
   };
 
-  const getStatusConfig = (status?: string): { styles: string; label: string; icon: JSX.Element } => {
-    switch (status) {
+  /** Badge for a track's download state; null for tracks not in the DB */
+  const getStatusConfig = (track: Track): { styles: string; label: string; title: string; icon: JSX.Element } | null => {
+    const icon = (d: string, strokeWidth = 2) => (
+      <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={strokeWidth} d={d} />
+      </svg>
+    );
+
+    switch (track.status) {
       case 'done':
         return {
           styles: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 dark:border-green-500/25',
-          label: t('jobs.status.done'),
-          icon: (
-            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-            </svg>
-          ),
+          label: t('album.trackStatus.done'),
+          title: t('album.trackStatus.done'),
+          icon: icon('M5 13l4 4L19 7', 2.5),
         };
       case 'failed':
         return {
           styles: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 dark:border-red-500/25',
-          label: t('jobs.status.failed'),
-          icon: (
-            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          ),
+          label: t('album.trackStatus.failed'),
+          // Failed tracks carry the download error; surface it on hover.
+          title: track.last_error ? `${t('album.downloadError')}: ${track.last_error}` : t('album.trackStatus.failed'),
+          icon: icon('M6 18L18 6M6 6l12 12', 2.5),
         };
       case 'downloading':
         return {
           styles: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 dark:border-blue-500/25',
-          label: t('jobs.status.downloading'),
-          icon: (
-            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-          ),
+          label: t('album.trackStatus.downloading'),
+          title: t('album.trackStatus.downloading'),
+          icon: icon('M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4'),
+        };
+      case 'queued': {
+        // Rate-limited: no worker takes downloads until the pause lifts
+        if (downloadsPausedUntil) {
+          const time = new Date(downloadsPausedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          return {
+            styles: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 dark:border-amber-500/25',
+            label: t('album.trackStatus.paused'),
+            title: t('album.pausedUntil', { time }),
+            icon: icon('M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z'),
+          };
+        }
+        // A queued track with an error is waiting out a retry backoff
+        return {
+          styles: 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-400/30 dark:border-slate-500/30',
+          label: t('album.trackStatus.queued'),
+          title: track.last_error
+            ? t('album.retryingAfter', { error: track.last_error })
+            : t('album.trackStatus.queued'),
+          icon: icon('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'),
+        };
+      }
+      case 'available':
+        return {
+          styles: 'bg-slate-500/5 text-slate-400 dark:text-slate-500 border-slate-400/15 dark:border-slate-500/15',
+          label: t('album.trackStatus.available'),
+          title: t('album.trackStatus.available'),
+          icon: icon('M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z'),
         };
       default:
-        return {
-          styles: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-400/20 dark:border-slate-500/20',
-          label: t('jobs.status.new'),
-          icon: (
-            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          ),
-        };
+        return null;
     }
   };
 
@@ -357,6 +403,18 @@ export default function Album(): JSX.Element {
                   ← {t('common.back')}
                 </Button>
 
+                {canModify && isFollowing && showTrackState && retryableCount > 0 && (
+                  <Button
+                    onClick={handleRetry}
+                    variant="secondary"
+                    size="lg"
+                    isLoading={retryLoading}
+                  >
+                    <span className="mr-2">↻</span>
+                    {t('album.retry')}
+                  </Button>
+                )}
+
                 {isAdmin && source === 'database' && isFollowing && (
                   <Button
                     onClick={() => setDeleteConfirm(true)}
@@ -394,14 +452,16 @@ export default function Album(): JSX.Element {
                       <th className="px-3 md:px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell sm:w-24">
                         {t('album.duration')}
                       </th>
-                      {showLyrics && (
+                      {showTrackState && (
                         <th className="px-3 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider sm:w-28">
                           {t('album.lyrics')}
                         </th>
                       )}
-                      <th className="px-3 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider sm:w-28">
-                        {t('album.status')}
-                      </th>
+                      {showTrackState && (
+                        <th className="px-3 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider sm:w-28">
+                          {t('album.status')}
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-white/10">
@@ -427,33 +487,37 @@ export default function Album(): JSX.Element {
                         <td className="px-3 md:px-6 py-4 text-sm text-muted-foreground text-right font-mono hidden sm:table-cell">
                           {formatDuration(track.duration_seconds || track.duration)}
                         </td>
-                        {showLyrics && (
+                        {/* A download-mode album whose import hasn't landed yet
+                            lists YTMusic's tracks, which have no row (and no status) */}
+                        {showTrackState && (
                           <td className="px-3 md:px-6 py-4 text-center">
-                            <LyricsBadge
-                              kind={track.lyrics}
-                              title={t('lyrics.open')}
-                              onClick={() => setLyricsTrack(track)}
-                            />
+                            {track.status && (
+                              <LyricsBadge
+                                kind={track.lyrics}
+                                title={t('lyrics.open')}
+                                onClick={() => setLyricsTrack(track)}
+                              />
+                            )}
                           </td>
                         )}
-                        <td className="px-3 md:px-6 py-4 text-center">
-                          {(() => {
-                            const { styles, label, icon } = getStatusConfig(track.status);
-                            // Failed tracks carry the download error; surface it on hover.
-                            const errorTitle = track.status === 'failed' && track.last_error
-                              ? `${t('album.downloadError')}: ${track.last_error}`
-                              : undefined;
-                            return (
-                              <span
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border backdrop-blur-sm ${errorTitle ? 'cursor-help' : ''} ${styles}`}
-                                title={errorTitle ?? label}
-                              >
-                                {icon}
-                                <span className="hidden sm:inline">{label}</span>
-                              </span>
-                            );
-                          })()}
-                        </td>
+                        {showTrackState && (
+                          <td className="px-3 md:px-6 py-4 text-center">
+                            {(() => {
+                              const config = getStatusConfig(track);
+                              if (!config) return null;
+                              const { styles, label, title, icon } = config;
+                              return (
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium whitespace-nowrap rounded-full border backdrop-blur-sm ${title !== label ? 'cursor-help' : ''} ${styles}`}
+                                  title={title}
+                                >
+                                  {icon}
+                                  <span className="hidden sm:inline">{label}</span>
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

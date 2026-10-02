@@ -91,7 +91,7 @@ class CatalogTrack(BaseModel):
     lyrics: Optional[str] = Field(None, max_length=16)
     lyrics_local: Optional[str] = Field(None, max_length=1024)
     file_path: Optional[str] = Field(None, max_length=2048)
-    status: str = Field("new", max_length=64)
+    status: str = Field("available", max_length=64)
     artist_valid: bool = True
 
 

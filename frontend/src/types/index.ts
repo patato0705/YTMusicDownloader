@@ -73,7 +73,13 @@ export interface Track {
   raw?: any;
 }
 
-export type TrackStatus = 'new' | 'downloading' | 'done' | 'failed';
+/**
+ * Download state of a track in the DB (backend/services/tracks.py):
+ * available = nothing planned, queued = a download job is waiting for it
+ * (incl. retries and rate-limit pauses), failed = out of attempts.
+ * Tracks served straight from YTMusic have none.
+ */
+export type TrackStatus = 'available' | 'queued' | 'downloading' | 'done' | 'failed';
 
 /** What kind of .lrc a downloaded track has on disk; null/undefined = none yet */
 export type LyricsKind = 'synced' | 'plain' | null;

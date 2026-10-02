@@ -5,6 +5,7 @@ Album endpoints.
 Endpoints :
 - GET /api/albums/{album_id} - Get album details
 - POST /api/albums/{album_id}/download - Download album (queue track downloads)
+- POST /api/albums/{album_id}/retry - Requeue tracks of a downloaded album that aren't on disk
 - DELETE /api/albums/{album_id}/download - Stop downloading album (revert to metadata)
 """
 from __future__ import annotations
@@ -96,10 +97,13 @@ def get_album(
                     "name": first_artist.get("name")
                 }
 
-        # Use DB info when the album exists in library, otherwise pure YTMusic
+        # Use DB info when the album exists in library, otherwise pure YTMusic.
+        # The tracks come from YTMusic either way, so they carry no download
+        # state; "database" only tells the client to keep refreshing, which
+        # is worth it for a download-mode album whose import hasn't landed.
         if album:
             return {
-                "source": "database",
+                "source": "database" if db_mode == "download" else "ytmusic",
                 "mode": db_mode,
                 "album": {
                     "id": album["id"],
@@ -234,39 +238,12 @@ def download_album(
                 artist_sub_created = True
                 logger.info(f"Auto-created light artist subscription for {album_artist_id}")
 
-        # Queue download jobs for all tracks
+        # Queue download jobs for every track not on disk. This also rolls
+        # the album up right away, so clients polling album status see the
+        # work before the first track finishes.
         tracks = album.get("tracks", [])
-        queued_count = 0
-
-        for track in tracks:
-            track_id = track.get("id")
-            if not track_id:
-                continue
-
-            # Only queue if track is not already downloaded
-            if track.get("status") in ["new", "failed"]:
-                try:
-                    enqueue_job(
-                        db,
-                        job_type="download_track",
-                        payload={
-                            "track_id": track_id,
-                            "album_id": album_id,
-                        },
-                        priority=10,
-                        user_id=current_user.id,
-                        commit=False,
-                    )
-                    queued_count += 1
-                except Exception as e:
-                    logger.exception(f"Failed to enqueue job for track {track_id}")
-
-        # Reflect the queued work on the album row right away. Without this the
-        # album keeps its previous status (usually NULL -> "idle") until the
-        # first track finishes, so clients polling album status see nothing
-        # happening for the whole first download.
-        if queued_count:
-            subs_svc.check_and_update_album_download_status(db, album_id)
+        db.flush()  # autoflush=False: the rollup has to see the mode change
+        queued_count = tracks_svc.queue_album_downloads(db, album_id, user_id=current_user.id)
 
         # Commit mode change + download jobs
         db.commit()
@@ -309,6 +286,35 @@ def download_album(
         db.rollback()
         logger.exception(f"download_album failed for {album_id}")
         raise HTTPException(status_code=500, detail=f"Failed to download album: {e}")
+
+
+@router.post("/{album_id}/retry", status_code=status.HTTP_200_OK)
+def retry_album_download(
+    album_id: str,
+    current_user: User = Depends(require_member_or_admin),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Requeue every track of a download-mode album that isn't on disk and
+    isn't already waiting: failed tracks, and any left "available" (e.g.
+    after a cancelled job).
+    """
+    album_obj = db.get(Album, album_id)
+    if not album_obj:
+        raise HTTPException(status_code=404, detail="Album not found")
+    if album_obj.mode != "download":
+        raise HTTPException(status_code=400, detail="Album is not in download mode")
+
+    try:
+        queued = tracks_svc.queue_album_downloads(db, album_id, user_id=current_user.id)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"retry_album_download failed for {album_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to retry album: {e}")
+
+    logger.info(f"User {current_user.id} retried album {album_id}: {queued} tracks queued")
+    return {"album_id": album_id, "tracks_queued": queued}
 
 
 @router.delete("/{album_id}/download", status_code=status.HTTP_200_OK)

@@ -8,8 +8,8 @@ Responsibilities:
 3. Clean up old completed jobs (daily, keeping `scheduler.job_cleanup_days`)
 4. Clean up expired refresh tokens (every `scheduler.token_cleanup_days`)
 5. Retry/upgrade missing lyrics (every `scheduler.lyrics_retry_interval_hours`)
-6. Requeue jobs abandoned by a dead worker and drop stale download scratch
-   dirs (every 5 minutes)
+6. Requeue jobs abandoned by a dead worker, requeue "queued" tracks that
+   lost their job, and drop stale download scratch dirs (every 5 minutes)
 
 Note: Album subscriptions are handled on-demand (follow album → immediate import)
 """
@@ -75,6 +75,9 @@ class Scheduler:
         self._last_lyrics_retry = 0.0
         self._last_stale_sweep = 0.0
         self._last_settings_refresh = 0.0
+        # Tracks the previous sweep found "queued" with no job (see
+        # _requeue_orphaned_track_downloads)
+        self._orphaned_track_ids: set[str] = set()
         
         # Don't load settings here - database might not be ready yet
         # Settings will be loaded in _run_loop after wait_for_db()
@@ -444,8 +447,11 @@ class Scheduler:
             reclaimed = reclaim_orphaned_jobs(session, "scheduler")
             if reclaimed:
                 logger.warning(f"Requeued {reclaimed} job(s) abandoned by a dead worker")
+            self._requeue_orphaned_track_downloads(session)
         except Exception:
             logger.exception("Failed to reclaim stale jobs")
+            if session:
+                session.rollback()
         finally:
             if session:
                 try:
@@ -472,6 +478,43 @@ class Scheduler:
             pass
         except Exception:
             logger.exception("Failed to sweep download scratch dirs")
+
+    def _requeue_orphaned_track_downloads(self, session: Session) -> None:
+        """
+        Give a new job to "queued" tracks whose job is gone.
+
+        Everything that creates or drops a download job updates the track in
+        the same transaction, so this should find nothing; it's the safety net
+        for whatever slips through (a job deleted by hand, a crash between
+        commits). Tracks of albums no longer downloaded go back to "available".
+
+        A track is only acted on when two sweeps in a row find it orphaned:
+        the jobs and tracks are read in two statements, not one snapshot, so a
+        single sighting can just be a download queued between the two reads.
+        """
+        from .models import Track
+        from .services import tracks as tracks_svc
+
+        active = tracks_svc.active_download_track_ids(session)  # read first; see above
+        queued = session.query(Track).filter(Track.status == "queued").all()
+        orphans = {t.id: t for t in queued if t.id not in active}
+
+        confirmed = [t for tid, t in orphans.items() if tid in self._orphaned_track_ids]
+        self._orphaned_track_ids = set(orphans) - {t.id for t in confirmed}
+        if not confirmed:
+            return
+
+        wanted = [t for t in confirmed if t.album and t.album.mode == "download"]
+        for track in confirmed:
+            if track not in wanted:
+                track.status = "available"
+                session.add(track)
+        requeued = tracks_svc.queue_track_downloads(session, wanted)
+        session.commit()
+        logger.warning(
+            f"Found {len(confirmed)} queued track(s) with no download job: "
+            f"requeued {requeued}, released {len(confirmed) - len(wanted)}"
+        )
 
     def cleanup_expired_tokens(self) -> None:
         """

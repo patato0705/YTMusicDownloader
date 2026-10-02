@@ -1,15 +1,28 @@
 # backend/services/tracks.py
 """
 Track entity CRUD operations and track-specific business logic.
+
+Track.status is one of:
+- "available":   known, nothing planned (metadata-only album, cancelled job)
+- "queued":      a download_track job is waiting for it (incl. retry backoff
+                 and rate-limit pauses; last_error says why it's retrying)
+- "downloading": a worker is on it
+- "done":        on disk
+- "failed":      its download job ran out of attempts
+
+"queued" must always mean a live job exists: whatever creates, requeues or
+drops a download_track job updates its track in the same transaction
+(queue_track_downloads here, and the helpers in jobs/jobqueue.py).
 """
 from __future__ import annotations
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Track
+from ..models import Job, Track
 
 logger = logging.getLogger("services.tracks")
 
@@ -26,7 +39,7 @@ def upsert_track(
     duration_seconds: Optional[int],
     artists_list: Optional[List[Dict[str, Optional[str]]]] = None,
     album_id: Optional[str] = None,
-    status: str = "new",
+    status: Optional[str] = "available",
     file_path: Optional[str] = None,
     artist_valid: bool = True,
     lyrics: Optional[str] = None,
@@ -34,6 +47,8 @@ def upsert_track(
 ) -> Track:
     """
     Upsert a Track row. `artists_list` is a list of dicts {id, name}.
+    Fields passed as None are left untouched on an existing row (a new row
+    with status=None starts "available").
     Returns the Track instance (not committed).
     """
     if not track_id:
@@ -52,7 +67,7 @@ def upsert_track(
             lyrics=lyrics,
             lyrics_local=str(lyrics_local) if lyrics_local else None,
             file_path=str(file_path) if file_path is not None else None,
-            status=str(status),
+            status=status or "available",
             artist_valid=bool(artist_valid),
         )
         session.add(obj)
@@ -184,7 +199,7 @@ def get_tracks_by_status(
     
     Args:
         session: SQLAlchemy session
-        status: Status to filter by ("new", "downloading", "done", "failed")
+        status: Status to filter by (see the module docstring)
         limit: Optional limit on number of results
     
     Returns:
@@ -202,27 +217,88 @@ def get_tracks_by_status(
         return []
 
 
-def get_pending_download_tracks(
+# ============================================================================
+# DOWNLOAD QUEUEING
+# ============================================================================
+
+# A track on disk or in a worker's hands never gets another job
+_NOT_QUEUEABLE = ("done", "downloading")
+
+
+def active_download_track_ids(session: Session) -> Set[str]:
+    """Tracks that already have a download_track job waiting or running."""
+    payloads = session.execute(
+        select(Job.payload).where(
+            Job.type == "download_track",
+            Job.status.in_(("queued", "reserved")),
+        )
+    ).scalars().all()
+    return {str(p["track_id"]) for p in payloads if isinstance(p, dict) and p.get("track_id")}
+
+
+def queue_track_downloads(
     session: Session,
-    limit: Optional[int] = None,
-) -> List[Track]:
+    tracks: Iterable[Track],
+    artist_id: Optional[str] = None,
+    user_id: Optional[int] = None,
+    priority: int = 10,
+) -> int:
     """
-    Get tracks that need to be downloaded (status = "new" or "failed").
-    
-    Args:
-        session: SQLAlchemy session
-        limit: Optional limit on number of results
-    
-    Returns:
-        List of Track instances
+    Queue a download_track job for each track that needs one, mark it
+    "queued" and roll the affected albums up. Does not commit: the job and
+    the status have to land in the same transaction.
+
+    Tracks on disk, being downloaded, or already waiting on a job are
+    skipped, so this is safe to call on a whole album any number of times.
+
+    Returns the number of jobs queued.
     """
-    try:
-        query = session.query(Track).filter(Track.status.in_(["new", "failed"]))
-        
-        if limit is not None:
-            query = query.limit(limit)
-        
-        return list(query.all())
-    except Exception as e:
-        logger.exception(f"Failed to get pending download tracks: {e}")
-        return []
+    from ..jobs.jobqueue import enqueue_job
+    from . import subscriptions as subs_svc
+
+    active = active_download_track_ids(session)
+    albums: Set[str] = set()
+    queued = 0
+
+    for track in tracks:
+        if track.status in _NOT_QUEUEABLE or track.id in active:
+            continue
+        payload: Dict[str, Any] = {"track_id": track.id, "album_id": track.album_id}
+        if artist_id:
+            payload["artist_id"] = artist_id
+        enqueue_job(
+            session,
+            job_type="download_track",
+            payload=payload,
+            priority=priority,
+            user_id=user_id,
+            commit=False,
+        )
+        track.status = "queued"
+        track.last_error = None
+        session.add(track)
+        active.add(track.id)
+        queued += 1
+        if track.album_id:
+            albums.add(track.album_id)
+
+    if albums:
+        session.flush()  # autoflush=False: the rollup has to see the new statuses
+        for album_id in albums:
+            subs_svc.check_and_update_album_download_status(session, album_id)
+
+    return queued
+
+
+def queue_album_downloads(
+    session: Session,
+    album_id: str,
+    artist_id: Optional[str] = None,
+    user_id: Optional[int] = None,
+    priority: int = 10,
+) -> int:
+    """queue_track_downloads() for every track of an album. Does not commit."""
+    tracks = session.query(Track).filter(Track.album_id == album_id).all()
+    return queue_track_downloads(
+        session, tracks, artist_id=artist_id, user_id=user_id, priority=priority
+    )

@@ -38,6 +38,14 @@ export async function downloadAlbum(albumId: string): Promise<any> {
 }
 
 /**
+ * Requeue the tracks of a downloaded album that aren't on disk
+ * (failed ones, and any left without a job)
+ */
+export async function retryAlbum(albumId: string): Promise<{ album_id: string; tracks_queued: number }> {
+  return api.post(`/albums/${encodeURIComponent(albumId)}/retry`);
+}
+
+/**
  * Cancel album download
  * Reverts album to metadata mode; does not delete data or files
  */

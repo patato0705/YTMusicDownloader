@@ -84,7 +84,7 @@ def list_jobs(
     job_status: Optional[str] = Query(
         None,
         alias="status",
-        description="Filter by status (queued, reserved, done, failed)"
+        description="Filter by status (queued, reserved, done, failed, cancelled)"
     ),
     limit: int = Query(100, ge=1, le=1000, description="Max results"),
     current_user: User = Depends(require_auth),
@@ -156,7 +156,12 @@ def enqueue_job_endpoint(
             scheduled_at=req.scheduled_at,
             priority=req.priority if req.priority is not None else 0,
             max_attempts=req.max_attempts if req.max_attempts is not None else 5,
+            commit=False,
         )
+        # Keep "queued" meaning a job exists, even for hand-made ones
+        jobqueue.set_download_track_status(session, job, "queued")
+        session.commit()
+        session.refresh(job)
         
         logger.info(f"User {current_user.username} enqueued job {job.id} (type={req.type})")
         
@@ -247,27 +252,23 @@ def cancel_job(
             )
         
         # Check if job can be cancelled
-        if job.status in ["done", "failed"]:
+        if job.status in ["done", "failed", "cancelled"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot cancel job with status '{job.status}'"
             )
         
-        # Cancel the job
+        # Cancel the job. A running one is left to finish, but its worker
+        # can no longer requeue it (see jobqueue.mark_job_failed).
         message = body.message or "Cancelled by user"
-        jobqueue.mark_job_failed(
-            session,
-            job_id,
-            error_message=message,
-            retry_delay_seconds=None  # No retry
-        )
+        jobqueue.cancel_job(session, job_id, reason=message)
         
         logger.info(f"User {current_user.username} cancelled job {job_id}")
         
         return {
             "ok": True,
             "job_id": job_id,
-            "status": "failed",
+            "status": "cancelled",
             "message": message
         }
     
@@ -315,6 +316,7 @@ def requeue_job(
         job.last_error = None
         job.attempts = 0  # Reset attempts
         session.add(job)
+        jobqueue.set_download_track_status(session, job, "queued")
         session.commit()
         session.refresh(job)
         

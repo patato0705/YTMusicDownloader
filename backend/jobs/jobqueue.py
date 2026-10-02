@@ -10,6 +10,8 @@ Functions:
 - mark_job_failed() - Mark job as failed (with optional retry)
 - reclaim_orphaned_jobs() - Requeue jobs left "reserved" by a dead worker
 - cancel_job() - Cancel a queued or reserved job
+- cancel_download_jobs() - Cancel the download jobs of a set of tracks
+- set_download_track_status() - Mirror a download job's state onto its track
 - cleanup_old_jobs() - Delete old completed jobs
 
 Notes:
@@ -24,7 +26,7 @@ Notes:
 from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, Sequence
+from typing import Collection, Optional, Sequence
 
 from sqlalchemy import select, update, and_, or_
 from sqlalchemy.orm import Session
@@ -258,16 +260,7 @@ def reclaim_orphaned_jobs(
         # The dead worker had already flipped its track to "downloading";
         # without this it would sit there looking in-progress until the
         # retry, which may be a while.
-        if job.type == "download_track":
-            track_id = (job.payload or {}).get("track_id") if isinstance(job.payload, dict) else None
-            track = session.get(Track, str(track_id)) if track_id else None
-            if track and track.status == "downloading":
-                track.status = "new"
-                session.add(track)
-                if track.album_id:
-                    from ..services import subscriptions as subs_svc
-                    session.flush()
-                    subs_svc.check_and_update_album_download_status(session, track.album_id)
+        set_download_track_status(session, job, "queued")
 
     session.commit()
 
@@ -308,6 +301,8 @@ def mark_job_failed(
     job_id: int,
     error_message: Optional[str] = None,
     retry_delay_seconds: Optional[int] = None,
+    refund_attempt: bool = False,
+    worker_name: Optional[str] = None,
 ) -> None:
     """
     Mark job as failed. Optionally retry with exponential backoff.
@@ -319,20 +314,42 @@ def mark_job_failed(
     Otherwise:
     - Status set to "failed"
     - No further retries
+
+    A download_track job's track follows: "queued" when retried, "failed"
+    once out of attempts.
     
     Args:
         session: SQLAlchemy session
         job_id: Job ID
         error_message: Error description
         retry_delay_seconds: Optional retry delay in seconds
+        refund_attempt: The failure wasn't the job's fault (YouTube rate
+            limit): don't count this attempt against max_attempts
+        worker_name: The worker reporting the failure. When given, the
+            outcome is ignored unless that worker still holds the job.
     """
     job = session.get(Job, job_id)
     if not job:
         logger.warning(f"Cannot mark job {job_id} as failed: not found")
         return
+
+    # Cancelled or reclaimed while this attempt ran: its outcome no longer
+    # decides anything, and requeueing here would undo a cancellation.
+    if job.status != "reserved" or (worker_name and job.reserved_by != worker_name):
+        logger.info(
+            f"Ignoring failure of job {job_id} reported by {worker_name or 'caller'}: "
+            f"job is now {job.status} (held by {job.reserved_by or 'nobody'})"
+        )
+        if job.status == "cancelled":
+            set_download_track_status(session, job, "available", only_from=("queued", "downloading"))
+            session.commit()
+        return
     
     now = now_utc()
     job.last_error = str(error_message) if error_message else None
+
+    if refund_attempt and job.attempts:
+        job.attempts -= 1
     
     # Check if we should retry
     if retry_delay_seconds and (job.attempts or 0) < (job.max_attempts or 1):
@@ -343,6 +360,7 @@ def mark_job_failed(
         job.reserved_by = None  # Clear reservation
         job.heartbeat_at = None
         session.add(job)
+        set_download_track_status(session, job, "queued")
         session.commit()
         
         logger.warning(
@@ -354,6 +372,7 @@ def mark_job_failed(
         job.status = "failed"
         job.finished_at = now
         session.add(job)
+        set_download_track_status(session, job, "failed", error=error_message)
         session.commit()
         
         logger.error(
@@ -387,10 +406,88 @@ def cancel_job(session: Session, job_id: int, reason: Optional[str] = None) -> b
     job.finished_at = now_utc()
     job.last_error = f"Cancelled: {reason}" if reason else "Cancelled by user"
     session.add(job)
+    # A download already running is left to finish: its worker then lands
+    # the file, or hands the track back via mark_job_failed's cancelled path.
+    set_download_track_status(session, job, "available", only_from=("queued",))
     session.commit()
     
     logger.info(f"Cancelled job {job_id}: {reason}")
     return True
+
+
+def cancel_download_jobs(session: Session, track_ids: Collection[str], reason: str) -> int:
+    """
+    Cancel every queued or running download_track job for these tracks.
+    Does not commit, and leaves the tracks' status to the caller.
+
+    A worker already downloading one of them carries on; when it finishes
+    the file lands as usual, and a failure is discarded (see mark_job_failed).
+
+    Returns the number of jobs cancelled.
+    """
+    wanted = {str(t) for t in track_ids}
+    if not wanted:
+        return 0
+
+    jobs = session.execute(
+        select(Job).where(Job.type == "download_track", Job.status.in_(("queued", "reserved")))
+    ).scalars().all()
+
+    now = now_utc()
+    cancelled = 0
+    for job in jobs:
+        payload = job.payload if isinstance(job.payload, dict) else {}
+        if str(payload.get("track_id")) not in wanted:
+            continue
+        job.status = "cancelled"
+        job.finished_at = now
+        job.last_error = f"Cancelled: {reason}"
+        session.add(job)
+        cancelled += 1
+
+    if cancelled:
+        logger.info(f"Cancelled {cancelled} download job(s): {reason}")
+    return cancelled
+
+
+def set_download_track_status(
+    session: Session,
+    job: Job,
+    status: str,
+    only_from: Optional[Collection[str]] = None,
+    error: Optional[str] = None,
+) -> None:
+    """
+    Mirror a download_track job's state onto its track and roll the album
+    up. No-op for other job types and for tracks already on disk. Does not
+    commit: call it in the transaction that changes the job.
+
+    Args:
+        only_from: Only change tracks currently in one of these statuses
+        error: Recorded on the track when failing it, if the download
+            didn't already leave a more specific one
+    """
+    if job.type != "download_track":
+        return
+    track_id = job.payload.get("track_id") if isinstance(job.payload, dict) else None
+    track = session.get(Track, str(track_id)) if track_id else None
+    if not track or track.status == "done":
+        return
+    if only_from is not None and track.status not in only_from:
+        return
+
+    track.status = status
+    if status == "failed" and error and not track.last_error:
+        from ..services.tracks import truncate_error
+        track.last_error = truncate_error(error)
+    elif status == "available":
+        track.last_error = None
+    session.add(track)
+
+    if track.album_id:
+        from ..services import subscriptions as subs_svc
+        session.flush()  # autoflush=False: the rollup has to see the new status
+        subs_svc.check_and_update_album_download_status(session, track.album_id)
 
 
 def cleanup_old_jobs(
@@ -417,7 +514,7 @@ def cleanup_old_jobs(
     )
     
     if keep_failed:
-        query = query.filter(Job.status == "done")
+        query = query.filter(Job.status.in_(["done", "cancelled"]))
     else:
         query = query.filter(Job.status.in_(["done", "failed", "cancelled"]))
     

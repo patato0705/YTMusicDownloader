@@ -234,12 +234,21 @@ class Worker:
                         # mark failed — allow task to suggest retry_delay_seconds
                         err = None
                         retry_delay = None
+                        refund = False
                         if isinstance(result, dict):
                             err = result.get("error") or result.get("message")
                             retry_delay = result.get("retry_delay_seconds") or result.get("retry_after")
+                            refund = bool(result.get("refund_attempt"))
                         err_msg = str(err) if err is not None else "task returned ok=False"
                         try:
-                            mark_job_failed(session, getattr(job, "id"), error_message=err_msg, retry_delay_seconds=retry_delay)
+                            mark_job_failed(
+                                session,
+                                getattr(job, "id"),
+                                error_message=err_msg,
+                                retry_delay_seconds=retry_delay,
+                                refund_attempt=refund,
+                                worker_name=self.worker_name,
+                            )
                             logger.warning("Job id=%s marked failed (retry_delay=%s) error=%s", getattr(job, "id"), retry_delay, err_msg)
                         except Exception:
                             logger.exception("Failed to mark job failed id=%s", getattr(job, "id"))
@@ -248,7 +257,7 @@ class Worker:
                     trace = traceback.format_exc()
                     logger.exception("Unhandled exception executing job id=%s: %s", getattr(job, "id", None), e)
                     try:
-                        mark_job_failed(session, getattr(job, "id"), error_message=str(e))
+                        mark_job_failed(session, getattr(job, "id"), error_message=str(e), worker_name=self.worker_name)
                         logger.info("Marked job id=%s failed after exception", getattr(job, "id", None))
                     except Exception:
                         logger.exception("Failed to mark job failed after exception id=%s", getattr(job, "id", None))

@@ -5,13 +5,13 @@ Subscription service - manages artist and album subscriptions.
 """
 from __future__ import annotations
 import logging
-from typing import Optional
+from typing import Collection, Optional
 from datetime import datetime
 
 from sqlalchemy import select, func, case
 from sqlalchemy.orm import Session
 
-from ..models import Artist, Album, ArtistSubscription, Track
+from ..models import Artist, Album, ArtistSubscription, Job, Track
 from ..time_utils import now_utc, ensure_timezone_aware
 
 logger = logging.getLogger("services.subscriptions")
@@ -170,7 +170,8 @@ def set_album_mode(session: Session, album_id: str, mode: str) -> Album:
 
 def clear_album_download(session: Session, album_id: str) -> bool:
     """
-    Downgrade an album back to metadata mode and clear download status.
+    Downgrade an album back to metadata mode, cancel its pending downloads
+    and clear download status. Does not commit.
 
     Returns:
         True if album existed, False otherwise
@@ -182,14 +183,25 @@ def clear_album_download(session: Session, album_id: str) -> bool:
     album.mode = "metadata"
     album.download_status = None
     session.add(album)
+    _stop_album_downloads(session, [album_id])
     logger.info(f"Cleared album download for {album_id}")
     return True
 
 
-def upgrade_all_albums_to_download(session: Session, artist_id: str) -> int:
+def upgrade_all_albums_to_download(
+    session: Session,
+    artist_id: str,
+    user_id: Optional[int] = None,
+) -> int:
     """
-    Upgrade all albums for an artist from metadata to download mode.
-    Used when upgrading artist from light to full mode.
+    Upgrade all albums for an artist from metadata to download mode, and
+    queue an import_album for each so their tracks get (re)listed and
+    downloaded. Used when upgrading artist from light to full mode.
+    Does not commit.
+
+    Download-mode albums that still have no tracks (an import that never
+    landed) get one too, since the upgrade is when the user expects the
+    whole discography to start downloading.
 
     Returns:
         Number of albums upgraded
@@ -207,13 +219,69 @@ def upgrade_all_albums_to_download(session: Session, artist_id: str) -> int:
     count = len(albums)
     if count > 0:
         logger.info(f"Upgraded {count} albums to download mode for artist {artist_id}")
+
+    trackless = session.execute(
+        select(Album.id).where(
+            Album.artist_id == artist_id,
+            Album.mode == "download",
+            ~select(Track.id).where(Track.album_id == Album.id).exists(),
+        )
+    ).scalars().all()
+    queue_album_imports(
+        session,
+        {a.id for a in albums} | set(trackless),
+        artist_id=artist_id,
+        user_id=user_id,
+    )
     return count
+
+
+def queue_album_imports(
+    session: Session,
+    album_ids: Collection[str],
+    artist_id: Optional[str] = None,
+    user_id: Optional[int] = None,
+    priority: int = 20,
+) -> int:
+    """
+    Queue an import_album job for each album that doesn't already have one
+    waiting or running. Does not commit. Returns the number queued.
+    """
+    from ..jobs.jobqueue import enqueue_job
+
+    pending = {
+        str(p.get("browse_id"))
+        for p in session.execute(
+            select(Job.payload).where(
+                Job.type == "import_album",
+                Job.status.in_(("queued", "reserved")),
+            )
+        ).scalars()
+        if isinstance(p, dict)
+    }
+
+    queued = 0
+    for album_id in sorted(album_ids):
+        if album_id in pending:
+            continue
+        enqueue_job(
+            session,
+            job_type="import_album",
+            payload={"browse_id": album_id, "artist_id": artist_id},
+            priority=priority,
+            user_id=user_id,
+            commit=False,
+        )
+        pending.add(album_id)
+        queued += 1
+    return queued
 
 
 def downgrade_all_albums_to_metadata(session: Session, artist_id: str) -> int:
     """
-    Downgrade all albums for an artist from download to metadata mode.
-    Used when downgrading artist from full to light mode.
+    Downgrade all albums for an artist from download to metadata mode and
+    cancel their pending downloads. Files already on disk stay.
+    Used when downgrading artist from full to light mode. Does not commit.
 
     Returns:
         Number of albums downgraded
@@ -226,12 +294,37 @@ def downgrade_all_albums_to_metadata(session: Session, artist_id: str) -> int:
 
     for album in albums:
         album.mode = "metadata"
+        album.download_status = None
         session.add(album)
+
+    _stop_album_downloads(session, [a.id for a in albums])
 
     count = len(albums)
     if count > 0:
         logger.info(f"Downgraded {count} albums to metadata mode for artist {artist_id}")
     return count
+
+
+def _stop_album_downloads(session: Session, album_ids: Collection[str]) -> None:
+    """
+    Cancel the download jobs of these albums' tracks and hand the tracks
+    that were waiting (or had failed) back to "available". A download
+    already running is left to finish. Does not commit.
+    """
+    if not album_ids:
+        return
+    from ..jobs.jobqueue import cancel_download_jobs
+
+    tracks = session.execute(
+        select(Track).where(Track.album_id.in_(list(album_ids)))
+    ).scalars().all()
+    cancel_download_jobs(session, [t.id for t in tracks], reason="album no longer followed")
+
+    for track in tracks:
+        if track.status in ("queued", "failed"):
+            track.status = "available"
+            track.last_error = None
+            session.add(track)
 
 
 # ============================================================================
@@ -245,12 +338,12 @@ def check_and_update_album_download_status(
     """
     Check track statuses for an album and update Album.download_status.
 
-    Status logic:
+    Status logic, first match wins:
     - "completed": all tracks are "done"
     - "downloading": at least one track is "downloading"
-    - "failed": at least one track is "failed" and none are "downloading"
-    - "pending": at least one track is "new"
-    - "idle": no tracks or album not found
+    - "pending": at least one track is "queued"
+    - "failed": at least one track is "failed" (and nothing left to try)
+    - "idle": no tracks, or the rest are "available" (nothing planned)
 
     Returns:
         The new download_status string
@@ -259,13 +352,21 @@ def check_and_update_album_download_status(
     if not album:
         return "idle"
 
+    # Only albums being downloaded have a download status. A metadata album
+    # can still see a track finish (a download that was already running when
+    # it was unfollowed), which mustn't bring the status back.
+    if album.mode != "download":
+        album.download_status = None
+        session.add(album)
+        return "idle"
+
     stats = (
         session.query(
             func.count(Track.id).label("total"),
             func.sum(case((Track.status == "done", 1), else_=0)).label("done"),
             func.sum(case((Track.status == "downloading", 1), else_=0)).label("downloading"),
             func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
-            func.sum(case((Track.status == "new", 1), else_=0)).label("new"),
+            func.sum(case((Track.status == "queued", 1), else_=0)).label("queued"),
         )
         .filter(Track.album_id == album_id)
         .first()
@@ -280,7 +381,7 @@ def check_and_update_album_download_status(
     done = int(stats.done or 0)
     downloading = int(stats.downloading or 0)
     failed = int(stats.failed or 0)
-    new_count = int(getattr(stats, "new", 0) or 0)
+    queued = int(stats.queued or 0)
 
     if total == 0:
         new_status = "idle"
@@ -288,10 +389,10 @@ def check_and_update_album_download_status(
         new_status = "completed"
     elif downloading > 0:
         new_status = "downloading"
-    elif failed > 0 and new_count == 0 and downloading == 0:
-        new_status = "failed"
-    elif new_count > 0:
+    elif queued > 0:
         new_status = "pending"
+    elif failed > 0:
+        new_status = "failed"
     else:
         new_status = "idle"
 

@@ -13,13 +13,13 @@ import logging
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config
 from .. import settings as settings_module
 from ..models import (
-    Artist, Album, Track, ArtistSubscription, ChartSubscription, User, Setting, Job,
+    Artist, Album, Track, ArtistSubscription, ChartSubscription, User, Setting,
 )
 from ..schemas.export import (
     FORMAT_VERSION,
@@ -360,7 +360,6 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             playlist_id=al.playlist_id,
         )
         obj.mode = "download"
-        obj.download_status = al.download_status
         download_albums[al.id] = al.artist_id
         result.albums += 1
         if not cover_on_disk and not (obj.image_local and Path(obj.image_local).exists()):
@@ -383,7 +382,7 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             duration_seconds=t.duration,
             artists_list=t.artists,
             album_id=t.album_id,
-            status="done" if on_disk else "new",
+            status="done" if on_disk else "available",
             file_path=str(audio) if on_disk else None,
             artist_valid=t.artist_valid,
             lyrics=t.lyrics if lrc_on_disk else None,
@@ -406,57 +405,26 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
         obj.file_size = None
         obj.lyrics = None
         obj.lyrics_local = None
-        obj.status = "new"
+        obj.status = "available"
         result.tracks_to_download += 1
         albums_needing_import.add(t.album_id)
     session.flush()
+
+    # The exported download_status describes the old instance's queue, not
+    # this one: recompute it from the tracks just restored.
+    for album_id in download_albums:
+        subs_svc.check_and_update_album_download_status(session, album_id)
 
     # One import_album per album rather than a download_track per track: it
     # re-fetches the cover (download_track only reuses whatever the album row
     # points at), writes album.nfo, keeps tracks that already have a file and
     # queues downloads for the rest.
-    pending_imports = {
-        str((job.payload or {}).get("browse_id"))
-        for job in session.execute(
-            select(Job).where(Job.type == "import_album", Job.status.in_(("queued", "reserved")))
-        ).scalars()
-    }
     for album_id in sorted(albums_needing_import):
-        if album_id in pending_imports:
-            continue
-        enqueue_job(
-            session,
-            job_type="import_album",
-            payload={"browse_id": album_id, "artist_id": download_albums[album_id]},
-            priority=20,
-            user_id=user_id,
-            commit=False,
+        result.albums_to_import += subs_svc.queue_album_imports(
+            session, [album_id], artist_id=download_albums[album_id], user_id=user_id,
         )
-        result.albums_to_import += 1
-        subs_svc.check_and_update_album_download_status(session, album_id)
 
     return result
-
-
-def _queue_missing_album_imports(session: Session, artist_id: str, user_id: Optional[int]) -> int:
-    """After a light->full upgrade, import albums that have no tracks yet (mirrors follow_artist)."""
-    album_ids = session.execute(
-        select(Album.id).where(Album.artist_id == artist_id, Album.mode == "download")
-    ).scalars().all()
-    queued = 0
-    for aid in album_ids:
-        track_count = session.query(func.count(Track.id)).filter(Track.album_id == aid).scalar()
-        if not track_count:
-            enqueue_job(
-                session,
-                job_type="import_album",
-                payload={"browse_id": aid, "artist_id": artist_id},
-                priority=20,
-                user_id=user_id,
-                commit=False,
-            )
-            queued += 1
-    return queued
 
 
 def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int], warnings: List[ImportWarning]) -> LibraryImportResult:
@@ -480,9 +448,7 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
         if item.mode == "full":
             full_artists.add(item.id)
             if old_mode == "light":
-                subs_svc.upgrade_all_albums_to_download(session, item.id)
-                session.flush()
-                _queue_missing_album_imports(session, item.id, user_id)
+                subs_svc.upgrade_all_albums_to_download(session, item.id, user_id=user_id)
         enqueue_job(
             session,
             job_type="sync_artist",

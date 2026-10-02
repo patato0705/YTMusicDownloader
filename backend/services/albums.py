@@ -518,16 +518,9 @@ def fetch_and_upsert_album(
 
             # Check if track exists
             pre_existing = session.get(Track, str(final_track_id))
-            
-            # Preserve status if track has file
-            if pre_existing and pre_existing.file_path:
-                status = pre_existing.status or "done"
-                file_path = pre_existing.file_path
-            else:
-                status = "new"
-                file_path = None
 
-            # Upsert track
+            # Upsert track. A known track keeps its status and file: a
+            # re-import mustn't reset one that's queued or mid-download.
             upsert_track(
                 session=session,
                 track_id=str(final_track_id),
@@ -536,8 +529,8 @@ def fetch_and_upsert_album(
                 duration_seconds=int(duration) if duration is not None else None,
                 artists_list=artists_for_db,
                 album_id=str(album_id),
-                status=status,
-                file_path=file_path,
+                status=None if pre_existing else "available",
+                file_path=None,
                 artist_valid=True,
             )
 

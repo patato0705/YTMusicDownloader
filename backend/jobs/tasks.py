@@ -212,7 +212,7 @@ def download_track(
     Download a track by video ID using yt-dlp.
     
     Flow:
-    1. Get track info from DB
+    1. Get track info from DB (skip if already on disk)
     2. Get album/artist info for metadata
     3. Update status to "downloading" and COMMIT
     4. Call downloader.core.download_track_by_videoid() (no transaction held)
@@ -238,6 +238,12 @@ def download_track(
         track = session.get(Track, str(track_id))
         if not track:
             return {"ok": False, "error": f"Track {track_id} not found in database"}
+
+        # A job left over for a track that's already on disk (an admin
+        # requeue, a duplicate) has nothing to do.
+        if track.status == "done" and track.file_path and Path(track.file_path).exists():
+            logger.info(f"Track {track_id} is already on disk, skipping download")
+            return {"ok": True, "file_path": track.file_path, "track_id": track_id, "skipped": True}
         
         # Get album info for metadata
         album = None
@@ -271,7 +277,7 @@ def download_track(
         # Roll that up to the album now, not just when the track finishes -
         # otherwise an album in progress reports "pending" to the API.
         # The flush matters: the session is autoflush=False (see db.py), so
-        # without it the aggregate below still counts this track as "new".
+        # without it the aggregate below still counts this track as "queued".
         if track_album_id:
             from ..services import subscriptions as subs_svc
             session.flush()
@@ -473,15 +479,15 @@ def download_track(
         else:
             logger.exception(f"Download failed for track {track_id}")
 
-        # Update track status. A rate limit says nothing about the track --
-        # it goes back to "new" (queued) so the UI shows it waiting rather
-        # than broken; the job's retry picks it up once the pause lifts.
+        # Hand the track back to the queue with the reason attached. Whether
+        # it really gets another attempt is mark_job_failed's call (the
+        # worker's next step): it settles the track on "failed" if not.
         try:
             track = session.get(Track, str(track_id))  # Re-fetch
             if not track:
                 logger.error(f"Track {track_id} not found when marking failed")
             else:
-                track.status = "new" if throttled else "failed"
+                track.status = "queued"
                 track.last_error = tracks_svc.truncate_error(e)
                 session.add(track)
 
@@ -530,6 +536,9 @@ def download_track(
                 "ok": False,
                 "error": f"Download failed: {error_msg}",
                 "retry_delay_seconds": 600,  # Retry in 10 minutes if still rate-limited
+                # A rate limit says nothing about the track: a long block
+                # mustn't burn through its attempts and fail it for good.
+                "refund_attempt": True,
             }
         else:
             return {
@@ -881,7 +890,7 @@ def import_album(
     Flow:
     1. Fetch album data from YTMusic (includes full track list)
     2. Upsert album and tracks to database
-    3. Queue download_track jobs for all new tracks
+    3. Queue download_track jobs for tracks not on disk (download-mode albums only)
     4. Return summary
     
     Args:
@@ -931,41 +940,22 @@ def import_album(
         except Exception:
             logger.exception(f"Failed writing album.nfo for {album_id}")
 
-        # ===== TRANSACTION 2: Queue download jobs for new tracks =====
-        try:
-            from .jobqueue import enqueue_job
-            
-            # Get tracks for this album
-            tracks = tracks_svc.list_tracks_for_album_from_db(session, album_id)
-            
-            queued = 0
-            for track in tracks:
-                if track.get("status") in ["new", "failed"]:
-                    try:
-                        enqueue_job(
-                            session,
-                            job_type="download_track",
-                            payload={
-                                "track_id": track["id"],
-                                "album_id": album_id,
-                                "artist_id": artist_id,
-                            },
-                            priority=10
-                        )
-                        queued += 1
-                    except Exception as e:
-                        logger.exception(f"Failed to queue download for track {track['id']}")
-            
-            if queued:
-                from ..services import subscriptions as subs_svc
-                subs_svc.check_and_update_album_download_status(session, album_id)
-                session.commit()
-
-            logger.info(f"Queued {queued} download jobs for album {album_id}")
-        
-        except Exception as e:
-            logger.warning(f"Failed to queue download jobs for album {album_id}: {e}")
-            queued = 0
+        # ===== TRANSACTION 2: Queue download jobs for tracks not on disk =====
+        # Only while the album is still wanted: it may have been unfollowed
+        # (downgraded to metadata) since this import was queued.
+        queued = 0
+        album_obj = session.get(Album, album_id)
+        if album_obj and album_obj.mode == "download":
+            try:
+                queued = tracks_svc.queue_album_downloads(session, album_id, artist_id=artist_id)
+                _db_operation_with_retry(session.commit)
+                logger.info(f"Queued {queued} download jobs for album {album_id}")
+            except Exception as e:
+                session.rollback()
+                logger.warning(f"Failed to queue download jobs for album {album_id}: {e}")
+                queued = 0
+        else:
+            logger.info(f"Album {album_id} is not in download mode, no downloads queued")
         
         return {
             "ok": True,
@@ -1153,7 +1143,7 @@ def sync_artist(session: Session, artist_id: str, download_banner: bool = True) 
         except Exception as e:
             logger.exception(f"Failed to create album {album_id}")
 
-    # Upgrade metadata → download for existing albums
+    # Upgrade metadata → download for existing albums (queues their imports)
     upgraded_count = 0
     if upgradeable_albums:
         upgraded_count = subs_svc.upgrade_all_albums_to_download(session, artist_id)
@@ -1175,7 +1165,6 @@ def sync_artist(session: Session, artist_id: str, download_banner: bool = True) 
     albums_to_import = []
     if sync_mode == "full":
         albums_to_import.extend(new_albums)
-        albums_to_import.extend(upgradeable_albums)
 
     for album_item in albums_to_import:
         browse_id = album_item.get("id") or album_item.get("browseId")
