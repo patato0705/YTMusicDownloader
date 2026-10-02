@@ -61,7 +61,7 @@ The first build takes a few minutes (frontend build + Python dependencies). Subs
 
 | Host path | Container path | Contents |
 |---|---|---|
-| `./config` | `/config` | SQLite database, `secrets.json` (JWT secret), logs, caches, temp downloads, YouTube cookie jars |
+| `./config` | `/config` | SQLite database, `secrets.json` (JWT secret), logs, caches, temp downloads, YouTube cookie jars, artwork for artists and albums that aren't downloaded (`covers/`) |
 | `./data` | `/data` | Your music library |
 
 Both are created on first start. Back up `./config` together with `./data` — losing `secrets.json` logs everyone out; losing the database loses the library index (though the *Backup* tab in the admin panel gives you a portable alternative, see below).
