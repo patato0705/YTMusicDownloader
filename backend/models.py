@@ -121,6 +121,9 @@ class Track(Base):
     track_number: Mapped[int] = mapped_column(Integer, nullable=True)
     lyrics: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, default=None)
     lyrics_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    # When the scheduler last queued a lyrics recovery/upgrade for this track.
+    # Its sweeps take the oldest first, so every track gets a turn.
+    lyrics_retried_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     file_path: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
     # Audio file size in bytes, recorded when the download completes so the
     # library stats can sum real sizes instead of guessing.

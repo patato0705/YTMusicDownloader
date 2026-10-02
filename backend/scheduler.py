@@ -550,6 +550,9 @@ class Scheduler:
         Two categories:
         1. Recovery: status="done", has audio, lyrics=None → normal download
         2. Upgrade: lyrics="plain" → attempt synced upgrade
+
+        Each sweep takes a capped batch per category, least recently retried
+        first (Track.lyrics_retried_at), so the whole library rotates through.
         """
         session: Optional[Session] = None
         try:
@@ -564,79 +567,65 @@ class Scheduler:
                 return
 
             from .models import Track, Job
-            from sqlalchemy import select, and_
+            from .time_utils import now_utc
+            from sqlalchemy import select
 
-            # Build set of track IDs with already-queued lyrics jobs
-            pending_payloads = session.execute(
-                select(Job.payload).where(
-                    and_(
-                        Job.type == "download_lyrics",
-                        Job.status.in_(["queued", "reserved"]),
-                    )
-                )
-            ).scalars().all()
+            # Tracks with a lyrics job already waiting or running. The NULL
+            # filter matters: one NULL in a NOT IN list matches nothing at all.
+            pending_track_id = Job.payload["track_id"].as_string()
+            pending = select(pending_track_id).where(
+                Job.type == "download_lyrics",
+                Job.status.in_(["queued", "reserved"]),
+                pending_track_id != None,  # noqa: E711
+            )
 
-            already_queued = set()
-            for payload in pending_payloads:
-                if isinstance(payload, dict):
-                    tid = payload.get("track_id")
-                    if tid:
-                        already_queued.add(tid)
+            def due_tracks(*conditions, limit: int) -> list[Track]:
+                # Least recently retried first, never-retried before all:
+                # tracks LRCLIB never has lyrics for would otherwise come back
+                # in the same batch every sweep and starve all the others.
+                return list(session.execute(
+                    select(Track)
+                    .where(*conditions, Track.id.notin_(pending))
+                    .order_by(Track.lyrics_retried_at.asc().nulls_first(), Track.id)
+                    .limit(limit)
+                ).scalars().all())
 
             # === Category 1: Recovery (missing lyrics) ===
-            recovery_tracks = (
-                session.query(Track.id)
-                .filter(
-                    Track.status == "done",
-                    Track.file_path != None,  # noqa: E711
-                    Track.lyrics == None,  # noqa: E711
-                )
-                .limit(50)
-                .all()
+            recovery_tracks = due_tracks(
+                Track.status == "done",
+                Track.file_path != None,  # noqa: E711
+                Track.lyrics == None,  # noqa: E711
+                limit=50,
             )
-
-            recovery_count = 0
-            for (track_id,) in recovery_tracks:
-                if track_id in already_queued:
-                    continue
-                try:
-                    enqueue_job(
-                        session,
-                        job_type="download_lyrics",
-                        payload={"track_id": track_id},
-                        priority=3,
-                        max_attempts=3,
-                    )
-                    already_queued.add(track_id)
-                    recovery_count += 1
-                except Exception:
-                    logger.exception(f"Failed to enqueue lyrics recovery for {track_id}")
-
             # === Category 2: Upgrade (plain → synced) ===
-            upgrade_tracks = (
-                session.query(Track.id)
-                .filter(Track.lyrics == "plain")
-                .limit(25)
-                .all()
-            )
+            upgrade_tracks = due_tracks(Track.lyrics == "plain", limit=25)
 
-            upgrade_count = 0
-            for (track_id,) in upgrade_tracks:
-                if track_id in already_queued:
-                    continue
-                try:
-                    enqueue_job(
-                        session,
-                        job_type="download_lyrics",
-                        payload={"track_id": track_id, "mode": "upgrade"},
-                        priority=2,
-                        max_attempts=2,
-                    )
-                    already_queued.add(track_id)
-                    upgrade_count += 1
-                except Exception:
-                    logger.exception(f"Failed to enqueue lyrics upgrade for {track_id}")
+            now = now_utc()
+            for track in recovery_tracks:
+                enqueue_job(
+                    session,
+                    job_type="download_lyrics",
+                    payload={"track_id": track.id},
+                    priority=3,
+                    max_attempts=3,
+                    commit=False,
+                )
+                track.lyrics_retried_at = now
+            for track in upgrade_tracks:
+                enqueue_job(
+                    session,
+                    job_type="download_lyrics",
+                    payload={"track_id": track.id, "mode": "upgrade"},
+                    priority=2,
+                    max_attempts=2,
+                    commit=False,
+                )
+                track.lyrics_retried_at = now
+            # Jobs and timestamps together, so a track is never marked as
+            # retried without its job
+            session.commit()
 
+            recovery_count, upgrade_count = len(recovery_tracks), len(upgrade_tracks)
             if recovery_count or upgrade_count:
                 logger.info(
                     f"Lyrics retry: enqueued {recovery_count} recovery + "
