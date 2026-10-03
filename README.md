@@ -54,7 +54,7 @@ Open <http://localhost:8000> and sign in with the default account:
 - **Username:** `admin`
 - **Password:** `default`
 
-**Change this password immediately** (user menu → change password). The first admin is only created when the database is empty; after that, the `FIRST_ADMIN_*` variables are ignored.
+You'll be asked to choose a new password right away (even if you set a custom `FIRST_ADMIN_PASSWORD`: it sits in plain text in the compose file). The first admin is only created when the database is empty; after that, the `FIRST_ADMIN_*` variables are ignored.
 
 The first build takes a few minutes (frontend build + Python dependencies). Subsequent starts are fast.
 
@@ -145,6 +145,8 @@ Admins create users from **Admin Panel → Users**, or enable public registratio
 
 Changing your password (user menu → *Change Password*) signs you out of every other browser and device; the one you changed it from stays signed in.
 
+Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**, which shows a temporary password once to pass on. The user is signed out everywhere and has to pick a new password at next sign-in. Admins can reset anyone but themselves (use *Change Password*, or the [recovery commands](#recovering-access) if you can't sign in).
+
 ### Following vs. downloading
 
 - **Follow an artist** (artist page → *Follow*): downloads every release and keeps watching for new ones.
@@ -203,6 +205,50 @@ Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS (the
 - Proxy installed on the host, reaching the published port: connections arrive from the Docker network's gateway, so the subnet works here too.
 
 Only trust the proxy. The header is trivial to forge, so `*` (or a range that includes your clients) lets anyone pick their own IP and skip the limit. For the same reason, don't keep port 8000 reachable from outside once the proxy is in place: publish it as `127.0.0.1:8000:8000`, or drop `ports:` entirely when the proxy shares the container's network.
+
+## Recovering access
+
+For when nobody can (or should) use the admin panel, a few commands run inside the container. Use the service name from `docker-compose.yml` (`docker exec -it <container> …` works too):
+
+```bash
+docker compose exec ytmusicdownloader python -m backend.cli --help
+```
+
+| Command | Does |
+|---|---|
+| `list-users` | Accounts with their role and status |
+| `reset-password <user> [--generate]` | New password (typed twice, hidden), or a generated temporary one with `--generate`. Also reactivates the account and signs it out everywhere. |
+| `create-user <user> --role <role> [--generate]` | New account |
+| `set-role <user> <role>` | `administrator`, `member` or `visitor` |
+| `activate <user>` / `deactivate <user>` | Deactivating also signs the account out |
+| `deactivate-all [--except <user>]` | Lockdown: deactivate every account and sign everyone out |
+| `get-setting [key]` / `set-setting <key> <value>` | Read or change a setting (same checks as the admin panel) |
+
+Passwords are never passed as arguments (they'd end up in your shell history).
+
+**Forgot the admin password**
+
+```bash
+docker compose exec ytmusicdownloader python -m backend.cli reset-password admin
+```
+
+**An admin account was hijacked** (or something is misusing one): lock everyone out except you, then take your account back. Deactivated accounts lose their sessions on their very next request.
+
+```bash
+docker compose exec ytmusicdownloader python -m backend.cli deactivate-all --except admin
+docker compose exec ytmusicdownloader python -m backend.cli reset-password admin
+docker compose exec ytmusicdownloader python -m backend.cli set-role admin administrator   # if it was demoted
+```
+
+Then reactivate the legitimate accounts from **Admin Panel → Users**, and check settings and other admins.
+
+**Locked out while someone keeps guessing your password** ("Too many failed attempts" for your account): browsers you're already signed in to aren't affected, but a new browser (or yours after a password reset) is. Turn the per-account limit off for a moment — the per-IP limit still applies — sign in, then turn it back on. Once signed in, your browser has its own allowance again.
+
+```bash
+docker compose exec ytmusicdownloader python -m backend.cli set-setting auth.login_max_failures_per_account 0
+# sign in, then:
+docker compose exec ytmusicdownloader python -m backend.cli set-setting auth.login_max_failures_per_account 5
+```
 
 ## API
 

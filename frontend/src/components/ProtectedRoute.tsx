@@ -36,6 +36,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/login" replace />;
   }
 
+  // Temporary password (first admin, or reset by an admin): choose one first
+  if (user?.must_change_password) {
+    return <Navigate to="/change-password" replace />;
+  }
+
   // Check role if required
   if (requiredRole && user) {
     const roleHierarchy: Record<string, number> = {

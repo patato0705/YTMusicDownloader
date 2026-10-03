@@ -5,7 +5,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
-import * as authApi from '../../api/auth';
 import { retryAfterMinutes } from '../../utils';
 
 export const Login: React.FC = () => {
@@ -48,20 +47,9 @@ export const Login: React.FC = () => {
 
     try {
       await login(username, password);
-      
-      // Check if default admin with default password
-      const user = await authApi.getCurrentUser();
-      
-      if (user.id === 1 && password === 'default') {
-        navigate('/change-password', { 
-          state: { 
-            forced: true, 
-            message: t('auth.changePassword.defaultWarning')
-          } 
-        });
-      } else {
-        navigate('/');
-      }
+      // A temporary password (first admin, admin reset) is caught by
+      // ProtectedRoute, which sends the user to /change-password
+      navigate('/');
     } catch (err: any) {
       if (err?.status === 429) {
         setError(t('auth.errors.tooManyAttempts', { minutes: retryAfterMinutes(err) }));

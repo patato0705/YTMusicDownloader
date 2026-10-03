@@ -224,6 +224,7 @@ def build_users_section(session: Session) -> List[Dict[str, Any]]:
             "password_hash": u.password_hash,
             "role": u.role,
             "is_active": bool(u.is_active),
+            "must_change_password": bool(u.must_change_password),
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
         for u in users
@@ -311,6 +312,7 @@ def _import_users(session: Session, doc: ExportDocument, warnings: List[ImportWa
             password_hash=item.password_hash,
             role=item.role,
             is_active=item.is_active,
+            must_change_password=item.must_change_password,
             created_at=now_utc(),
         ))
         session.flush()

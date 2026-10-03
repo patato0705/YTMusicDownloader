@@ -112,6 +112,7 @@ class ExportedUser(BaseModel):
     password_hash: str = Field(..., pattern=r"^\$2[aby]\$\d{2}\$.{53}$")
     role: Literal["administrator", "member", "visitor"] = "visitor"
     is_active: bool = True
+    must_change_password: bool = False
     created_at: Optional[str] = None
 
 

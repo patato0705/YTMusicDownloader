@@ -23,6 +23,7 @@ from .auth import (
     TokenResponse,
     UserResponse,
     LoginResponse,
+    TemporaryPasswordResponse,
 )
 
 # Job schemas
@@ -75,6 +76,7 @@ __all__ = [
     "TokenResponse",
     "UserResponse",
     "LoginResponse",
+    "TemporaryPasswordResponse",
     
     # Job schemas
     "EnqueueRequest",

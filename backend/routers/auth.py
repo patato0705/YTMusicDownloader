@@ -198,9 +198,7 @@ def login(
         account_bucket = f"login:device:{device['jti']}"
     else:
         device = None
-        # Every attempted username gets a bucket, existing or not, so a 429
-        # doesn't reveal which accounts exist
-        account_bucket = f"login:user:{data.username.lower()}"
+        account_bucket = login_throttle.login_account_key(data.username)
     buckets = [(f"login:ip:{_client_ip(request)}", ip_limit), (account_bucket, account_limit)]
 
     login_throttle.check(buckets, window)

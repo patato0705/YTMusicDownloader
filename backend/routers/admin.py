@@ -8,6 +8,7 @@ User Management:
 - PATCH /api/admin/users/{user_id}/role - Update user role
 - POST /api/admin/users/{user_id}/deactivate - Deactivate user
 - POST /api/admin/users/{user_id}/activate - Activate user
+- POST /api/admin/users/{user_id}/reset-password - Set a temporary password
 - DELETE /api/admin/users/{user_id} - Permanently delete user
 
 YouTube account cookies (fallback for age-restricted videos only):
@@ -32,6 +33,7 @@ from backend.db import get_session
 from backend.dependencies import require_admin
 from backend.services import admin as admin_svc
 from backend.services import auth as auth_svc  # For create_user
+from backend.services import login_throttle
 from backend import settings as settings_module
 from backend.schemas import (
     UserResponse,
@@ -39,6 +41,7 @@ from backend.schemas import (
     SettingResponse,
     SettingUpdateRequest,
     MessageResponse,
+    TemporaryPasswordResponse,
     YoutubeCookiesStatus,
     YoutubeCookiesUpload,
 )
@@ -189,6 +192,45 @@ def activate_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+
+@router.post("/users/{user_id}/reset-password", response_model=TemporaryPasswordResponse)
+def reset_user_password(
+    user_id: int,
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    """
+    Give a user a generated temporary password (admin only).
+
+    The password is returned once, for the admin to pass on; the user has to
+    choose a new one at next sign-in. Signs the user out everywhere and
+    clears their failed sign-in lock. Works on other admins too (an admin
+    can already demote or delete them), but not on yourself: that would
+    skip the current-password check of /api/auth/change-password.
+    """
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot reset your own password, change it instead",
+        )
+
+    user = auth_svc.get_user_by_id(session, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User {user_id} not found",
+        )
+
+    temporary_password = auth_svc.generate_temporary_password()
+    revoked = auth_svc.change_password(session, user, temporary_password, must_change_password=True)
+    login_throttle.clear(login_throttle.login_account_key(user.username))
+
+    logger.info(
+        f"Admin {current_user.username} reset the password of {user.username} "
+        f"({revoked} session(s) signed out)"
+    )
+    return TemporaryPasswordResponse(temporary_password=temporary_password)
 
 
 @router.delete("/users/{user_id}", response_model=MessageResponse)

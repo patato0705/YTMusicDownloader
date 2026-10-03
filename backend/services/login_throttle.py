@@ -16,6 +16,7 @@ Functions:
 - check() - Raise TooManyAttempts if any bucket is full
 - record_failure() - Add a failure to buckets
 - clear() - Forget a bucket's failures
+- login_account_key() - Bucket of an account's failed sign-ins
 """
 from __future__ import annotations
 import math
@@ -79,6 +80,15 @@ def record_failure(buckets: Iterable[Tuple[str, int]], window_seconds: int) -> N
             cutoff = now - window_seconds
             for key in [k for k, q in _failures.items() if q[-1] <= cutoff]:
                 del _failures[key]
+
+
+def login_account_key(username: str) -> str:
+    """
+    Bucket for failed sign-ins on an account from browsers it doesn't know.
+    Keyed by the name as typed (lowercased), existing account or not, so a
+    429 doesn't reveal which accounts exist.
+    """
+    return f"login:user:{username.lower()}"
 
 
 def clear(key: str) -> None:

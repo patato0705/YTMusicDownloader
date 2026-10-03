@@ -69,6 +69,7 @@ class UserResponse(BaseModel):
     username: str
     role: str
     is_active: bool
+    must_change_password: bool = False
     created_at: datetime
     last_login_at: Optional[datetime] = None
     
@@ -80,6 +81,11 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+class TemporaryPasswordResponse(BaseModel):
+    """A generated password, shown to the admin once (never stored in clear)"""
+    temporary_password: str
 
 
 class MessageResponse(BaseModel):

@@ -300,6 +300,9 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")  # administrator, member, visitor
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Set for the first admin and on password resets (temporary password);
+    # the frontend sends the user to the change-password page until cleared
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     last_login_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Access and device tokens issued before this are rejected (set when the
@@ -317,6 +320,7 @@ class User(Base):
             "username": getattr(self, "username", None),
             "role": getattr(self, "role", "member"),
             "is_active": bool(getattr(self, "is_active", True)),
+            "must_change_password": bool(getattr(self, "must_change_password", False)),
             "created_at": created.isoformat() if created else None,
             "last_login_at": last_login.isoformat() if last_login else None,
         }

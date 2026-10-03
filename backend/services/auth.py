@@ -18,7 +18,9 @@ Functions:
 - get_user_by_username() - Fetch user by username
 - get_user_by_id() - Fetch user by ID
 - update_last_login() - Update user's last_login_at
+- revoke_sessions() - Sign a user out everywhere (but one session)
 - change_password() - Set a new password and sign out the user's other sessions
+- generate_temporary_password() - Random password for resets
 - ensure_first_admin() - Create first admin user on startup
 
 Exceptions:
@@ -358,22 +360,15 @@ def update_last_login(session: Session, user_id: int) -> None:
         session.commit()
 
 
-def change_password(
-    session: Session,
-    user: User,
-    new_password: str,
-    keep_refresh_token: Optional[str] = None,
-) -> int:
+def revoke_sessions(session: Session, user: User, keep_refresh_token: Optional[str] = None) -> int:
     """
-    Set a new password and sign the user out everywhere else: every refresh
-    token but `keep_refresh_token` (the session making the change) is
-    revoked, and access/device tokens issued so far stop being accepted
-    (tokens_valid_after). The caller hands the current session fresh ones.
+    Sign the user out everywhere but `keep_refresh_token`'s session: their
+    refresh tokens are revoked, and access/device tokens issued so far stop
+    being accepted (tokens_valid_after). Doesn't commit.
 
     Returns:
         Number of refresh tokens revoked
     """
-    user.password_hash = hash_password(new_password)
     user.tokens_valid_after = now_utc().replace(microsecond=0)
     session.add(user)
 
@@ -388,10 +383,46 @@ def change_password(
         token.revoked = True
         session.add(token)
         revoked += 1
+    return revoked
+
+
+def change_password(
+    session: Session,
+    user: User,
+    new_password: str,
+    keep_refresh_token: Optional[str] = None,
+    must_change_password: bool = False,
+) -> int:
+    """
+    Set a new password and sign the user out everywhere else: every refresh
+    token but `keep_refresh_token` (the session making the change) is
+    revoked, and access/device tokens issued so far stop being accepted
+    (tokens_valid_after). The caller hands the current session fresh ones.
+
+    Used for resets too (no session kept): pass must_change_password=True
+    when the new password is a temporary one someone else knows.
+
+    Returns:
+        Number of refresh tokens revoked
+    """
+    user.password_hash = hash_password(new_password)
+    user.must_change_password = must_change_password
+    session.add(user)
+    revoked = revoke_sessions(session, user, keep_refresh_token)
 
     session.commit()
     session.refresh(user)
     return revoked
+
+
+# No 0/O, 1/l/I: temporary passwords get read out or retyped by hand
+_TEMP_PASSWORD_ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def generate_temporary_password() -> str:
+    """Random password like 7hKq-3mPz-Xw9t-Ld2c (~90 bits)."""
+    groups = ("".join(secrets.choice(_TEMP_PASSWORD_ALPHABET) for _ in range(4)) for _ in range(4))
+    return "-".join(groups)
 
 
 # ============================================================================
@@ -403,6 +434,7 @@ def create_user(
     username: str,
     password: str,
     role: str = config.ROLE_VISITOR,
+    must_change_password: bool = False,
 ) -> User:
     """
     Create a new user.
@@ -411,6 +443,8 @@ def create_user(
         session: SQLAlchemy session
         username: Unique username
         password: Plain text password (will be hashed)
+        must_change_password: Password is a temporary one (generated, or
+            from the environment for the first admin)
         role: User role (default: visitor)
     
     Returns:
@@ -440,6 +474,7 @@ def create_user(
         password_hash=password_hash,
         role=role,
         is_active=True,
+        must_change_password=must_change_password,
         created_at=now_utc(),
     )
     
@@ -475,6 +510,9 @@ def ensure_first_admin(session: Session) -> None:
             username=config.FIRST_ADMIN_USERNAME,
             password=config.FIRST_ADMIN_PASSWORD,
             role=config.ROLE_ADMINISTRATOR,
+            # Even a custom FIRST_ADMIN_PASSWORD sits in plain text in the
+            # compose file, so the first sign-in always asks for a new one
+            must_change_password=True,
         )
         logger.info(f"Created first admin user: {admin.username}")
         logger.warning(

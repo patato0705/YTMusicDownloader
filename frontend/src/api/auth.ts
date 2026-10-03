@@ -10,6 +10,8 @@ export interface User {
   username: string;
   role: 'administrator' | 'member' | 'visitor';
   is_active: boolean;
+  /** Temporary password (first admin, admin reset): must be changed before using the app */
+  must_change_password: boolean;
   created_at: string;
   last_login_at: string | null;
 }

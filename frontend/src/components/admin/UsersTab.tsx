@@ -1,6 +1,6 @@
 // src/components/admin/UsersTab.tsx
 /**
- * Admin panel > Users: list, filter, create, change role, (de)activate, delete.
+ * Admin panel > Users: list, filter, create, change role, (de)activate, reset password, delete.
  */
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,6 +9,7 @@ import { Button } from '../ui/Button';
 import { CreateUserModal } from '../ui/CreateUserModal';
 import { SearchInput } from '../ui/SearchInput';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { TemporaryPasswordDialog } from '../ui/TemporaryPasswordDialog';
 import { Select } from '../ui/Select';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { InfoTooltip } from '../ui/InfoTooltip';
@@ -39,6 +40,9 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ userId: number; username: string } | null>(null);
+  const [resetConfirm, setResetConfirm] = useState<{ userId: number; username: string } | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [temporaryPassword, setTemporaryPassword] = useState<{ username: string; password: string } | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,6 +92,20 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
       onToast(t('admin.users.roleUpdated'), 'success');
     } catch (err: any) {
       onToast(parseApiError(err), 'error');
+    }
+  };
+
+  const confirmReset = async () => {
+    if (!resetConfirm) return;
+    setResetLoading(true);
+    try {
+      const { temporary_password } = await adminApi.resetUserPassword(resetConfirm.userId);
+      setTemporaryPassword({ username: resetConfirm.username, password: temporary_password });
+    } catch (err: any) {
+      onToast(parseApiError(err), 'error');
+    } finally {
+      setResetLoading(false);
+      setResetConfirm(null);
     }
   };
 
@@ -156,6 +174,26 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
         onCancel={() => setDeleteConfirm(null)}
         variant="danger"
       />
+
+      <ConfirmDialog
+        isOpen={!!resetConfirm}
+        title={t('admin.users.resetPasswordTitle')}
+        message={resetConfirm ? t('admin.users.confirmResetPassword', { username: resetConfirm.username }) : ''}
+        confirmText={t('admin.users.resetPassword')}
+        cancelText={t('common.cancel')}
+        onConfirm={confirmReset}
+        onCancel={() => setResetConfirm(null)}
+        variant="warning"
+        isLoading={resetLoading}
+      />
+
+      {temporaryPassword && (
+        <TemporaryPasswordDialog
+          username={temporaryPassword.username}
+          password={temporaryPassword.password}
+          onClose={() => setTemporaryPassword(null)}
+        />
+      )}
 
       <div className="space-y-6">
         {/* Search and Filters */}
@@ -256,7 +294,16 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                           label={u.is_active ? t('admin.users.active') : t('admin.users.inactive')}
                         />
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right whitespace-nowrap space-x-2">
+                        {/* Own password: Change Password instead (needs the current one) */}
+                        <Button
+                          onClick={() => setResetConfirm({ userId: u.id, username: u.username })}
+                          variant="outline"
+                          size="sm"
+                          disabled={u.id === user?.id}
+                        >
+                          {t('admin.users.resetPassword')}
+                        </Button>
                         <Button
                           onClick={() => setDeleteConfirm({ userId: u.id, username: u.username })}
                           variant="danger"

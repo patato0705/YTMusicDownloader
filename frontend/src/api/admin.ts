@@ -96,6 +96,14 @@ export async function activateUser(userId: number): Promise<User> {
 }
 
 /**
+ * Give a user a generated temporary password (admin only, not yourself).
+ * Returned once; the user must change it at next sign-in.
+ */
+export async function resetUserPassword(userId: number): Promise<{ temporary_password: string }> {
+  return api.post<{ temporary_password: string }>(`/admin/users/${userId}/reset-password`);
+}
+
+/**
  * Permanently delete user (admin only)
  * WARNING: This cannot be undone!
  */

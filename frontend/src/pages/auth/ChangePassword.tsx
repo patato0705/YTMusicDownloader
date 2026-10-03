@@ -1,6 +1,7 @@
 // src/pages/auth/ChangePassword.tsx
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import * as authApi from '../../api/auth';
@@ -18,10 +19,10 @@ export const ChangePassword: React.FC = () => {
   
   const { t } = useI18n();
   const navigate = useNavigate();
-  const location = useLocation();
-  
-  const forced = location.state?.forced || false;
-  const message = location.state?.message || '';
+  const { user, refreshUser } = useAuth();
+
+  // Temporary password (first admin, or reset by an admin): no way out but changing it
+  const forced = !!user?.must_change_password;
 
   // Validate new password on blur or change
   const validateNewPassword = (password: string) => {
@@ -84,7 +85,10 @@ export const ChangePassword: React.FC = () => {
         new_password: newPassword,
       });
 
-      navigate('/');
+      // Picks up the cleared must_change_password, or ProtectedRoute would
+      // send us straight back here
+      await refreshUser();
+      navigate('/', { replace: true });
     } catch (err: any) {
       if (err?.status === 400) {
         setCurrentPasswordError(t('auth.errors.currentPasswordIncorrect'));
@@ -126,7 +130,7 @@ export const ChangePassword: React.FC = () => {
         </div>
 
         {/* Warning message for forced password change */}
-        {forced && message && (
+        {forced && (
           <div className="mb-6 bg-yellow-500/10 dark:bg-yellow-500/5 backdrop-blur-sm rounded-2xl p-5 border border-yellow-500/30">
             <div className="flex items-start gap-3">
               <span className="text-2xl">⚠️</span>
@@ -134,7 +138,7 @@ export const ChangePassword: React.FC = () => {
                 <h3 className="font-semibold text-yellow-600 dark:text-yellow-400 mb-1">
                   {t('auth.changePassword.required')}
                 </h3>
-                <p className="text-sm text-yellow-600/80 dark:text-yellow-400/80">{message}</p>
+                <p className="text-sm text-yellow-600/80 dark:text-yellow-400/80">{t('auth.changePassword.temporaryWarning')}</p>
               </div>
             </div>
           </div>
