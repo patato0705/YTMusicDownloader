@@ -12,6 +12,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Import a playlist**: paste a YouTube Music playlist URL, then follow every artist in it or download every album it contains in bulk.
 - **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly).
 - **Synced lyrics** from [LRCLIB](https://lrclib.net), saved as `.lrc` sidecar files. Missing lyrics are retried daily; plain lyrics are upgraded to synced when they become available. Lyrics can also be viewed and edited by hand in the UI.
+- **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
 - **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year and embedded cover art.
 - **Jellyfin-friendly layout** with `artist.nfo`, `album.nfo`, `backdrop.jpg` and `cover.jpg`.
 - **Multi-user** with three roles (visitor / member / administrator), optional public registration, and httpOnly-cookie sessions.
@@ -64,27 +65,7 @@ The first build takes a few minutes (frontend build + Python dependencies). Subs
 | `./config` | `/config` | SQLite database, `secrets.json` (JWT secret), logs, caches, temp downloads, YouTube cookie jars, artwork for artists and albums that aren't downloaded (`covers/`) |
 | `./data` | `/data` | Your music library |
 
-Both are created on first start. Back up `./config` together with `./data` — losing `secrets.json` logs everyone out; losing the database loses the library index (though the *Backup* tab in the admin panel gives you a portable alternative, see below).
-
-### File ownership
-
-The app runs as `PUID:PGID` inside the container (default `1000:1000`), so files it writes to `./config` and `./data` are owned by that user on the host. If `id -u` / `id -g` on your host give different numbers, set them in `docker-compose.yml`.
-
-## How it works
-
-Everything runs in a single Docker container managed by supervisord:
-
-| Process | Role |
-|---|---|
-| `web` | FastAPI backend + the built React frontend, on port 8000 |
-| `worker-download-N` | Downloads audio with yt-dlp (N processes, see `DOWNLOAD_WORKERS`) |
-| `worker-metadata` | Talks to YouTube Music: artist syncs, album imports, chart syncs |
-| `worker-lyrics` | Fetches lyrics from LRCLIB |
-| `scheduler` | Periodic syncs, retries and clean-ups |
-
-All work goes through a job queue stored in SQLite (`/config/db.sqlite`). Workers are split by job family so that a slow download never blocks metadata imports and vice versa. If a worker dies mid-job, the job is requeued automatically.
-
-Following an artist queues a `sync_artist` job → which queues an `import_album` job per release → which queues a `download_track` job per track → which queues a `download_lyrics` job once the audio is on disk.
+Both are created on first start if missing. Back up `./config` together with `./data`. Losing `secrets.json` logs everyone out. Losing the database loses the library index (though the *Backup* tab in the admin panel gives you a portable alternative, see below).
 
 ### Library layout
 
@@ -105,6 +86,10 @@ data/
 ```
 
 Names are sanitised for the filesystem. Point Jellyfin (or any media server that reads NFO files and folder art) at this directory.
+
+### File ownership
+
+The app runs as `PUID:PGID` inside the container (default `1000:1000`), so files it writes to `./config` and `./data` are owned by that user on the host. If `id -u` / `id -g` on your host give different numbers, set them in `docker-compose.yml`.
 
 ## Configuration
 
@@ -137,10 +122,9 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Synced lyrics only | on | Reject plain lyrics; keep retrying for synced ones |
 | Charts | on | Enable the Charts page and chart subscriptions |
 | Artist sync interval | 6 h | How often each followed artist is checked for new releases |
-| Chart sync interval | 168 h | How often each followed chart is re-fetched |
+| Chart sync interval | 7 days | How often each followed chart is re-fetched (YouTube Music updates its charts weekly) |
 | Lyrics retry interval | 24 h | How often tracks with missing/plain lyrics are retried |
-| Job retention | 3 days | Completed jobs older than this are deleted (failed ones are kept) |
-| Token cleanup interval | 1 day | How often expired sign-in tokens are purged |
+| Job retention | 3 days | Finished jobs (completed, failed or cancelled) older than this are deleted |
 | YouTube Music language | `en` | Language of fetched metadata (bios, descriptions) |
 | YouTube account cookies | none | See [Age-restricted tracks](#age-restricted-tracks) |
 
@@ -159,8 +143,9 @@ Admins create users from **Admin Panel → Users**, or enable public registratio
 ### Following vs. downloading
 
 - **Follow an artist** (artist page → *Follow*): downloads every release and keeps watching for new ones.
-- **Unfollow**: stops watching for new releases. Nothing is deleted; the artist stays in your library in "light" (metadata-only) mode.
+- **Unfollow**: stops watching for new releases and cancels downloads that haven't started yet (one already in progress is allowed to finish). Nothing is deleted; the artist stays in your library in "light" (metadata-only) mode.
 - **Download an album** (album page → *Download Album*): grabs just that album. The artist is added to the library in light mode so the album has somewhere to live.
+- **Retry missing tracks** (album page): shown on a downloaded album when some tracks failed or have no download queued. Requeues every track that isn't on disk and isn't already waiting.
 - **Delete artist / album** (admin only): removes the database entries *and* the files on disk.
 
 ### Playlist import
@@ -211,6 +196,22 @@ Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS. The
 
 Interactive OpenAPI docs are served at `/api/docs`. Authentication is JWT: `POST /api/auth/login` returns a short-lived access token (send as `Authorization: Bearer …`) and sets an httpOnly refresh cookie; `POST /api/auth/refresh` gets a new access token.
 
+## How it works
+
+Everything runs in a single Docker container managed by supervisord:
+
+| Process | Role |
+|---|---|
+| `web` | FastAPI backend + the built React frontend, on port 8000 |
+| `worker-download-N` | Downloads audio with yt-dlp (N processes, see `DOWNLOAD_WORKERS`) |
+| `worker-metadata` | Talks to YouTube Music: artist syncs, album imports, chart syncs |
+| `worker-lyrics` | Fetches lyrics from LRCLIB |
+| `scheduler` | Periodic syncs, retries and clean-ups |
+
+All work goes through a job queue stored in SQLite (`/config/db.sqlite`). Workers are split by job family so that a slow download never blocks metadata imports and vice versa. If a worker dies mid-job, the job is requeued automatically.
+
+Following an artist queues a `sync_artist` job → which queues an `import_album` job per release → which queues a `download_track` job per track → which queues a `download_lyrics` job once the audio is on disk.
+
 ## Logs
 
 - `docker compose logs -f` — everything, interleaved.
@@ -220,7 +221,7 @@ Interactive OpenAPI docs are served at `/api/docs`. Authentication is JWT: `POST
 
 **Downloads fail across the board right after an update to YouTube** — restart the container. yt-dlp is updated from PyPI at every start; wait a day or two for a yt-dlp release if the restart doesn't help.
 
-**A track fails with an age-restriction error** — upload account cookies (see above). Such tracks are retried once a day.
+**A track fails with an age-restriction error** — upload account cookies (see above). Such tracks are retried once a day, up to 5 attempts; after that they're marked failed, and *Retry missing tracks* on the album page queues them again.
 
 **Everything is paused with a rate-limit banner** — wait it out; it resolves on its own. If it keeps happening, lower *Max concurrent downloads*.
 
