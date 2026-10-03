@@ -28,4 +28,4 @@ export { getUsernameError, isValidEmail, getPasswordError } from './validation';
 export type { UsernameError, PasswordError } from './validation';
 
 // API error parsing
-export { parseApiError } from './apiError';
+export { parseApiError, retryAfterMinutes } from './apiError';

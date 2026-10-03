@@ -102,6 +102,7 @@ Set in `docker-compose.yml`. All are optional.
 | `TZ` | `Europe/Paris` | Timezone for log timestamps |
 | `PUID` / `PGID` | `1000` / `1000` | User/group the app runs as (see above) |
 | `COOKIE_SECURE` | `false` | Set to `true` when served over HTTPS (behind a TLS-terminating reverse proxy). Leave off for plain HTTP or login won't persist. |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Address(es) or subnet(s) of your reverse proxy, comma-separated. Required behind a proxy, see [Running behind a reverse proxy](#running-behind-a-reverse-proxy). |
 | `DOWNLOAD_WORKERS` | `3` | Number of download worker *processes*. This is a ceiling; how many actually run at once is the *Max concurrent downloads* setting in the admin panel. |
 | `CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated origins, only needed if you serve the frontend from a different origin than the API. Leave unset for the standard setup. |
 | `FIRST_ADMIN_USERNAME` | `admin` | First admin account, created only when the database is empty |
@@ -116,6 +117,9 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Setting | Default | Description |
 |---|---|---|
 | Public registration | off | Let anyone create an account (new accounts are *visitors*) |
+| Failed sign-ins per IP | 10 | Wrong passwords allowed from one IP within the window before it's blocked. Set to 0 to turn this check off. |
+| Failed sign-ins per account | 5 | Wrong passwords allowed for one account within the window before *new* browsers are blocked from it. Browsers signed in to the account before (and not signed out since) get their own allowance, so hammering `admin` from elsewhere doesn't lock you out of your usual browser. Also applies to wrong current passwords on *Change password*. Set to 0 to turn this check off. |
+| Failed sign-in window | 15 min | How long failed sign-ins are remembered; blocks lift as they expire |
 | Max concurrent downloads | 1 | Parallel YouTube downloads. Capped by `DOWNLOAD_WORKERS`. Every extra stream from one IP raises the odds of being rate-limited. |
 | Rate-limit pause | 10 min | How long all downloads stop after a rate limit. Doubles on each consecutive pause (up to 16×) until a download succeeds. |
 | Lyrics download | on | Fetch lyrics from LRCLIB for every downloaded track |
@@ -190,7 +194,14 @@ Importing first shows a dry-run preview (what would be followed, queued, skipped
 
 ## Running behind a reverse proxy
 
-Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS. The frontend and API share one origin, so no CORS configuration is required. The `/api/health` endpoint (no auth) can be used for uptime checks; it returns 503 if the database, ffmpeg/yt-dlp or the data directories are unhealthy.
+Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS (the app doesn't infer it from the proxy). The frontend and API share one origin, so no CORS configuration is required. The `/api/health` endpoint (no auth) can be used for uptime checks; it returns 503 if the database, ffmpeg/yt-dlp or the data directories are unhealthy.
+
+**Set `FORWARDED_ALLOW_IPS` to your proxy's address.** Without it the app sees every request as coming from the proxy, so the per-IP sign-in limit is shared by all your users: one person guessing passwords blocks sign-in for everyone. With it, the app takes the real client address from the proxy's `X-Forwarded-For` header (and the scheme from `X-Forwarded-Proto`). `X-Real-IP` and `Forwarded` are not read: Traefik, Caddy and Nginx Proxy Manager send `X-Forwarded-For` by default, plain nginx needs `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`. With several proxies in a row (e.g. Cloudflare → Traefik), every hop must be trusted.
+
+- Proxy in another container on the same Docker network (Traefik, Caddy, Nginx Proxy Manager…): use the network's subnet, found with `docker network inspect <network>`, e.g. `FORWARDED_ALLOW_IPS=172.18.0.0/16`.
+- Proxy installed on the host, reaching the published port: connections arrive from the Docker network's gateway, so the subnet works here too.
+
+Only trust the proxy. The header is trivial to forge, so `*` (or a range that includes your clients) lets anyone pick their own IP and skip the limit. For the same reason, don't keep port 8000 reachable from outside once the proxy is in place: publish it as `127.0.0.1:8000:8000`, or drop `ports:` entirely when the proxy shares the container's network.
 
 ## API
 
@@ -226,6 +237,8 @@ Following an artist queues a `sync_artist` job → which queues an `import_album
 **Everything is paused with a rate-limit banner** — wait it out; it resolves on its own. If it keeps happening, lower *Max concurrent downloads*.
 
 **Permission errors on `./config` or `./data`** — make sure `PUID`/`PGID` match your host user. Files that already existed before a `PUID` change need a one-time `chown`.
+
+**"Too many failed attempts" for everyone** — you're behind a reverse proxy without `FORWARDED_ALLOW_IPS`, so all users share the proxy's IP. See [Running behind a reverse proxy](#running-behind-a-reverse-proxy). To get back in right away, restart the container (the counters live in memory).
 
 **Login doesn't stick** — if you're on plain HTTP, `COOKIE_SECURE` must be unset or `false`. If you're on HTTPS, set it to `true`.
 

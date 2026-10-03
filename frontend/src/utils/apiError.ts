@@ -28,3 +28,13 @@ export function parseApiError(err: any, fallback: string = 'An error occurred'):
 
   return err?.message || fallback;
 }
+
+/**
+ * Minutes to wait before retrying, for a 429 from the failed password
+ * throttling (login, change password). The backend puts the wait in seconds
+ * in the body's `retry_after`, since ApiError doesn't keep response headers.
+ */
+export function retryAfterMinutes(err: any): number {
+  const seconds = Number((err as ApiError)?.data?.retry_after);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 1;
+}

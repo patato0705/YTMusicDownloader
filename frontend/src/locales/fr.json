@@ -104,7 +104,8 @@
       "currentPasswordIncorrect": "Le mot de passe actuel est incorrect",
       "loginFailed": "Échec de la connexion. Veuillez réessayer.",
       "usernameTaken": "Ce nom d'utilisateur est déjà utilisé",
-      "emailTaken": "Cette adresse email est déjà utilisée"
+      "emailTaken": "Cette adresse email est déjà utilisée",
+      "tooManyAttempts": "Trop de tentatives échouées. Réessayez dans {minutes} min."
     }
   },
   "nav": {
@@ -379,6 +380,18 @@
           "registration_enabled": {
             "label": "Inscription publique",
             "description": "Autoriser n'importe qui à créer un compte depuis la page d'inscription."
+          },
+          "login_max_failures_per_ip": {
+            "label": "Échecs de connexion par IP",
+            "description": "Mots de passe erronés autorisés depuis une même adresse IP pendant la fenêtre avant qu'elle soit bloquée. Mettre à 0 pour désactiver cette vérification."
+          },
+          "login_max_failures_per_account": {
+            "label": "Échecs de connexion par compte",
+            "description": "Mots de passe erronés autorisés pour un même compte pendant la fenêtre avant que les nouveaux navigateurs soient bloqués. Un navigateur déjà connecté à ce compte (et non déconnecté depuis) dispose de son propre quota, pour que son propriétaire ne soit pas bloqué. S'applique aussi au mot de passe actuel lors d'un changement de mot de passe. Mettre à 0 pour désactiver cette vérification."
+          },
+          "login_failure_window_minutes": {
+            "label": "Fenêtre des échecs de connexion (minutes)",
+            "description": "Durée pendant laquelle les échecs de connexion sont mémorisés. Une IP ou un compte bloqué est libéré à leur expiration."
           }
         },
         "download": {

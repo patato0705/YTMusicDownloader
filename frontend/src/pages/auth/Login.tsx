@@ -6,6 +6,7 @@ import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import * as authApi from '../../api/auth';
+import { retryAfterMinutes } from '../../utils';
 
 export const Login: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -62,7 +63,11 @@ export const Login: React.FC = () => {
         navigate('/');
       }
     } catch (err: any) {
-      setError(t(err?.status === 401 ? 'auth.errors.invalidCredentials' : 'auth.errors.loginFailed'));
+      if (err?.status === 429) {
+        setError(t('auth.errors.tooManyAttempts', { minutes: retryAfterMinutes(err) }));
+      } else {
+        setError(t(err?.status === 401 ? 'auth.errors.invalidCredentials' : 'auth.errors.loginFailed'));
+      }
     } finally {
       setIsLoading(false);
     }

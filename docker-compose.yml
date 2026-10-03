@@ -15,6 +15,11 @@ services:
       # Set to "true" only if this is reached over HTTPS (e.g. behind a
       # TLS-terminating reverse proxy). Leave unset/false for plain HTTP.
       # - COOKIE_SECURE=true
+      # Behind a reverse proxy: its address or subnet (comma-separated),
+      # so the app sees real client IPs in X-Forwarded-For. Without it all
+      # users share the proxy's IP for the failed sign-in limit. Never "*"
+      # while port 8000 is reachable without going through the proxy.
+      # - FORWARDED_ALLOW_IPS=172.18.0.0/16
       # UID/GID the app runs as -- files it writes to ./config and ./data
       # are owned by this user on the host. Defaults to 1000:1000 (the
       # first regular user on most Linux installs); override if `id -u`

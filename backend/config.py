@@ -38,6 +38,9 @@ except Exception:
 JWT_ALGORITHM = "HS256"
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 15
 JWT_REFRESH_TOKEN_EXPIRE_DAYS = 7
+# How long a browser stays "known" to an account after its last successful
+# sign-in (gives it its own failed-attempt allowance, see services/login_throttle)
+DEVICE_TOKEN_EXPIRE_DAYS = 365
 
 # Auth cookies (access_token, refresh_token): mark Secure only if this
 # deployment is reached over HTTPS (e.g. behind a TLS-terminating reverse

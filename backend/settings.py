@@ -53,7 +53,31 @@ DEFAULT_SETTINGS = {
         "type": "bool",
         "description": "Allow public user registration",
     },
-    
+
+    # Failed password throttling (services/login_throttle.py). Read on every
+    # attempt, so changes apply immediately.
+    "auth.login_max_failures_per_ip": {
+        "value": 10,
+        "type": "int",
+        "min": 0,
+        "description": "Failed sign-ins allowed from one IP address per window before it is blocked (set to 0 to turn this check off)",
+    },
+    "auth.login_max_failures_per_account": {
+        # Browsers that already signed in to the account get their own
+        # allowance of this size, so someone hammering the account (e.g. the
+        # default "admin") can't lock its owner out of their usual browser.
+        "value": 5,
+        "type": "int",
+        "min": 0,
+        "description": "Failed sign-ins allowed per account per window before it is blocked for new browsers (set to 0 to turn this check off)",
+    },
+    "auth.login_failure_window_minutes": {
+        "value": 15,
+        "type": "int",
+        "min": 1,
+        "description": "Minutes failed sign-ins are remembered; a blocked IP or account is released as they expire",
+    },
+
     # Download settings
     "download.max_concurrent": {
         # How many of the download worker processes actually take jobs; the

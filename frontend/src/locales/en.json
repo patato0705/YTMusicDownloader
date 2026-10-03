@@ -104,7 +104,8 @@
       "currentPasswordIncorrect": "Current password is incorrect",
       "loginFailed": "Login failed. Please try again.",
       "usernameTaken": "This username is already taken",
-      "emailTaken": "This email is already in use"
+      "emailTaken": "This email is already in use",
+      "tooManyAttempts": "Too many failed attempts. Try again in {minutes} min."
     }
   },
   "nav": {
@@ -379,6 +380,18 @@
           "registration_enabled": {
             "label": "Public registration",
             "description": "Allow anyone to create an account from the registration page."
+          },
+          "login_max_failures_per_ip": {
+            "label": "Failed sign-ins per IP",
+            "description": "Wrong passwords allowed from one IP address within the window before it is blocked. Set to 0 to turn this check off."
+          },
+          "login_max_failures_per_account": {
+            "label": "Failed sign-ins per account",
+            "description": "Wrong passwords allowed for one account within the window before new browsers are blocked from it. A browser signed in to the account before (and not signed out since) gets its own allowance, so its owner isn't locked out. Also limits wrong current passwords when changing password. Set to 0 to turn this check off."
+          },
+          "login_failure_window_minutes": {
+            "label": "Failed sign-in window (minutes)",
+            "description": "How long failed sign-ins are remembered. A blocked IP or account is released as they expire."
           }
         },
         "download": {

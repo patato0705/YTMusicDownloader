@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import * as authApi from '../../api/auth';
+import { retryAfterMinutes } from '../../utils';
 
 export const ChangePassword: React.FC = () => {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -87,6 +88,8 @@ export const ChangePassword: React.FC = () => {
     } catch (err: any) {
       if (err?.status === 400) {
         setCurrentPasswordError(t('auth.errors.currentPasswordIncorrect'));
+      } else if (err?.status === 429) {
+        setError(t('auth.errors.tooManyAttempts', { minutes: retryAfterMinutes(err) }));
       } else {
         setError(t('auth.errors.changePasswordFailed'));
       }

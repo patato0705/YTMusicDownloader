@@ -133,6 +133,18 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Failed password throttling (services/login_throttle.py). retry_after is
+    # repeated in the body because the frontend's ApiError doesn't keep headers.
+    from .services.login_throttle import TooManyAttempts
+
+    @app.exception_handler(TooManyAttempts)
+    async def too_many_attempts_handler(request: Request, exc: TooManyAttempts) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "too_many_attempts", "retry_after": exc.retry_after},
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+
     # Include API routers FIRST (these take precedence)
     routers_to_try: List[str] = [
         "admin",

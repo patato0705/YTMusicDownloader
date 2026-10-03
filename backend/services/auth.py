@@ -9,6 +9,7 @@ Functions:
 - create_refresh_token() - Generate and store refresh token
 - verify_access_token() - Decode and validate access token
 - verify_refresh_token() - Verify refresh token and return user
+- create_device_token() / verify_device_token() - Known-browser marker for login throttling
 - revoke_refresh_token() - Invalidate refresh token (logout)
 - cleanup_expired_tokens() - Remove expired tokens from database
 - authenticate_user() - Verify username/password
@@ -24,6 +25,7 @@ Exceptions:
   (subclass ValueError so generic handlers keep working)
 """
 from __future__ import annotations
+import functools
 import logging
 import secrets
 from datetime import datetime, timedelta
@@ -87,6 +89,8 @@ def create_access_token(user_id: int, username: str, role: str) -> str:
     - sub: user_id
     - username: username
     - role: user role
+    - typ: "access" (so other tokens signed with the same key, like device
+      tokens, can't be used as one)
     - exp: expiration timestamp
     - iat: issued at timestamp
     """
@@ -97,6 +101,7 @@ def create_access_token(user_id: int, username: str, role: str) -> str:
         "sub": str(user_id),
         "username": username,
         "role": role,
+        "typ": "access",
         "exp": expires,
         "iat": now,
     }
@@ -119,6 +124,9 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
             config.JWT_SECRET_KEY,
             algorithms=[config.JWT_ALGORITHM]
         )
+        if payload.get("typ") != "access":
+            logger.debug("Token is not an access token")
+            return None
         
         return {
             "user_id": int(payload["sub"]),
@@ -133,6 +141,44 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
         return None
     except Exception as e:
         logger.exception(f"Token verification error: {e}")
+        return None
+
+
+def create_device_token(user_id: int) -> str:
+    """
+    Create a device token: proof that this browser has signed in to this
+    account before. It authenticates nothing; login uses it to give known
+    browsers their own failed-attempt allowance (see services/login_throttle).
+
+    Payload:
+    - sub: user_id
+    - jti: random id, the browser's throttling bucket
+    - typ: "device"
+    - exp: expiration timestamp
+    """
+    payload = {
+        "sub": str(user_id),
+        "jti": secrets.token_urlsafe(16),
+        "typ": "device",
+        "exp": now_utc() + timedelta(days=config.DEVICE_TOKEN_EXPIRE_DAYS),
+    }
+    return jwt.encode(payload, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
+
+
+def verify_device_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Decode a device token.
+
+    Returns:
+        {"user_id", "jti"} if valid
+        None if invalid/expired/not a device token
+    """
+    try:
+        payload = jwt.decode(token, config.JWT_SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
+        if payload.get("typ") != "device":
+            return None
+        return {"user_id": int(payload["sub"]), "jti": str(payload["jti"])}
+    except (jwt.InvalidTokenError, KeyError, ValueError, TypeError):
         return None
 
 
@@ -257,6 +303,12 @@ def get_user_by_id(session: Session, user_id: int) -> Optional[User]:
     return session.get(User, user_id)
 
 
+@functools.cache
+def _dummy_password_hash() -> str:
+    """A hash no password matches, computed once at the configured cost."""
+    return hash_password(secrets.token_urlsafe(32))
+
+
 def authenticate_user(session: Session, username: str, password: str) -> Optional[User]:
     """
     Authenticate user with username/password.
@@ -268,10 +320,14 @@ def authenticate_user(session: Session, username: str, password: str) -> Optiona
     user = get_user_by_username(session, username)
     
     if not user:
+        # Spend the same bcrypt time as a real check, so response times
+        # don't reveal which usernames exist
+        verify_password(password, _dummy_password_hash())
         logger.debug(f"Authentication failed: user '{username}' not found")
         return None
     
     if not user.is_active:
+        verify_password(password, _dummy_password_hash())
         logger.debug(f"Authentication failed: user '{username}' is inactive")
         return None
     

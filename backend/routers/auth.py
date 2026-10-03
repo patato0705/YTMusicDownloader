@@ -20,6 +20,7 @@ from backend.db import get_session
 from backend.dependencies import get_current_user, require_admin
 from backend.settings import get_setting
 from backend.services import auth as auth_svc
+from backend.services import login_throttle
 from backend.schemas import (
     LoginRequest,
     RegisterRequest,
@@ -75,6 +76,42 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
+    # Signing out is the "this browser isn't mine" signal (public PC...): it
+    # stops being a known browser. A session that simply expires keeps it.
+    response.delete_cookie("device_token", path="/api/auth")
+
+
+# The device token marks a browser that has signed in to an account and not
+# signed out since (see login()). Scoped to /api/auth since only login reads it.
+def _set_device_cookie(response: Response, device_token: str) -> None:
+    response.set_cookie(
+        key="device_token",
+        value=device_token,
+        max_age=config.DEVICE_TOKEN_EXPIRE_DAYS * 86400,
+        httponly=True,
+        secure=config.COOKIE_SECURE,
+        samesite="lax",
+        path="/api/auth",
+    )
+
+
+# ============================================================================
+# FAILED ATTEMPT THROTTLING (services/login_throttle.py)
+# ============================================================================
+
+def _throttle_settings(session: Session) -> tuple[int, int, int]:
+    """(per-IP limit, per-account limit, window in seconds); a limit of 0 is off."""
+    return (
+        get_setting(session, "auth.login_max_failures_per_ip"),
+        get_setting(session, "auth.login_max_failures_per_account"),
+        get_setting(session, "auth.login_failure_window_minutes") * 60,
+    )
+
+
+def _client_ip(request: Request) -> str:
+    # Behind a reverse proxy this is only the real client if uvicorn trusts
+    # the proxy's X-Forwarded-For (FORWARDED_ALLOW_IPS, see README)
+    return request.client.host if request.client else "unknown"
 
 
 # ============================================================================
@@ -135,6 +172,7 @@ def register(
 @router.post("/login", response_model=LoginResponse)
 def login(
     data: LoginRequest,
+    request: Request,
     response: Response,
     session: Session = Depends(get_session),
 ):
@@ -144,11 +182,36 @@ def login(
     Sets the access token (15min) and refresh token (7 days) as httpOnly
     cookies, and also returns the access token in the body for use in the
     Authorization header on regular API calls.
+
+    Failed attempts are throttled per IP and per account (429 with
+    Retry-After once over the limit). A browser holding a device token for
+    the account (set on a previous successful login) is counted in its own
+    bucket instead of the account's, so failures from elsewhere can't lock
+    the owner out of the browser they normally use.
     """
+    ip_limit, account_limit, window = _throttle_settings(session)
+
+    device = None
+    device_cookie = request.cookies.get("device_token")
+    if device_cookie:
+        device = auth_svc.verify_device_token(device_cookie)
+    target = auth_svc.get_user_by_username(session, data.username)
+    if device and target and device["user_id"] == target.id:
+        account_bucket = f"login:device:{device['jti']}"
+    else:
+        device = None
+        # Every attempted username gets a bucket, existing or not, so a 429
+        # doesn't reveal which accounts exist
+        account_bucket = f"login:user:{data.username.lower()}"
+    buckets = [(f"login:ip:{_client_ip(request)}", ip_limit), (account_bucket, account_limit)]
+
+    login_throttle.check(buckets, window)
+
     # Authenticate user
     user = auth_svc.authenticate_user(session, data.username, data.password)
 
     if not user:
+        login_throttle.record_failure(buckets, window)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
@@ -172,6 +235,12 @@ def login(
 
     _set_access_cookie(response, access_token)
     _set_refresh_cookie(response, refresh_token)
+
+    # The IP and account buckets are left alone: clearing them on success
+    # would let someone with any valid account reset their allowance
+    if device:
+        login_throttle.clear(account_bucket)
+    _set_device_cookie(response, auth_svc.create_device_token(user.id))
 
     return LoginResponse(
         user=UserResponse.model_validate(user),
@@ -272,10 +341,17 @@ def change_password(
     """
     Change current user's password.
     
-    Requires current password for verification.
+    Requires current password for verification. Wrong current passwords
+    count against the per-account limit, so a stolen session can't be used
+    to brute-force the password.
     """
+    _, account_limit, window = _throttle_settings(session)
+    buckets = [(f"change_password:{current_user.id}", account_limit)]
+    login_throttle.check(buckets, window)
+
     # Verify current password
     if not auth_svc.verify_password(data.current_password, current_user.password_hash):
+        login_throttle.record_failure(buckets, window)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
@@ -286,6 +362,7 @@ def change_password(
     current_user.password_hash = new_hash
     session.add(current_user)
     session.commit()
+    login_throttle.clear(buckets[0][0])
     
     logger.info(f"Password changed for user {current_user.username}")
     
