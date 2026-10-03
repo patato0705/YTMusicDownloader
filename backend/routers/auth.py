@@ -196,7 +196,8 @@ def login(
     if device_cookie:
         device = auth_svc.verify_device_token(device_cookie)
     target = auth_svc.get_user_by_username(session, data.username)
-    if device and target and device["user_id"] == target.id:
+    # A password change since the token was issued revokes the trust too
+    if device and target and device["user_id"] == target.id and not auth_svc.token_revoked(target, device["issued_at"]):
         account_bucket = f"login:device:{device['jti']}"
     else:
         device = None
@@ -332,9 +333,11 @@ def get_current_user_info(
     return UserResponse.model_validate(current_user)
 
 
-@router.post("/change-password", response_model=MessageResponse)
+@router.post("/change-password", response_model=TokenResponse)
 def change_password(
     data: ChangePasswordRequest,
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -344,6 +347,11 @@ def change_password(
     Requires current password for verification. Wrong current passwords
     count against the per-account limit, so a stolen session can't be used
     to brute-force the password.
+
+    Signs the user out of every other session (their access tokens stop
+    working right away, not when they expire) and forgets other known
+    browsers. This session stays signed in: it keeps its refresh token and
+    gets a new access token (body + cookie) and device token.
     """
     _, account_limit, window = _throttle_settings(session)
     buckets = [(f"change_password:{current_user.id}", account_limit)]
@@ -357,13 +365,26 @@ def change_password(
             detail="Current password is incorrect",
         )
     
-    # Hash and update new password
-    new_hash = auth_svc.hash_password(data.new_password)
-    current_user.password_hash = new_hash
-    session.add(current_user)
-    session.commit()
+    revoked = auth_svc.change_password(
+        session,
+        current_user,
+        data.new_password,
+        keep_refresh_token=request.cookies.get("refresh_token"),
+    )
     login_throttle.clear(buckets[0][0])
     
-    logger.info(f"Password changed for user {current_user.username}")
-    
-    return MessageResponse(message="Password changed successfully")
+    logger.info(f"Password changed for user {current_user.username}, {revoked} other session(s) signed out")
+
+    access_token = auth_svc.create_access_token(
+        user_id=current_user.id,
+        username=current_user.username,
+        role=current_user.role,
+    )
+    _set_access_cookie(response, access_token)
+    _set_device_cookie(response, auth_svc.create_device_token(current_user.id))
+
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )

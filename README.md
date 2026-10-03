@@ -144,6 +144,8 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 
 Admins create users from **Admin Panel → Users**, or enable public registration in Settings.
 
+Changing your password (user menu → *Change Password*) signs you out of every other browser and device; the one you changed it from stays signed in.
+
 ### Following vs. downloading
 
 - **Follow an artist** (artist page → *Follow*): downloads every release and keeps watching for new ones.

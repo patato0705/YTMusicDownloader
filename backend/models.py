@@ -303,6 +303,10 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     last_login_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Access and device tokens issued before this are rejected (set when the
+    # password changes, see services/auth.change_password). Whole seconds,
+    # like JWT "iat".
+    tokens_valid_after: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """Return user data (excluding password)"""

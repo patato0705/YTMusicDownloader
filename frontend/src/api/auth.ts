@@ -84,7 +84,10 @@ export async function getCurrentUser(): Promise<User> {
  * Change current user's password
  */
 export async function changePassword(data: ChangePasswordRequest): Promise<void> {
-  await api.post('/auth/change-password', data);
+  // Changing the password signs out every session, this one included; the
+  // response carries this session's replacement access token.
+  const response = await api.post<{ access_token: string }>('/auth/change-password', data);
+  setAccessToken(response.access_token);
 }
 
 /**

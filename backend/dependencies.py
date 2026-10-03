@@ -60,6 +60,14 @@ def _resolve_user_from_token(token: str, session: Session) -> User:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Signed out by a password change since this token was issued
+    if auth_svc.token_revoked(user, payload["issued_at"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user
 
 

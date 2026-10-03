@@ -10,6 +10,7 @@ Functions:
 - verify_access_token() - Decode and validate access token
 - verify_refresh_token() - Verify refresh token and return user
 - create_device_token() / verify_device_token() - Known-browser marker for login throttling
+- token_revoked() - Whether a token predates the user's tokens_valid_after
 - revoke_refresh_token() - Invalidate refresh token (logout)
 - cleanup_expired_tokens() - Remove expired tokens from database
 - authenticate_user() - Verify username/password
@@ -18,6 +19,7 @@ Functions:
 - get_user_by_email() - Fetch user by email
 - get_user_by_id() - Fetch user by ID
 - update_last_login() - Update user's last_login_at
+- change_password() - Set a new password and sign out the user's other sessions
 - ensure_first_admin() - Create first admin user on startup
 
 Exceptions:
@@ -37,7 +39,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import User, RefreshToken
-from ..time_utils import now_utc
+from ..time_utils import now_utc, ensure_timezone_aware
 from .. import config
 
 logger = logging.getLogger("services.auth")
@@ -115,8 +117,10 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
     Decode and verify JWT access token.
     
     Returns:
-        Payload dict with user_id, username, role if valid
+        Payload dict with user_id, username, role, issued_at if valid
         None if invalid/expired
+
+    Callers must still reject it if token_revoked() says so (needs the user).
     """
     try:
         payload = jwt.decode(
@@ -132,6 +136,7 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
             "user_id": int(payload["sub"]),
             "username": payload["username"],
             "role": payload["role"],
+            "issued_at": int(payload["iat"]),
         }
     except jwt.ExpiredSignatureError:
         logger.debug("Access token expired")
@@ -155,12 +160,15 @@ def create_device_token(user_id: int) -> str:
     - jti: random id, the browser's throttling bucket
     - typ: "device"
     - exp: expiration timestamp
+    - iat: issued at timestamp (checked against token_revoked())
     """
+    now = now_utc()
     payload = {
         "sub": str(user_id),
         "jti": secrets.token_urlsafe(16),
         "typ": "device",
-        "exp": now_utc() + timedelta(days=config.DEVICE_TOKEN_EXPIRE_DAYS),
+        "exp": now + timedelta(days=config.DEVICE_TOKEN_EXPIRE_DAYS),
+        "iat": now,
     }
     return jwt.encode(payload, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
 
@@ -170,16 +178,29 @@ def verify_device_token(token: str) -> Optional[Dict[str, Any]]:
     Decode a device token.
 
     Returns:
-        {"user_id", "jti"} if valid
+        {"user_id", "jti", "issued_at"} if valid
         None if invalid/expired/not a device token
+
+    Callers must still reject it if token_revoked() says so (needs the user).
     """
     try:
         payload = jwt.decode(token, config.JWT_SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
         if payload.get("typ") != "device":
             return None
-        return {"user_id": int(payload["sub"]), "jti": str(payload["jti"])}
+        return {"user_id": int(payload["sub"]), "jti": str(payload["jti"]), "issued_at": int(payload["iat"])}
     except (jwt.InvalidTokenError, KeyError, ValueError, TypeError):
         return None
+
+
+def token_revoked(user: User, issued_at: int) -> bool:
+    """
+    True if a token issued at `issued_at` (JWT "iat", whole seconds) was
+    issued before the user's tokens_valid_after. A token from the very
+    second of the cutoff is still accepted: "iat" can't tell before from
+    after within it.
+    """
+    cutoff = ensure_timezone_aware(user.tokens_valid_after)
+    return cutoff is not None and issued_at < int(cutoff.timestamp())
 
 
 def create_refresh_token(session: Session, user_id: int) -> str:
@@ -346,6 +367,42 @@ def update_last_login(session: Session, user_id: int) -> None:
         user.last_login_at = now_utc()
         session.add(user)
         session.commit()
+
+
+def change_password(
+    session: Session,
+    user: User,
+    new_password: str,
+    keep_refresh_token: Optional[str] = None,
+) -> int:
+    """
+    Set a new password and sign the user out everywhere else: every refresh
+    token but `keep_refresh_token` (the session making the change) is
+    revoked, and access/device tokens issued so far stop being accepted
+    (tokens_valid_after). The caller hands the current session fresh ones.
+
+    Returns:
+        Number of refresh tokens revoked
+    """
+    user.password_hash = hash_password(new_password)
+    user.tokens_valid_after = now_utc().replace(microsecond=0)
+    session.add(user)
+
+    stmt = select(RefreshToken).where(
+        RefreshToken.user_id == user.id,
+        RefreshToken.revoked.is_(False),
+    )
+    revoked = 0
+    for token in session.execute(stmt).scalars().all():
+        if keep_refresh_token is not None and token.token == keep_refresh_token:
+            continue
+        token.revoked = True
+        session.add(token)
+        revoked += 1
+
+    session.commit()
+    session.refresh(user)
+    return revoked
 
 
 # ============================================================================
