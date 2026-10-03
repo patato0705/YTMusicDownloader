@@ -24,7 +24,7 @@ export {
 export { formatNumber } from './formatting';
 
 // Validation utilities
-export { getUsernameError, isValidEmail, getPasswordError } from './validation';
+export { getUsernameError, getPasswordError } from './validation';
 export type { UsernameError, PasswordError } from './validation';
 
 // API error parsing

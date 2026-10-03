@@ -107,7 +107,6 @@ class CatalogSection(BaseModel):
 
 class ExportedUser(BaseModel):
     username: str = Field(..., min_length=1, max_length=64)
-    email: str = Field(..., min_length=3, max_length=255)
     # bcrypt hashes are self-contained (salt embedded), so they move between
     # instances as-is. Anything else can't be verified by this app.
     password_hash: str = Field(..., pattern=r"^\$2[aby]\$\d{2}\$.{53}$")

@@ -106,7 +106,6 @@ Set in `docker-compose.yml`. All are optional.
 | `DOWNLOAD_WORKERS` | `3` | Number of download worker *processes*. This is a ceiling; how many actually run at once is the *Max concurrent downloads* setting in the admin panel. |
 | `CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated origins, only needed if you serve the frontend from a different origin than the API. Leave unset for the standard setup. |
 | `FIRST_ADMIN_USERNAME` | `admin` | First admin account, created only when the database is empty |
-| `FIRST_ADMIN_EMAIL` | `admin@localhost` | |
 | `FIRST_ADMIN_PASSWORD` | `default` | |
 | `LOG_LOCAL_TIME` | `1` | Set to `0` for UTC log timestamps |
 

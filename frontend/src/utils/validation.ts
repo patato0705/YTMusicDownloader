@@ -17,10 +17,6 @@ export function getUsernameError(username: string): UsernameError {
   return null;
 }
 
-export function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
 /** Matches the backend's min_length=8 password requirement. */
 export function getPasswordError(password: string): PasswordError {
   if (!password) return null;

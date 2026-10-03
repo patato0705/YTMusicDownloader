@@ -221,7 +221,6 @@ def build_users_section(session: Session) -> List[Dict[str, Any]]:
     return [
         {
             "username": u.username,
-            "email": u.email,
             "password_hash": u.password_hash,
             "role": u.role,
             "is_active": bool(u.is_active),
@@ -304,12 +303,11 @@ def _import_users(session: Session, doc: ExportDocument, warnings: List[ImportWa
     for item in doc.users or []:
         # Never touch an existing account (that includes the admin running the
         # import): conflicts are reported, not resolved.
-        if auth_svc.get_user_by_username(session, item.username) or auth_svc.get_user_by_email(session, item.email):
+        if auth_svc.get_user_by_username(session, item.username):
             result.skipped.append(item.username)
             continue
         session.add(User(
             username=item.username,
-            email=item.email,
             password_hash=item.password_hash,
             role=item.role,
             is_active=item.is_active,

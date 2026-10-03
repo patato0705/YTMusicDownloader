@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Optional
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # ============================================================================
@@ -20,7 +20,6 @@ class LoginRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
-    email: EmailStr
     password: str = Field(..., min_length=8)
     
     @field_validator("username")
@@ -34,7 +33,6 @@ class RegisterRequest(BaseModel):
 class CreateUserRequest(BaseModel):
     """Request to create a new user (admin only)"""
     username: str = Field(..., min_length=3, max_length=64)
-    email: EmailStr
     password: str = Field(..., min_length=8)
     role: str = Field(..., pattern="^(administrator|member|visitor)$")
     
@@ -52,7 +50,6 @@ class ChangePasswordRequest(BaseModel):
 
 
 class UpdateUserRequest(BaseModel):
-    email: Optional[EmailStr] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -70,7 +67,6 @@ class TokenResponse(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
-    email: str
     role: str
     is_active: bool
     created_at: datetime

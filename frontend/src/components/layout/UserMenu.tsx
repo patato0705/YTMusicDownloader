@@ -135,14 +135,13 @@ export const UserMenu: React.FC<{
                 {user.username[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2">
                   <div className="font-semibold text-foreground truncate">{user.username}</div>
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-medium rounded-full ${roleColors[user.role]} flex-shrink-0`}>
                     <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
                     {user.role}
                   </span>
                 </div>
-                <div className="text-sm text-muted-foreground truncate">{user.email}</div>
               </div>
             </div>
           </div>

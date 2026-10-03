@@ -16,14 +16,13 @@ Functions:
 - authenticate_user() - Verify username/password
 - create_user() - Register new user
 - get_user_by_username() - Fetch user by username
-- get_user_by_email() - Fetch user by email
 - get_user_by_id() - Fetch user by ID
 - update_last_login() - Update user's last_login_at
 - change_password() - Set a new password and sign out the user's other sessions
 - ensure_first_admin() - Create first admin user on startup
 
 Exceptions:
-- UsernameTakenError / EmailTakenError - raised by create_user() on conflicts
+- UsernameTakenError - raised by create_user() on conflicts
   (subclass ValueError so generic handlers keep working)
 """
 from __future__ import annotations
@@ -47,10 +46,6 @@ logger = logging.getLogger("services.auth")
 
 class UsernameTakenError(ValueError):
     """Username is already registered."""
-
-
-class EmailTakenError(ValueError):
-    """Email is already registered."""
 
 
 # ============================================================================
@@ -313,12 +308,6 @@ def get_user_by_username(session: Session, username: str) -> Optional[User]:
     return session.execute(stmt).scalars().first()
 
 
-def get_user_by_email(session: Session, email: str) -> Optional[User]:
-    """Fetch user by email (case-insensitive via the column's NOCASE collation)"""
-    stmt = select(User).where(User.email == email)
-    return session.execute(stmt).scalars().first()
-
-
 def get_user_by_id(session: Session, user_id: int) -> Optional[User]:
     """Fetch user by ID"""
     return session.get(User, user_id)
@@ -412,7 +401,6 @@ def change_password(
 def create_user(
     session: Session,
     username: str,
-    email: str,
     password: str,
     role: str = config.ROLE_VISITOR,
 ) -> User:
@@ -422,7 +410,6 @@ def create_user(
     Args:
         session: SQLAlchemy session
         username: Unique username
-        email: Unique email address
         password: Plain text password (will be hashed)
         role: User role (default: visitor)
     
@@ -431,12 +418,11 @@ def create_user(
     
     Raises:
         UsernameTakenError: If username already exists
-        EmailTakenError: If email already exists
         ValueError: If inputs are missing or role is invalid
     """
     # Validate inputs
-    if not username or not email or not password:
-        raise ValueError("Username, email, and password are required")
+    if not username or not password:
+        raise ValueError("Username and password are required")
     
     if role not in config.VALID_ROLES:
         raise ValueError(f"Invalid role: {role}. Must be one of {config.VALID_ROLES}")
@@ -445,17 +431,12 @@ def create_user(
     if get_user_by_username(session, username):
         raise UsernameTakenError(f"Username '{username}' already exists")
     
-    # Check for existing email
-    if get_user_by_email(session, email):
-        raise EmailTakenError(f"Email '{email}' already exists")
-    
     # Hash password
     password_hash = hash_password(password)
     
     # Create user
     user = User(
         username=username,
-        email=email,
         password_hash=password_hash,
         role=role,
         is_active=True,
@@ -492,7 +473,6 @@ def ensure_first_admin(session: Session) -> None:
         admin = create_user(
             session=session,
             username=config.FIRST_ADMIN_USERNAME,
-            email=config.FIRST_ADMIN_EMAIL,
             password=config.FIRST_ADMIN_PASSWORD,
             role=config.ROLE_ADMINISTRATOR,
         )

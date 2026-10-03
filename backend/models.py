@@ -297,7 +297,6 @@ class User(Base):
     # NOCASE: equality and the unique index are case-insensitive (ASCII), so
     # "Admin" and "admin" are the same account at the DB level
     username: Mapped[str] = mapped_column(String(64, collation="NOCASE"), unique=True, nullable=False, index=True)
-    email: Mapped[str] = mapped_column(String(255, collation="NOCASE"), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")  # administrator, member, visitor
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -316,7 +315,6 @@ class User(Base):
         return {
             "id": getattr(self, "id", None),
             "username": getattr(self, "username", None),
-            "email": getattr(self, "email", None),
             "role": getattr(self, "role", "member"),
             "is_active": bool(getattr(self, "is_active", True)),
             "created_at": created.isoformat() if created else None,

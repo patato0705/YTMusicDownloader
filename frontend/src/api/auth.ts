@@ -8,7 +8,6 @@ import { api, apiFetch, setAccessToken, clearAccessToken } from './client';
 export interface User {
   id: number;
   username: string;
-  email: string;
   role: 'administrator' | 'member' | 'visitor';
   is_active: boolean;
   created_at: string;
@@ -24,7 +23,6 @@ export interface LoginResponse {
 
 export interface RegisterRequest {
   username: string;
-  email: string;
   password: string;
 }
 

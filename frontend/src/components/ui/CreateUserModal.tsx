@@ -4,7 +4,7 @@ import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
 import * as adminApi from '../../api/admin';
-import { parseApiError, getUsernameError, isValidEmail, getPasswordError } from '../../utils';
+import { parseApiError, getUsernameError, getPasswordError } from '../../utils';
 
 interface CreateUserModalProps {
   onClose: () => void;
@@ -13,12 +13,10 @@ interface CreateUserModalProps {
 
 export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuccess }) => {
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'member' | 'visitor' | 'administrator'>('member');
   const [error, setError] = useState('');
   const [usernameError, setUsernameError] = useState('');
-  const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
   const { t } = useI18n();
@@ -37,15 +35,6 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
     }
   };
 
-  // Validate email
-  const validateEmail = (value: string) => {
-    if (value && !isValidEmail(value)) {
-      setEmailError(t('auth.errors.invalidEmail'));
-    } else {
-      setEmailError('');
-    }
-  };
-
   // Validate password
   const validatePassword = (value: string) => {
     if (getPasswordError(value) === 'too_short') {
@@ -59,7 +48,6 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
     e.preventDefault();
     setError('');
     setUsernameError('');
-    setEmailError('');
     setPasswordError('');
 
     // Validate all fields
@@ -80,15 +68,6 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
       return;
     }
 
-    if (!email) {
-      setEmailError(t('auth.errors.emailRequired'));
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailError(t('auth.errors.invalidEmail'));
-      return;
-    }
-
     if (!password) {
       setPasswordError(t('auth.errors.passwordRequired'));
       return;
@@ -103,7 +82,6 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
     try {
       await adminApi.createUser({
         username,
-        email,
         password,
         role,
       });
@@ -124,9 +102,6 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
           if (field === 'username') {
             setUsernameError(t('auth.errors.usernameInvalid'));
             hasFieldError = true;
-          } else if (field === 'email') {
-            setEmailError(t('auth.errors.emailInvalid'));
-            hasFieldError = true;
           } else if (field === 'password') {
             setPasswordError(t('auth.errors.passwordInvalid'));
             hasFieldError = true;
@@ -138,8 +113,6 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
         }
       } else if (err?.status === 409 && data?.detail === 'username_taken') {
         setUsernameError(t('auth.errors.usernameTaken'));
-      } else if (err?.status === 409 && data?.detail === 'email_taken') {
-        setEmailError(t('auth.errors.emailTaken'));
       } else {
         setError(parseApiError(err));
       }
@@ -196,34 +169,6 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
             {usernameError && (
               <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
                 <span>⚠️</span> {usernameError}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              {t('admin.users.email')}
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (e.target.value) validateEmail(e.target.value);
-                else setEmailError('');
-              }}
-              onBlur={(e) => validateEmail(e.target.value)}
-              className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 ${
-                emailError 
-                  ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                  : 'focus:ring-blue-500 dark:focus:ring-red-600'
-              } transition-all`}
-              disabled={loading}
-            />
-            {emailError && (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                <span>⚠️</span> {emailError}
               </p>
             )}
           </div>

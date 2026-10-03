@@ -107,8 +107,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
   // Filter users based on search and filters
   const filteredUsers = users.filter(u => {
     const matchesSearch = searchQuery === '' ||
-      u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase());
+      u.username.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' ||
       (statusFilter === 'active' && u.is_active) ||
@@ -211,9 +210,6 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                     {t('admin.users.username')}
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {t('admin.users.email')}
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     <span className="inline-flex items-center gap-1.5">
                       {t('admin.users.role')}
                       <InfoTooltip label={t('admin.users.roleInfo.title')} content={roleInfo} />
@@ -242,9 +238,6 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                     <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">
                         <div className="font-semibold text-foreground">{u.username}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-muted-foreground">{u.email}</div>
                       </td>
                       <td className="px-6 py-4">
                         <Select

@@ -5,18 +5,16 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
 import * as authApi from '../../api/auth';
-import { getUsernameError, isValidEmail, getPasswordError } from '../../utils';
+import { getUsernameError, getPasswordError } from '../../utils';
 
 export const Register: React.FC = () => {
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [usernameError, setUsernameError] = useState('');
-  const [emailError, setEmailError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
   const [checkingRegistration, setCheckingRegistration] = useState(true);
@@ -64,15 +62,6 @@ export const Register: React.FC = () => {
     }
   };
 
-  // Validate email format
-  const validateEmail = (value: string) => {
-    if (value && !isValidEmail(value)) {
-      setEmailError(t('auth.errors.invalidEmail'));
-    } else {
-      setEmailError('');
-    }
-  };
-
   // Validate password
   const validatePassword = (pass: string) => {
     if (getPasswordError(pass) === 'too_short') {
@@ -95,18 +84,12 @@ export const Register: React.FC = () => {
     e.preventDefault();
     setError('');
     setUsernameError('');
-    setEmailError('');
     setPasswordError('');
     setConfirmError('');
 
     // Check for empty fields
     if (!username) {
       setUsernameError(t('auth.errors.usernameRequired'));
-      return;
-    }
-
-    if (!email) {
-      setEmailError(t('auth.errors.emailRequired'));
       return;
     }
 
@@ -149,7 +132,7 @@ export const Register: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await authApi.register({ username, email, password });
+      await authApi.register({ username, password });
 
       // Auto-login after registration
       await login(username, password);
@@ -168,9 +151,6 @@ export const Register: React.FC = () => {
           if (field === 'username') {
             setUsernameError(t('auth.errors.usernameInvalid'));
             hasFieldError = true;
-          } else if (field === 'email') {
-            setEmailError(t('auth.errors.emailInvalid'));
-            hasFieldError = true;
           } else if (field === 'password') {
             setPasswordError(t('auth.errors.passwordInvalid'));
             hasFieldError = true;
@@ -181,8 +161,6 @@ export const Register: React.FC = () => {
         setError(t('auth.register.disabled.message'));
       } else if (err?.status === 409 && data?.detail === 'username_taken') {
         setUsernameError(t('auth.errors.usernameTaken'));
-      } else if (err?.status === 409 && data?.detail === 'email_taken') {
-        setEmailError(t('auth.errors.emailTaken'));
       } else {
         setError(t('auth.errors.registrationFailed'));
       }
@@ -317,38 +295,6 @@ export const Register: React.FC = () => {
               ) : (
                 <p className="text-xs text-muted-foreground mt-1.5">
                   {t('auth.register.usernameHint')}
-                </p>
-              )}
-            </div>
-
-            {/* Email field */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-foreground mb-2">
-                {t('auth.register.email')}
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (e.target.value) validateEmail(e.target.value);
-                  else setEmailError('');
-                }}
-                onBlur={(e) => validateEmail(e.target.value)}
-                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
-                  emailError 
-                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
-                } focus:border-transparent transition-all duration-300`}
-                placeholder={t('auth.register.mailPlaceholder')}
-                disabled={isLoading}
-              />
-              {emailError && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                  <span>⚠️</span>
-                  {emailError}
                 </p>
               )}
             </div>

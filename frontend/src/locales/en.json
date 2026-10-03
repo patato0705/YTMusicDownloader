@@ -48,7 +48,6 @@
       "title": "Create Account",
       "subtitle": "Join the music library",
       "username": "Username",
-      "email": "Email",
       "password": "Password",
       "confirmPassword": "Confirm Password",
       "button": "Create account",
@@ -56,7 +55,6 @@
       "hasAccount": "Already have an account?",
       "login": "Sign in here",
       "usernameHint": "Username must be 3-64 characters",
-      "mailPlaceholder": "you@example.com",
       "disabled": {
         "title": "Registration Disabled",
         "message": "Public registration is currently disabled. Please contact an administrator for access.",
@@ -84,8 +82,6 @@
     "errors": {
       "usernameRequired": "Username is required",
       "passwordRequired": "Password is required",
-      "emailRequired": "Email is required",
-      "invalidEmail": "Please enter a valid email address",
       "currentPasswordRequired": "Current password is required",
       "newPasswordRequired": "New password is required",
       "confirmPasswordRequired": "Please confirm your password",
@@ -97,14 +93,12 @@
       "usernameTooLong": "Username must be at most 64 characters",
       "usernameInvalidChars": "Username may only contain letters, numbers, hyphens, and underscores",
       "usernameInvalid": "Invalid username",
-      "emailInvalid": "Invalid email address",
       "passwordInvalid": "Invalid password",
       "registrationFailed": "Registration failed",
       "changePasswordFailed": "Failed to change password",
       "currentPasswordIncorrect": "Current password is incorrect",
       "loginFailed": "Login failed. Please try again.",
       "usernameTaken": "This username is already taken",
-      "emailTaken": "This email is already in use",
       "tooManyAttempts": "Too many failed attempts. Try again in {minutes} min."
     }
   },
@@ -141,7 +135,6 @@
     },
     "account": {
       "username": "Username",
-      "email": "Email",
       "role": "Role",
       "changePassword": "Change Password"
     },
@@ -465,7 +458,6 @@
       "allRoles": "All roles",
       "create": "Create user",
       "username": "Username",
-      "email": "Email",
       "role": "Role",
       "status": "Status",
       "actions": "Actions",

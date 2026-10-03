@@ -48,7 +48,6 @@
       "title": "Créer un compte",
       "subtitle": "Rejoignez la bibliothèque musicale",
       "username": "Nom d'utilisateur",
-      "email": "Email",
       "password": "Mot de passe",
       "confirmPassword": "Confirmer le mot de passe",
       "button": "Créer un compte",
@@ -56,7 +55,6 @@
       "hasAccount": "Vous avez déjà un compte ?",
       "login": "Se connecter ici",
       "usernameHint": "Le nom d'utilisateur doit contenir entre 3 et 64 caractères",
-      "mailPlaceholder": "vous@exemple.com",
       "disabled": {
         "title": "Inscription désactivée",
         "message": "L'inscription publique est actuellement désactivée. Veuillez contacter un administrateur pour obtenir un accès.",
@@ -84,8 +82,6 @@
     "errors": {
       "usernameRequired": "Le nom d'utilisateur est requis",
       "passwordRequired": "Le mot de passe est requis",
-      "emailRequired": "L'email est requis",
-      "invalidEmail": "Veuillez saisir une adresse email valide",
       "currentPasswordRequired": "Le mot de passe actuel est requis",
       "newPasswordRequired": "Le nouveau mot de passe est requis",
       "confirmPasswordRequired": "Veuillez confirmer votre mot de passe",
@@ -97,14 +93,12 @@
       "usernameTooLong": "Le nom d'utilisateur doit contenir au plus 64 caractères",
       "usernameInvalidChars": "Le nom d'utilisateur ne peut contenir que des lettres, chiffres, tirets et underscores",
       "usernameInvalid": "Nom d'utilisateur invalide",
-      "emailInvalid": "Adresse email invalide",
       "passwordInvalid": "Mot de passe invalide",
       "registrationFailed": "Échec de l'inscription",
       "changePasswordFailed": "Échec du changement de mot de passe",
       "currentPasswordIncorrect": "Le mot de passe actuel est incorrect",
       "loginFailed": "Échec de la connexion. Veuillez réessayer.",
       "usernameTaken": "Ce nom d'utilisateur est déjà utilisé",
-      "emailTaken": "Cette adresse email est déjà utilisée",
       "tooManyAttempts": "Trop de tentatives échouées. Réessayez dans {minutes} min."
     }
   },
@@ -141,7 +135,6 @@
     },
     "account": {
       "username": "Nom d'utilisateur",
-      "email": "Email",
       "role": "Rôle",
       "changePassword": "Changer le mot de passe"
     },
@@ -465,7 +458,6 @@
       "allRoles": "Tous les rôles",
       "create": "Créer un utilisateur",
       "username": "Nom d'utilisateur",
-      "email": "Email",
       "role": "Rôle",
       "status": "Statut",
       "actions": "Actions",

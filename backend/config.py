@@ -55,7 +55,6 @@ BCRYPT_ROUNDS = 12  # Balance between security and performance
 
 # First-time setup
 FIRST_ADMIN_USERNAME = os.environ.get("FIRST_ADMIN_USERNAME", "admin")
-FIRST_ADMIN_EMAIL = os.environ.get("FIRST_ADMIN_EMAIL", "admin@localhost")
 FIRST_ADMIN_PASSWORD = os.environ.get("FIRST_ADMIN_PASSWORD", "default")
 
 # User roles

@@ -151,7 +151,6 @@ def register(
         user = auth_svc.create_user(
             session=session,
             username=data.username,
-            email=data.email,
             password=data.password,
             role=config.ROLE_VISITOR,  # Default role for public registration
         )
@@ -160,8 +159,6 @@ def register(
     
     except auth_svc.UsernameTakenError:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username_taken")
-    except auth_svc.EmailTakenError:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="email_taken")
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
