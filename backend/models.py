@@ -294,8 +294,10 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    # NOCASE: equality and the unique index are case-insensitive (ASCII), so
+    # "Admin" and "admin" are the same account at the DB level
+    username: Mapped[str] = mapped_column(String(64, collation="NOCASE"), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255, collation="NOCASE"), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")  # administrator, member, visitor
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

@@ -240,14 +240,15 @@ def cleanup_expired_tokens(session: Session) -> int:
 # ============================================================================
 
 def get_user_by_username(session: Session, username: str) -> Optional[User]:
-    """Fetch user by username (case-insensitive)"""
-    stmt = select(User).where(User.username.ilike(username))
+    """Fetch user by username (case-insensitive via the column's NOCASE collation)"""
+    # Plain equality, not ilike: LIKE treats "%" and "_" as wildcards
+    stmt = select(User).where(User.username == username)
     return session.execute(stmt).scalars().first()
 
 
 def get_user_by_email(session: Session, email: str) -> Optional[User]:
-    """Fetch user by email (case-insensitive)"""
-    stmt = select(User).where(User.email.ilike(email))
+    """Fetch user by email (case-insensitive via the column's NOCASE collation)"""
+    stmt = select(User).where(User.email == email)
     return session.execute(stmt).scalars().first()
 
 
