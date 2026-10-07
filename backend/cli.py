@@ -126,9 +126,15 @@ def cmd_list_users(args) -> None:
     from .models import User
     session = _session()
     users = session.execute(select(User).order_by(User.id)).scalars().all()
-    rows = [(u.username, u.role, "active" if u.is_active else "inactive") for u in users]
-    widths = [max(len(r[i]) for r in rows + [("USERNAME", "ROLE", "STATUS")]) for i in range(3)]
-    for row in [("USERNAME", "ROLE", "STATUS")] + rows:
+
+    def sign_in(u) -> str:
+        methods = (["sso"] if u.is_oidc else []) + (["password"] if u.has_password else [])
+        return "+".join(methods) or "none"
+
+    header = ("USERNAME", "ROLE", "STATUS", "SIGN-IN")
+    rows = [(u.username, u.role, "active" if u.is_active else "inactive", sign_in(u)) for u in users]
+    widths = [max(len(r[i]) for r in rows + [header]) for i in range(len(header))]
+    for row in [header] + rows:
         print("  ".join(col.ljust(w) for col, w in zip(row, widths)).rstrip())
 
 
@@ -136,6 +142,12 @@ def cmd_create_user(args) -> None:
     from pydantic import ValidationError
     from .schemas import CreateUserRequest
     from .services import auth as auth_svc
+    from . import config
+    if not config.PASSWORD_LOGIN_ENABLED:
+        raise CliError(
+            "password sign-in is disabled (PASSWORD_LOGIN_ENABLED=false), a password account couldn't sign in. "
+            "Single sign-on accounts are created at their first sign-in."
+        )
     session = _session()
     if auth_svc.get_user_by_username(session, args.username):
         raise CliError(f"user '{args.username}' already exists")
@@ -172,6 +184,15 @@ def cmd_reset_password(args) -> None:
     if args.generate:
         print(f"Temporary password: {password}")
         print("It will have to be changed at next sign-in.")
+    from . import config
+    if user.is_oidc:
+        print("Note: this is a single sign-on account; it can now also sign in with this password.")
+    if not config.PASSWORD_LOGIN_ENABLED:
+        print(
+            "warning: password sign-in is disabled (PASSWORD_LOGIN_ENABLED=false); "
+            "set it to true and restart to use this password.",
+            file=sys.stderr,
+        )
 
 
 def cmd_set_role(args) -> None:
@@ -183,6 +204,13 @@ def cmd_set_role(args) -> None:
     except ValueError as e:
         raise CliError(str(e))
     print(f"'{user.username}' is now {args.role}.")
+    from . import config
+    if user.is_oidc and config.OIDC_ROLES_FROM_GROUPS:
+        print(
+            "warning: roles of single sign-on accounts come from provider groups "
+            "(OIDC_ADMIN_GROUP / OIDC_MEMBER_GROUP); this one is re-applied at their next sign-in.",
+            file=sys.stderr,
+        )
     _warn_if_no_admin(session)
 
 
@@ -230,8 +258,7 @@ def cmd_get_setting(args) -> None:
     from . import settings as settings_module
     session = _session()
     if args.key:
-        if args.key not in settings_module.DEFAULT_SETTINGS or settings_module.is_internal(args.key):
-            raise CliError(f"unknown setting '{args.key}' (run get-setting without a key to list them)")
+        _check_setting_key(args.key)
         print(json.dumps(settings_module.get_setting(session, args.key)))
         return
     for s in settings_module.get_all_settings(session):
@@ -259,10 +286,17 @@ def _parse_setting_value(setting_type: str, raw: str):
     return raw
 
 
+def _check_setting_key(key: str) -> None:
+    from . import settings as settings_module
+    if key not in settings_module.DEFAULT_SETTINGS or settings_module.is_internal(key):
+        raise CliError(f"unknown setting '{key}' (run get-setting to list them)")
+    if not settings_module.is_applicable(key):
+        raise CliError(f"'{key}' doesn't apply to the current sign-in configuration (see PASSWORD_LOGIN_ENABLED / OIDC_*)")
+
+
 def cmd_set_setting(args) -> None:
     from . import settings as settings_module
-    if args.key not in settings_module.DEFAULT_SETTINGS or settings_module.is_internal(args.key):
-        raise CliError(f"unknown setting '{args.key}' (run get-setting to list them)")
+    _check_setting_key(args.key)
     value = _parse_setting_value(settings_module.DEFAULT_SETTINGS[args.key]["type"], args.value)
     session = _session()
     try:

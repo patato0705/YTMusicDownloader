@@ -14,6 +14,8 @@ import { Select } from '../ui/Select';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { InfoTooltip } from '../ui/InfoTooltip';
 import * as adminApi from '../../api/admin';
+import * as authApi from '../../api/auth';
+import type { AuthConfig } from '../../api/auth';
 import type { User } from '../../api/admin';
 import { parseApiError } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
@@ -49,6 +51,10 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all');
 
+  // Which actions apply: password accounts can't be created or reset with
+  // password sign-in off, and SSO roles can't be edited when groups own them
+  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
+
   const loadUsers = async () => {
     const usersData = await adminApi.listUsers(true); // Include inactive users
     setUsers(usersData);
@@ -60,7 +66,8 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
       setLoading(true);
       setError(null);
       try {
-        await loadUsers();
+        const [, config] = await Promise.all([loadUsers(), authApi.getAuthConfig()]);
+        if (!cancelled) setAuthConfig(config);
       } catch (err: any) {
         console.error('Failed to load users:', err);
         if (!cancelled) setError(parseApiError(err, 'Failed to load data'));
@@ -228,9 +235,11 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
               ]}
             />
 
-            <Button onClick={() => setShowCreateModal(true)} variant="primary">
-              + {t('admin.users.create')}
-            </Button>
+            {authConfig?.password_login_enabled && (
+              <Button onClick={() => setShowCreateModal(true)} variant="primary">
+                + {t('admin.users.create')}
+              </Button>
+            )}
           </div>
 
           <div className="text-sm text-muted-foreground">
@@ -275,16 +284,29 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                   filteredUsers.map((u) => (
                     <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-foreground">{u.username}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-foreground">{u.username}</span>
+                          {u.is_oidc && (
+                            <span
+                              className="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+                              title={t('admin.users.ssoTooltip', { name: authConfig?.oidc_provider_name ?? 'SSO' })}
+                            >
+                              {t('admin.users.ssoBadge')}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
-                        <Select
-                          value={u.role}
-                          onChange={(value) => changeUserRole(u.id, value)}
-                          options={roleOptions}
-                          disabled={u.id === user?.id}
-                          className={`text-xs font-medium ${roleColors[u.role]} border-0 py-1`}
-                        />
+                        {/* Groups own SSO roles: a change here would be undone at their next sign-in */}
+                        <span title={u.is_oidc && authConfig?.oidc_roles_from_groups ? t('admin.users.roleFromGroups') : undefined}>
+                          <Select
+                            value={u.role}
+                            onChange={(value) => changeUserRole(u.id, value)}
+                            options={roleOptions}
+                            disabled={u.id === user?.id || (u.is_oidc && !!authConfig?.oidc_roles_from_groups)}
+                            className={`text-xs font-medium ${roleColors[u.role]} border-0 py-1`}
+                          />
+                        </span>
                       </td>
                       <td className="px-6 py-4">
                         <ToggleSwitch
@@ -295,15 +317,18 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                         />
                       </td>
                       <td className="px-6 py-4 text-right whitespace-nowrap space-x-2">
-                        {/* Own password: Change Password instead (needs the current one) */}
-                        <Button
-                          onClick={() => setResetConfirm({ userId: u.id, username: u.username })}
-                          variant="outline"
-                          size="sm"
-                          disabled={u.id === user?.id}
-                        >
-                          {t('admin.users.resetPassword')}
-                        </Button>
+                        {/* Own password: Change Password instead (needs the current one).
+                            SSO accounts have none: their sign-in is the provider's */}
+                        {authConfig?.password_login_enabled && !u.is_oidc && (
+                          <Button
+                            onClick={() => setResetConfirm({ userId: u.id, username: u.username })}
+                            variant="outline"
+                            size="sm"
+                            disabled={u.id === user?.id}
+                          >
+                            {t('admin.users.resetPassword')}
+                          </Button>
+                        )}
                         <Button
                           onClick={() => setDeleteConfirm({ userId: u.id, username: u.username })}
                           variant="danger"

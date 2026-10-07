@@ -14,7 +14,7 @@ backends. File paths are relative to the music directory.
 from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 FORMAT_VERSION = 1
 
@@ -109,11 +109,22 @@ class ExportedUser(BaseModel):
     username: str = Field(..., min_length=1, max_length=64)
     # bcrypt hashes are self-contained (salt embedded), so they move between
     # instances as-is. Anything else can't be verified by this app.
-    password_hash: str = Field(..., pattern=r"^\$2[aby]\$\d{2}\$.{53}$")
+    password_hash: Optional[str] = Field(None, pattern=r"^\$2[aby]\$\d{2}\$.{53}$")
+    # Single sign-on identity (same provider expected on the new instance)
+    oidc_issuer: Optional[str] = Field(None, min_length=1, max_length=512)
+    oidc_subject: Optional[str] = Field(None, min_length=1, max_length=255)
     role: Literal["administrator", "member", "visitor"] = "visitor"
     is_active: bool = True
     must_change_password: bool = False
     created_at: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _can_sign_in(self) -> "ExportedUser":
+        if bool(self.oidc_issuer) != bool(self.oidc_subject):
+            raise ValueError("oidc_issuer and oidc_subject go together")
+        if not self.password_hash and not self.oidc_subject:
+            raise ValueError("a user needs a password_hash or a single sign-on identity")
+        return self
 
 
 class ExportedSetting(BaseModel):

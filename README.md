@@ -15,7 +15,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
 - **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year and embedded cover art.
 - **Jellyfin-friendly layout** with `artist.nfo`, `album.nfo`, `backdrop.jpg` and `cover.jpg`.
-- **Multi-user** with three roles (visitor / member / administrator), optional public registration, and httpOnly-cookie sessions.
+- **Multi-user** with three roles (visitor / member / administrator), optional public registration, optional [single sign-on](#single-sign-on-oidc) through your identity provider (Authelia, Authentik, Pocket ID, Keycloak…), and httpOnly-cookie sessions.
 - **Rate-limit aware**: detects YouTube throttling and bot checks, resets its session, and pauses all downloads with exponential backoff instead of hammering YouTube.
 - **Age-restricted tracks** supported via an optional cookies.txt from a signed-in YouTube account (used *only* for those tracks).
 - **Backup / restore**: export your followed artists, albums and charts (or a full backup with users and settings) as JSON and import it on another instance, with a dry-run preview.
@@ -105,6 +105,7 @@ Set in `docker-compose.yml`. All are optional.
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Address(es) or subnet(s) of your reverse proxy, comma-separated. Required behind a proxy, see [Running behind a reverse proxy](#running-behind-a-reverse-proxy). |
 | `DOWNLOAD_WORKERS` | `3` | Number of download worker *processes*. This is a ceiling; how many actually run at once is the *Max concurrent downloads* setting in the admin panel. |
 | `CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated origins, only needed if you serve the frontend from a different origin than the API. Leave unset for the standard setup. |
+| `PUBLIC_URL`, `OIDC_*`, `PASSWORD_LOGIN_ENABLED` | – | Single sign-on, see [Single sign-on (OIDC)](#single-sign-on-oidc) |
 | `FIRST_ADMIN_USERNAME` | `admin` | First admin account, created only when the database is empty |
 | `FIRST_ADMIN_PASSWORD` | `default` | |
 | `LOG_LOCAL_TIME` | `1` | Set to `0` for UTC log timestamps |
@@ -119,6 +120,8 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Failed sign-ins per IP | 10 | Wrong passwords allowed from one IP within the window before it's blocked. Set to 0 to turn this check off. |
 | Failed sign-ins per account | 5 | Wrong passwords allowed for one account within the window before *new* browsers are blocked from it. Browsers signed in to the account before (and not signed out since) get their own allowance, so hammering `admin` from elsewhere doesn't lock you out of your usual browser. Also applies to wrong current passwords on *Change password*. Set to 0 to turn this check off. |
 | Failed sign-in window | 15 min | How long failed sign-ins are remembered; blocks lift as they expire |
+| New single sign-on accounts | on | Create an account at someone's first single sign-on (otherwise only existing accounts, and members of the configured provider groups, get in). Shown only when single sign-on is configured. |
+| Role of new single sign-on accounts | visitor | *Visitor* or *member*. Shown only when single sign-on is configured. |
 | Max concurrent downloads | 1 | Parallel YouTube downloads. Capped by `DOWNLOAD_WORKERS`. Every extra stream from one IP raises the odds of being rate-limited. |
 | Rate-limit pause | 10 min | How long all downloads stop after a rate limit. Doubles on each consecutive pause (up to 16×) until a download succeeds. |
 | Lyrics download | on | Fetch lyrics from LRCLIB for every downloaded track |
@@ -206,6 +209,52 @@ Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS (the
 
 Only trust the proxy. The header is trivial to forge, so `*` (or a range that includes your clients) lets anyone pick their own IP and skip the limit. For the same reason, don't keep port 8000 reachable from outside once the proxy is in place: publish it as `127.0.0.1:8000:8000`, or drop `ports:` entirely when the proxy shares the container's network.
 
+## Single sign-on (OIDC)
+
+Let people sign in through your identity provider (Authelia, Authentik, Pocket ID, Keycloak, Zitadel…) with OpenID Connect. Multi-factor authentication, passkeys and password policies then come from the provider. Password sign-in keeps working alongside, unless you turn it off.
+
+It's configured with environment variables only: whoever can change them decides who may sign in as anyone, so that stays with whoever runs the container.
+
+**At your provider**, create a *confidential* client (one with a secret) using the authorization code flow, and register this redirect URI:
+
+```
+<PUBLIC_URL>/api/auth/oidc/callback      e.g. https://music.example.com/api/auth/oidc/callback
+```
+
+Most providers only accept HTTPS redirect URIs, so this goes with a [reverse proxy](#running-behind-a-reverse-proxy) and `COOKIE_SECURE=true`. PKCE (S256) is always used; client authentication is `client_secret_basic`, or `client_secret_post` if that's all the provider supports.
+
+**Then set:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `PUBLIC_URL` | – | Address people use to reach the app, e.g. `https://music.example.com`. The redirect URI is built from it. |
+| `OIDC_ISSUER_URL` | – | Your provider's issuer, e.g. `https://auth.example.com`. Its settings are discovered from `<issuer>/.well-known/openid-configuration`. |
+| `OIDC_CLIENT_ID` | – | Client ID from the provider |
+| `OIDC_CLIENT_SECRET` / `OIDC_CLIENT_SECRET_FILE` | – | Client secret, or a file containing it (Docker / Kubernetes secrets) |
+| `OIDC_PROVIDER_NAME` | `SSO` | Shown on the login button: "Sign in with *name*" |
+| `OIDC_SCOPES` | `openid profile` | Add `groups` (or your provider's equivalent) to use group roles |
+| `OIDC_GROUPS_CLAIM` | `groups` | Name of the claim listing the user's groups |
+| `OIDC_ADMIN_GROUP` / `OIDC_MEMBER_GROUP` | – | Provider groups mapped to *administrator* / *member*. Setting either hands roles over to the provider (below). |
+| `PASSWORD_LOGIN_ENABLED` | `true` | `false` for single sign-on only |
+
+Single sign-on is on when issuer, client ID and secret are all set. The web process refuses to start on a configuration that can't work (partly configured, no `PUBLIC_URL`, password sign-in off without single sign-on…) and logs why. If the provider is unreachable, the app still starts; the button reports the provider as unavailable.
+
+**Accounts.** An account is tied to the provider's identity (issuer + subject), never to a name, so nobody can take over an account by picking its username at the provider. The first sign-in creates the account (see the *New single sign-on accounts* and *Role* settings), named after the provider's username: if that name is taken here, a suffix is added (`admin-2`), the two accounts are never merged. Deactivated accounts can't sign in. Single sign-on accounts have no password here, so *Change password* and *Reset password* don't apply to them.
+
+**Roles from provider groups.** With `OIDC_ADMIN_GROUP` and/or `OIDC_MEMBER_GROUP` set, the provider owns the roles of single sign-on accounts: at every sign-in they become *administrator* (in the admin group), *member* (in the member group) or the default role (in neither), and the role can't be edited in the admin panel. Members of those groups can sign in even when *New single sign-on accounts* is off. Groups are read from the ID token and the userinfo endpoint.
+
+**Single sign-on only** (`PASSWORD_LOGIN_ENABLED=false`): the password form, registration, *Create user* and *Reset password* go away, and no password admin is created on first start. Get your first administrator with one of:
+
+- `OIDC_ADMIN_GROUP` set to a provider group you're in: you're an admin from your first sign-in;
+- sign in once, then `docker compose exec ytmusicdownloader python -m backend.cli set-role <your-username> administrator`;
+- start with password sign-in on, sign in as the first admin, promote your single sign-on account in **Admin Panel → Users**, then set `PASSWORD_LOGIN_ENABLED=false` and restart.
+
+**Limits.**
+
+- Removing someone at the provider doesn't end their session here: sessions last up to 7 days. Deactivate the account in **Admin Panel → Users** too.
+- Signing out signs out of this app only, not of the provider.
+- A sign-in that fails sends you back to the login page with a short reason; the exact cause is in `config/logs/web.log`.
+
 ## Recovering access
 
 For when nobody can (or should) use the admin panel, a few commands run inside the container. Use the service name from `docker-compose.yml` (`docker exec -it <container> …` works too):
@@ -225,6 +274,8 @@ docker compose exec ytmusicdownloader python -m backend.cli --help
 | `get-setting [key]` / `set-setting <key> <value>` | Read or change a setting (same checks as the admin panel) |
 
 Passwords are never passed as arguments (they'd end up in your shell history).
+
+With single sign-on, `list-users` shows how each account signs in. If the provider is down, `reset-password` also works on a single sign-on account: it gets a password as a fallback (with password sign-in enabled).
 
 **Forgot the admin password**
 
@@ -252,7 +303,7 @@ docker compose exec ytmusicdownloader python -m backend.cli set-setting auth.log
 
 ## API
 
-Interactive OpenAPI docs are served at `/api/docs`. Authentication is JWT: `POST /api/auth/login` returns a short-lived access token (send as `Authorization: Bearer …`) and sets an httpOnly refresh cookie; `POST /api/auth/refresh` gets a new access token.
+Interactive OpenAPI docs are served at `/api/docs`. Authentication is JWT: `POST /api/auth/login` returns a short-lived access token (send as `Authorization: Bearer …`) and sets an httpOnly refresh cookie; `POST /api/auth/refresh` gets a new access token. Single sign-on goes through `GET /api/auth/oidc/login` and back to `/api/auth/oidc/callback`, which opens the same kind of session.
 
 ## How it works
 
@@ -286,6 +337,8 @@ Following an artist queues a `sync_artist` job → which queues an `import_album
 **Permission errors on `./config` or `./data`** — make sure `PUID`/`PGID` match your host user. Files that already existed before a `PUID` change need a one-time `chown`.
 
 **"Too many failed attempts" for everyone** — you're behind a reverse proxy without `FORWARDED_ALLOW_IPS`, so all users share the proxy's IP. See [Running behind a reverse proxy](#running-behind-a-reverse-proxy). To get back in right away, restart the container (the counters live in memory).
+
+**Single sign-on fails** — the login page shows a short reason; the detail is in `config/logs/web.log`. The usual suspects: the redirect URI registered at the provider doesn't exactly match `<PUBLIC_URL>/api/auth/oidc/callback`, `OIDC_ISSUER_URL` differs from the issuer the provider announces, or the container can't reach the provider (use an address reachable from inside the container). Also open the app at `PUBLIC_URL` itself to sign in: starting from another address (a LAN IP, say) loses the sign-in cookie on the way back.
 
 **Login doesn't stick** — if you're on plain HTTP, `COOKIE_SECURE` must be unset or `false`. If you're on HTTPS, set it to `true`.
 

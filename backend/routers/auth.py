@@ -3,8 +3,11 @@
 Authentication endpoints.
 
 Endpoints:
-- POST /api/auth/register - Register new user (Admin only)
+- GET /api/auth/config - Which sign-in methods are available (public)
+- POST /api/auth/register - Register new user (public registration)
 - POST /api/auth/login - Login with username/password
+- GET /api/auth/oidc/login - Start single sign-on (redirects to the provider)
+- GET /api/auth/oidc/callback - Single sign-on return point
 - POST /api/auth/refresh - Refresh access token
 - POST /api/auth/logout - Revoke refresh token
 - GET /api/auth/me - Get current user info
@@ -12,8 +15,10 @@ Endpoints:
 """
 from __future__ import annotations
 import logging
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from backend.db import get_session
@@ -21,6 +26,7 @@ from backend.dependencies import get_current_user, require_admin
 from backend.settings import get_setting
 from backend.services import auth as auth_svc
 from backend.services import login_throttle
+from backend.services import oidc
 from backend.schemas import (
     LoginRequest,
     RegisterRequest,
@@ -95,6 +101,36 @@ def _set_device_cookie(response: Response, device_token: str) -> None:
     )
 
 
+# Carries state/nonce/PKCE verifier from /oidc/login to /oidc/callback. Lax is
+# enough: the provider sends the browser back with a top-level GET.
+_OIDC_FLOW_COOKIE = "oidc_flow"
+_OIDC_FLOW_PATH = "/api/auth/oidc"
+
+
+def _start_session(response: Response, session: Session, user: User) -> str:
+    """Open a session for an authenticated user: cookies set, access token returned."""
+    access_token = auth_svc.create_access_token(
+        user_id=user.id,
+        username=user.username,
+        role=user.role,
+    )
+    refresh_token = auth_svc.create_refresh_token(session, user.id)
+    auth_svc.update_last_login(session, user.id)
+    # Refresh user object to get updated last_login_at
+    session.refresh(user)
+    _set_access_cookie(response, access_token)
+    _set_refresh_cookie(response, refresh_token)
+    return access_token
+
+
+def _require_password_login() -> None:
+    if not config.PASSWORD_LOGIN_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="password_login_disabled",
+        )
+
+
 # ============================================================================
 # FAILED ATTEMPT THROTTLING (services/login_throttle.py)
 # ============================================================================
@@ -118,16 +154,23 @@ def _client_ip(request: Request) -> str:
 # PUBLIC ENDPOINTS
 # ============================================================================
 
-@router.get("/registration-status")
-async def get_registration_status(
+@router.get("/config")
+def get_auth_config(
     session: Session = Depends(get_session),
 ) -> dict:
     """
-    Public endpoint to check if registration is enabled.
+    Which sign-in methods the login and registration pages should offer.
+    Public: needed before anyone is signed in.
     """
-    
-    enabled = get_setting(session, "auth.registration_enabled", default=False)
-    return {"enabled": enabled}
+    return {
+        "password_login_enabled": config.PASSWORD_LOGIN_ENABLED,
+        "registration_enabled": config.PASSWORD_LOGIN_ENABLED
+        and bool(get_setting(session, "auth.registration_enabled", default=False)),
+        "oidc_enabled": config.OIDC_ENABLED,
+        "oidc_provider_name": config.OIDC_PROVIDER_NAME if config.OIDC_ENABLED else None,
+        # Role changes for SSO accounts would be undone at their next sign-in
+        "oidc_roles_from_groups": config.OIDC_ENABLED and config.OIDC_ROLES_FROM_GROUPS,
+    }
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -140,6 +183,7 @@ def register(
     
     Registration must be enabled via the 'auth.registration_enabled' setting.
     """
+    _require_password_login()
     # Check if registration is enabled
     if not get_setting(session, "auth.registration_enabled", default=False):
         raise HTTPException(
@@ -186,6 +230,7 @@ def login(
     bucket instead of the account's, so failures from elsewhere can't lock
     the owner out of the browser they normally use.
     """
+    _require_password_login()
     ip_limit, account_limit, window = _throttle_settings(session)
 
     device = None
@@ -214,23 +259,7 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create tokens
-    access_token = auth_svc.create_access_token(
-        user_id=user.id,
-        username=user.username,
-        role=user.role,
-    )
-
-    refresh_token = auth_svc.create_refresh_token(session, user.id)
-
-    # Update last login
-    auth_svc.update_last_login(session, user.id)
-
-    # Refresh user object to get updated last_login_at
-    session.refresh(user)
-
-    _set_access_cookie(response, access_token)
-    _set_refresh_cookie(response, refresh_token)
+    access_token = _start_session(response, session, user)
 
     # The IP and account buckets are left alone: clearing them on success
     # would let someone with any valid account reset their allowance
@@ -244,6 +273,79 @@ def login(
         token_type="bearer",
         expires_in=config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
+
+@router.get("/oidc/login")
+def oidc_login():
+    """
+    Start single sign-on: redirect the browser to the provider. The values
+    the callback has to check travel in a short-lived signed cookie.
+    """
+    if not config.OIDC_ENABLED:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Single sign-on is not configured")
+    try:
+        flow = oidc.start_flow()
+    except oidc.OidcError as e:
+        logger.error(f"Single sign-on unavailable: {e}")
+        return RedirectResponse(f"/login?oidc_error={e.code}", status_code=status.HTTP_303_SEE_OTHER)
+
+    response = RedirectResponse(flow["url"], status_code=status.HTTP_303_SEE_OTHER)
+    response.set_cookie(
+        key=_OIDC_FLOW_COOKIE,
+        value=oidc.encode_flow_state(flow),
+        max_age=600,
+        httponly=True,
+        secure=config.COOKIE_SECURE,
+        samesite="lax",
+        path=_OIDC_FLOW_PATH,
+    )
+    return response
+
+
+@router.get("/oidc/callback")
+def oidc_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    session: Session = Depends(get_session),
+):
+    """
+    Where the provider sends the browser back. Checks state, exchanges the
+    code, validates the ID token, then opens a normal session (same cookies
+    as a password sign-in) and lands on the app. Failures land on the login
+    page with ?oidc_error=<reason>.
+    """
+    if not config.OIDC_ENABLED:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Single sign-on is not configured")
+
+    def fail(reason: str, detail: str) -> RedirectResponse:
+        log = logger.info if reason in ("denied", "not_allowed", "inactive") else logger.warning
+        log(f"Single sign-on failed ({reason}): {detail}")
+        response = RedirectResponse(f"/login?oidc_error={reason}", status_code=status.HTTP_303_SEE_OTHER)
+        response.delete_cookie(_OIDC_FLOW_COOKIE, path=_OIDC_FLOW_PATH)
+        return response
+
+    if error:
+        return fail("denied", f"provider returned error={error}")
+    flow = oidc.decode_flow_state(request.cookies.get(_OIDC_FLOW_COOKIE, ""))
+    if not flow:
+        return fail("failed", "missing or expired flow cookie (sign-in took over 10 minutes, or cookies are blocked)")
+    # Constant-time compare: the state is what ties this callback to our redirect
+    if not state or not code or not secrets.compare_digest(state, flow["state"]):
+        return fail("failed", "state mismatch")
+
+    try:
+        claims = oidc.complete_flow(code, flow)
+        user = oidc.sign_in(session, claims)
+    except oidc.OidcError as e:
+        return fail(e.code, str(e))
+
+    response = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie(_OIDC_FLOW_COOKIE, path=_OIDC_FLOW_PATH)
+    _start_session(response, session, user)
+    logger.info(f"User {user.username} signed in with single sign-on")
+    return response
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -348,6 +450,11 @@ def change_password(
     browsers. This session stays signed in: it keeps its refresh token and
     gets a new access token (body + cookie) and device token.
     """
+    if not current_user.has_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account signs in with single sign-on; its password is managed by the provider",
+        )
     _, account_limit, window = _throttle_settings(session)
     buckets = [(f"change_password:{current_user.id}", account_limit)]
     login_throttle.check(buckets, window)

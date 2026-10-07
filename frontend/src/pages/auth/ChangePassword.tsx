@@ -1,6 +1,6 @@
 // src/pages/auth/ChangePassword.tsx
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
@@ -101,6 +101,11 @@ export const ChangePassword: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  // Single sign-on accounts have no password to change here
+  if (user && !user.has_password) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden bg-background">

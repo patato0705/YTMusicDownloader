@@ -34,8 +34,8 @@ export const Register: React.FC = () => {
   useEffect(() => {
     const checkRegistration = async () => {
       try {
-        const enabled = await authApi.isRegistrationEnabled();
-        setRegistrationEnabled(enabled);
+        const authConfig = await authApi.getAuthConfig();
+        setRegistrationEnabled(authConfig.registration_enabled);
       } catch (err) {
         console.error('Failed to check registration status:', err);
         // On error, assume enabled - backend will validate on submit

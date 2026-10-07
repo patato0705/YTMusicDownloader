@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -292,12 +292,17 @@ class ChartSnapshot(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("oidc_issuer", "oidc_subject"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # NOCASE: equality and the unique index are case-insensitive (ASCII), so
     # "Admin" and "admin" are the same account at the DB level
     username: Mapped[str] = mapped_column(String(64, collation="NOCASE"), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # None for single sign-on accounts (until given one by the recovery CLI)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Single sign-on identity: accounts are matched on these, never on names
+    oidc_issuer: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    oidc_subject: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")  # administrator, member, visitor
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Set for the first admin and on password resets (temporary password);
@@ -321,9 +326,19 @@ class User(Base):
             "role": getattr(self, "role", "member"),
             "is_active": bool(getattr(self, "is_active", True)),
             "must_change_password": bool(getattr(self, "must_change_password", False)),
+            "has_password": self.has_password,
+            "is_oidc": self.is_oidc,
             "created_at": created.isoformat() if created else None,
             "last_login_at": last_login.isoformat() if last_login else None,
         }
+
+    @property
+    def has_password(self) -> bool:
+        return bool(self.password_hash)
+
+    @property
+    def is_oidc(self) -> bool:
+        return bool(self.oidc_subject)
 
     def __repr__(self) -> str:
         return f"<User id={self.id} username={self.username!r} role={self.role}>"

@@ -42,7 +42,16 @@
       "button": "Se connecter",
       "loading": "Connexion...",
       "noAccount": "Pas de compte ?",
-      "register": "S'inscrire ici"
+      "register": "S'inscrire ici",
+      "sso": "Se connecter avec {name}",
+      "or": "ou",
+      "ssoErrors": {
+        "denied": "La connexion a été annulée chez le fournisseur.",
+        "not_allowed": "Vous n'avez pas encore de compte ici. Demandez l'accès à un administrateur.",
+        "inactive": "Ce compte est désactivé. Contactez un administrateur.",
+        "unavailable": "Le fournisseur de connexion est injoignable pour le moment. Réessayez plus tard.",
+        "failed": "La connexion a échoué. Réessayez, et contactez un administrateur si le problème persiste."
+      }
     },
     "register": {
       "title": "Créer un compte",
@@ -368,6 +377,14 @@
         "scheduler": "Planificateur",
         "ytmusic": "YouTube Music"
       },
+      "options": {
+        "auth": {
+          "oidc_default_role": {
+            "visitor": "Visiteur",
+            "member": "Membre"
+          }
+        }
+      },
       "keys": {
         "auth": {
           "registration_enabled": {
@@ -385,6 +402,14 @@
           "login_failure_window_minutes": {
             "label": "Fenêtre des échecs de connexion (minutes)",
             "description": "Durée pendant laquelle les échecs de connexion sont mémorisés. Une IP ou un compte bloqué est libéré à leur expiration."
+          },
+          "oidc_signup_enabled": {
+            "label": "Nouveaux comptes par authentification unique",
+            "description": "Créer un compte la première fois que quelqu'un se connecte par authentification unique. Désactivé, seuls les comptes existants (et les membres des groupes configurés chez le fournisseur) peuvent se connecter."
+          },
+          "oidc_default_role": {
+            "label": "Rôle des nouveaux comptes par authentification unique",
+            "description": "Attribué aux comptes créés par authentification unique. Quand les rôles viennent des groupes du fournisseur, attribué aussi à toute personne hors de ces groupes."
           }
         },
         "download": {
@@ -474,6 +499,9 @@
       "temporaryPasswordDone": "Terminé",
       "copy": "Copier",
       "copied": "Copié",
+      "ssoBadge": "SSO",
+      "ssoTooltip": "Se connecte avec {name}",
+      "roleFromGroups": "Ce rôle vient des groupes de l'utilisateur chez le fournisseur de connexion",
       "noResults": "Aucun utilisateur trouvé",
       "created": "Utilisateur créé avec succès",
       "deleted": "Utilisateur supprimé avec succès",

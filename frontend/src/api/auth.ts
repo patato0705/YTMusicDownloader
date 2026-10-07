@@ -3,7 +3,7 @@
  * Authentication API endpoints
  */
 
-import { api, apiFetch, setAccessToken, clearAccessToken } from './client';
+import { api, apiFetch, setAccessToken, clearAccessToken, API_BASE } from './client';
 
 export interface User {
   id: number;
@@ -12,6 +12,10 @@ export interface User {
   is_active: boolean;
   /** Temporary password (first admin, admin reset): must be changed before using the app */
   must_change_password: boolean;
+  /** False for single sign-on accounts (unless given one from the recovery CLI) */
+  has_password: boolean;
+  /** Signs in with single sign-on */
+  is_oidc: boolean;
   created_at: string;
   last_login_at: string | null;
 }
@@ -26,6 +30,16 @@ export interface LoginResponse {
 export interface RegisterRequest {
   username: string;
   password: string;
+}
+
+/** Sign-in methods offered by this deployment (GET /auth/config, public) */
+export interface AuthConfig {
+  password_login_enabled: boolean;
+  registration_enabled: boolean;
+  oidc_enabled: boolean;
+  oidc_provider_name: string | null;
+  /** Roles of single sign-on accounts come from provider groups (not editable here) */
+  oidc_roles_from_groups: boolean;
 }
 
 export interface ChangePasswordRequest {
@@ -91,18 +105,17 @@ export async function changePassword(data: ChangePasswordRequest): Promise<void>
 }
 
 /**
- * Check if public registration is enabled (public endpoint, no auth required)
+ * Which sign-in methods are offered (public endpoint, no auth required)
  */
-export async function isRegistrationEnabled(): Promise<boolean> {
-  try {
-    // Use apiFetch directly to bypass auth headers for this public endpoint
-    const response = await apiFetch<{ enabled: boolean }>('/auth/registration-status', {
-      method: 'GET',
-    });
-    return response.enabled;
-  } catch (err) {
-    // If endpoint fails, assume enabled (fail-open) - backend will validate on submit
-    console.error('Failed to check registration status:', err);
-    return true;
-  }
+export async function getAuthConfig(): Promise<AuthConfig> {
+  // Use apiFetch directly to bypass auth headers for this public endpoint
+  return apiFetch<AuthConfig>('/auth/config', { method: 'GET' });
+}
+
+/**
+ * Full-page navigation to the provider (not a fetch): it redirects the
+ * browser there and back to /api/auth/oidc/callback, which lands on the app.
+ */
+export function startSingleSignOn(): void {
+  window.location.assign(`${API_BASE}/auth/oidc/login`);
 }

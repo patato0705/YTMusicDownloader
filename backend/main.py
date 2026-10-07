@@ -52,6 +52,10 @@ def create_app() -> FastAPI:
     log_local = os.environ.get("LOG_LOCAL_TIME", "1") not in ("0", "false", "False")
     configure_logging(level=logging.INFO, use_local_time=log_local, process_name="web")
 
+    # Outside the lifespan's catch-all on purpose: a broken sign-in setup
+    # must stop the web process with a clear message, not start half-working
+    config.validate_auth_config()
+
     version = "0.1"
     try:
         # try to read ytm_service version if available

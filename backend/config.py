@@ -57,6 +57,70 @@ BCRYPT_ROUNDS = 12  # Balance between security and performance
 FIRST_ADMIN_USERNAME = os.environ.get("FIRST_ADMIN_USERNAME", "admin")
 FIRST_ADMIN_PASSWORD = os.environ.get("FIRST_ADMIN_PASSWORD", "default")
 
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _secret_env(name: str) -> str:
+    """NAME, or the contents of the file NAME_FILE points to (Docker/Kubernetes secrets)."""
+    path = os.environ.get(f"{name}_FILE", "").strip()
+    if path:
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except OSError:
+            # Reported by validate_auth_config() at startup
+            return ""
+    return os.environ.get(name, "").strip()
+
+
+# Single sign-on (OpenID Connect). Deployment settings, so env-only: whoever
+# can change them decides who may sign in as anyone (see README). Enabled
+# when issuer, client id and secret are all set.
+PASSWORD_LOGIN_ENABLED = _bool_env("PASSWORD_LOGIN_ENABLED", True)
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "").strip().rstrip("/")
+OIDC_ISSUER_URL = os.environ.get("OIDC_ISSUER_URL", "").strip()
+OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID", "").strip()
+OIDC_CLIENT_SECRET = _secret_env("OIDC_CLIENT_SECRET")
+OIDC_SCOPES = os.environ.get("OIDC_SCOPES", "").strip() or "openid profile"
+OIDC_GROUPS_CLAIM = os.environ.get("OIDC_GROUPS_CLAIM", "").strip() or "groups"
+# When either is set, the provider owns roles: re-applied at every sign-in
+OIDC_ADMIN_GROUP = os.environ.get("OIDC_ADMIN_GROUP", "").strip()
+OIDC_MEMBER_GROUP = os.environ.get("OIDC_MEMBER_GROUP", "").strip()
+OIDC_PROVIDER_NAME = os.environ.get("OIDC_PROVIDER_NAME", "").strip() or "SSO"
+
+OIDC_ENABLED = bool(OIDC_ISSUER_URL and OIDC_CLIENT_ID and OIDC_CLIENT_SECRET)
+OIDC_ROLES_FROM_GROUPS = bool(OIDC_ADMIN_GROUP or OIDC_MEMBER_GROUP)
+
+
+def validate_auth_config() -> None:
+    """
+    Refuse to start on a sign-in setup that can't work, rather than failing
+    later at someone's first sign-in. Called by the web app factory only:
+    the recovery CLI must keep working whatever the configuration.
+    """
+    errors = []
+    if os.environ.get("OIDC_CLIENT_SECRET_FILE", "").strip() and not OIDC_CLIENT_SECRET:
+        errors.append("OIDC_CLIENT_SECRET_FILE is set but the file is missing, unreadable or empty")
+    oidc_vars = {"OIDC_ISSUER_URL": OIDC_ISSUER_URL, "OIDC_CLIENT_ID": OIDC_CLIENT_ID, "OIDC_CLIENT_SECRET": OIDC_CLIENT_SECRET}
+    if any(oidc_vars.values()) and not all(oidc_vars.values()):
+        missing = ", ".join(name for name, value in oidc_vars.items() if not value)
+        errors.append(f"single sign-on is partly configured, missing: {missing}")
+    if OIDC_ENABLED:
+        if not PUBLIC_URL.startswith(("http://", "https://")):
+            errors.append("PUBLIC_URL (e.g. https://music.example.com) is required with single sign-on")
+        if "openid" not in OIDC_SCOPES.split():
+            errors.append("OIDC_SCOPES must include 'openid'")
+    elif OIDC_ROLES_FROM_GROUPS:
+        errors.append("OIDC_ADMIN_GROUP / OIDC_MEMBER_GROUP are set but single sign-on is not configured")
+    if not PASSWORD_LOGIN_ENABLED and not OIDC_ENABLED:
+        errors.append("PASSWORD_LOGIN_ENABLED=false needs single sign-on configured, or nobody can sign in")
+    if errors:
+        raise RuntimeError("Invalid sign-in configuration: " + "; ".join(errors))
+
 # User roles
 ROLE_ADMINISTRATOR = "administrator"
 ROLE_MEMBER = "member"

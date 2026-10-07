@@ -93,8 +93,12 @@ def create_user(
     Create a new user (admin only).
     
     Allows admins to create users with any role.
-    This is separate from the public registration endpoint.
+    This is separate from the public registration endpoint. Creates password
+    accounts, so unavailable when password sign-in is off (single sign-on
+    accounts are created at their first sign-in).
     """
+    if not config.PASSWORD_LOGIN_ENABLED:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_login_disabled")
     try:
         user = auth_svc.create_user(
             session=session,
@@ -126,12 +130,20 @@ def update_user_role(
 
     Valid roles: administrator, member, visitor
     Cannot change your own role (avoids self-lockout, e.g. on a single-admin
-    setup with no one else able to restore admin access).
+    setup with no one else able to restore admin access). Nor that of a
+    single sign-on account when roles come from provider groups: it would be
+    undone at their next sign-in.
     """
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot change your own role",
+        )
+    target = auth_svc.get_user_by_id(session, user_id)
+    if target and target.is_oidc and config.OIDC_ROLES_FROM_GROUPS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account's role comes from its single sign-on groups",
         )
 
     try:
@@ -207,8 +219,12 @@ def reset_user_password(
     choose a new one at next sign-in. Signs the user out everywhere and
     clears their failed sign-in lock. Works on other admins too (an admin
     can already demote or delete them), but not on yourself: that would
-    skip the current-password check of /api/auth/change-password.
+    skip the current-password check of /api/auth/change-password. Nor on
+    single sign-on accounts: their sign-in is the provider's business (the
+    recovery CLI can still give one a password, as a last resort).
     """
+    if not config.PASSWORD_LOGIN_ENABLED:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_login_disabled")
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -220,6 +236,11 @@ def reset_user_password(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User {user_id} not found",
+        )
+    if user.is_oidc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account signs in with single sign-on; it has no password to reset",
         )
 
     temporary_password = auth_svc.generate_temporary_password()
@@ -361,6 +382,11 @@ def update_setting(
     If the setting doesn't exist, it will be created with type 'string'
     unless it's a default setting.
     """
+    if not settings_module.is_applicable(key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Setting '{key}' doesn't apply to the current sign-in configuration",
+        )
     try:
         setting = settings_module.set_setting(
             session=session,

@@ -34,12 +34,21 @@ services:
       # parallel stream from one IP raises the odds of YouTube rate-limiting
       # or bot-checking you.
       # - DOWNLOAD_WORKERS=3
-      # Only needed if you're running the frontend on a different origin
-      # than this backend (a custom/split deployment). Comma-separated
-      # exact origin(s), e.g. https://music.example.com. Leave unset for
-      # the standard setup (frontend served from this same container) --
-      # same-origin requests aren't subject to CORS at all.
-      # - CORS_ALLOWED_ORIGINS=https://music.example.com
+      # Single sign-on (OpenID Connect: Authelia, Authentik, Pocket ID,
+      # Keycloak...). Enabled when issuer, client id and secret are all set.
+      # Register PUBLIC_URL/api/auth/oidc/callback as the redirect URI at
+      # your provider. See README "Single sign-on".
+      # - PUBLIC_URL=https://music.example.com
+      # - OIDC_ISSUER_URL=https://auth.example.com
+      # - OIDC_CLIENT_ID=ytmusicdownloader
+      # - OIDC_CLIENT_SECRET_FILE=/run/secrets/oidc_client_secret  # or OIDC_CLIENT_SECRET=...
+      # - OIDC_PROVIDER_NAME=Authelia
+      # Optional: roles from provider groups (add "groups" to the scopes)
+      # - OIDC_SCOPES=openid profile groups
+      # - OIDC_ADMIN_GROUP=ytmd-admins
+      # - OIDC_MEMBER_GROUP=ytmd-members
+      # Optional: single sign-on only (no password sign-in at all)
+      # - PASSWORD_LOGIN_ENABLED=false
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
       interval: 30s

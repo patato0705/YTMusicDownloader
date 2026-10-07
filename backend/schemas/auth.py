@@ -70,6 +70,8 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     must_change_password: bool = False
+    has_password: bool = True
+    is_oidc: bool = False
     created_at: datetime
     last_login_at: Optional[datetime] = None
     

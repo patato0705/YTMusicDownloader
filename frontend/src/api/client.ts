@@ -4,7 +4,7 @@
  * All API calls go through this client.
  */
 
-const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
+export const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
 
 /**
  * The access token lives in memory only (never localStorage) so an XSS bug

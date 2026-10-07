@@ -342,6 +342,12 @@ def authenticate_user(session: Session, username: str, password: str) -> Optiona
         verify_password(password, _dummy_password_hash())
         logger.debug(f"Authentication failed: user '{username}' is inactive")
         return None
+
+    if not user.password_hash:
+        # Single sign-on account: same timing as a wrong password
+        verify_password(password, _dummy_password_hash())
+        logger.debug(f"Authentication failed: '{username}' has no password (single sign-on)")
+        return None
     
     if not verify_password(password, user.password_hash):
         logger.debug(f"Authentication failed: invalid password for '{username}'")
@@ -501,6 +507,15 @@ def ensure_first_admin(session: Session) -> None:
     
     if existing_user:
         logger.debug("Users already exist, skipping first admin creation")
+        return
+
+    if not config.PASSWORD_LOGIN_ENABLED:
+        # A password account couldn't sign in; the first admin comes from SSO
+        logger.warning(
+            "No users yet and password sign-in is disabled. To get a first administrator: "
+            "set OIDC_ADMIN_GROUP to a provider group you're in, or sign in once with SSO "
+            "and run `python -m backend.cli set-role <username> administrator` (see README)."
+        )
         return
     
     # Create first admin

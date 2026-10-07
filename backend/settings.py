@@ -51,6 +51,7 @@ DEFAULT_SETTINGS = {
     "auth.registration_enabled": {
         "value": False,
         "type": "bool",
+        "requires": "password_login",
         "description": "Allow public user registration",
     },
 
@@ -60,6 +61,7 @@ DEFAULT_SETTINGS = {
         "value": 10,
         "type": "int",
         "min": 0,
+        "requires": "password_login",
         "description": "Failed sign-ins allowed from one IP address per window before it is blocked (set to 0 to turn this check off)",
     },
     "auth.login_max_failures_per_account": {
@@ -69,13 +71,35 @@ DEFAULT_SETTINGS = {
         "value": 5,
         "type": "int",
         "min": 0,
+        "requires": "password_login",
         "description": "Failed sign-ins allowed per account per window before it is blocked for new browsers (set to 0 to turn this check off)",
     },
     "auth.login_failure_window_minutes": {
         "value": 15,
         "type": "int",
         "min": 1,
+        "requires": "password_login",
         "description": "Minutes failed sign-ins are remembered; a blocked IP or account is released as they expire",
+    },
+
+    # Single sign-on (services/oidc.py). Who gets in and with which role;
+    # how sign-in works and which provider is trusted are env-only.
+    "auth.oidc_signup_enabled": {
+        "value": True,
+        "type": "bool",
+        "requires": "oidc",
+        "description": "Create an account on the first single sign-on of someone without one (otherwise they are refused)",
+    },
+    "auth.oidc_default_role": {
+        # No administrator: admins come from OIDC_ADMIN_GROUP, the CLI or the panel
+        "value": "visitor",
+        "type": "string",
+        "requires": "oidc",
+        "description": "Role of accounts created by single sign-on (and of everyone outside the configured groups)",
+        "allowed_values": [
+            {"value": "visitor", "label": "Visitor"},
+            {"value": "member", "label": "Member"},
+        ],
     },
 
     # Download settings
@@ -199,6 +223,21 @@ def get_max_value(key: str) -> Optional[int]:
         return None
     maximum = config_.get("max")
     return maximum() if callable(maximum) else maximum
+
+
+def is_applicable(key: str) -> bool:
+    """
+    False for settings the sign-in configuration makes moot (password sign-in
+    off, or single sign-on not configured): hidden from the settings panel.
+    They keep their value, and still travel in backups.
+    """
+    config_ = DEFAULT_SETTINGS.get(key)
+    requires = config_.get("requires") if config_ else None
+    if requires == "password_login":
+        return config.PASSWORD_LOGIN_ENABLED
+    if requires == "oidc":
+        return config.OIDC_ENABLED
+    return True
 
 
 def is_internal(key: str) -> bool:
@@ -334,10 +373,16 @@ def set_setting(
 
 
 def get_all_settings(session: Session, include_internal: bool = False) -> List[Dict[str, Any]]:
-    """Get all settings as list of dicts (internal bookkeeping keys left out by default)"""
+    """
+    Get all settings as list of dicts. Internal bookkeeping keys and settings
+    moot under the current sign-in configuration are left out by default.
+    """
     stmt = select(Setting).order_by(Setting.key)
     settings = session.execute(stmt).scalars().all()
-    return [s.to_dict() for s in settings if include_internal or not is_internal(s.key)]
+    return [
+        s.to_dict() for s in settings
+        if include_internal or (not is_internal(s.key) and is_applicable(s.key))
+    ]
 
 
 def delete_setting(session: Session, key: str) -> bool:
