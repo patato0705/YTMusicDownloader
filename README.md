@@ -357,7 +357,7 @@ npm install
 npm run dev                     # Vite dev server, proxies /api to :8000
 ```
 
-To run the backend natively (Python 3.11, ffmpeg on PATH, `/config` and `/data` writable):
+To run the backend natively (Python 3.14, ffmpeg on PATH, `/config` and `/data` writable):
 
 ```bash
 pip install -r backend/requirements.txt

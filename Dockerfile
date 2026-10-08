@@ -1,7 +1,7 @@
 # -------------------------
 # 1. Build frontend (React + Vite)
 # -------------------------
-FROM node:20 AS frontend-builder
+FROM node:24-slim AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -15,19 +15,14 @@ RUN npm run build
 # -------------------------
 # 2. Runtime python image with supervisord
 # -------------------------
-FROM python:3.11-slim
+FROM python:3.14-slim
 
-# necessary system packages (ffmpeg, libmagic, libs for Pillow, build tools, supervisor)
+# tzdata for TZ, ffmpeg for yt-dlp and cover conversion, curl for the compose
+# healthcheck. No compiler: every Python dependency ships a prebuilt wheel.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tzdata \
         ffmpeg \
-        git \
-        libmagic1 \
-        libjpeg-dev \
-        zlib1g-dev \
-        build-essential \
-        supervisor \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -36,9 +31,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Copy backend requirements and install deps
+# Copy backend requirements and install deps. --only-binary makes the build
+# fail loudly if a dependency ever needs compiling, since there's no compiler.
 COPY backend/requirements.txt /app/backend/requirements.txt
-RUN pip install --no-cache-dir -r /app/backend/requirements.txt
+RUN pip install --no-cache-dir --only-binary=:all: -r /app/backend/requirements.txt
 
 # copy backend source
 COPY backend/ /app/backend
