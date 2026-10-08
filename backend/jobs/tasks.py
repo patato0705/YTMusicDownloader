@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 from pathlib import Path
 
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from ..models import Job, Track, Album, Artist
 from ..settings import get_setting
@@ -1112,7 +1112,12 @@ def sync_artist(session: Session, artist_id: str, download_banner: bool = True) 
         f"{len(upgradeable_albums)} to upgrade"
     )
 
-    # ===== TRANSACTION 4: Create Album rows + upgrade existing =====
+    # ===== TRANSACTION 4: Create Album rows (one transaction each) + upgrade existing =====
+    # One commit per album: another sync running in parallel can create the
+    # same album (one that is in both artists' discographies) between our
+    # check above and our commit. Its IntegrityError then only rolls back
+    # that one album, which is left to the sync that created it -- the same
+    # outcome as if it had already existed when this sync looked.
     albums_created = 0
 
     for album_item in new_albums:
@@ -1139,8 +1144,13 @@ def sync_artist(session: Session, artist_id: str, download_banner: bool = True) 
             except Exception as e:
                 logger.warning(f"Failed to download cover for album {album_id}: {e}")
 
+            _db_operation_with_retry(session.commit)
             albums_created += 1
+        except IntegrityError:
+            session.rollback()
+            logger.info(f"Album {album_id} was created by another sync meanwhile, skipping")
         except Exception as e:
+            session.rollback()
             logger.exception(f"Failed to create album {album_id}")
 
     # Upgrade metadata → download for existing albums (queues their imports)
@@ -1239,7 +1249,7 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
     
     if result.get("skipped"):
         logger.info(f"Chart sync skipped for {country_code}: {result.get('reason')}")
-        return result
+        return {**result, "ok": True}
     
     # Get artists to follow
     artist_ids = result.get("artists_to_follow", [])
@@ -1248,7 +1258,7 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
     
     if not artist_ids:
         logger.info(f"No new artists to follow for {country_code}")
-        return {**result, "jobs_queued": 0}
+        return {**result, "ok": True, "jobs_queued": 0}
     
     # ===== TRANSACTION 2: Follow artists (create subscriptions in full mode) =====
     # One short transaction per artist, never held across a network call:
@@ -1343,6 +1353,7 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
     
     return {
         **result,
+        "ok": True,
         "artists_followed": artists_followed,
         "jobs_queued": jobs_queued,
         "failed_artists": len(failed_artists),
@@ -1376,6 +1387,10 @@ def run_job_task(session: Session, job: Job) -> Dict[str, Any]:
     Returns:
         Task result dict with {"ok": bool, "error": str (optional), ...}
     """
+    # Read now: once a task fails mid-transaction, touching `job` again
+    # before the rollback raises a second error, and that one escaped to the
+    # worker loop, leaving the job "reserved" until the orphan sweep.
+    job_id = job.id
     try:
         # Parse payload
         payload = job.payload or {}
@@ -1401,19 +1416,23 @@ def run_job_task(session: Session, job: Job) -> Dict[str, Any]:
         return result or {"ok": True}
     
     except TypeError as e:
-        # Wrong arguments passed to handler
-        logger.exception(f"Task handler signature mismatch for job {job.id}")
+        # Wrong arguments passed to handler (or a TypeError raised inside it)
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        logger.exception(f"Task handler signature mismatch for job {job_id}")
         return {
             "ok": False,
             "error": f"Invalid task arguments: {str(e)}",
         }
     
     except Exception as e:
-        logger.exception(f"Unexpected error in run_job_task for job {job.id}")
         try:
             session.rollback()
         except Exception:
             pass
+        logger.exception(f"Unexpected error in run_job_task for job {job_id}")
         return {
             "ok": False,
             "error": f"Unexpected error: {str(e)}",

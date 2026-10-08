@@ -214,22 +214,26 @@ class Worker:
                     time.sleep(self.poll_interval)
                     continue
 
+                # Read once: after a task fails mid-transaction the job's
+                # attributes can't be loaded again until a rollback.
+                job_id = job.id
                 logger.info("Worker %s reserved job id=%s type=%s attempts=%s",
-                            self.worker_name, getattr(job, "id", None), getattr(job, "type", None), getattr(job, "attempts", None))
+                            self.worker_name, job_id, getattr(job, "type", None), getattr(job, "attempts", None))
 
                 # execute task
-                self._set_current_job(getattr(job, "id", None))
+                self._set_current_job(job_id)
                 try:
                     result = run_job_task(session, job)
+                    _discard_failed_transaction(session)
                     # result expected to be a dict with ok: bool
                     if isinstance(result, dict) and result.get("ok", False):
                         # mark done
                         try:
-                            mark_job_done(session, getattr(job, "id"))
-                            logger.info("Job id=%s marked done", getattr(job, "id"))
+                            mark_job_done(session, job_id)
+                            logger.info("Job id=%s marked done", job_id)
                         except Exception:
                             # if marking done fails, log and continue
-                            logger.exception("Failed to mark job done id=%s", getattr(job, "id"))
+                            logger.exception("Failed to mark job done id=%s", job_id)
                     else:
                         # mark failed — allow task to suggest retry_delay_seconds
                         err = None
@@ -243,24 +247,25 @@ class Worker:
                         try:
                             mark_job_failed(
                                 session,
-                                getattr(job, "id"),
+                                job_id,
                                 error_message=err_msg,
                                 retry_delay_seconds=retry_delay,
                                 refund_attempt=refund,
                                 worker_name=self.worker_name,
                             )
-                            logger.warning("Job id=%s marked failed (retry_delay=%s) error=%s", getattr(job, "id"), retry_delay, err_msg)
+                            logger.warning("Job id=%s marked failed (retry_delay=%s) error=%s", job_id, retry_delay, err_msg)
                         except Exception:
-                            logger.exception("Failed to mark job failed id=%s", getattr(job, "id"))
+                            logger.exception("Failed to mark job failed id=%s", job_id)
                 except Exception as e:
                     # Unhandled exception while running task -> mark failed with no retry_delay by default
                     trace = traceback.format_exc()
-                    logger.exception("Unhandled exception executing job id=%s: %s", getattr(job, "id", None), e)
+                    logger.exception("Unhandled exception executing job id=%s: %s", job_id, e)
+                    _discard_failed_transaction(session)
                     try:
-                        mark_job_failed(session, getattr(job, "id"), error_message=str(e), worker_name=self.worker_name)
-                        logger.info("Marked job id=%s failed after exception", getattr(job, "id", None))
+                        mark_job_failed(session, job_id, error_message=str(e), worker_name=self.worker_name)
+                        logger.info("Marked job id=%s failed after exception", job_id)
                     except Exception:
-                        logger.exception("Failed to mark job failed after exception id=%s", getattr(job, "id", None))
+                        logger.exception("Failed to mark job failed after exception id=%s", job_id)
                 finally:
                     self._set_current_job(None)
                     # close session for this iteration (jobqueue functions commit)
@@ -281,6 +286,21 @@ class Worker:
                 except Exception:
                     pass
                 time.sleep(self.idle_sleep)
+
+
+def _discard_failed_transaction(session: Session) -> None:
+    """
+    Roll back a transaction a task left failed (an error during flush that
+    the task caught without rolling back). Until then every use of the
+    session raises, so marking the job done/failed would fail and leave it
+    "reserved" until the orphan sweep. A healthy session is left alone: the
+    job bookkeeping commits whatever the task still has pending, as before.
+    """
+    if not session.is_active:
+        try:
+            session.rollback()
+        except Exception:
+            logger.exception("Rollback of a failed task transaction failed")
 
 
 def _env_get(name: str, default: Optional[str] = None) -> Optional[str]:
