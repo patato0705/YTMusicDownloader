@@ -13,6 +13,7 @@ import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
+import { GenreChips } from '../components/ui/GenreChips';
 import { categorizeAlbums, getAlbumStatus } from '../utils';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import type { Album, Artist as ArtistType } from '../types';
@@ -257,6 +258,8 @@ export default function Artist(): JSX.Element {
                 <span className="text-gradient">{artist.name}</span>
               </h1>
               
+              <GenreChips genres={artist.genres} className="mb-4" />
+
               <p className="text-lg text-muted-foreground mb-8">
                 {albums.length} {albums.length === 1 ? t('artist.release') : t('artist.releases')}
               </p>

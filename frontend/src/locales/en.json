@@ -432,6 +432,10 @@
             "label": "Synced lyrics only",
             "description": "Only keep time-synced lyrics; plain (unsynced) lyrics are rejected and retried later."
           },
+          "genres_enabled": {
+            "label": "Genre lookup",
+            "description": "Look up album and artist genres on MusicBrainz, with Deezer as a fallback, and write them to the tags and NFO files. Turning it off stops the lookups; genres already found are kept."
+          },
           "charts_enabled": {
             "label": "Charts",
             "description": "Enable the Charts page and chart subscriptions."

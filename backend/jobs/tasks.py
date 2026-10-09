@@ -13,17 +13,20 @@ Task types:
 - download_lyrics: Download synced lyrics from LRCLIB
 - import_album: Fetch and upsert album from YTMusic
 - sync_artist: Check artist for new releases
+- fetch_genres: Look up an artist's and its albums' genres (MusicBrainz, Deezer)
 """
 from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from ..models import Job, Track, Album, Artist
 from ..settings import get_setting
+from ..time_utils import now_utc
 from ..services import albums as albums_svc
 from ..services import artists as artists_svc
 from ..services import tracks as tracks_svc
@@ -269,6 +272,7 @@ def download_track(
         track_number = track.track_number
         year = int(album.year) if album and album.year else None
         cover_path = album.image_local if album else None
+        genres = list(album.genres or []) if album else []
         album_id_final = album.id if album else None
         track_album_id = track.album_id
         
@@ -323,6 +327,7 @@ def download_track(
                             cover_path_override=cover_path,
                             skip_metadata=True,
                             cookiefile=cookiefile,
+                            genres=genres,
                         )
                 else:
                     result = dl_func(
@@ -335,6 +340,7 @@ def download_track(
                         cover_path_override=cover_path,
                         skip_metadata=True,
                         cookiefile=cookiefile,
+                        genres=genres,
                     )
                 break
 
@@ -402,6 +408,20 @@ def download_track(
         _db_operation_with_retry(commit_track_update)
         
         logger.info(f"Successfully downloaded track {track_id} to {file_path}")
+
+        # Genres found while this track was downloading: the genre lookup
+        # only re-tags tracks that were already done, so this one catches up.
+        # Read from the DB, not the session (expire_on_commit=False).
+        if album_id_final:
+            try:
+                current = session.execute(
+                    select(Album.genres).where(Album.id == album_id_final)
+                ).scalar() or []
+                if list(current) != genres:
+                    from ..downloader import embed as embed_mod
+                    embed_mod.set_genres(file_path, list(current))
+            except Exception:
+                logger.exception(f"Failed to re-tag genres of track {track_id}")
 
         # A success means YouTube is talking to us again: reset the pause
         # escalation so the next throttle starts from the base duration.
@@ -965,7 +985,11 @@ def import_album(
                 queued = 0
         else:
             logger.info(f"Album {album_id} is not in download mode, no downloads queued")
-        
+
+        # Genres for a new album -- in particular one whose artist is never
+        # synced again (an album downloaded on its own)
+        _queue_genre_lookup(session, album_obj.artist_id if album_obj else None, origin)
+
         return {
             "ok": True,
             "album_id": album_id,
@@ -1207,6 +1231,9 @@ def sync_artist(
     else:
         logger.info(f"Light mode: {albums_created} albums created with metadata for artist {artist_id}")
     
+    # Genres for the albums this sync created, if any
+    _queue_genre_lookup(session, artist_id, origin)
+
     # ===== TRANSACTION 6: Update sync timestamp =====
     subs_svc.mark_artist_synced(session, artist_id)
     
@@ -1385,6 +1412,114 @@ def sync_chart(
 
 
 # ============================================================================
+# TASK: FETCH GENRES
+# ============================================================================
+
+def _queue_genre_lookup(session: Session, artist_id: Optional[str], origin: str) -> None:
+    """Queue a fetch_genres for the artist if one is due (services/genres.py). Commits."""
+    if not artist_id:
+        return
+    from ..services import genres as genres_svc
+    try:
+        genres_svc.queue_lookup(session, artist_id, origin=Origin(origin))
+        _db_operation_with_retry(session.commit)
+    except Exception:
+        session.rollback()
+        logger.exception(f"Failed to queue genre lookup for artist {artist_id}")
+
+
+def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, Any]:
+    """
+    Look up the genres of an artist and all its albums (services/genres.py),
+    store them, then bring the files up to date: artist.nfo and album.nfo
+    where they exist, and the genre tag of every track already downloaded
+    from an album whose genres changed. Tracks still downloading tag
+    themselves when they finish (download_track).
+
+    Only worker-genres runs this, which is what keeps MusicBrainz at one
+    request per second.
+    """
+    from ..services import genres as genres_svc
+    from ..downloader import embed as embed_mod, nfo as nfo_mod
+
+    if not genres_svc.genres_enabled(session):
+        return {"ok": True, "skipped": "genre lookups are switched off"}
+
+    artist = session.get(Artist, artist_id)
+    if not artist:
+        return {"ok": True, "skipped": "artist not in DB"}
+    albums = [(a.id, a.title, a.year) for a in session.query(Album).filter(Album.artist_id == artist_id).all()]
+    name, musicbrainz_id, deezer_id = artist.name, artist.musicbrainz_id, artist.deezer_id
+    session.rollback()  # nothing held while the sources answer (several seconds)
+
+    try:
+        found = genres_svc.lookup_artist(artist_id, name, albums, musicbrainz_id, deezer_id)
+    except genres_svc.GenreSourceUnavailable as e:
+        logger.warning(f"Genre lookup for {name} postponed: {e}")
+        return {"ok": False, "error": str(e), "retry_delay_seconds": 900}
+
+    # ===== Store (one short transaction) =====
+    session.expire_all()
+    artist = session.get(Artist, artist_id)
+    if not artist:
+        return {"ok": True, "skipped": "artist deleted meanwhile"}
+    now = now_utc()
+    artist_changed = (artist.genres or []) != found.genres
+    artist.genres = found.genres
+    artist.musicbrainz_id = found.musicbrainz_id
+    artist.deezer_id = found.deezer_id
+    artist.genres_checked_at = now
+    changed: Dict[str, list] = {}
+    for album in session.query(Album).filter(Album.id.in_(list(found.albums))).all():
+        picked = found.albums[album.id]
+        if (album.genres or []) != picked.genres:
+            changed[album.id] = picked.genres
+        album.genres = picked.genres
+        album.genres_source = picked.source
+        album.genres_checked_at = now
+    _db_operation_with_retry(session.commit)
+
+    # ===== Files (no transaction) =====
+    if artist_changed and nfo_mod.artist_dir_exists(artist.name):
+        nfo_mod.write_artist_nfo(artist)
+    retagged = 0
+    if changed:
+        for album in session.query(Album).filter(Album.id.in_(list(changed))).all():
+            if nfo_mod.album_dir_exists(artist.name, album.title):
+                nfo_mod.write_album_nfo(album, artist)
+        done_tracks = session.query(Track).filter(
+            Track.album_id.in_(list(changed)),
+            Track.status == "done",
+            Track.file_path != None,  # noqa: E711
+        ).all()
+        for track in done_tracks:
+            if embed_mod.set_genres(track.file_path, changed[track.album_id]):
+                retagged += 1
+
+    # Albums a sync added while this ran get a follow-up lookup
+    try:
+        if genres_svc.queue_lookup(session, artist_id, origin=Origin(origin), from_lookup=True):
+            logger.info(f"Albums of {name} added during the lookup: follow-up queued")
+        _db_operation_with_retry(session.commit)
+    except Exception:
+        session.rollback()
+        logger.exception(f"Failed to queue follow-up genre lookup for {name}")
+
+    with_genres = sum(1 for g in found.albums.values() if g.genres)
+    logger.info(
+        f"Genres for {name}: {with_genres}/{len(found.albums)} albums, "
+        f"{len(changed)} changed, {retagged} files re-tagged"
+    )
+    return {
+        "ok": True,
+        "albums": len(found.albums),
+        "albums_with_genres": with_genres,
+        "albums_changed": len(changed),
+        "files_retagged": retagged,
+    }
+
+
+# ============================================================================
 # TASK DISPATCHER
 # ============================================================================
 
@@ -1394,6 +1529,7 @@ _TASK_MAP = {
     "import_album": import_album,
     "sync_artist": sync_artist,
     "sync_chart": sync_chart,
+    "fetch_genres": fetch_genres,
 }
 
 ALL_JOB_TYPES = tuple(_TASK_MAP)

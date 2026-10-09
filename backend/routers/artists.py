@@ -102,6 +102,7 @@ def get_artist(
                     "name": artist_data.get("name"),
                     "thumbnail": artist_data.get("thumbnail"),
                     "image_local": artist_obj.image_local if artist_obj else None,
+                    "genres": (artist_obj.genres or []) if artist_obj else [],
                 },
                 "albums": [
                     {k: v for k, v in album.items() if k != "thumbnails"}
@@ -127,6 +128,7 @@ def get_artist(
                 "id": artist_obj.id,
                 "name": artist_obj.name,
                 "image_local": artist_obj.image_local,
+                "genres": artist_obj.genres or [],
             },
             "albums": albums,
         }

@@ -13,7 +13,8 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly).
 - **Synced lyrics** from [LRCLIB](https://lrclib.net), saved as `.lrc` sidecar files. Missing lyrics are retried daily; plain lyrics are upgraded to synced when they become available. Lyrics can also be viewed and edited by hand in the UI.
 - **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
-- **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year and embedded cover art.
+- **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year, genres and embedded cover art.
+- **Genres** from [MusicBrainz](https://musicbrainz.org) (specific, community-voted) with [Deezer](https://www.deezer.com) as a fallback, written to the tags and NFO files so Jellyfin can browse and mix by genre. No account or API key needed.
 - **Jellyfin-friendly layout** with `artist.nfo`, `album.nfo`, `backdrop.jpg` and `cover.jpg`.
 - **Multi-user** with three roles (visitor / member / administrator), optional public registration, optional [single sign-on](#single-sign-on-oidc) through your identity provider (Authelia, Authentik, Pocket ID, Keycloak…), and httpOnly-cookie sessions.
 - **Rate-limit aware**: detects YouTube throttling and bot checks, resets its session, and pauses all downloads with exponential backoff instead of hammering YouTube.
@@ -126,6 +127,7 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Rate-limit pause | 10 min | How long all downloads stop after a rate limit. Doubles on each consecutive pause (up to 16×) until a download succeeds. |
 | Lyrics download | on | Fetch lyrics from LRCLIB for every downloaded track |
 | Synced lyrics only | on | Reject plain lyrics; keep retrying for synced ones |
+| Genre lookup | on | Look up genres on MusicBrainz and Deezer. Off stops the lookups; genres already found stay in the files. |
 | Charts | on | Enable the Charts page and chart subscriptions |
 | Artist sync interval | 6 h | How often each followed artist is checked for new releases |
 | Chart sync interval | 7 days | How often each followed chart is re-fetched (YouTube Music updates its charts weekly) |
@@ -169,6 +171,17 @@ Admins follow a country chart from **Admin Panel → Charts** and choose how man
 ### Lyrics
 
 After a track is downloaded, a `download_lyrics` job queries LRCLIB (cached lookup → exact lookup → fuzzy search with duration matching). Synced lyrics are saved as `<track>.lrc` next to the audio file. Each track has a lyrics badge (synced / plain / none); click it to view, paste or edit lyrics manually. Clearing the text deletes the `.lrc` and lets the next retry sweep query LRCLIB again.
+
+### Genres
+
+YouTube Music has no genres, so they're looked up elsewhere, per artist, on its own worker (`worker-genres`): once when an artist or album is added, then monthly. Each album gets up to three genres, from the first of these that has any:
+
+1. its own genres on MusicBrainz;
+2. the artist's genres on MusicBrainz;
+3. its genre on Deezer (one per album, broader: *Rap/Hip Hop*, *Dance*);
+4. the artist's most common genre on Deezer.
+
+The two sources are never mixed, and MusicBrainz's *Hip Hop* is renamed to Deezer's *Rap/Hip Hop*, so Jellyfin doesn't end up with both for the same music. That rename is a deliberate choice: MusicBrainz has no plain *rap* genre (it files rap under hip hop), so without it no album would ever be tagged Rap, and in practice what MusicBrainz calls hip hop is nearly always rap. Sub-genres such as *Pop Rap* or *Conscious Hip Hop* are kept as they are. Artists are looked up by name and only accepted when they share at least one album title with ours, which rules out namesakes. MusicBrainz allows one request per second, so a first lookup takes about 4 seconds per artist: a 200-artist library is done in a quarter of an hour. Genres are written into each track's tags and into `album.nfo` / `artist.nfo`, and shown on album and artist pages.
 
 ### Age-restricted tracks
 
@@ -315,6 +328,7 @@ Everything runs in a single Docker container managed by supervisord:
 | `worker-download-N` | Downloads audio with yt-dlp (N processes, see `DOWNLOAD_WORKERS`) |
 | `worker-metadata-N` | Talks to YouTube Music: artist syncs, album imports, chart syncs (3 processes) |
 | `worker-lyrics` | Fetches lyrics from LRCLIB |
+| `worker-genres` | Looks up genres on MusicBrainz and Deezer |
 | `scheduler` | Periodic syncs, retries and clean-ups |
 
 All work goes through a job queue stored in SQLite (`/config/db.sqlite`). Workers are split by job family so that a slow download never blocks metadata imports and vice versa. If a worker dies mid-job, the job is requeued automatically.
@@ -326,7 +340,7 @@ Jobs run in order of where they came from, and every job inherits that from the 
 ## Logs
 
 - `docker compose logs -f` — everything, interleaved.
-- `./config/logs/` — one rotating file per process (`web.log`, `worker-download-0.log`, `worker-metadata-0.log`, `worker-lyrics.log`, `scheduler.log`), 5 MB × 3 each.
+- `./config/logs/` — one rotating file per process (`web.log`, `worker-download-0.log`, `worker-metadata-0.log`, `worker-lyrics.log`, `worker-genres.log`, `scheduler.log`), 5 MB × 3 each.
 
 ## Troubleshooting
 

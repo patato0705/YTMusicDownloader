@@ -116,6 +116,7 @@ def get_album_from_db(
             "type": album.type or "Album",
             "image_local": album.image_local,
             "playlist_id": album.playlist_id,
+            "genres": album.genres or [],
             "mode": album.mode,
             "download_status": album.download_status,
         }

@@ -18,6 +18,7 @@ export interface Artist {
   image_local?: string | null;
   subscribers?: string;
   resultType?: string;
+  genres?: string[];
   // Library endpoint extras
   albums_count?: number;
   tracks_total?: number;
@@ -33,6 +34,7 @@ export type MediaStatus = 'downloaded' | 'in_library' | 'downloading' | 'queued'
 export interface Album {
   id: string;
   title: string;
+  genres?: string[];
   artist?: string;
   artist_id?: string;
   artist_name?: string;

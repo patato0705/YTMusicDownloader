@@ -27,6 +27,13 @@ class Artist(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Genres (see services/genres.py): the artist's own, used for albums the
+    # genre sources know nothing specific about. The ids are this artist on
+    # each source, matched once and reused by later lookups.
+    genres: Mapped[Optional[List[str]]] = mapped_column(JSONCol, nullable=True)
+    musicbrainz_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    deezer_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    genres_checked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
     # relationship: Artist -> Album
@@ -47,6 +54,7 @@ class Artist(Base):
             "name": getattr(self, "name", None),
             "image_local": image_local,
             "description": getattr(self, "description", None),
+            "genres": getattr(self, "genres", None) or [],
             "created_at": created_at,
         }
  
@@ -69,6 +77,11 @@ class Album(Base):
     playlist_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     year: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+    # Up to 3 genres and where they came from (services/genres.py): e.g.
+    # "musicbrainz-album", or "musicbrainz-artist" when the album itself had none
+    genres: Mapped[Optional[List[str]]] = mapped_column(JSONCol, nullable=True)
+    genres_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    genres_checked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # subscription / sync fields (moved from former AlbumSubscription table)
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="metadata")  # "metadata" or "download"
@@ -94,6 +107,7 @@ class Album(Base):
             "playlist_id": getattr(self, "playlist_id", None),
             "year": getattr(self, "year", None),
             "image_local": getattr(self, "image_local", None),
+            "genres": getattr(self, "genres", None) or [],
             "mode": getattr(self, "mode", None),
             "download_status": getattr(self, "download_status", None),
             "last_synced_at": (ls.isoformat() if (ls := getattr(self, "last_synced_at", None)) else None),

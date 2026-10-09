@@ -14,7 +14,7 @@ if not logging.getLogger().handlers:
 try:
     from mutagen import File as MutagenFile  # type: ignore
     from mutagen.mp4 import MP4, MP4Cover  # type: ignore
-    from mutagen.id3 import ID3, TIT2, TALB, TPE1, TPE2, TRCK, TDRC, APIC, USLT  # type: ignore
+    from mutagen.id3 import ID3, TIT2, TALB, TPE1, TPE2, TRCK, TDRC, TCON, APIC, USLT  # type: ignore
     _HAS_MUTAGEN = True
 except Exception:
     _HAS_MUTAGEN = False
@@ -36,7 +36,8 @@ def _embed_mp4_tags(path: Path,
                     lyrics_path: Optional[Union[str, Path]],
                     cover_path: Optional[Union[str, Path]],
                     track_number: Optional[int],
-                    year: Optional[str]) -> None:
+                    year: Optional[str],
+                    genres: Optional[List[str]] = None) -> None:
     """
     Embed tags into M4A/MP4 file using mutagen.mp4.MP4.
     """
@@ -60,6 +61,8 @@ def _embed_mp4_tags(path: Path,
                 mp4["\xa9day"] = [str(year)]
             except Exception:
                 pass
+        if genres:
+            mp4["\xa9gen"] = [str(g) for g in genres]
         # lyrics
         if lyrics_path:
             lyrics_bytes = _read_bytes(lyrics_path)
@@ -96,7 +99,8 @@ def _embed_mp3_tags(path: Path,
                     lyrics_path: Optional[Union[str, Path]],
                     cover_path: Optional[Union[str, Path]],
                     track_number: Optional[int],
-                    year: Optional[str]) -> None:
+                    year: Optional[str],
+                    genres: Optional[List[str]] = None) -> None:
     """
     Embed tags into MP3 file using ID3 frames.
     """
@@ -123,6 +127,9 @@ def _embed_mp3_tags(path: Path,
         if year:
             id3.delall("TDRC")
             id3.add(TDRC(encoding=3, text=[str(year)]))
+        if genres:
+            id3.delall("TCON")
+            id3.add(TCON(encoding=3, text=[str(g) for g in genres]))
         # lyrics
         if lyrics_path:
             lyrics_bytes = _read_bytes(lyrics_path)
@@ -156,7 +163,8 @@ def embed_tags(file_path: str,
                lyrics_path: Optional[Union[str, Path]] = None,
                cover_path: Optional[Union[str, Path]] = None,
                track_number: Optional[int] = None,
-               year: Optional[str] = None) -> None:
+               year: Optional[str] = None,
+               genres: Optional[List[str]] = None) -> None:
     """
     Embeds metadata into an audio file. Supports MP4/M4A and MP3 via mutagen.
     If mutagen is not installed, logs and returns.
@@ -177,9 +185,53 @@ def embed_tags(file_path: str,
         # autodetect container
         mf = MutagenFile(str(p))
         if isinstance(mf, MP4) or p.suffix.lower() in (".m4a", ".mp4", ".aac", ".m4b"):
-            _embed_mp4_tags(p, title, album, artists_list, album_artist, lyrics_path, cover_path, track_number, year)
+            _embed_mp4_tags(p, title, album, artists_list, album_artist, lyrics_path, cover_path, track_number, year, genres)
         else:
             # fallback to MP3 ID3 embedding where possible
-            _embed_mp3_tags(p, title, album, artists_list, album_artist, lyrics_path, cover_path, track_number, year)
+            _embed_mp3_tags(p, title, album, artists_list, album_artist, lyrics_path, cover_path, track_number, year, genres)
     except Exception:
         logger.exception("Embedding metadata failed for %s", file_path)
+
+def set_genres(file_path: Union[str, Path], genres: List[str]) -> bool:
+    """
+    Replace the genre tag of a file already in the library (an empty list
+    removes it), leaving every other tag alone. Returns whether it was written.
+
+    Holds an exclusive lock on the file meanwhile: the genre lookup and a
+    download finishing (jobs.tasks.download_track re-tags when genres
+    arrived mid-download) can both get here for the same file, from
+    different processes.
+    """
+    if not _HAS_MUTAGEN:
+        return False
+    p = Path(str(file_path))
+    if not p.is_file():
+        return False
+    import fcntl
+    try:
+        with open(p, "rb") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                mf = MutagenFile(str(p))
+                if isinstance(mf, MP4) or p.suffix.lower() in (".m4a", ".mp4", ".aac", ".m4b"):
+                    mp4 = mf if isinstance(mf, MP4) else MP4(str(p))
+                    if genres:
+                        mp4["\xa9gen"] = [str(g) for g in genres]
+                    else:
+                        mp4.pop("\xa9gen", None)
+                    mp4.save()
+                else:
+                    try:
+                        id3 = ID3(str(p))
+                    except Exception:
+                        id3 = ID3()
+                    id3.delall("TCON")
+                    if genres:
+                        id3.add(TCON(encoding=3, text=[str(g) for g in genres]))
+                    id3.save(str(p))
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+        return True
+    except Exception:
+        logger.exception("Setting genres failed for %s", p)
+        return False

@@ -432,6 +432,10 @@
             "label": "Paroles synchronisées uniquement",
             "description": "Ne conserver que les paroles synchronisées ; les paroles simples (non synchronisées) sont rejetées et réessayées plus tard."
           },
+          "genres_enabled": {
+            "label": "Recherche des genres",
+            "description": "Rechercher les genres des albums et des artistes sur MusicBrainz, avec Deezer en secours, et les écrire dans les tags et les fichiers NFO. Désactivée, plus aucune recherche n'est faite ; les genres déjà trouvés sont conservés."
+          },
           "charts_enabled": {
             "label": "Charts",
             "description": "Activer la page Charts et les abonnements aux charts."

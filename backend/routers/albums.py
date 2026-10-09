@@ -82,6 +82,7 @@ def get_album(
                     "type": album["type"],
                     "image_local": album["image_local"],
                     "playlist_id": album["playlist_id"],
+                    "genres": album["genres"],
                 },
                 "tracks": album.get("tracks", []),
             }
@@ -129,6 +130,7 @@ def get_album(
                     "type": album["type"],
                     "image_local": album["image_local"],
                     "playlist_id": album["playlist_id"],
+                    "genres": album["genres"],
                 },
                 "tracks": album_data.get("tracks", []),
             }
@@ -145,6 +147,7 @@ def get_album(
                 "type": album_data.get("type", "Album"),
                 "thumbnail": album_data.get("cover"),
                 "playlist_id": album_data.get("playlistId"),
+                "genres": [],
             },
             "tracks": album_data.get("tracks", []),
         }

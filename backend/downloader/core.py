@@ -68,6 +68,7 @@ def download_track_by_videoid(
     cover_path_override: Optional[Union[str, Path]] = None,
     skip_metadata: bool = True,  # NEW: Skip metadata extraction
     cookiefile: Optional[Union[str, Path]] = None,
+    genres: Optional[List[str]] = None,
 ) -> tuple[str, Optional[str]]:
     """
     Downloads track (yt-dlp), puts final file under MUSIC_DIR/{artist}/{album}/
@@ -85,6 +86,7 @@ def download_track_by_videoid(
         cookiefile: yt-dlp cookie jar to read from and write back to
             (default: config.YDL_COOKIEFILE). Concurrent download workers
             each pass their own -- see jobs.tasks.
+        genres: The album's genres, for the genre tag
 
     Returns:
         tuple: (final_track_path, final_cover_path or None)
@@ -93,7 +95,7 @@ def download_track_by_videoid(
     try:
         return _download_into(
             job_dir, video_id, artist_name, album_name, track_title, track_number,
-            year, cover_path_override, skip_metadata, cookiefile,
+            year, cover_path_override, skip_metadata, cookiefile, genres,
         )
     finally:
         shutil.rmtree(job_dir, ignore_errors=True)
@@ -110,6 +112,7 @@ def _download_into(
     cover_path_override: Optional[Union[str, Path]],
     skip_metadata: bool,
     cookiefile: Optional[Union[str, Path]],
+    genres: Optional[List[str]] = None,
 ) -> tuple[str, Optional[str]]:
     url = f"https://www.youtube.com/watch?v={video_id}"
     outtmpl = str(job_dir / "song.%(ext)s")
@@ -295,6 +298,7 @@ def _download_into(
                 cover_path=str(cover_path_file) if cover_path_file else None,
                 track_number=(int(track_number) if track_number else None),
                 year=str(year) if year else None,
+                genres=genres,
             )
         else:
             logger.debug("embed_mod.embed_tags not available; skipping embedding")

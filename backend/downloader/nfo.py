@@ -25,6 +25,20 @@ def _set_text(parent: ET.Element, tag: str, value: Optional[str]) -> None:
     el.text = str(value)
 
 
+def _set_genres(parent: ET.Element, genres) -> None:
+    # One element per genre: how Jellyfin reads several
+    for genre in genres or []:
+        _set_text(parent, "genre", genre)
+
+
+def artist_dir_exists(artist_name: Optional[str]) -> bool:
+    return bool(artist_name) and _artist_dir(artist_name).is_dir()
+
+
+def album_dir_exists(artist_name: Optional[str], album_title: Optional[str]) -> bool:
+    return bool(artist_name and album_title) and _album_dir(artist_name, album_title).is_dir()
+
+
 def _write_xml(root: ET.Element, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     ET.indent(root, space="  ")
@@ -42,6 +56,7 @@ def write_artist_nfo(artist) -> Optional[Path]:
         root = ET.Element("artist")
         _set_text(root, "name", name)
         _set_text(root, "biography", getattr(artist, "description", None))
+        _set_genres(root, getattr(artist, "genres", None))
         thumb = getattr(artist, "image_local", None)
         if thumb:
             _set_text(root, "thumb", str(thumb))
@@ -67,6 +82,7 @@ def write_album_nfo(album, artist) -> Optional[Path]:
         _set_text(root, "title", title)
         _set_text(root, "artist", artist_name)
         _set_text(root, "year", getattr(album, "year", None))
+        _set_genres(root, getattr(album, "genres", None))
         thumb = getattr(album, "image_local", None)
         if thumb:
             _set_text(root, "thumb", str(thumb))

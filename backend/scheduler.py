@@ -13,6 +13,7 @@ Responsibilities:
    tracks that lost their job, and drop stale download scratch dirs
    (every 5 minutes)
 7. Delete thumbnail proxy cache files older than THUMBNAIL_CACHE_TTL (daily)
+8. Queue genre lookups that are due (daily, see services/genres.py)
 
 Note: Album subscriptions are handled on-demand (follow album → immediate import)
 """
@@ -68,6 +69,7 @@ class Scheduler:
         self.lyrics_retry_interval_seconds: int = 86400  # refreshed from DB
         self.stale_sweep_interval_seconds: int = 300
         self.thumbnail_cleanup_interval_seconds: int = 86400
+        self.genre_sweep_interval_seconds: int = 86400
         self.settings_refresh_interval: int = settings_refresh_interval
 
         self._thread_name = thread_name
@@ -80,6 +82,7 @@ class Scheduler:
         self._last_lyrics_retry = 0.0
         self._last_stale_sweep = 0.0
         self._last_thumbnail_cleanup = 0.0
+        self._last_genre_sweep = 0.0
         self._last_settings_refresh = 0.0
         # Tracks the previous sweep found "queued" with no job (see
         # _requeue_orphaned_track_downloads)
@@ -258,6 +261,13 @@ class Scheduler:
                     self._last_thumbnail_cleanup = now
                 except Exception:
                     logger.exception("Unexpected error in cleanup_thumbnail_cache")
+
+            if now - self._last_genre_sweep >= self.genre_sweep_interval_seconds:
+                try:
+                    self.queue_due_genre_lookups()
+                    self._last_genre_sweep = now
+                except Exception:
+                    logger.exception("Unexpected error in queue_due_genre_lookups")
 
             # Sleep for a short interval (check every minute)
             self._stopped.wait(timeout=60.0)
@@ -588,6 +598,40 @@ class Scheduler:
                     session.close()
                 except Exception:
                     pass
+
+    # How many artists one daily sweep queues: at ~4 s each on worker-genres,
+    # a few minutes of lookups, and enough to refresh 1500 artists a month
+    GENRE_SWEEP_LIMIT = 50
+
+    def queue_due_genre_lookups(self) -> None:
+        """
+        Queue a fetch_genres for subscribed artists whose genres are due
+        (services/genres.py): the monthly refresh, and artists a sync never
+        visits again -- light ones, whose albums were downloaded on their own
+        -- after lookups were switched off and on again. Syncs and imports
+        queue lookups for new albums themselves; this is the catch-all.
+        """
+        from .services import genres as genres_svc
+
+        session: Optional[Session] = None
+        try:
+            session = SessionLocal()
+            if not genres_svc.genres_enabled(session):
+                return
+            queued = 0
+            for artist_id in genres_svc.due_artist_ids(session, self.GENRE_SWEEP_LIMIT):
+                if genres_svc.queue_lookup(session, artist_id, origin=Origin.AUTO):
+                    queued += 1
+            session.commit()
+            if queued:
+                logger.info(f"Queued {queued} genre lookup(s)")
+        except Exception:
+            if session:
+                session.rollback()
+            logger.exception("Failed to queue genre lookups")
+        finally:
+            if session:
+                session.close()
 
     def retry_missing_lyrics(self) -> None:
         """

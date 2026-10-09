@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { LyricsBadge } from '../components/ui/LyricsBadge';
 import { LyricsModal } from '../components/ui/LyricsModal';
+import { GenreChips } from '../components/ui/GenreChips';
 import { formatDuration, getPrimaryArtist } from '../utils';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import type { Track } from '../types';
@@ -351,6 +352,8 @@ export default function Album(): JSX.Element {
                   {album.artist.name || album.artist_name || t('album.unknownArtist')}
                 </button>
               )}
+
+              <GenreChips genres={album.genres} className="mb-4" />
 
               {/* Album metadata */}
               <div className="flex flex-wrap items-center gap-3 text-muted-foreground mb-8">

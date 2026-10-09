@@ -156,6 +156,11 @@ DEFAULT_SETTINGS = {
         "type": "bool",
         "description": "Only keep synced lyrics (reject plain/unsynced lyrics)",
     },
+    "features.genres_enabled": {
+        "value": True,
+        "type": "bool",
+        "description": "Look up album and artist genres on MusicBrainz and Deezer",
+    },
     "features.charts_enabled": {
         "value": True,
         "type": "bool",
