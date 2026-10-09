@@ -135,56 +135,6 @@ def get_album_from_db(
         return None
 
 
-def get_album_with_tracks(
-    session: Session,
-    album_id: str,
-) -> Optional[Dict[str, Any]]:
-    """
-    Get album from DB, with on-demand track fetch for metadata-mode albums.
-
-    If the album exists in DB with mode="metadata" and has no tracks,
-    fetches full album data (including tracks) from YTMusic and persists
-    to DB before returning.
-    """
-    album = get_album_from_db(session, album_id, include_tracks=True)
-
-    if album is None:
-        return None
-
-    tracks = album.get("tracks", [])
-    mode = album.get("mode", "metadata")
-
-    if not tracks and mode == "metadata":
-        logger.info(
-            f"Album {album_id} is metadata-mode with no tracks, "
-            f"fetching from YTMusic on demand"
-        )
-        try:
-            fetch_and_upsert_album(
-                session=session,
-                browse_id=album_id,
-                artist_id=album.get("artist_id"),
-            )
-            session.commit()
-
-            album = get_album_from_db(session, album_id, include_tracks=True)
-            if album is None:
-                logger.error(f"Album {album_id} disappeared after upsert")
-                return None
-
-            logger.info(
-                f"On-demand fetch complete for {album_id}: "
-                f"{len(album.get('tracks', []))} tracks loaded"
-            )
-        except Exception as e:
-            logger.warning(
-                f"On-demand track fetch failed for {album_id}: {e}. "
-                f"Returning album without tracks."
-            )
-
-    return album
-
-
 def list_albums_for_artist_from_db(
     session: Session,
     artist_id: str,
@@ -409,13 +359,18 @@ def fetch_and_upsert_album(
     playlist_id = album_data.get("playlistId")
     tracks = album_data.get("tracks") or []
     
-    # Extract artist from album data if not provided
+    # Extract artist from album data if not provided, and make sure its row
+    # exists: an album pointing at an artist the DB doesn't know shows up
+    # with no artist anywhere in the library
     if not artist_id:
         artists = album_data.get("artists", [])
         if artists and isinstance(artists, list) and len(artists) > 0:
             first_artist = artists[0]
             if isinstance(first_artist, dict):
                 artist_id = first_artist.get("id")
+                if artist_id:
+                    from .artists import upsert_artist
+                    upsert_artist(session, artist_id=artist_id, name=first_artist.get("name"))
 
     logger.info(f"Fetched album {album_id}: {album_title} ({len(tracks)} tracks)")
 

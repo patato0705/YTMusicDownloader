@@ -237,6 +237,7 @@
     "retry": "Réessayer les titres manquants",
     "retryQueued": "{count} titre(s) mis en file de téléchargement",
     "retryNothing": "Rien à réessayer : tous les titres sont sur le disque ou déjà en attente",
+    "retryImport": "La liste des titres de l'album va être récupérée à nouveau, puis ses titres téléchargés",
     "retryFailed": "Impossible de mettre les titres en file d'attente",
     "lyrics": "Paroles",
     "noTracks": "Aucun titre",

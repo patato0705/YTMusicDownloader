@@ -28,10 +28,9 @@ export async function getAlbum(albumId: string): Promise<Album> {
 }
 
 /**
- * Download an album
- * 1. Fetch album from YTMusic if not in DB
- * 2. Set album mode to "download"
- * 3. Queue download jobs for all tracks
+ * Download an album: sets it to download mode and queues its import,
+ * which refreshes the tracklist and queues a download for every track
+ * not on disk (an album not in the DB yet is fetched first)
  */
 export async function downloadAlbum(albumId: string): Promise<any> {
   return api.post(`/albums/${encodeURIComponent(albumId)}/download`);
@@ -39,9 +38,10 @@ export async function downloadAlbum(albumId: string): Promise<any> {
 
 /**
  * Requeue the tracks of a downloaded album that aren't on disk
- * (failed ones, and any left without a job)
+ * (failed ones, and any left without a job), or its import when it has
+ * no tracks at all (import_queued)
  */
-export async function retryAlbum(albumId: string): Promise<{ album_id: string; tracks_queued: number }> {
+export async function retryAlbum(albumId: string): Promise<{ album_id: string; tracks_queued: number; import_queued: boolean }> {
   return api.post(`/albums/${encodeURIComponent(albumId)}/retry`);
 }
 

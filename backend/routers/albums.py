@@ -4,8 +4,9 @@ Album endpoints.
 
 Endpoints :
 - GET /api/albums/{album_id} - Get album details
-- POST /api/albums/{album_id}/download - Download album (queue track downloads)
-- POST /api/albums/{album_id}/retry - Requeue tracks of a downloaded album that aren't on disk
+- POST /api/albums/{album_id}/download - Download album (queues its import, which queues the downloads)
+- POST /api/albums/{album_id}/retry - Requeue tracks of a downloaded album that aren't on disk,
+  or its import when it has no tracks yet
 - DELETE /api/albums/{album_id}/download - Stop downloading album (revert to metadata)
 """
 from __future__ import annotations
@@ -16,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..deps import get_db
-from ..models import Album
+from ..models import Album, Job, Track
 from ..services import albums as albums_svc
 from ..services import tracks as tracks_svc
 from ..services import subscriptions as subs_svc
@@ -29,6 +30,15 @@ from backend.models import User
 logger = logging.getLogger("routers.albums")
 
 router = APIRouter(prefix="/api/albums", tags=["Albums"])
+
+
+def _import_waiting(db: Session, album_id: str) -> bool:
+    """Whether an import_album job for this album is waiting or running."""
+    return db.query(Job.id).filter(
+        Job.type == "import_album",
+        Job.status.in_(("queued", "reserved")),
+        Job.payload["browse_id"].as_string() == album_id,
+    ).first() is not None
 
 
 @router.get("/{album_id}", status_code=status.HTTP_200_OK)
@@ -63,6 +73,7 @@ def get_album(
             return {
                 "source": "database",
                 "mode": album.get("mode", "metadata"),
+                "needs_import": False,
                 "album": {
                     "id": album["id"],
                     "title": album["title"],
@@ -106,6 +117,10 @@ def get_album(
             return {
                 "source": "database" if db_mode == "download" else "ytmusic",
                 "mode": db_mode,
+                # A download-mode album whose import failed for good: the
+                # tracks shown are YTMusic's, none are in the DB to retry, so
+                # Retry has to import it again
+                "needs_import": db_mode == "download" and not _import_waiting(db, album_id),
                 "album": {
                     "id": album["id"],
                     "title": album["title"],
@@ -121,6 +136,7 @@ def get_album(
         return {
             "source": "ytmusic",
             "mode": None,
+            "needs_import": False,
             "album": {
                 "id": album_data.get("id", album_id),
                 "title": album_data.get("title"),
@@ -147,112 +163,65 @@ def download_album(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Download an album:
-    1. Fetch album from YTMusic if not in DB
-    2. Set album mode to "download"
-    3. Queue download jobs for all tracks
+    Download an album: set it to download mode and queue its import, which
+    fetches the current tracklist from YTMusic, writes the cover and
+    album.nfo, then queues a download for every track not on disk -- the
+    same path as the albums of a followed artist.
 
-    Returns album data and count of queued jobs.
+    An album not in the DB yet is fetched here first, so it shows up with
+    its real title, artist and tracks right away instead of as an empty
+    row until the import lands. Its artist gets a light subscription if it
+    has none (album metadata and banner, no downloads).
     """
     if not album_id:
         raise HTTPException(status_code=400, detail="album_id required")
 
     try:
-        # Check if album exists in DB (with on-demand track fetch for metadata mode)
-        album = albums_svc.get_album_with_tracks(db, album_id)
-
-        if not album:
-            # Not in DB - fetch and upsert from YTMusic
+        album_obj = db.get(Album, album_id)
+        if album_obj is None:
             logger.info(f"Album {album_id} not in DB, fetching from YTMusic")
-
-            # First, get album data to extract artist info
-            from ..ytm_service import adapter as ytm_adapter
-            album_raw = ytm_adapter.get_album(browse_id=album_id)
-
-            # Upsert artist first if present
-            artist_id = None
-            artists = album_raw.get("artists", [])
-            if artists and isinstance(artists, list) and len(artists) > 0:
-                first_artist = artists[0]
-                if isinstance(first_artist, dict):
-                    artist_id = first_artist.get("id")
-                    artist_name = first_artist.get("name")
-
-                    if artist_id:
-                        from ..services import artists as artists_svc
-                        try:
-                            artists_svc.upsert_artist(
-                                db,
-                                artist_id=artist_id,
-                                name=artist_name,
-                            )
-                            logger.info(f"Upserted artist {artist_id}: {artist_name}")
-                        except Exception as e:
-                            logger.exception(f"Failed to upsert artist {artist_id}")
-
-            # Now fetch and upsert album with artist_id
-            result = albums_svc.fetch_and_upsert_album(db, browse_id=album_id, artist_id=artist_id)
-
-            # Get the album data
-            album = albums_svc.get_album_from_db(db, album_id, include_tracks=True)
-
-            if not album:
+            albums_svc.fetch_and_upsert_album(db, browse_id=album_id)
+            db.flush()  # autoflush=False: db.get can't see the new row before this
+            album_obj = db.get(Album, album_id)
+            if album_obj is None:
                 raise HTTPException(status_code=500, detail="Failed to fetch album from YTMusic")
 
-            logger.info(f"Fetched and upserted album {album_id}: {result['inserted_tracks']} tracks")
+        album_info = {
+            "id": album_obj.id,
+            "title": album_obj.title,
+            "artist_id": album_obj.artist_id,
+            "type": album_obj.type,
+        }
 
-        # Check if already in download mode
-        album_obj = db.get(Album, album_id)
-        if album_obj and album_obj.mode == "download":
+        if album_obj.mode == "download":
             return {
                 "source": "database",
                 "mode": "download",
                 "message": "Album already in download mode",
-                "album": {
-                    "id": album["id"],
-                    "title": album["title"],
-                    "artist_id": album["artist_id"],
-                },
-                "tracks_queued": 0,
+                "album": album_info,
+                "artist_subscription_created": False,
             }
 
-        # Set album mode to download
         album_obj.mode = "download"
         db.add(album_obj)
-
-        album_artist_id = album.get("artist_id")
-        logger.info(f"Set album {album_id} to download mode")
+        album_artist_id = album_obj.artist_id
 
         # Auto-create light artist subscription if artist doesn't have one yet
         artist_sub_created = False
-        if album_artist_id:
-            existing_artist_sub = subs_svc.get_artist_subscription(db, album_artist_id)
-            if not existing_artist_sub:
-                from ..services import artists as artists_svc
-                # Ensure artist record exists in DB
-                artists_svc.upsert_artist(
-                    db,
-                    artist_id=album_artist_id,
-                    name=album.get("artist_name") or None,
-                )
-                subs_svc.subscribe_to_artist(db, artist_id=album_artist_id, mode="light")
-                artist_sub_created = True
-                logger.info(f"Auto-created light artist subscription for {album_artist_id}")
+        if album_artist_id and not subs_svc.get_artist_subscription(db, album_artist_id):
+            subs_svc.subscribe_to_artist(db, artist_id=album_artist_id, mode="light")
+            artist_sub_created = True
+            logger.info(f"Auto-created light artist subscription for {album_artist_id}")
 
-        # Queue download jobs for every track not on disk. This also rolls
-        # the album up right away, so clients polling album status see the
-        # work before the first track finishes.
-        tracks = album.get("tracks", [])
-        db.flush()  # autoflush=False: the rollup has to see the mode change
-        queued_count = tracks_svc.queue_album_downloads(
-            db, album_id, user_id=current_user.id, origin=Origin.USER
+        db.flush()  # autoflush=False: the rollup and the import check see the mode change
+        subs_svc.check_and_update_album_download_status(db, album_id)
+        subs_svc.queue_album_imports(
+            db, [album_id], artist_id=album_artist_id, user_id=current_user.id, origin=Origin.USER
         )
-
-        # Commit mode change + download jobs
         db.commit()
 
         # Queue sync_artist job for light subscription (fetches all albums metadata + banner)
-        if artist_sub_created and album_artist_id:
+        if artist_sub_created:
             try:
                 enqueue_job(
                     db,
@@ -265,20 +234,13 @@ def download_album(
             except Exception as e:
                 logger.exception(f"Failed to queue sync_artist job for {album_artist_id}")
 
-        logger.info(f"Album {album_id} set to download by user {current_user.id}: {queued_count} tracks queued")
+        logger.info(f"Album {album_id} set to download by user {current_user.id}: import queued")
 
         return {
             "source": "database",
             "mode": "download",
-            "message": f"Album download started. {queued_count} tracks queued.",
-            "album": {
-                "id": album["id"],
-                "title": album["title"],
-                "artist_id": album_artist_id,
-                "type": album["type"],
-            },
-            "tracks_total": len(tracks),
-            "tracks_queued": queued_count,
+            "message": "Album download started",
+            "album": album_info,
             "artist_subscription_created": artist_sub_created,
         }
 
@@ -301,6 +263,9 @@ def retry_album_download(
     Requeue every track of a download-mode album that isn't on disk and
     isn't already waiting: failed tracks, and any left "available" (e.g.
     after a cancelled job).
+
+    An album with no tracks at all (its import failed for good) has nothing
+    to requeue: its import is queued again instead.
     """
     album_obj = db.get(Album, album_id)
     if not album_obj:
@@ -309,6 +274,14 @@ def retry_album_download(
         raise HTTPException(status_code=400, detail="Album is not in download mode")
 
     try:
+        if db.query(Track.id).filter(Track.album_id == album_id).first() is None:
+            subs_svc.queue_album_imports(
+                db, [album_id], artist_id=album_obj.artist_id, user_id=current_user.id, origin=Origin.USER
+            )
+            db.commit()
+            logger.info(f"User {current_user.id} retried album {album_id}: no tracks, import queued")
+            return {"album_id": album_id, "tracks_queued": 0, "import_queued": True}
+
         queued = tracks_svc.queue_album_downloads(
             db, album_id, user_id=current_user.id, origin=Origin.USER
         )
@@ -319,7 +292,7 @@ def retry_album_download(
         raise HTTPException(status_code=500, detail=f"Failed to retry album: {e}")
 
     logger.info(f"User {current_user.id} retried album {album_id}: {queued} tracks queued")
-    return {"album_id": album_id, "tracks_queued": queued}
+    return {"album_id": album_id, "tracks_queued": queued, "import_queued": False}
 
 
 @router.delete("/{album_id}/download", status_code=status.HTTP_200_OK)

@@ -237,6 +237,7 @@
     "retry": "Retry missing tracks",
     "retryQueued": "{count} track(s) queued for download",
     "retryNothing": "Nothing to retry: every track is on disk or already queued",
+    "retryImport": "The album's tracklist will be fetched again, then its tracks downloaded",
     "retryFailed": "Could not queue the tracks",
     "lyrics": "Lyrics",
     "noTracks": "No Tracks",

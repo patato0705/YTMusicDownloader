@@ -31,6 +31,9 @@ export default function Album(): JSX.Element {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [source, setSource] = useState<string>('');
+  // A download-mode album with no tracks in the DB and no import waiting:
+  // Retry imports it again (see routers/albums.py)
+  const [needsImport, setNeedsImport] = useState(false);
   const [lyricsTrack, setLyricsTrack] = useState<Track | null>(null);
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -50,6 +53,7 @@ export default function Album(): JSX.Element {
     setTracks(data.tracks || []);
     setIsFollowing(data.mode === 'download');
     setSource(data.source || '');
+    setNeedsImport(Boolean(data.needs_import));
   };
 
   useEffect(() => {
@@ -123,11 +127,13 @@ export default function Album(): JSX.Element {
 
     setRetryLoading(true);
     try {
-      const { tracks_queued } = await retryAlbum(albumId);
+      const { tracks_queued, import_queued } = await retryAlbum(albumId);
       refreshJobs();
-      setToast(tracks_queued > 0
-        ? { message: t('album.retryQueued', { count: tracks_queued }), type: 'success' }
-        : { message: t('album.retryNothing'), type: 'success' });
+      setToast(import_queued
+        ? { message: t('album.retryImport'), type: 'success' }
+        : tracks_queued > 0
+          ? { message: t('album.retryQueued', { count: tracks_queued }), type: 'success' }
+          : { message: t('album.retryNothing'), type: 'success' });
       const data = await getAlbum(albumId);
       applyAlbum(data);
     } catch (err: any) {
@@ -403,7 +409,7 @@ export default function Album(): JSX.Element {
                   ← {t('common.back')}
                 </Button>
 
-                {canModify && isFollowing && showTrackState && retryableCount > 0 && (
+                {canModify && isFollowing && showTrackState && (retryableCount > 0 || needsImport) && (
                   <Button
                     onClick={handleRetry}
                     variant="secondary"
