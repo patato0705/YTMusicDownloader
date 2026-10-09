@@ -31,7 +31,7 @@ from ..services import charts as charts_svc
 from .. import downloader
 
 from ..config import YDL_COOKIEFILE, YDL_USER_COOKIEFILE
-from .priorities import DEFAULT_ORIGIN, Origin
+from .priorities import Origin
 
 logger = logging.getLogger("jobs.tasks")
 
@@ -208,7 +208,8 @@ def download_track(
     track_id: str,
     album_id: Optional[str] = None,
     artist_id: Optional[str] = None,
-    origin: str = DEFAULT_ORIGIN.value,
+    *,
+    origin: str,
 ) -> Dict[str, Any]:
     """
     Download a track by video ID using yt-dlp.
@@ -712,7 +713,8 @@ def download_lyrics(
     session: Session,
     track_id: str,
     mode: str = "normal",
-    origin: str = DEFAULT_ORIGIN.value,  # sets this job's priority; queues nothing itself
+    *,
+    origin: str,  # sets this job's priority; queues nothing itself
 ) -> Dict[str, Any]:
     """
     Download lyrics for a track using LRCLIB API.
@@ -886,7 +888,8 @@ def import_album(
     session: Session,
     browse_id: str,
     artist_id: Optional[str] = None,
-    origin: str = DEFAULT_ORIGIN.value,
+    *,
+    origin: str,
 ) -> Dict[str, Any]:
     """
     Fetch and import an album from YTMusic, then queue download jobs.
@@ -992,7 +995,8 @@ def sync_artist(
     session: Session,
     artist_id: str,
     download_banner: bool = True,
-    origin: str = DEFAULT_ORIGIN.value,
+    *,
+    origin: str,
 ) -> Dict[str, Any]:
     """
     Sync an artist: fetch latest releases and update database.
@@ -1237,7 +1241,8 @@ def sync_artist(
 def sync_chart(
     session: Session,
     country_code: str,
-    origin: str = Origin.BULK.value,  # always BULK, see services/charts.enqueue_chart_sync
+    *,
+    origin: str,  # always BULK, see services/charts.enqueue_chart_sync
 ) -> Dict[str, Any]:
     """
     Sync a country chart: fetch latest data and follow top N artists.

@@ -8,22 +8,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class EnqueueRequest(BaseModel):
-    """Request to enqueue a new job"""
-    type: str = Field(..., description="Job type (e.g. 'download_track', 'sync_artist')")
-    payload: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Job payload data")
-    scheduled_at: Optional[datetime] = Field(None, description="Schedule for future (UTC)")
-    priority: Optional[int] = Field(0, description="Priority (higher = first)")
-    max_attempts: Optional[int] = Field(5, description="Max retry attempts")
-
-
-class EnqueueResponse(BaseModel):
-    """Response after enqueueing a job"""
-    ok: bool
-    job_id: Optional[int] = None
-    message: Optional[str] = None
-
-
 class JobOut(BaseModel):
     """Job output schema"""
     id: int

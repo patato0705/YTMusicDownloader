@@ -18,11 +18,6 @@ export interface Track {
   [key: string]: any;
 }
 
-export interface DownloadTrackRequest {
-  video_id?: string;
-  [key: string]: any;
-}
-
 export interface TrackLyrics {
   ok: boolean;
   track_id: string;
@@ -62,17 +57,6 @@ export async function getTrack(trackId: string): Promise<Track> {
  */
 export async function getAlbumTracks(albumId: string): Promise<Track[]> {
   return api.get<Track[]>(`/tracks/album/${encodeURIComponent(albumId)}`);
-}
-
-/**
- * Enqueue a download job for the track
- * Returns { ok: true, job_id: <int> }
- */
-export async function downloadTrack(
-  trackId: string,
-  metadata?: DownloadTrackRequest
-): Promise<any> {
-  return api.post(`/tracks/${encodeURIComponent(trackId)}/download`, metadata);
 }
 
 /**

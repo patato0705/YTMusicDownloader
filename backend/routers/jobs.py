@@ -4,7 +4,6 @@ Job endpoints.
 
 Endpoints:
 - GET /api/jobs - List jobs.
-- POST /api/jobs/enqueue - Enqueue a new job.
 - GET /api/jobs/{job_id} - Get a single job by ID.
 - POST /api/jobs/{job_id}/cancel - Cancel a job.
 - POST /api/jobs/{job_id}/requeue - Requeue a failed job.
@@ -25,8 +24,6 @@ from ..jobs import jobqueue
 from ..jobs.priorities import Origin, priority_for
 from .. import time_utils
 from ..schemas.jobs import (
-    EnqueueRequest,
-    EnqueueResponse,
     JobOut,
     CancelRequest,
     RequeueRequest,
@@ -119,61 +116,6 @@ def list_jobs(
     
     except Exception as e:
         logger.exception("list_jobs failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.post("/enqueue", response_model=EnqueueResponse, status_code=status.HTTP_201_CREATED)
-def enqueue_job_endpoint(
-    req: EnqueueRequest,
-    current_user: User = Depends(require_admin),
-    session: Session = Depends(get_session),
-) -> EnqueueResponse:
-    """
-    Enqueue a raw job (any type/payload/priority).
-    
-    Permissions: Administrators only. This is a generic queue endpoint that
-    bypasses the role checks on the typed endpoints (album download, artist
-    follow, chart sync, ...), so it must not be open to members or visitors.
-    The job will be associated with the current user.
-    """
-    if not req.type or not req.type.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Job type is required"
-        )
-    
-    try:
-        # Add user_id to payload
-        payload = req.payload or {}
-        payload["user_id"] = current_user.id
-        
-        job = jobqueue.enqueue_job(
-            session=session,
-            job_type=req.type.strip(),
-            payload=payload,
-            scheduled_at=req.scheduled_at,
-            priority=req.priority if req.priority is not None else 0,
-            max_attempts=req.max_attempts if req.max_attempts is not None else 5,
-            commit=False,
-        )
-        # Keep "queued" meaning a job exists, even for hand-made ones
-        jobqueue.set_download_track_status(session, job, "queued")
-        session.commit()
-        session.refresh(job)
-        
-        logger.info(f"User {current_user.username} enqueued job {job.id} (type={req.type})")
-        
-        return EnqueueResponse(
-            ok=True,
-            job_id=job.id,
-            message="Job enqueued successfully"
-        )
-    
-    except Exception as e:
-        logger.exception(f"Failed to enqueue job {req.type}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

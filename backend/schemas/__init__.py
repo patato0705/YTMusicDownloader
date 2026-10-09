@@ -28,8 +28,6 @@ from .auth import (
 
 # Job schemas
 from .jobs import (
-    EnqueueRequest,
-    EnqueueResponse,
     JobOut,
     CancelRequest,
     RequeueRequest,
@@ -79,8 +77,6 @@ __all__ = [
     "TemporaryPasswordResponse",
     
     # Job schemas
-    "EnqueueRequest",
-    "EnqueueResponse",
     "JobOut",
     "CancelRequest",
     "RequeueRequest",

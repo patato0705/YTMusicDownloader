@@ -22,7 +22,7 @@ artist's imports. Ties go to the oldest job (jobqueue.reserve_job).
 """
 from __future__ import annotations
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 
 class Origin(str, Enum):
@@ -30,10 +30,6 @@ class Origin(str, Enum):
     AUTO = "auto"
     BULK = "bulk"
 
-
-# A job whose payload names no origin (one enqueued raw through the admin
-# API) neither jumps ahead of user requests nor waits behind charts.
-DEFAULT_ORIGIN = Origin.AUTO
 
 # Retries lower a job's priority by its attempt count (jobqueue.mark_job_failed),
 # at most 1+2+3+4 = 10 with the default 5 attempts: far less than the gap
@@ -51,12 +47,9 @@ def priority_for(job_type: str, origin: Origin) -> int:
     return _BASE[Origin(origin)] + _STAGE.get(job_type, 0)
 
 
-def job_origin(payload: Optional[dict[str, Any]]) -> Origin:
-    """The origin recorded in a job's payload (DEFAULT_ORIGIN if none)."""
-    try:
-        return Origin((payload or {}).get("origin"))
-    except ValueError:
-        return DEFAULT_ORIGIN
+def job_origin(payload: dict[str, Any]) -> Origin:
+    """The origin recorded in a job's payload (always set by enqueue_job)."""
+    return Origin(payload["origin"])
 
 
 def promote(job: Any, origin: Origin) -> bool:

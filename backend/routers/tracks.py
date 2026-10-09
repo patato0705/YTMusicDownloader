@@ -5,7 +5,6 @@ Track endpoints.
 Endpoints:
 - GET /api/tracks/{track_id} - Return track info from DB
 - GET /api/tracks/album/{album_id} - Return a lightweight list of tracks for the given album_id.
-- POST /api/tracks/{track_id}/download - Enqueue a download job for the given track
 - POST /api/tracks/{track_id}/ensure_lyrics - Fetch lyrics from LRCLIB now (queues/bumps a download_lyrics job).
 - GET /api/tracks/{track_id}/lyrics - Return the track's .lrc file content.
 - PUT /api/tracks/{track_id}/lyrics - Overwrite (or clear) the track's .lrc file.
@@ -134,40 +133,6 @@ def list_tracks_for_album(
         logger.exception("list_tracks_for_album failed for %s", album_id)
         raise HTTPException(status_code=500, detail=str(e))
 
-
-class DownloadRequestModel(dict):
-    """
-    Simple inline model shape documentation for request body of download endpoint.
-    Keys typically:
-      - cover_path (optional string)
-      - track_title, artist_name, album_name, year, track_number (optional metadata)
-    """
-
-@router.post("/{track_id}/download", status_code=status.HTTP_202_ACCEPTED)
-def download_track(
-    track_id: str,
-    body: Dict[str, Any] = Body(default_factory=dict),
-    current_user: User = Depends(require_member_or_admin),
-    db: Session = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    Enqueue a download job for the given track (video id).
-    The job type used is 'download_track' and payload includes video_id plus optional metadata from body.
-    Returns { ok: True, job_id: <int> } on success.
-    """
-    if not track_id:
-        raise HTTPException(status_code=400, detail="track_id required")
-    try:
-        payload: Dict[str, Any] = {"video_id": str(track_id), "user_id": current_user.id}
-        # merge allowed optional metadata from body
-        for k in ("artist_name", "album_name", "track_title", "track_number", "year", "cover_path"):
-            if k in body:
-                payload[k] = body.get(k)
-        job = jobqueue.enqueue_job(session=db, job_type="download_track", payload=payload)
-        return {"ok": True, "job_id": job.id}
-    except Exception as e:
-        logger.exception("download_track enqueue failed for %s", track_id)
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{track_id}/ensure_lyrics", status_code=status.HTTP_202_ACCEPTED)
 def ensure_lyrics(
