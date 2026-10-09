@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from .db import SessionLocal
 from .jobs.jobqueue import enqueue_job, cleanup_old_jobs, reclaim_orphaned_jobs
+from .jobs.priorities import Origin
 from .services import subscriptions as subs_svc, auth as auth_svc, charts as charts_svc
 from .routers import features
 from . import settings as settings_module
@@ -324,7 +325,7 @@ class Scheduler:
                             session=session,
                             job_type="sync_artist",
                             payload=payload,
-                            priority=25,  # Higher priority for syncs
+                            origin=Origin.AUTO,
                         )
                         logger.info(f"Enqueued sync_artist job {job.id} for artist {artist_id}")
                         enqueued_count += 1
@@ -522,7 +523,7 @@ class Scheduler:
             track.status = "available"
             track.last_error = None
             session.add(track)
-        requeued = tracks_svc.queue_track_downloads(session, wanted)
+        requeued = tracks_svc.queue_track_downloads(session, wanted, origin=Origin.AUTO)
 
         # queue_track_downloads rolls up its own albums; the released ones
         # would otherwise keep showing "pending"/"downloading"
@@ -646,13 +647,15 @@ class Scheduler:
             # === Category 2: Upgrade (plain → synced) ===
             upgrade_tracks = due_tracks(Track.lyrics == "plain", limit=25)
 
+            # Same priority for both: recoveries still run first, being queued
+            # first (ties go to the oldest job)
             now = now_utc()
             for track in recovery_tracks:
                 enqueue_job(
                     session,
                     job_type="download_lyrics",
                     payload={"track_id": track.id},
-                    priority=3,
+                    origin=Origin.AUTO,
                     max_attempts=3,
                     commit=False,
                 )
@@ -662,7 +665,7 @@ class Scheduler:
                     session,
                     job_type="download_lyrics",
                     payload={"track_id": track.id, "mode": "upgrade"},
-                    priority=2,
+                    origin=Origin.AUTO,
                     max_attempts=2,
                     commit=False,
                 )

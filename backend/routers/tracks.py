@@ -26,6 +26,7 @@ from ..deps import get_db
 from ..models import Job, Track
 from ..time_utils import now_utc
 from ..jobs import jobqueue
+from ..jobs.priorities import Origin, promote
 from ..services import tracks as tracks_svc
 
 from backend.dependencies import require_auth, require_member_or_admin, require_admin
@@ -199,12 +200,14 @@ def ensure_lyrics(
             if isinstance(job.payload, dict) and job.payload.get("track_id") == str(track_id):
                 if job.status == "queued":
                     job.scheduled_at = now_utc()
+                    promote(job, Origin.USER)
                     db.commit()
                 return {"ok": True, "job_id": job.id, "queued": False}
         job = jobqueue.enqueue_job(
             session=db,
             job_type="download_lyrics",
             payload={"track_id": str(track_id), "mode": "normal"},
+            origin=Origin.USER,
             user_id=current_user.id,
         )
         return {"ok": True, "job_id": job.id, "queued": True}

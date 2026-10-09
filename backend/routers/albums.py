@@ -21,6 +21,7 @@ from ..services import albums as albums_svc
 from ..services import tracks as tracks_svc
 from ..services import subscriptions as subs_svc
 from ..jobs.jobqueue import enqueue_job
+from ..jobs.priorities import Origin
 
 from backend.dependencies import require_auth, require_member_or_admin, require_admin
 from backend.models import User
@@ -243,7 +244,9 @@ def download_album(
         # work before the first track finishes.
         tracks = album.get("tracks", [])
         db.flush()  # autoflush=False: the rollup has to see the mode change
-        queued_count = tracks_svc.queue_album_downloads(db, album_id, user_id=current_user.id)
+        queued_count = tracks_svc.queue_album_downloads(
+            db, album_id, user_id=current_user.id, origin=Origin.USER
+        )
 
         # Commit mode change + download jobs
         db.commit()
@@ -255,7 +258,7 @@ def download_album(
                     db,
                     job_type="sync_artist",
                     payload={"artist_id": album_artist_id},
-                    priority=15,
+                    origin=Origin.USER,
                     user_id=current_user.id,
                 )
                 logger.info(f"Queued sync_artist job for light subscription of {album_artist_id}")
@@ -306,7 +309,9 @@ def retry_album_download(
         raise HTTPException(status_code=400, detail="Album is not in download mode")
 
     try:
-        queued = tracks_svc.queue_album_downloads(db, album_id, user_id=current_user.id)
+        queued = tracks_svc.queue_album_downloads(
+            db, album_id, user_id=current_user.id, origin=Origin.USER
+        )
         db.commit()
     except Exception as e:
         db.rollback()

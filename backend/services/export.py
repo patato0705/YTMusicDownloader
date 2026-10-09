@@ -33,6 +33,10 @@ from ..schemas.export import (
 )
 from ..time_utils import now_utc
 from ..jobs.jobqueue import enqueue_job
+# Everything a restore queues is BULK (see jobs/priorities.py): a whole
+# library's worth of work, which shouldn't hold up what users ask for while
+# it runs. Users and settings are written directly, never queued.
+from ..jobs.priorities import Origin
 from . import subscriptions as subs_svc
 from . import artists as artists_svc
 from . import albums as albums_svc
@@ -430,6 +434,7 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
     for album_id in sorted(albums_needing_import):
         result.albums_to_import += subs_svc.queue_album_imports(
             session, [album_id], artist_id=download_albums[album_id], user_id=user_id,
+            origin=Origin.BULK,
         )
 
     return result
@@ -456,12 +461,14 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
         if item.mode == "full":
             full_artists.add(item.id)
             if old_mode == "light":
-                subs_svc.upgrade_all_albums_to_download(session, item.id, user_id=user_id)
+                subs_svc.upgrade_all_albums_to_download(
+                    session, item.id, user_id=user_id, origin=Origin.BULK
+                )
         enqueue_job(
             session,
             job_type="sync_artist",
             payload={"artist_id": item.id},
-            priority=30,
+            origin=Origin.BULK,
             user_id=user_id,
             commit=False,
         )
@@ -487,7 +494,7 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
                     session,
                     job_type="sync_artist",
                     payload={"artist_id": item.artist_id},
-                    priority=30,
+                    origin=Origin.BULK,
                     user_id=user_id,
                     commit=False,
                 )
@@ -498,7 +505,7 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
             session,
             job_type="import_album",
             payload={"browse_id": item.id, "artist_id": item.artist_id},
-            priority=20,
+            origin=Origin.BULK,
             user_id=user_id,
             commit=False,
         )

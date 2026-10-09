@@ -22,6 +22,7 @@ from ..db import get_session
 from ..dependencies import require_auth, require_admin
 from ..models import Job, User
 from ..jobs import jobqueue
+from ..jobs.priorities import Origin, priority_for
 from .. import time_utils
 from ..schemas.jobs import (
     EnqueueRequest,
@@ -310,11 +311,14 @@ def requeue_job(
         if body.delay_seconds is not None:
             scheduled_at = now_utc() + timedelta(seconds=body.delay_seconds)
         
-        # Update job
+        # Update job. An admin asking for it again is a user request: it
+        # also undoes the priority it lost to its failed attempts.
         job.status = "queued"
         job.scheduled_at = scheduled_at
         job.last_error = None
         job.attempts = 0  # Reset attempts
+        job.priority = priority_for(job.type, Origin.USER)
+        job.payload = {**(job.payload or {}), "origin": Origin.USER.value}
         session.add(job)
         jobqueue.set_download_track_status(session, job, "queued")
         session.commit()

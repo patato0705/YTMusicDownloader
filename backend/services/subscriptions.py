@@ -11,6 +11,7 @@ from datetime import datetime
 from sqlalchemy import select, func, case
 from sqlalchemy.orm import Session
 
+from ..jobs.priorities import Origin, promote
 from ..models import Artist, Album, ArtistSubscription, Job, Track
 from ..time_utils import now_utc, ensure_timezone_aware
 
@@ -192,6 +193,8 @@ def upgrade_all_albums_to_download(
     session: Session,
     artist_id: str,
     user_id: Optional[int] = None,
+    *,
+    origin: Origin,
 ) -> int:
     """
     Upgrade all albums for an artist from metadata to download mode, and
@@ -225,6 +228,7 @@ def upgrade_all_albums_to_download(
         {a.id for a in albums} | set(_trackless_download_album_ids(session, artist_id)),
         artist_id=artist_id,
         user_id=user_id,
+        origin=origin,
     )
     return count
 
@@ -244,6 +248,8 @@ def queue_trackless_album_imports(
     session: Session,
     artist_id: str,
     user_id: Optional[int] = None,
+    *,
+    origin: Origin,
 ) -> int:
     """
     Queue an import_album for each of the artist's download-mode albums
@@ -263,6 +269,7 @@ def queue_trackless_album_imports(
         _trackless_download_album_ids(session, artist_id),
         artist_id=artist_id,
         user_id=user_id,
+        origin=origin,
     )
 
 
@@ -271,38 +278,41 @@ def queue_album_imports(
     album_ids: Collection[str],
     artist_id: Optional[str] = None,
     user_id: Optional[int] = None,
-    priority: int = 20,
+    *,
+    origin: Origin,
 ) -> int:
     """
     Queue an import_album job for each album that doesn't already have one
-    waiting or running. Does not commit. Returns the number queued.
+    waiting or running. A waiting one is moved up to `origin`'s class if
+    that's higher (see jobs/priorities.py) rather than duplicated. Does not
+    commit. Returns the number queued.
     """
     from ..jobs.jobqueue import enqueue_job
 
     pending = {
-        str(p.get("browse_id"))
-        for p in session.execute(
-            select(Job.payload).where(
+        str(job.payload.get("browse_id")): job
+        for job in session.execute(
+            select(Job).where(
                 Job.type == "import_album",
                 Job.status.in_(("queued", "reserved")),
             )
         ).scalars()
-        if isinstance(p, dict)
+        if isinstance(job.payload, dict)
     }
 
     queued = 0
     for album_id in sorted(album_ids):
         if album_id in pending:
+            promote(pending[album_id], origin)
             continue
-        enqueue_job(
+        pending[album_id] = enqueue_job(
             session,
             job_type="import_album",
             payload={"browse_id": album_id, "artist_id": artist_id},
-            priority=priority,
+            origin=origin,
             user_id=user_id,
             commit=False,
         )
-        pending.add(album_id)
         queued += 1
     return queued
 

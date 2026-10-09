@@ -22,6 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..jobs.priorities import Origin, promote
 from ..models import Job, Track
 
 logger = logging.getLogger("services.tracks")
@@ -236,12 +237,28 @@ def active_download_track_ids(session: Session) -> Set[str]:
     return {str(p["track_id"]) for p in payloads if isinstance(p, dict) and p.get("track_id")}
 
 
+def _promote_waiting_downloads(session: Session, track_ids: Set[str], origin: Origin) -> None:
+    """Move the waiting download jobs of these tracks up to `origin`'s class."""
+    if not track_ids:
+        return
+    jobs = session.execute(
+        select(Job).where(
+            Job.type == "download_track",
+            Job.status == "queued",
+            Job.payload["track_id"].as_string().in_(track_ids),
+        )
+    ).scalars().all()
+    for job in jobs:
+        promote(job, origin)
+
+
 def queue_track_downloads(
     session: Session,
     tracks: Iterable[Track],
     artist_id: Optional[str] = None,
     user_id: Optional[int] = None,
-    priority: int = 10,
+    *,
+    origin: Origin,
 ) -> int:
     """
     Queue a download_track job for each track that needs one, mark it
@@ -250,13 +267,18 @@ def queue_track_downloads(
 
     Tracks on disk, being downloaded, or already waiting on a job are
     skipped, so this is safe to call on a whole album any number of times.
+    A waiting job is moved up to `origin`'s class if that's higher (see
+    jobs/priorities.py): a user downloading an album a chart already queued
+    shouldn't wait behind the rest of the chart.
 
     Returns the number of jobs queued.
     """
     from ..jobs.jobqueue import enqueue_job
     from . import subscriptions as subs_svc
 
+    tracks = list(tracks)
     active = active_download_track_ids(session)
+    _promote_waiting_downloads(session, {t.id for t in tracks if t.id in active}, origin)
     albums: Set[str] = set()
     queued = 0
 
@@ -270,7 +292,7 @@ def queue_track_downloads(
             session,
             job_type="download_track",
             payload=payload,
-            priority=priority,
+            origin=origin,
             user_id=user_id,
             commit=False,
         )
@@ -295,10 +317,11 @@ def queue_album_downloads(
     album_id: str,
     artist_id: Optional[str] = None,
     user_id: Optional[int] = None,
-    priority: int = 10,
+    *,
+    origin: Origin,
 ) -> int:
     """queue_track_downloads() for every track of an album. Does not commit."""
     tracks = session.query(Track).filter(Track.album_id == album_id).all()
     return queue_track_downloads(
-        session, tracks, artist_id=artist_id, user_id=user_id, priority=priority
+        session, tracks, artist_id=artist_id, user_id=user_id, origin=origin
     )

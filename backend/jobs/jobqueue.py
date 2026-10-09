@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Job, Track
 from ..time_utils import now_utc
+from .priorities import Origin, priority_for
 
 logger = logging.getLogger("jobs.jobqueue")
 
@@ -55,6 +56,7 @@ def enqueue_job(
     max_attempts: int = 5,
     user_id: Optional[int] = None,  # NEW parameter
     commit: bool = True,
+    origin: Optional[Origin] = None,
 ) -> Job:
     """
     Create a new Job row and commit. Returns the Job instance.
@@ -64,20 +66,30 @@ def enqueue_job(
         job_type: Job type identifier (e.g., "download_track", "import_album")
         payload: Job data as dict (e.g., {"track_id": "abc123"})
         scheduled_at: Optional datetime to schedule job for future execution
-        priority: Job priority (higher = more important, default 0)
+        priority: Job priority (higher = more important, default 0). Ignored
+            when `origin` is given; only the raw admin enqueue sets it.
         max_attempts: Maximum retry attempts (default 5)
         user_id: Optional user ID who initiated the job (for tracking)
         commit: Whether to commit immediately (default True)
+        origin: Where the job comes from (see jobs/priorities.py): sets the
+            priority and is recorded in the payload, so the jobs this one
+            queues inherit it
     
     Returns:
         Job instance with ID populated
     """
     if not job_type:
         raise ValueError("job_type is required")
-    
+
+    payload = dict(payload or {})
+    if origin is not None:
+        origin = Origin(origin)
+        priority = priority_for(job_type, origin)
+        payload["origin"] = origin.value
+
     job = Job(
         type=str(job_type),
-        payload=payload or {},
+        payload=payload,
         status="queued",
         attempts=0,
         max_attempts=max_attempts,

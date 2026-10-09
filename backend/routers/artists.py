@@ -21,6 +21,7 @@ from ..services import artists as artists_svc
 from ..services import albums as albums_svc
 from ..services import subscriptions as subs_svc
 from ..jobs.jobqueue import enqueue_job
+from ..jobs.priorities import Origin
 from backend.dependencies import require_auth, require_member_or_admin
 from backend.models import User, Artist
 
@@ -180,7 +181,9 @@ def follow_artist(
         # If upgrading from light to full, upgrade all albums to download mode;
         # that queues an import_album for each, which queues their downloads
         if old_mode == "light":
-            upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id, user_id=current_user.id)
+            upgraded_count = subs_svc.upgrade_all_albums_to_download(
+                db, artist_id, user_id=current_user.id, origin=Origin.USER
+            )
             logger.info(f"Upgraded {upgraded_count} albums to download mode for artist {artist_id}")
 
         db.commit()
@@ -192,7 +195,7 @@ def follow_artist(
                 db,
                 job_type="sync_artist",
                 payload={"artist_id": artist_id},
-                priority=30,
+                origin=Origin.USER,
                 user_id=current_user.id
             )
             logger.info(f"Queued sync_artist job {job.id} for artist {artist_id}")
@@ -302,7 +305,9 @@ def update_artist_mode(
         # Update albums accordingly
         if mode == "full":
             # Upgrade: metadata → download (queues an import_album per album)
-            upgraded_count = subs_svc.upgrade_all_albums_to_download(db, artist_id, user_id=current_user.id)
+            upgraded_count = subs_svc.upgrade_all_albums_to_download(
+                db, artist_id, user_id=current_user.id, origin=Origin.USER
+            )
             db.commit()
 
             # Queue sync job (picks up any brand-new albums from API)
@@ -311,7 +316,7 @@ def update_artist_mode(
                     db,
                     job_type="sync_artist",
                     payload={"artist_id": artist_id},
-                    priority=20,
+                    origin=Origin.USER,
                     user_id=current_user.id
                 )
                 logger.info(f"Queued sync_artist job {job.id} for upgraded artist {artist_id}")

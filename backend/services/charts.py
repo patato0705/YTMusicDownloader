@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import ChartSubscription, ChartSnapshot, ArtistSubscription, Job
 from ..jobs.jobqueue import enqueue_job
+from ..jobs.priorities import Origin
 from ..ytm_service import adapter as ytm_adapter
 from ..time_utils import now_utc
 
@@ -215,7 +216,9 @@ def enqueue_chart_sync(
         session,
         job_type="sync_chart",
         payload={"country_code": country_code},
-        priority=20,
+        # Even when a user follows the chart or syncs it by hand: it's the
+        # whole chart's worth of artists, albums and tracks
+        origin=Origin.BULK,
         user_id=user_id,
         commit=False,
     )

@@ -313,7 +313,7 @@ Everything runs in a single Docker container managed by supervisord:
 |---|---|
 | `web` | FastAPI backend + the built React frontend, on port 8000 |
 | `worker-download-N` | Downloads audio with yt-dlp (N processes, see `DOWNLOAD_WORKERS`) |
-| `worker-metadata` | Talks to YouTube Music: artist syncs, album imports, chart syncs |
+| `worker-metadata-N` | Talks to YouTube Music: artist syncs, album imports, chart syncs (3 processes) |
 | `worker-lyrics` | Fetches lyrics from LRCLIB |
 | `scheduler` | Periodic syncs, retries and clean-ups |
 
@@ -321,10 +321,12 @@ All work goes through a job queue stored in SQLite (`/config/db.sqlite`). Worker
 
 Following an artist queues a `sync_artist` job → which queues an `import_album` job per release → which queues a `download_track` job per track → which queues a `download_lyrics` job once the audio is on disk.
 
+Jobs run in order of where they came from, and every job inherits that from the one that queued it: what a user asked for (follow, download, retry) runs first, then routine upkeep (scheduled syncs, lyrics retries), then large batches (charts, backup restore). So a chart's thousands of downloads never hold up an album you just asked for. Within each of these, an artist's albums are imported before the next artist is synced, so artists complete one at a time.
+
 ## Logs
 
 - `docker compose logs -f` — everything, interleaved.
-- `./config/logs/` — one rotating file per process (`web.log`, `worker-download-0.log`, `worker-metadata.log`, `worker-lyrics.log`, `scheduler.log`), 5 MB × 3 each.
+- `./config/logs/` — one rotating file per process (`web.log`, `worker-download-0.log`, `worker-metadata-0.log`, `worker-lyrics.log`, `scheduler.log`), 5 MB × 3 each.
 
 ## Troubleshooting
 

@@ -31,6 +31,7 @@ from ..services import charts as charts_svc
 from .. import downloader
 
 from ..config import YDL_COOKIEFILE, YDL_USER_COOKIEFILE
+from .priorities import DEFAULT_ORIGIN, Origin
 
 logger = logging.getLogger("jobs.tasks")
 
@@ -207,6 +208,7 @@ def download_track(
     track_id: str,
     album_id: Optional[str] = None,
     artist_id: Optional[str] = None,
+    origin: str = DEFAULT_ORIGIN.value,
 ) -> Dict[str, Any]:
     """
     Download a track by video ID using yt-dlp.
@@ -456,7 +458,7 @@ def download_track(
                     session,
                     job_type="download_lyrics",
                     payload={"track_id": track_id},
-                    priority=5
+                    origin=Origin(origin),
                 )
                 logger.debug(f"Queued lyrics download for track {track_id}")
             else:
@@ -710,6 +712,7 @@ def download_lyrics(
     session: Session,
     track_id: str,
     mode: str = "normal",
+    origin: str = DEFAULT_ORIGIN.value,  # sets this job's priority; queues nothing itself
 ) -> Dict[str, Any]:
     """
     Download lyrics for a track using LRCLIB API.
@@ -883,6 +886,7 @@ def import_album(
     session: Session,
     browse_id: str,
     artist_id: Optional[str] = None,
+    origin: str = DEFAULT_ORIGIN.value,
 ) -> Dict[str, Any]:
     """
     Fetch and import an album from YTMusic, then queue download jobs.
@@ -947,7 +951,9 @@ def import_album(
         album_obj = session.get(Album, album_id)
         if album_obj and album_obj.mode == "download":
             try:
-                queued = tracks_svc.queue_album_downloads(session, album_id, artist_id=artist_id)
+                queued = tracks_svc.queue_album_downloads(
+                    session, album_id, artist_id=artist_id, origin=Origin(origin)
+                )
                 _db_operation_with_retry(session.commit)
                 logger.info(f"Queued {queued} download jobs for album {album_id}")
             except Exception as e:
@@ -982,7 +988,12 @@ def import_album(
 # TASK: SYNC ARTIST
 # ============================================================================
 
-def sync_artist(session: Session, artist_id: str, download_banner: bool = True) -> Dict[str, Any]:
+def sync_artist(
+    session: Session,
+    artist_id: str,
+    download_banner: bool = True,
+    origin: str = DEFAULT_ORIGIN.value,
+) -> Dict[str, Any]:
     """
     Sync an artist: fetch latest releases and update database.
     
@@ -1156,7 +1167,9 @@ def sync_artist(session: Session, artist_id: str, download_banner: bool = True) 
     # Upgrade metadata → download for existing albums (queues their imports)
     upgraded_count = 0
     if upgradeable_albums:
-        upgraded_count = subs_svc.upgrade_all_albums_to_download(session, artist_id)
+        upgraded_count = subs_svc.upgrade_all_albums_to_download(
+            session, artist_id, origin=Origin(origin)
+        )
 
     def commit_albums():
         session.commit()
@@ -1176,7 +1189,9 @@ def sync_artist(session: Session, artist_id: str, download_banner: bool = True) 
     jobs_queued = 0
     if sync_mode == "full":
         try:
-            jobs_queued = subs_svc.queue_trackless_album_imports(session, artist_id)
+            jobs_queued = subs_svc.queue_trackless_album_imports(
+                session, artist_id, origin=Origin(origin)
+            )
             _db_operation_with_retry(session.commit)
         except Exception:
             session.rollback()
@@ -1219,7 +1234,11 @@ def sync_artist(session: Session, artist_id: str, download_banner: bool = True) 
 # ============================================================================
 
 
-def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
+def sync_chart(
+    session: Session,
+    country_code: str,
+    origin: str = Origin.BULK.value,  # always BULK, see services/charts.enqueue_chart_sync
+) -> Dict[str, Any]:
     """
     Sync a country chart: fetch latest data and follow top N artists.
     
@@ -1337,7 +1356,7 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
                     # Already fetched above - only retried when that failed
                     "download_banner": artist_id not in banners_downloaded,
                 },
-                priority=10,  # Lower priority than manual follows
+                origin=Origin.BULK,
             )
             jobs_queued += 1
             logger.debug(f"Queued sync_artist job {job.id} for artist {artist_id}")
