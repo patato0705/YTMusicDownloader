@@ -302,14 +302,26 @@ def get_user_stats(
 # SETTINGS MANAGEMENT ENDPOINTS
 # ============================================================================
 
-def _setting_meta(key: str) -> dict:
-    """What a SettingResponse carries besides the stored row: constraints and default."""
-    return {
+def _setting_meta(key: str, value=None) -> dict:
+    """
+    What a SettingResponse carries besides the stored row: constraints and
+    default, and for a schedule its unit, next fixed run and time zone --
+    computed here because the container's TZ needn't be the browser's.
+    """
+    meta = {
         "allowed_values": settings_module.get_allowed_values(key),
         "min": settings_module.get_min_value(key),
         "max": settings_module.get_max_value(key),
         "default": settings_module.get_default_value(key),
+        "unit": settings_module.get_unit(key),
     }
+    if settings_module.DEFAULT_SETTINGS.get(key, {}).get("type") == "schedule":
+        from .. import schedules
+        from ..time_utils import now_utc
+        upcoming = schedules.next_run(schedules.parse(value, meta["default"]), now_utc())
+        meta["next_run"] = upcoming.isoformat() if upcoming else None
+        meta["timezone"] = str(schedules.timezone())
+    return meta
 
 
 @router.get("/settings", response_model=list[SettingResponse])
@@ -324,7 +336,7 @@ def get_all_settings(
     """
     settings_list = settings_module.get_all_settings(session)
     return [
-        SettingResponse(**setting, **_setting_meta(setting["key"]))
+        SettingResponse(**setting, **_setting_meta(setting["key"], setting["value"]))
         for setting in settings_list
     ]
 
@@ -352,7 +364,7 @@ def get_setting(
                 value=default_config["value"],
                 type=default_config["type"],
                 description=default_config["description"],
-                **_setting_meta(key),
+                **_setting_meta(key, default_config["value"]),
                 updated_at=None,
                 updated_by=None,
             )
@@ -364,7 +376,7 @@ def get_setting(
 
     return SettingResponse(
         **setting.to_dict(),
-        **_setting_meta(key),
+        **_setting_meta(key, setting.get_typed_value()),
     )
 
 
@@ -401,7 +413,7 @@ def update_setting(
 
         return SettingResponse(
             **setting.to_dict(),
-            **_setting_meta(key),
+            **_setting_meta(key, setting.get_typed_value()),
         )
     
     except Exception as e:

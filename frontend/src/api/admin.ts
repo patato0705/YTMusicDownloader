@@ -27,15 +27,24 @@ export interface SettingOption {
 export interface Setting {
   key: string;
   value: any; // Can be number, boolean, string, or object
-  type: 'int' | 'bool' | 'string' | 'json';
+  type: 'int' | 'bool' | 'string' | 'json' | 'schedule';
   description: string | null;
   allowed_values: SettingOption[] | null;
-  min: number | null; // lower bound for int settings
+  min: number | null; // lower bound for int settings (and schedule intervals)
   max: number | null; // upper bound for int settings
   default: any; // built-in default value; null for keys without one
+  unit?: 'hours' | 'days' | null; // schedule settings: unit of the interval
+  next_run?: string | null; // schedule settings in fixed mode: ISO time of the next run
+  timezone?: string | null; // schedule settings: the container's TZ
   updated_at: string | null;
   updated_by: number | null;
 }
+
+/** Value of a "schedule" setting (backend/schedules.py) */
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+export type Schedule =
+  | { mode: 'interval'; every: number }
+  | { mode: 'fixed'; time: string; days: Weekday[] };
 
 export interface SettingUpdateRequest {
   value: any;
@@ -184,14 +193,6 @@ export async function deleteSetting(key: string): Promise<MessageResponse> {
  */
 export const Settings = {
   // Scheduler
-  getSyncInterval: async (): Promise<number> => {
-    const setting = await getSetting('scheduler.sync_interval_hours');
-    return setting.value as number;
-  },
-  setSyncInterval: async (hours: number): Promise<void> => {
-    await updateSetting('scheduler.sync_interval_hours', hours);
-  },
-
   getJobCleanupDays: async (): Promise<number> => {
     const setting = await getSetting('scheduler.job_cleanup_days');
     return setting.value as number;
@@ -233,14 +234,6 @@ export const Settings = {
   },
   setSyncedLyricsOnly: async (enabled: boolean): Promise<void> => {
     await updateSetting('features.synced_lyrics_only', enabled);
-  },
-
-  getLyricsRetryInterval: async (): Promise<number> => {
-    const setting = await getSetting('scheduler.lyrics_retry_interval_hours');
-    return setting.value as number;
-  },
-  setLyricsRetryInterval: async (hours: number): Promise<void> => {
-    await updateSetting('scheduler.lyrics_retry_interval_hours', hours);
   },
 
   areChartsEnabled: async (): Promise<boolean> => {

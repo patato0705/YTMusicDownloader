@@ -442,21 +442,27 @@
           }
         },
         "scheduler": {
-          "sync_interval_hours": {
-            "label": "Intervalle de synchronisation des artistes (heures)",
-            "description": "Fréquence à laquelle chaque artiste suivi est vérifié pour de nouvelles sorties."
+          "artist_sync": {
+            "label": "Synchronisation des artistes",
+            "description": "Quand les artistes suivis sont vérifiés pour de nouvelles sorties.",
+            "intervalHint": "Chaque artiste est vérifié {count} heures après sa dernière vérification : les vérifications s'étalent sur la journée.",
+            "intervalHint_one": "Chaque artiste est vérifié une heure après sa dernière vérification : les vérifications s'étalent sur la journée."
+          },
+          "chart_sync": {
+            "label": "Synchronisation des charts",
+            "description": "Quand les charts suivis sont récupérés à nouveau pour suivre les nouveaux artistes du top N. YouTube Music ne met à jour ses charts qu'une fois par semaine : plus souvent que tous les 7 jours, on ne trouve presque jamais rien de nouveau.",
+            "intervalHint": "Chaque chart est récupéré à nouveau {count} jours après sa dernière synchronisation.",
+            "intervalHint_one": "Chaque chart est récupéré à nouveau un jour après sa dernière synchronisation."
+          },
+          "lyrics_retry": {
+            "label": "Nouvel essai des paroles",
+            "description": "Quand les titres sans paroles ou avec des paroles non synchronisées sont réessayés.",
+            "intervalHint": "Un essai {count} heures après le précédent.",
+            "intervalHint_one": "Un essai toutes les heures."
           },
           "job_cleanup_days": {
             "label": "Conservation des tâches (jours)",
             "description": "Les tâches terminées (réussies, en échec ou annulées) plus anciennes que cette durée sont supprimées."
-          },
-          "lyrics_retry_interval_hours": {
-            "label": "Intervalle de nouvelle tentative des paroles (heures)",
-            "description": "Fréquence à laquelle les titres sans paroles ou avec des paroles non synchronisées sont réessayés."
-          },
-          "chart_sync_interval_days": {
-            "label": "Intervalle de synchronisation des charts (jours)",
-            "description": "Fréquence à laquelle chaque chart suivi est rechargé pour suivre les nouveaux artistes de son top. YouTube Music ne met à jour ses charts qu'une fois par semaine : synchroniser plus souvent que tous les 7 jours trouve rarement du nouveau."
           }
         },
         "ytmusic": {
@@ -477,6 +483,28 @@
         "uploaded": "Cookies de compte enregistrés",
         "uploadFailed": "Ce fichier ne ressemble pas à un cookies.txt",
         "deleted": "Cookies de compte supprimés"
+      },
+      "schedule": {
+        "modeFixed": "À",
+        "unit_hours": "heures",
+        "unit_hours_one": "heure",
+        "unit_days": "jours",
+        "unit_days_one": "jour",
+        "every_hours": "Toutes les {count} heures",
+        "every_hours_one": "Toutes les heures",
+        "every_days": "Tous les {count} jours",
+        "every_days_one": "Tous les jours",
+        "everyDay": "Tous les jours",
+        "fixedSummary": "{days} à {time}",
+        "nextRun": "Prochaine exécution : {when}",
+        "nextRunAfterSave": "La prochaine exécution s'affiche une fois enregistré.",
+        "noDays": "Choisissez au moins un jour.",
+        "timezone": "Les heures fixes sont dans le fuseau {timezone}, celui du conteneur (TZ). Une exécution manquée parce que l'application était arrêtée est sautée, pas rattrapée.",
+        "invalid": "{name} : la planification est incomplète",
+        "timeLabel": "Heure",
+        "daysLabel": "Jours de la semaine",
+        "modeInterval_hours": "Toutes les",
+        "modeInterval_days": "Tous les"
       }
     },
     "users": {

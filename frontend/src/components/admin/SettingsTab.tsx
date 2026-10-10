@@ -12,6 +12,7 @@ import * as adminApi from '../../api/admin';
 import type { Setting, YoutubeCookiesStatus } from '../../api/admin';
 import { parseApiError } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
+import { ScheduleControls, ScheduleHint, isValidSchedule, useScheduleSummary } from './ScheduleInput';
 import type { AdminTabProps } from './AdminTabShell';
 
 interface SettingsTabProps extends AdminTabProps {
@@ -21,6 +22,7 @@ interface SettingsTabProps extends AdminTabProps {
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) => {
   const { t, locale } = useI18n();
+  const scheduleSummary = useScheduleSummary();
 
   const [settings, setSettings] = useState<Setting[]>([]);
   const [editedSettings, setEditedSettings] = useState<Record<string, any>>({});
@@ -130,6 +132,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
 
   const defaultValueLabel = (setting: Setting): string => {
     if (setting.type === 'bool') return t(setting.default ? 'admin.settings.on' : 'admin.settings.off');
+    if (setting.type === 'schedule') return scheduleSummary(setting.default, setting.unit);
     const option = setting.allowed_values?.find(o => o.value === setting.default);
     return option ? settingOptionLabel(setting, option) : String(setting.default);
   };
@@ -149,7 +152,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
     );
   };
 
+  const invalidScheduleSetting = (setting: Setting): boolean =>
+    setting.type === 'schedule' && !isValidSchedule(editedSettings[setting.key], setting.min ?? 1);
+
   const saveSettings = async () => {
+    const invalidSchedule = settings.find(invalidScheduleSetting);
+    if (invalidSchedule) {
+      onToast(t('admin.settings.schedule.invalid', { name: settingLabel(invalidSchedule) }), 'error');
+      return;
+    }
     const invalid = settings.find(invalidIntSetting);
     if (invalid) {
       const params = { name: settingLabel(invalid), min: invalid.min ?? 0, max: invalid.max ?? 0 };
@@ -167,7 +178,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
       // Update each changed setting
       const updatePromises = Object.entries(editedSettings).map(([key, value]) => {
         const originalSetting = settings.find(s => s.key === key);
-        if (originalSetting && originalSetting.value !== value) {
+        if (originalSetting && JSON.stringify(originalSetting.value) !== JSON.stringify(value)) {
           return adminApi.updateSetting(key, value);
         }
         return Promise.resolve();
@@ -245,9 +256,18 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                       {settingLabel(setting)}
                     </label>
                     <p className="text-sm text-muted-foreground">{settingDescription(setting)}</p>
+                    {setting.type === 'schedule' && editedSettings[setting.key] && (
+                      <ScheduleHint
+                        settingKey={setting.key}
+                        value={editedSettings[setting.key]}
+                        nextRun={setting.next_run}
+                        dirty={JSON.stringify(editedSettings[setting.key]) !== JSON.stringify(setting.value)}
+                        timezone={setting.timezone}
+                      />
+                    )}
                   </div>
 
-                  <div className="flex-shrink-0 ml-auto flex items-center gap-2">
+                  <div className="flex-shrink-0 ml-auto flex flex-wrap items-center justify-end gap-2 max-w-full">
                     {!isAtDefault(setting) && (
                       <Button
                         variant="ghost"
@@ -259,7 +279,16 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                         {t('admin.settings.default')}
                       </Button>
                     )}
-                    {setting.type === 'bool' ? (
+                    {setting.type === 'schedule' ? (
+                      editedSettings[setting.key] && (
+                        <ScheduleControls
+                          value={editedSettings[setting.key]}
+                          onChange={(value) => handleSettingChange(setting.key, value, setting.type)}
+                          unit={setting.unit === 'days' ? 'days' : 'hours'}
+                          min={setting.min ?? 1}
+                        />
+                      )
+                    ) : setting.type === 'bool' ? (
                       <ToggleSwitch
                         checked={!!editedSettings[setting.key]}
                         onChange={(checked) => handleSettingChange(setting.key, checked, setting.type)}
@@ -299,6 +328,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                   </div>
                 </div>
               ))}
+
+              {category === 'scheduler' && categorySettings.some(s => s.timezone) && (
+                <p className="text-xs text-muted-foreground">
+                  {t('admin.settings.schedule.timezone', {
+                    timezone: categorySettings.find(s => s.timezone)?.timezone ?? '',
+                  })}
+                </p>
+              )}
 
               {category === 'download' && (
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-3">

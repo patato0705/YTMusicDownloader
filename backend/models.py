@@ -400,7 +400,7 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(String(128), primary_key=True)
     value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    type: Mapped[str] = mapped_column(String(32), nullable=False, default="string")  # string, int, bool, json
+    type: Mapped[str] = mapped_column(String(32), nullable=False, default="string")  # string, int, bool, json, schedule (JSON)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
     updated_by: Mapped[Optional[int]] = mapped_column(
@@ -437,7 +437,7 @@ class Setting(Base):
         elif setting_type == "bool":
             return value.lower() in ("true", "1", "yes", "on")
         
-        elif setting_type == "json":
+        elif setting_type in ("json", "schedule"):
             try:
                 import json
                 return json.loads(value)
@@ -451,7 +451,7 @@ class Setting(Base):
         """Set value with type conversion to string"""
         if value is None:
             self.value = None
-        elif self.type == "json":
+        elif self.type in ("json", "schedule"):
             import json
             self.value = json.dumps(value)
         elif self.type == "bool":

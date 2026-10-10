@@ -13,12 +13,15 @@ class SettingResponse(BaseModel):
     """Response model for a setting"""
     key: str
     value: Any  # Can be int, bool, str, dict depending on type
-    type: str  # "string", "int", "bool", "json"
+    type: str  # "string", "int", "bool", "json", "schedule"
     description: Optional[str] = None
     allowed_values: Optional[List[Dict[str, str]]] = None
     min: Optional[int] = None  # lower bound for int settings
     max: Optional[int] = None  # upper bound for int settings
     default: Any = None  # built-in default value; None for keys without one
+    unit: Optional[str] = None  # schedule settings: "hours" or "days" for interval mode
+    next_run: Optional[str] = None  # schedule settings in fixed mode: ISO time of the next run
+    timezone: Optional[str] = None  # schedule settings: the container's TZ the times are in
     updated_at: Optional[datetime] = None
     updated_by: Optional[int] = None
 

@@ -3,17 +3,21 @@
 Scheduler for periodic sync tasks.
 
 Responsibilities:
-1. Sync followed artists for new releases (every `scheduler.sync_interval_hours`)
-2. Re-sync followed charts (every `scheduler.chart_sync_interval_days`)
+1. Sync followed artists for new releases (`scheduler.artist_sync`)
+2. Re-sync followed charts (`scheduler.chart_sync`)
 3. Clean up old finished jobs, failed ones included (daily, keeping
    `scheduler.job_cleanup_days`)
 4. Clean up expired refresh tokens (daily)
-5. Retry/upgrade missing lyrics (every `scheduler.lyrics_retry_interval_hours`)
+5. Retry/upgrade missing lyrics (`scheduler.lyrics_retry`)
 6. Requeue jobs abandoned by a dead worker, fix up "queued"/"downloading"
    tracks that lost their job, and drop stale download scratch dirs
    (every 5 minutes)
 7. Delete thumbnail proxy cache files older than THUMBNAIL_CACHE_TTL (daily)
-8. Queue genre lookups that are due (daily, see services/genres.py)
+8. Queue genre lookups that are due (services/genres.py), along with the
+   artist syncs
+
+1, 2 and 5 follow a schedule set in the admin panel (backend/schedules.py):
+every N hours/days, or at a fixed time on chosen days of the week.
 
 Note: Album subscriptions are handled on-demand (follow album → immediate import)
 """
@@ -21,6 +25,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -31,8 +36,15 @@ from .jobs.priorities import Origin
 from .services import subscriptions as subs_svc, auth as auth_svc, charts as charts_svc
 from .routers import features
 from . import settings as settings_module
+from . import schedules
+from .time_utils import now_utc
 
 logger = logging.getLogger("scheduler")
+
+# Where each schedule's last fixed-time run is recorded (internal settings)
+ARTIST_LAST_RUN = "scheduler.artist_sync_last_run"
+CHART_LAST_RUN = "scheduler.chart_sync_last_run"
+LYRICS_LAST_RUN = "scheduler.lyrics_retry_last_run"
 
 
 class Scheduler:
@@ -51,25 +63,26 @@ class Scheduler:
         cleanup_interval_seconds: Optional[int] = None,
         token_cleanup_interval_seconds: Optional[int] = None,
         thread_name: str = "scheduler-thread",
-        settings_refresh_interval: int = 300  # Refresh settings every 5 minutes
+        settings_refresh_interval: int = 60  # a schedule change applies within a minute
     ) -> None:
-        # How often we *look* for artists that are due. The per-artist cadence is
-        # `scheduler.sync_interval_hours`, applied as a cutoff on last_synced_at.
-        # Looking more often than that keeps the real cadence close to the
-        # setting: polling exactly every N hours would usually find the artist
-        # synced a few seconds *after* the cutoff and skip it until 2N.
-        self.sync_check_interval_seconds: int = sync_check_interval_seconds or 600  # 10 minutes
-        self.sync_interval_hours: int = 6  # refreshed from DB
-        # Same pattern for charts: `scheduler.chart_sync_interval_days` is a
-        # cutoff on ChartSubscription.last_synced_at, checked on the artist cadence.
-        self.chart_sync_interval_days: int = 7  # refreshed from DB
+        # How often we *look* for due artists and charts. Every minute: a
+        # fixed-time run starts on time, and in interval mode -- a cutoff on
+        # each one's last_synced_at -- an artist is picked up within a minute
+        # of becoming due (polling exactly every N hours would find it synced
+        # a few seconds *after* the cutoff and skip it until 2N).
+        self.sync_check_interval_seconds: int = sync_check_interval_seconds or 60
+        # backend/schedules.py; the defaults until refreshed from the DB
+        def default(key: str) -> schedules.Schedule:
+            value = settings_module.get_default_value(key)
+            return schedules.parse(value, value)
+        self.artist_schedule = default("scheduler.artist_sync")
+        self.chart_schedule = default("scheduler.chart_sync")
+        self.lyrics_schedule = default("scheduler.lyrics_retry")
         # Fixed cadences (the settings only control retention / age):
         self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours
         self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours
-        self.lyrics_retry_interval_seconds: int = 86400  # refreshed from DB
         self.stale_sweep_interval_seconds: int = 300
         self.thumbnail_cleanup_interval_seconds: int = 86400
-        self.genre_sweep_interval_seconds: int = 86400
         self.settings_refresh_interval: int = settings_refresh_interval
 
         self._thread_name = thread_name
@@ -115,33 +128,17 @@ class Scheduler:
         try:
             session = SessionLocal()
             
-            # Get sync interval from settings (in hours)
-            sync_hours = settings_module.get_setting(
-                session, 
-                "scheduler.sync_interval_hours", 
-                default=6
-            )
-            self.sync_interval_hours = max(1, int(sync_hours))
+            def load(key: str) -> schedules.Schedule:
+                default = settings_module.get_default_value(key)
+                return schedules.parse(settings_module.get_setting(session, key, default), default)
 
-            chart_sync_days = settings_module.get_setting(
-                session,
-                "scheduler.chart_sync_interval_days",
-                default=7
-            )
-            self.chart_sync_interval_days = max(1, int(chart_sync_days))
-
-            # Get lyrics retry interval from settings (in hours, convert to seconds)
-            lyrics_retry_hours = settings_module.get_setting(
-                session,
-                "scheduler.lyrics_retry_interval_hours",
-                default=24
-            )
-            self.lyrics_retry_interval_seconds = max(1, int(lyrics_retry_hours)) * 3600
+            self.artist_schedule = load("scheduler.artist_sync")
+            self.chart_schedule = load("scheduler.chart_sync")
+            self.lyrics_schedule = load("scheduler.lyrics_retry")
 
             logger.debug(
-                f"Settings refreshed: sync_interval={self.sync_interval_hours}h, "
-                f"chart_sync_interval={self.chart_sync_interval_days}d, "
-                f"lyrics_retry_interval={self.lyrics_retry_interval_seconds}s"
+                f"Schedules refreshed: artists={self.artist_schedule}, "
+                f"charts={self.chart_schedule}, lyrics={self.lyrics_schedule}"
             )
             
         except Exception as e:
@@ -188,10 +185,8 @@ class Scheduler:
             self._refresh_settings_from_db()
             self._last_settings_refresh = time.time()
             logger.info(
-                "Scheduler settings loaded (sync_interval=%sh, chart_sync_interval=%sd, lyrics_retry_interval=%ss)",
-                self.sync_interval_hours,
-                self.chart_sync_interval_days,
-                self.lyrics_retry_interval_seconds
+                "Scheduler settings loaded (artists=%s, charts=%s, lyrics=%s, TZ=%s)",
+                self.artist_schedule, self.chart_schedule, self.lyrics_schedule, schedules.timezone(),
             )
         except Exception:
             logger.exception("Failed to load initial settings from database, using defaults")
@@ -215,13 +210,13 @@ class Scheduler:
             # Check if any artist or chart sync is due
             if now - self._last_sync >= self.sync_check_interval_seconds:
                 try:
-                    self.sync_monitored_artists()
+                    self._run_artist_syncs(now)
                 except Exception:
-                    logger.exception("Unexpected error in sync_monitored_artists")
+                    logger.exception("Unexpected error in artist syncs")
                 try:
-                    self.sync_charts()
+                    self._run_chart_syncs()
                 except Exception:
-                    logger.exception("Unexpected error in sync_charts")
+                    logger.exception("Unexpected error in chart syncs")
                 self._last_sync = now
             
             # Check if job cleanup is due
@@ -241,12 +236,16 @@ class Scheduler:
                     logger.exception("Unexpected error in cleanup_expired_tokens")
 
             # Check if lyrics retry is due
-            if now - self._last_lyrics_retry >= self.lyrics_retry_interval_seconds:
-                try:
+            try:
+                if self.lyrics_schedule.fixed:
+                    if self._fixed_run_due(self.lyrics_schedule, LYRICS_LAST_RUN):
+                        self.retry_missing_lyrics()
+                        self._mark_fixed_run(LYRICS_LAST_RUN)
+                elif now - self._last_lyrics_retry >= self.lyrics_schedule.every * 3600:
                     self.retry_missing_lyrics()
                     self._last_lyrics_retry = now
-                except Exception:
-                    logger.exception("Unexpected error in retry_missing_lyrics")
+            except Exception:
+                logger.exception("Unexpected error in retry_missing_lyrics")
 
             if now - self._last_stale_sweep >= self.stale_sweep_interval_seconds:
                 try:
@@ -262,20 +261,72 @@ class Scheduler:
                 except Exception:
                     logger.exception("Unexpected error in cleanup_thumbnail_cache")
 
-            if now - self._last_genre_sweep >= self.genre_sweep_interval_seconds:
-                try:
-                    self.queue_due_genre_lookups()
-                    self._last_genre_sweep = now
-                except Exception:
-                    logger.exception("Unexpected error in queue_due_genre_lookups")
-
             # Sleep for a short interval (check every minute)
             self._stopped.wait(timeout=60.0)
 
-    def sync_monitored_artists(self) -> None:
+    # -- schedules -------------------------------------------------------------
+
+    def _fixed_run_due(self, schedule: "schedules.Schedule", last_run_key: str) -> Optional[datetime]:
+        """The fixed run of `schedule` to do now, given the last one done (stored under last_run_key)."""
+        session = SessionLocal()
+        try:
+            raw = str(settings_module.get_setting(session, last_run_key, "") or "")
+        finally:
+            session.close()
+        last_done = None
+        if raw:
+            try:
+                last_done = datetime.fromisoformat(raw)
+            except ValueError:
+                logger.warning(f"Ignoring unparseable {last_run_key}={raw!r}")
+        return schedules.due_run(schedule, last_done, now_utc())
+
+    def _mark_fixed_run(self, last_run_key: str) -> None:
+        session = SessionLocal()
+        try:
+            settings_module.set_setting(session, last_run_key, now_utc().isoformat())
+        finally:
+            session.close()
+
+    def _run_artist_syncs(self, now: float) -> None:
         """
-        Check for followed artists that need syncing and enqueue sync_artist jobs.
-        Only syncs artists that haven't been synced in the last sync_interval_hours.
+        Interval mode: every artist last synced more than N hours ago, each on
+        its own cadence. Fixed mode: at the run time, every artist not synced
+        since. The genre sweep goes along, so all network work keeps to the
+        same schedule.
+        """
+        schedule = self.artist_schedule
+        if schedule.fixed:
+            run = self._fixed_run_due(schedule, ARTIST_LAST_RUN)
+            if run is None:
+                return
+            logger.info(f"Fixed-time artist sync ({schedule.time})")
+            self.sync_monitored_artists(cutoff=run)
+            self.queue_due_genre_lookups()
+            self._mark_fixed_run(ARTIST_LAST_RUN)
+            return
+        self.sync_monitored_artists(cutoff=now_utc() - timedelta(hours=schedule.every))
+        if now - self._last_genre_sweep >= schedule.every * 3600:
+            self.queue_due_genre_lookups()
+            self._last_genre_sweep = now
+
+    def _run_chart_syncs(self) -> None:
+        """Same as _run_artist_syncs for charts, in days."""
+        schedule = self.chart_schedule
+        if schedule.fixed:
+            run = self._fixed_run_due(schedule, CHART_LAST_RUN)
+            if run is None:
+                return
+            logger.info(f"Fixed-time chart sync ({schedule.time})")
+            self.sync_charts(cutoff=run)
+            self._mark_fixed_run(CHART_LAST_RUN)
+            return
+        self.sync_charts(cutoff=now_utc() - timedelta(days=schedule.every))
+
+    def sync_monitored_artists(self, cutoff: datetime) -> None:
+        """
+        Enqueue a sync_artist job for every followed artist last synced
+        before `cutoff` (see _run_artist_syncs).
         """
         session: Optional[Session] = None
         try:
@@ -285,7 +336,7 @@ class Scheduler:
             try:
                 artists = subs_svc.get_monitored_artists_needing_sync(
                     session=session,
-                    sync_interval_hours=self.sync_interval_hours
+                    cutoff=cutoff,
                 ) or []
             except Exception:
                 logger.exception("Failed fetching monitored artists")
@@ -355,10 +406,10 @@ class Scheduler:
                 except Exception:
                     pass
 
-    def sync_charts(self) -> None:
+    def sync_charts(self, cutoff: datetime) -> None:
         """
-        Enqueue sync_chart jobs for enabled charts not synced within
-        chart_sync_interval_days. Skipped entirely while the charts feature is off.
+        Enqueue sync_chart jobs for enabled charts last synced before `cutoff`
+        (see _run_chart_syncs). Skipped entirely while the charts feature is off.
         """
         session: Optional[Session] = None
         try:
@@ -371,7 +422,7 @@ class Scheduler:
             try:
                 subscriptions = charts_svc.get_chart_subscriptions_needing_sync(
                     session=session,
-                    sync_interval_hours=self.chart_sync_interval_days * 24,
+                    cutoff=cutoff,
                 )
             except Exception:
                 logger.exception("Failed fetching chart subscriptions needing sync")

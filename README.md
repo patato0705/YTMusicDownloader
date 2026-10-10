@@ -7,7 +7,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 ## Features
 
 - **Search YouTube Music** for artists, albums and tracks from a web UI.
-- **Follow artists** — all existing releases are downloaded, and new ones are picked up automatically (every 6 h by default).
+- **Follow artists** — all existing releases are downloaded, and new ones are picked up automatically.
 - **Download single albums** without following the artist.
 - **Import a playlist**: paste a YouTube Music playlist URL, then follow every artist in it or download every album it contains in bulk.
 - **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly).
@@ -129,9 +129,9 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Synced lyrics only | on | Reject plain lyrics; keep retrying for synced ones |
 | Genre lookup | on | Look up genres on MusicBrainz and Deezer. Off stops the lookups; genres already found stay in the files. |
 | Charts | on | Enable the Charts page and chart subscriptions |
-| Artist sync interval | 6 h | How often each followed artist is checked for new releases |
-| Chart sync interval | 7 days | How often each followed chart is re-fetched (YouTube Music updates its charts weekly) |
-| Lyrics retry interval | 24 h | How often tracks with missing/plain lyrics are retried |
+| Artist sync | Tue, Thu, Sat at 02:00 | When followed artists are checked for new releases (see [Schedules](#schedules)) |
+| Chart sync | Mondays at 04:00 | When followed charts are re-fetched (YouTube Music updates its charts weekly) |
+| Lyrics retry | every 24 h | When tracks with missing/plain lyrics are retried |
 | Job retention | 3 days | Finished jobs (completed, failed or cancelled) older than this are deleted |
 | YouTube Music language | `en` | Language of fetched metadata (bios, descriptions) |
 | YouTube account cookies | none | See [Age-restricted tracks](#age-restricted-tracks) |
@@ -164,9 +164,18 @@ Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**,
 
 On the **Browse** page, click *Import from playlist* (next to the search bar) and paste a YouTube Music playlist URL (or a raw playlist ID). The page lists the unique artists and albums in it, and offers *Follow Main Artists*, *Follow All Artists* and *Download All Albums* bulk actions, plus per-item buttons.
 
+### Schedules
+
+Artist syncs, chart syncs and lyrics retries each run on their own schedule, set in **Admin Panel → Settings → Scheduler**:
+
+- **Every N hours** (days for charts): each artist or chart is synced N hours after its own last sync, so the work spreads over the day.
+- **At a fixed time**, on the days of the week you tick: say 04:00 every day, or 07:00 on Mondays and Fridays. Everything due is queued at that time. The settings page shows the next run.
+
+Fixed times are in the container's time zone (`TZ` in `docker-compose.yml`). A fixed run the app wasn't up for (more than 30 minutes late) is skipped rather than caught up, so a sync meant for a quiet hour doesn't land in a busy one. Following an artist or a chart still syncs it right away; the schedule only drives the repeats. Genre lookups go along with the artist syncs.
+
 ### Charts
 
-Admins follow a country chart from **Admin Panel → Charts** and choose how many of its top artists to follow (1–40). Those artists are followed in full mode. The chart is re-synced on the chart sync interval, following any new entrants. The Charts page shows the current chart for every followed country.
+Admins follow a country chart from **Admin Panel → Charts** and choose how many of its top artists to follow (1–40). Those artists are followed in full mode. The chart is re-synced on the chart sync schedule, following any new entrants. The Charts page shows the current chart for every followed country.
 
 ### Lyrics
 

@@ -20,31 +20,57 @@ logger = logging.getLogger("settings")
 # Default settings with descriptions
 DEFAULT_SETTINGS = {
     # Scheduler settings
-    "scheduler.sync_interval_hours": {
-        "value": 6,
-        "type": "int",
+    # Schedules (backend/schedules.py): every N hours/days ("unit"), or at a
+    # fixed time on chosen days of the week. Their *_last_run companions
+    # record the last fixed run done, so one isn't repeated or caught up.
+    "scheduler.artist_sync": {
+        # A quiet hour, three times a week: plenty to catch new releases,
+        # which mostly land on Fridays
+        "value": {"mode": "fixed", "time": "02:00", "days": ["tue", "thu", "sat"]},
+        "type": "schedule",
+        "unit": "hours",
         "min": 1,
-        "description": "Hours between new-release checks for each followed artist",
+        "description": "When followed artists are checked for new releases",
+    },
+    "scheduler.artist_sync_last_run": {
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last fixed-time artist sync run",
+    },
+    "scheduler.chart_sync": {
+        # YouTube Music publishes its charts weekly, so syncing more often
+        # than once a week mostly fetches the same chart again.
+        "value": {"mode": "fixed", "time": "04:00", "days": ["mon"]},
+        "type": "schedule",
+        "unit": "days",
+        "min": 1,
+        "description": "When followed charts are re-fetched (YouTube Music updates its charts weekly)",
+    },
+    "scheduler.chart_sync_last_run": {
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last fixed-time chart sync run",
+    },
+    "scheduler.lyrics_retry": {
+        "value": {"mode": "interval", "every": 24},
+        "type": "schedule",
+        "unit": "hours",
+        "min": 1,
+        "description": "When tracks with missing or plain lyrics are retried",
+    },
+    "scheduler.lyrics_retry_last_run": {
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last fixed-time lyrics retry run",
     },
     "scheduler.job_cleanup_days": {
         "value": 3,
         "type": "int",
         "min": 1,
         "description": "Days to keep finished jobs (done, failed, cancelled)",
-    },
-    "scheduler.lyrics_retry_interval_hours": {
-        "value": 24,
-        "type": "int",
-        "min": 1,
-        "description": "Hours between lyrics recovery/upgrade checks",
-    },
-    "scheduler.chart_sync_interval_days": {
-        # YouTube Music publishes its charts weekly, so syncing more often
-        # than every 7 days mostly fetches the same chart again.
-        "value": 7,
-        "type": "int",
-        "min": 1,
-        "description": "Days between re-syncs of each followed chart (YouTube Music updates its charts weekly)",
     },
 
     # Registration settings
@@ -217,6 +243,12 @@ def get_min_value(key: str) -> Optional[int]:
     return config.get("min")
 
 
+def get_unit(key: str) -> Optional[str]:
+    """The unit of a schedule setting's interval ("hours" or "days")."""
+    config_ = DEFAULT_SETTINGS.get(key)
+    return config_.get("unit") if config_ else None
+
+
 def get_max_value(key: str) -> Optional[int]:
     """
     Return the upper bound for an int setting, or None if unconstrained.
@@ -283,6 +315,13 @@ def validate_value(key: str, setting_type: str, value: Any) -> Any:
     elif setting_type == "bool":
         if not isinstance(value, bool):
             raise ValueError(f"Invalid value for {key}: must be true or false")
+
+    elif setting_type == "schedule":
+        from . import schedules
+        try:
+            value = schedules.validate(value, get_min_value(key) or 1, get_max_value(key))
+        except ValueError as e:
+            raise ValueError(f"Invalid value for {key}: {e}")
 
     return value
 
@@ -382,8 +421,11 @@ def get_all_settings(session: Session, include_internal: bool = False) -> List[D
     Get all settings as list of dicts. Internal bookkeeping keys and settings
     moot under the current sign-in configuration are left out by default.
     """
-    stmt = select(Setting).order_by(Setting.key)
-    settings = session.execute(stmt).scalars().all()
+    settings = session.execute(select(Setting)).scalars().all()
+    # In the order they're declared above, which keeps related settings
+    # together (each schedule next to the others); unknown keys last
+    declared = {key: i for i, key in enumerate(DEFAULT_SETTINGS)}
+    settings = sorted(settings, key=lambda s: (declared.get(s.key, len(declared)), s.key))
     return [
         s.to_dict() for s in settings
         if include_internal or (not is_internal(s.key) and is_applicable(s.key))

@@ -464,17 +464,14 @@ def get_artist_status(session: Session, artist_id: str) -> dict:
 
 def get_monitored_artists_needing_sync(
     session: Session,
-    sync_interval_hours: int = 6,
+    cutoff: datetime,
 ) -> list[Artist]:
     """
-    Return Artist rows that have an enabled subscription and haven't been
-    synced within the last `sync_interval_hours` hours.
+    Return Artist rows that have an enabled full subscription and haven't
+    been synced since `cutoff` (or ever).
 
     Used by the scheduler to decide which artists to re-sync.
     """
-    from datetime import timedelta
-
-    cutoff = now_utc() - timedelta(hours=sync_interval_hours)
 
     stmt = (
         select(Artist)

@@ -442,21 +442,27 @@
           }
         },
         "scheduler": {
-          "sync_interval_hours": {
-            "label": "Artist sync interval (hours)",
-            "description": "How often each followed artist is checked for new releases."
+          "artist_sync": {
+            "label": "Artist sync",
+            "description": "When followed artists are checked for new releases.",
+            "intervalHint": "Each artist is checked {count} hours after its last check, so checks spread over the day.",
+            "intervalHint_one": "Each artist is checked an hour after its last check, so checks spread over the day."
+          },
+          "chart_sync": {
+            "label": "Chart sync",
+            "description": "When followed charts are re-fetched to follow new top-N artists. YouTube Music only updates its charts weekly, so more often than every 7 days rarely finds anything new.",
+            "intervalHint": "Each chart is re-fetched {count} days after its last sync.",
+            "intervalHint_one": "Each chart is re-fetched a day after its last sync."
+          },
+          "lyrics_retry": {
+            "label": "Lyrics retry",
+            "description": "When tracks with missing or unsynced lyrics are retried.",
+            "intervalHint": "A retry {count} hours after the previous one.",
+            "intervalHint_one": "A retry every hour."
           },
           "job_cleanup_days": {
             "label": "Job retention (days)",
             "description": "Finished jobs (completed, failed or cancelled) older than this are deleted."
-          },
-          "lyrics_retry_interval_hours": {
-            "label": "Lyrics retry interval (hours)",
-            "description": "How often tracks with missing or unsynced lyrics are retried."
-          },
-          "chart_sync_interval_days": {
-            "label": "Chart sync interval (days)",
-            "description": "How often each followed chart is re-fetched to follow new top-N artists. YouTube Music only updates its charts weekly, so syncing more often than every 7 days rarely finds anything new."
           }
         },
         "ytmusic": {
@@ -477,6 +483,28 @@
         "uploaded": "Account cookies saved",
         "uploadFailed": "That doesn't look like a cookies.txt file",
         "deleted": "Account cookies removed"
+      },
+      "schedule": {
+        "modeFixed": "At",
+        "unit_hours": "hours",
+        "unit_hours_one": "hour",
+        "unit_days": "days",
+        "unit_days_one": "day",
+        "every_hours": "Every {count} hours",
+        "every_hours_one": "Every hour",
+        "every_days": "Every {count} days",
+        "every_days_one": "Every day",
+        "everyDay": "Every day",
+        "fixedSummary": "{days} at {time}",
+        "nextRun": "Next run: {when}",
+        "nextRunAfterSave": "The next run is shown once saved.",
+        "noDays": "Pick at least one day.",
+        "timezone": "Fixed times are in {timezone}, the container's time zone (TZ). A run the app isn't up for is skipped, not caught up.",
+        "invalid": "{name}: the schedule is incomplete",
+        "timeLabel": "Time",
+        "daysLabel": "Days of the week",
+        "modeInterval_hours": "Every",
+        "modeInterval_days": "Every"
       }
     },
     "users": {

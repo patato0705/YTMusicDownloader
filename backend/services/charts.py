@@ -5,7 +5,7 @@ Charts service - handles chart subscriptions and sync operations.
 from __future__ import annotations
 import logging
 from typing import Optional, Dict, Any, List
-from datetime import timedelta
+from datetime import datetime
 
 from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
@@ -164,10 +164,9 @@ def update_sync_status(
 
 def get_chart_subscriptions_needing_sync(
     session: Session,
-    sync_interval_hours: int,
+    cutoff: datetime,
 ) -> List[ChartSubscription]:
-    """Enabled subscriptions that were never synced or not within the interval."""
-    cutoff = now_utc() - timedelta(hours=max(1, int(sync_interval_hours)))
+    """Enabled subscriptions never synced, or last synced before `cutoff`."""
     stmt = (
         select(ChartSubscription)
         .where(
