@@ -27,7 +27,7 @@ interface PlaylistsPanelProps {
 }
 
 export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onChanged }) => {
-  const { t, locale } = useI18n();
+  const { t, formatLocale } = useI18n();
   const { user } = useAuth();
   const { refresh: refreshJobs } = useJobActivity();
   const navigate = useNavigate();
@@ -39,7 +39,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
 
   const lastScan = (p: SavedPlaylist): string | null => {
     if (!p.last_synced_at) return null;
-    const when = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' })
+    const when = new Intl.DateTimeFormat(formatLocale, { dateStyle: 'medium', timeStyle: 'short' })
       .format(new Date(p.last_synced_at));
     return t('playlist.status.lastScan', { when });
   };

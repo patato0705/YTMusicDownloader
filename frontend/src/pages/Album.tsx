@@ -42,7 +42,7 @@ export default function Album(): JSX.Element {
   const [needsImport, setNeedsImport] = useState(false);
   const [lyricsTrack, setLyricsTrack] = useState<Track | null>(null);
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, formatLocale } = useI18n();
   const { user } = useAuth();
   const { revision, refresh: refreshJobs, downloadsPausedUntil } = useJobActivity();
   const isAdmin = user?.role === 'administrator';
@@ -212,7 +212,7 @@ export default function Album(): JSX.Element {
       case 'queued': {
         // Rate-limited: no worker takes downloads until the pause lifts
         if (downloadsPausedUntil) {
-          const time = new Date(downloadsPausedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const time = new Date(downloadsPausedUntil).toLocaleTimeString(formatLocale, { hour: '2-digit', minute: '2-digit' });
           return {
             styles: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 dark:border-amber-500/25',
             label: t('album.trackStatus.paused'),

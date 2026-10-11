@@ -5,22 +5,26 @@ import { createPortal } from 'react-dom';
 interface InfoTooltipProps {
   /** Tooltip body: plain text or richer markup. */
   content: React.ReactNode;
-  /** Accessible name for the "i" trigger button. */
+  /** Accessible name for the trigger button. */
   label: string;
+  /** Extra classes for the trigger; with custom children they are its only styling. */
   className?: string;
+  /** Custom trigger content, replacing the default "i" badge (e.g. a navbar status badge). */
+  children?: React.ReactNode;
 }
 
 const GAP = 8;     // distance between the trigger and the bubble
 const MARGIN = 8;  // minimum distance from the viewport edges
 
 /**
- * Small "i" button that reveals a bubble on hover, focus or click/tap.
+ * Small "i" button (or a custom trigger) that reveals a bubble on hover, focus
+ * or click/tap, so the details stay reachable on touch devices.
  *
  * The bubble is portaled to <body> with fixed positioning so it is neither
  * clipped by overflow-hidden/auto ancestors (cards, table wrappers) nor
  * affected by their text styles (e.g. an uppercase <th>).
  */
-export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, className = '' }) => {
+export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, className = '', children }) => {
   const [open, setOpen] = useState(false);
   // null until the bubble has been measured, so it is never painted at (0, 0)
   const [position, setPosition] = useState<{ top: number; left: number; arrowLeft: number; placement: 'top' | 'bottom' } | null>(null);
@@ -51,9 +55,13 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
       return;
     }
     updatePosition();
+    // Live content (e.g. job counts) can resize the bubble while it is open
+    const observer = new ResizeObserver(updatePosition);
+    if (bubbleRef.current) observer.observe(bubbleRef.current);
     window.addEventListener('scroll', updatePosition, true);
     window.addEventListener('resize', updatePosition);
     return () => {
+      observer.disconnect();
       window.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
     };
@@ -97,16 +105,20 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
         onBlur={() => setOpen(false)}
         aria-label={label}
         aria-expanded={open}
-        className={`inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 dark:border-white/20 text-[10px] leading-none normal-case font-serif italic text-muted-foreground hover:text-blue-600 dark:hover:text-red-400 hover:border-blue-400/50 dark:hover:border-red-600/50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 transition-colors ${className}`}
+        className={
+          children
+            ? `focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-red-600 ${className}`
+            : `inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 dark:border-white/20 text-[10px] leading-none normal-case font-serif italic text-muted-foreground hover:text-blue-600 dark:hover:text-red-400 hover:border-blue-400/50 dark:hover:border-red-600/50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 transition-colors ${className}`
+        }
       >
-        i
+        {children ?? 'i'}
       </button>
 
       {open && createPortal(
         <div
           ref={bubbleRef}
           role="tooltip"
-          className="fixed z-50 w-72 max-w-[calc(100vw-16px)] px-4 py-3 glass rounded-xl border border-slate-200/50 dark:border-white/10 shadow-xl text-sm font-normal normal-case tracking-normal text-foreground text-left pointer-events-none transition-opacity duration-150"
+          className="fixed z-50 w-max max-w-[min(18rem,calc(100vw-16px))] px-4 py-3 glass rounded-xl border border-slate-200/50 dark:border-white/10 shadow-xl text-sm font-normal normal-case tracking-normal text-foreground text-left pointer-events-none transition-opacity duration-150"
           style={
             position
               ? { top: `${position.top}px`, left: `${position.left}px`, opacity: 1 }

@@ -21,7 +21,7 @@ interface SettingsTabProps extends AdminTabProps {
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) => {
-  const { t, locale } = useI18n();
+  const { t, locale, formatLocale } = useI18n();
   const scheduleSummary = useScheduleSummary();
 
   const [settings, setSettings] = useState<Setting[]>([]);
@@ -227,7 +227,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
 
   const cookiesStatusText = (): string => {
     if (!cookies?.present) return t('admin.settings.cookies.none');
-    const when = cookies.modified_at ? new Date(cookies.modified_at).toLocaleString(locale) : '';
+    const when = cookies.modified_at ? new Date(cookies.modified_at).toLocaleString(formatLocale) : '';
     return t('admin.settings.cookies.present', { count: cookies.cookie_count, date: when });
   };
 

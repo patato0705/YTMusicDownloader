@@ -28,7 +28,7 @@ type ChartAction =
   | { kind: 'sync'; sub: ChartSubscription };
 
 export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
-  const { t, locale } = useI18n();
+  const { t, formatLocale } = useI18n();
 
   const [chartSubscriptions, setChartSubscriptions] = useState<ChartSubscription[]>([]);
   const [loading, setLoading] = useState(true);
@@ -415,7 +415,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                           <td className="px-6 py-4">
                             <div className="text-sm text-muted-foreground">
                               {sub.last_synced_at
-                                ? new Date(sub.last_synced_at).toLocaleString(locale)
+                                ? new Date(sub.last_synced_at).toLocaleString(formatLocale)
                                 : t('admin.charts.neverSynced')}
                             </div>
                             {sub.last_error && (

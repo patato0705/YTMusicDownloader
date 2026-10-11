@@ -6,13 +6,14 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { UserMenu } from './UserMenu';
 import { LanguageSelector } from '../ui/LanguageSelector';
+import { InfoTooltip } from '../ui/InfoTooltip';
 import { getFeatures } from '../../api/features';
 import { useJobActivity } from '../../contexts/JobActivityContext';
 
 export default function Navbar(): JSX.Element {
   const { isAuthenticated } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { locale, setLocale, t } = useI18n();
+  const { locale, formatLocale, setLocale, t } = useI18n();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -46,18 +47,29 @@ export default function Navbar(): JSX.Element {
 
   const jobBreakdown = Object.entries(activeByType)
     .filter(([, count]) => count > 0)
-    .sort(([, a], [, b]) => b - a)
-    .map(([type, count]) => `${jobTypeLabel(type)}: ${count}`)
-    .join(' · ');
+    .sort(([, a], [, b]) => b - a);
 
-  const jobTooltip = [
-    t('nav.activeJobs', { count: String(activeJobCount) }),
-    jobBreakdown,
-  ].filter(Boolean).join('\n');
+  const jobSummary = t('nav.activeJobs', { count: String(activeJobCount) });
+
+  const jobTooltip = (
+    <>
+      <div className="font-medium">{jobSummary}</div>
+      {jobBreakdown.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 text-muted-foreground">
+          {jobBreakdown.map(([type, count]) => (
+            <li key={type} className="flex justify-between gap-6">
+              <span>{jobTypeLabel(type)}</span>
+              <span className="tabular-nums">{count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
 
   const pausedTooltip = downloadsPausedUntil
     ? t('nav.rateLimited', {
-        time: new Date(downloadsPausedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: new Date(downloadsPausedUntil).toLocaleTimeString(formatLocale, { hour: '2-digit', minute: '2-digit' }),
       })
     : '';
 
@@ -156,26 +168,27 @@ export default function Navbar(): JSX.Element {
                 <div className="flex items-center shrink-0 space-x-1 lg:space-x-2">
                   {/* YouTube rate limit: downloads paused (backend/jobs/gate.py) */}
                   {isAuthenticated && downloadsPausedUntil && (
-                    <div
-                      className="flex items-center justify-center w-7 h-7 rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 text-sm font-bold cursor-help"
-                      title={pausedTooltip}
-                      aria-label={pausedTooltip}
+                    <InfoTooltip
+                      label={pausedTooltip}
+                      content={pausedTooltip}
+                      className="flex items-center justify-center w-7 h-7 rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 text-sm font-bold"
                     >
                       !
-                    </div>
+                    </InfoTooltip>
                   )}
 
                   {/* Active jobs indicator */}
                   {isAuthenticated && activeJobCount > 0 && (
-                    <div
+                    <InfoTooltip
+                      label={jobSummary}
+                      content={jobTooltip}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-medium"
-                      title={jobTooltip}
                     >
                       <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                       <span className="tabular-nums">{activeJobCount}</span>
-                    </div>
+                    </InfoTooltip>
                   )}
 
                   {/* Theme toggle - Desktop only */}

@@ -123,7 +123,7 @@
     "import": "Import",
     "admin": "Admin Panel",
     "activeJobs": "{count} active",
-    "rateLimited": "Rate-limited by YouTube — downloads paused until {time}",
+    "rateLimited": "Rate-limited by YouTube: downloads paused until {time}",
     "jobTypes": {
       "download_track": "tracks",
       "download_lyrics": "lyrics",

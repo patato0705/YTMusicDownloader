@@ -1,11 +1,13 @@
 // src/contexts/I18nContext.tsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Locale, DEFAULT_LOCALE, isValidLocale } from '../config/i18n';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { Locale, DEFAULT_LOCALE, isValidLocale, regionalLocale } from '../config/i18n';
 
 type Translations = Record<string, any>;
 
 interface I18nContextType {
   locale: Locale;
+  /** Pass to Intl/toLocale* for dates and times (see regionalLocale). */
+  formatLocale: string;
   setLocale: (locale: Locale) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
   translations: Translations;
@@ -49,6 +51,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [translations, setTranslations] = useState<Translations>({});
+  const formatLocale = useMemo(() => regionalLocale(locale), [locale]);
 
   // Load translations when locale changes
   useEffect(() => {
@@ -97,7 +100,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <I18nContext.Provider value={{ locale, setLocale, t, translations }}>
+    <I18nContext.Provider value={{ locale, formatLocale, setLocale, t, translations }}>
       {children}
     </I18nContext.Provider>
   );

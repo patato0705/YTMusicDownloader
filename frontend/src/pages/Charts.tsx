@@ -14,7 +14,7 @@ export default function Charts(): JSX.Element {
   const [charts, setCharts] = useState<Record<string, Chart>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { t, locale } = useI18n();
+  const { t, formatLocale } = useI18n();
 
   const hero = (
     <PageHero
@@ -184,7 +184,7 @@ export default function Charts(): JSX.Element {
                 {/* Last sync info */}
                 {subscription.last_synced_at && (
                   <p className="text-xs text-muted-foreground mt-4 text-center">
-                    {t('charts.lastUpdated', { date: new Date(subscription.last_synced_at).toLocaleString(locale) })}
+                    {t('charts.lastUpdated', { date: new Date(subscription.last_synced_at).toLocaleString(formatLocale) })}
                   </p>
                 )}
               </div>

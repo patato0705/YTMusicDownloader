@@ -39,14 +39,14 @@ export const isValidSchedule = (value: any, min = 1): boolean => {
 
 /** Localized weekday names, Monday first. */
 const useWeekdayNames = (style: 'short' | 'long' = 'short'): Record<Weekday, string> => {
-  const { locale } = useI18n();
+  const { formatLocale } = useI18n();
   return useMemo(() => {
-    const format = new Intl.DateTimeFormat(locale, { weekday: style });
+    const format = new Intl.DateTimeFormat(formatLocale, { weekday: style });
     // 2024-01-01 was a Monday
     return Object.fromEntries(
       WEEKDAYS.map((day, i) => [day, format.format(new Date(2024, 0, 1 + i))]),
     ) as Record<Weekday, string>;
-  }, [locale, style]);
+  }, [formatLocale, style]);
 };
 
 /** "Every 6 hours" / "Mon, Fri at 07:00": the schedule in a few words. */
@@ -184,7 +184,7 @@ interface ScheduleHintProps {
 
 /** The small line under the description: how interval mode counts, or the next fixed run. */
 export const ScheduleHint: React.FC<ScheduleHintProps> = ({ settingKey, value, nextRun, dirty, timezone }) => {
-  const { t, locale } = useI18n();
+  const { t, formatLocale } = useI18n();
   const tc = useCountedT();
 
   let text: string | null = null;
@@ -197,7 +197,7 @@ export const ScheduleHint: React.FC<ScheduleHintProps> = ({ settingKey, value, n
   } else if (dirty) {
     text = t('admin.settings.schedule.nextRunAfterSave');
   } else if (nextRun) {
-    const when = new Intl.DateTimeFormat(locale, {
+    const when = new Intl.DateTimeFormat(formatLocale, {
       weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false,
       ...(timezone ? { timeZone: timezone } : {}),
     }).format(new Date(nextRun));

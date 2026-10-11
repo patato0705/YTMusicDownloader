@@ -106,7 +106,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   matchHint,
   onClick,
 }) => {
-  const { t, locale } = useI18n();
+  const { t, formatLocale } = useI18n();
   const isArtist = type === 'artist';
   const status = mediaStatus ? STATUS_BADGES[mediaStatus] : undefined;
   const typeLabel = isArtist ? null : t(albumTypeKey(albumType));
@@ -203,7 +203,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
       </div>
 
       {/* Date */}
-      <div className={`${COLUMNS.date} text-sm text-muted-foreground truncate`}>{formatDate(date, locale)}</div>
+      <div className={`${COLUMNS.date} text-sm text-muted-foreground truncate`}>{formatDate(date, formatLocale)}</div>
 
       {/* Status - a pip on small screens, pip + label from lg up */}
       <div className={`${COLUMNS.status} flex items-center gap-2`}>
