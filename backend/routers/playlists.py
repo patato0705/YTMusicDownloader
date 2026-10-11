@@ -17,12 +17,13 @@ from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..dependencies import require_auth, require_member_or_admin
 from ..jobs.priorities import Origin
-from ..models import Playlist, User
+from ..models import Album, ArtistSubscription, Playlist, User
 from ..services import playlists as playlists_svc
 from ..ytm_service import adapter
 from ..ytm_service.adapter import YTMusicUnavailable
@@ -76,7 +77,24 @@ def get_playlist(
     except YTMusicUnavailable:
         raise _unreadable()
     playlist = session.get(Playlist, playlist_id)
-    return {**data, "saved": playlists_svc.summary(session, playlist) if playlist else None}
+    tracks = data.get("tracks") or []
+    artist_ids = {a["id"] for t in tracks for a in t.get("artists") or [] if a.get("id")}
+    album_ids = {(t.get("album") or {}).get("id") for t in tracks} - {None}
+    # What's already in the library, so the page shows Followed / Downloaded
+    followed_artists = session.scalars(
+        select(ArtistSubscription.artist_id).where(
+            ArtistSubscription.artist_id.in_(artist_ids), ArtistSubscription.mode == "full"
+        )
+    ).all() if artist_ids else []
+    downloaded_albums = session.scalars(
+        select(Album.id).where(Album.id.in_(album_ids), Album.mode == "download")
+    ).all() if album_ids else []
+    return {
+        **data,
+        "saved": playlists_svc.summary(session, playlist) if playlist else None,
+        "followed_artists": list(followed_artists),
+        "downloaded_albums": list(downloaded_albums),
+    }
 
 
 @router.post("/{playlist_id}", status_code=status.HTTP_201_CREATED)

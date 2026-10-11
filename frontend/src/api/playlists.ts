@@ -58,6 +58,9 @@ export interface Playlist {
   tracks: PlaylistTrack[];
   /** How it's added to the library, null if it isn't */
   saved: SavedPlaylist | null;
+  /** Its artists already followed, and its albums already downloaded */
+  followed_artists: string[];
+  downloaded_albums: string[];
 }
 
 /** A playlist from YouTube Music with its tracks, and how it's added to the library */

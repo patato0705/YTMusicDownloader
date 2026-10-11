@@ -242,6 +242,8 @@ export default function PlaylistImport(): JSX.Element {
       setPlaylistAuthor(playlist.author || null);
       setLoadedId(playlistId);
       setSaved(playlist.saved ?? null);
+      setFollowedArtists(new Set(playlist.followed_artists));
+      setDownloadedAlbums(new Set(playlist.downloaded_albums));
       setAllTracks(tracks);
       setUniqueArtists(extractUniqueArtists(tracks));
       setMainArtists(extractMainArtists(tracks));
