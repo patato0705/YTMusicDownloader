@@ -1,5 +1,5 @@
 // src/pages/PlaylistImport.tsx
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,8 +12,9 @@ import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import { PageHero } from '../components/ui/PageHero';
-import { formatDuration, formatDurationLong, apiErrorMessage } from '../utils';
-import type { PlaylistTrack, SavedPlaylist } from '../api/playlists';
+import { formatDuration, formatDurationLong, apiErrorMessage, createMemoryCache } from '../utils';
+import type { Playlist, PlaylistTrack, SavedPlaylist } from '../api/playlists';
+import { useHistoryState } from '../hooks/useHistoryState';
 import { PlaylistOptionsDialog } from '../components/playlists/PlaylistOptionsDialog';
 import { PlaylistBadges, usePlaylistStats } from '../components/playlists/PlaylistBadges';
 
@@ -133,6 +134,29 @@ function extractUniqueAlbums(tracks: PlaylistTrack[]): UniqueAlbum[] {
   return Array.from(albumMap.values()).sort((a, b) => b.trackCount - a.trackCount);
 }
 
+/**
+ * Playlists by id: coming back to one shows it right away instead of fetching
+ * it again from YouTube Music (slow for long ones), then refreshes it
+ */
+const playlistCache = createMemoryCache<Playlist>(10);
+
+/** What the page shows of a playlist */
+function playlistView(playlist: Playlist) {
+  const tracks = playlist.tracks || [];
+  return {
+    title: playlist.title || null,
+    thumbnail: playlist.thumbnail || null,
+    author: playlist.author || null,
+    saved: playlist.saved ?? null,
+    followedArtists: new Set(playlist.followed_artists),
+    downloadedAlbums: new Set(playlist.downloaded_albums),
+    tracks,
+    uniqueArtists: extractUniqueArtists(tracks),
+    mainArtists: extractMainArtists(tracks),
+    uniqueAlbums: extractUniqueAlbums(tracks),
+  };
+}
+
 const VALID_PLAYLIST_FILTERS = ['artists', 'albums', 'tracks'] as const;
 type PlaylistFilterType = typeof VALID_PLAYLIST_FILTERS[number];
 
@@ -146,6 +170,9 @@ export default function PlaylistImport(): JSX.Element {
   // Local state for responsive typing; URL synced only on playlist load
   const [url, setUrl] = useState(searchParams.get('url') || '');
 
+  // A new playlist opens on the artists tab. Both params in one update:
+  // `prev` is the URL of the last render, so a second setSearchParams in the
+  // same handler would drop the first one's change.
   const syncUrlToParams = useCallback((value: string) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -154,6 +181,7 @@ export default function PlaylistImport(): JSX.Element {
       } else {
         next.delete('url');
       }
+      next.set('filter', 'artists');
       return next;
     }, { replace: true });
   }, [setSearchParams]);
@@ -166,17 +194,25 @@ export default function PlaylistImport(): JSX.Element {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const [playlistTitle, setPlaylistTitle] = useState<string | null>(null);
-  const [playlistThumbnail, setPlaylistThumbnail] = useState<string | null>(null);
-  const [playlistAuthor, setPlaylistAuthor] = useState<string | null>(null);
-  const [allTracks, setAllTracks] = useState<PlaylistTrack[]>([]);
-  const [uniqueArtists, setUniqueArtists] = useState<UniqueArtist[]>([]);
-  const [mainArtists, setMainArtists] = useState<UniqueArtist[]>([]);
-  const [uniqueAlbums, setUniqueAlbums] = useState<UniqueAlbum[]>([]);
+  // The playlist in the URL, when it's cached: rendered on the first frame, so
+  // the back button lands where the page was scrolled
+  const [restored] = useState(() => {
+    const id = extractPlaylistId(searchParams.get('url') || '');
+    const playlist = id ? playlistCache.get(id) : undefined;
+    return id && playlist ? { id, ...playlistView(playlist) } : null;
+  });
+
+  const [playlistTitle, setPlaylistTitle] = useState<string | null>(restored?.title ?? null);
+  const [playlistThumbnail, setPlaylistThumbnail] = useState<string | null>(restored?.thumbnail ?? null);
+  const [playlistAuthor, setPlaylistAuthor] = useState<string | null>(restored?.author ?? null);
+  const [allTracks, setAllTracks] = useState<PlaylistTrack[]>(restored?.tracks ?? []);
+  const [uniqueArtists, setUniqueArtists] = useState<UniqueArtist[]>(restored?.uniqueArtists ?? []);
+  const [mainArtists, setMainArtists] = useState<UniqueArtist[]>(restored?.mainArtists ?? []);
+  const [uniqueAlbums, setUniqueAlbums] = useState<UniqueAlbum[]>(restored?.uniqueAlbums ?? []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [followedArtists, setFollowedArtists] = useState<Set<string>>(new Set());
-  const [downloadedAlbums, setDownloadedAlbums] = useState<Set<string>>(new Set());
+  const [followedArtists, setFollowedArtists] = useState<Set<string>>(restored?.followedArtists ?? new Set());
+  const [downloadedAlbums, setDownloadedAlbums] = useState<Set<string>>(restored?.downloadedAlbums ?? new Set());
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{
     type: 'artists' | 'albums';
@@ -184,10 +220,13 @@ export default function PlaylistImport(): JSX.Element {
     total: number;
   } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [expandedIds, setExpandedIds] = useHistoryState<Set<string>>('expanded', () => new Set());
   // The playlist loaded, and how it's added to the library (null: it isn't)
-  const [loadedId, setLoadedId] = useState<string | null>(null);
-  const [saved, setSaved] = useState<SavedPlaylist | null>(null);
+  const [loadedId, setLoadedId] = useState<string | null>(restored?.id ?? null);
+  const [saved, setSaved] = useState<SavedPlaylist | null>(restored?.saved ?? null);
+  // Only the latest fetch is shown: a refresh still running when another
+  // playlist is loaded is dropped
+  const latestRequestRef = useRef(0);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const playlistStats = usePlaylistStats();
 
@@ -209,7 +248,43 @@ export default function PlaylistImport(): JSX.Element {
     });
   };
 
-  const handleLoad = async () => {
+  const showPlaylist = (playlistId: string, playlist: Playlist) => {
+    const view = playlistView(playlist);
+    setPlaylistTitle(view.title);
+    setPlaylistThumbnail(view.thumbnail);
+    setPlaylistAuthor(view.author);
+    setLoadedId(playlistId);
+    setSaved(view.saved);
+    setFollowedArtists(view.followedArtists);
+    setDownloadedAlbums(view.downloadedAlbums);
+    setAllTracks(view.tracks);
+    setUniqueArtists(view.uniqueArtists);
+    setMainArtists(view.mainArtists);
+    setUniqueAlbums(view.uniqueAlbums);
+  };
+
+  // `refresh`: the playlist is already on screen (from the cache) and stays
+  // there, quietly updated, through the fetch and through an error
+  const fetchPlaylist = async (playlistId: string, refresh: boolean) => {
+    const request = ++latestRequestRef.current;
+    if (!refresh) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      const playlist = await getPlaylist(playlistId);
+      playlistCache.set(playlistId, playlist);
+      if (request === latestRequestRef.current) showPlaylist(playlistId, playlist);
+    } catch (err: any) {
+      console.error('Failed to load playlist:', err);
+      if (!refresh && request === latestRequestRef.current) setError(apiErrorMessage(err, t, t('common.error')));
+    } finally {
+      if (!refresh && request === latestRequestRef.current) setLoading(false);
+    }
+  };
+
+  const handleLoad = () => {
     const playlistId = extractPlaylistId(url);
     if (!playlistId) {
       setToast({ message: t('playlist.invalidUrl'), type: 'error' });
@@ -217,8 +292,6 @@ export default function PlaylistImport(): JSX.Element {
     }
 
     syncUrlToParams(url);
-    setLoading(true);
-    setError(null);
     setPlaylistTitle(null);
     setPlaylistThumbnail(null);
     setPlaylistAuthor(null);
@@ -229,39 +302,32 @@ export default function PlaylistImport(): JSX.Element {
     setFollowedArtists(new Set());
     setDownloadedAlbums(new Set());
     setExpandedIds(new Set());
-    setActiveFilter('artists');
     setLoadedId(null);
     setSaved(null);
-
-    try {
-      const playlist = await getPlaylist(playlistId);
-      const tracks = playlist.tracks || [];
-
-      setPlaylistTitle(playlist.title || null);
-      setPlaylistThumbnail(playlist.thumbnail || null);
-      setPlaylistAuthor(playlist.author || null);
-      setLoadedId(playlistId);
-      setSaved(playlist.saved ?? null);
-      setFollowedArtists(new Set(playlist.followed_artists));
-      setDownloadedAlbums(new Set(playlist.downloaded_albums));
-      setAllTracks(tracks);
-      setUniqueArtists(extractUniqueArtists(tracks));
-      setMainArtists(extractMainArtists(tracks));
-      setUniqueAlbums(extractUniqueAlbums(tracks));
-    } catch (err: any) {
-      console.error('Failed to load playlist:', err);
-      setError(apiErrorMessage(err, t, t('common.error')));
-    } finally {
-      setLoading(false);
-    }
+    fetchPlaylist(playlistId, false);
   };
 
-  // Auto-load playlist when mounting with a URL param (e.g., after back navigation)
+  // Mounting with a playlist in the URL (back button, link from the library):
+  // fetched, or refreshed when it came from the cache. The tab and the open
+  // rows stay as they were.
   useEffect(() => {
-    if (url.trim() && !hasResults && !loading) {
-      handleLoad();
-    }
+    const playlistId = extractPlaylistId(url);
+    if (playlistId) fetchPlaylist(playlistId, restored !== null);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Follows, downloads and library changes made here are kept in the cached
+  // copy, so coming back doesn't show them undone until the refresh lands
+  useEffect(() => {
+    if (!loadedId) return;
+    const cached = playlistCache.get(loadedId);
+    if (!cached) return;
+    playlistCache.set(loadedId, {
+      ...cached,
+      saved,
+      followed_artists: [...followedArtists],
+      downloaded_albums: [...downloadedAlbums],
+    });
+  }, [loadedId, saved, followedArtists, downloadedAlbums]);
 
   const handleFollowArtist = async (artistId: string) => {
     setActionLoadingId(artistId);

@@ -1,5 +1,6 @@
 // src/hooks/useProgressiveList.ts
 import { useEffect, useState } from 'react';
+import { useHistoryState } from './useHistoryState';
 
 /** How far below the viewport the sentinel triggers the next page */
 const PRELOAD_MARGIN = '800px 0px';
@@ -11,10 +12,14 @@ const PRELOAD_MARGIN = '800px 0px';
  * The whole list stays in memory, so it can still be searched and filtered
  * client-side - only the number of mounted rows is capped.
  *
+ * Coming back to the page with the back button mounts as many rows as were
+ * mounted when it was left, so the scroll position can be restored.
+ *
  * `resetKey` - back to the first page whenever it changes (new search, other tab...)
+ * `name` - unique within the page
  */
-export function useProgressiveList<T>(items: T[], pageSize: number, resetKey: unknown) {
-  const [count, setCount] = useState(pageSize);
+export function useProgressiveList<T>(items: T[], pageSize: number, resetKey: unknown, name: string) {
+  const [count, setCount] = useHistoryState(`progressiveList:${name}`, pageSize);
   const [prevResetKey, setPrevResetKey] = useState(resetKey);
   const [sentinel, setSentinel] = useState<HTMLElement | null>(null);
 

@@ -29,3 +29,7 @@ export type { UsernameError, PasswordError } from './validation';
 
 // API error parsing
 export { parseApiError, retryAfterMinutes, apiErrorMessage } from './apiError';
+
+// In-memory page caches
+export { createMemoryCache, clearMemoryCaches } from './memoryCache';
+export type { MemoryCache } from './memoryCache';

@@ -15,12 +15,18 @@ import {
   formatTrack,
   normalizeSearchResults,
   filterAlbums,
+  createMemoryCache,
 } from '../utils';
 import { useDebounce } from '../hooks/useDebounce';
 import type { SearchResults } from '../types';
 
 const VALID_FILTERS = ['all', 'artists', 'albums', 'tracks'] as const;
 type FilterType = typeof VALID_FILTERS[number];
+
+const EMPTY_RESULTS: SearchResults = { artists: [], albums: [], tracks: [] };
+
+/** Results by query: coming back to a search shows them right away */
+const resultsCache = createMemoryCache<SearchResults>(20);
 
 export default function Browse(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -44,11 +50,9 @@ export default function Browse(): JSX.Element {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const [results, setResults] = useState<SearchResults>({
-    artists: [],
-    albums: [],
-    tracks: [],
-  });
+  const [results, setResults] = useState<SearchResults>(
+    () => resultsCache.get(query.trim()) ?? EMPTY_RESULTS
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -75,7 +79,15 @@ export default function Browse(): JSX.Element {
     const trimmed = debouncedQuery.trim();
 
     if (!trimmed) {
-      setResults({ artists: [], albums: [], tracks: [] });
+      setResults(EMPTY_RESULTS);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    const cached = resultsCache.get(trimmed);
+    if (cached) {
+      setResults(cached);
       setError(null);
       setLoading(false);
       return;
@@ -90,12 +102,13 @@ export default function Browse(): JSX.Element {
       try {
         const response = await search(trimmed, 20);
         const normalized = normalizeSearchResults(response);
+        resultsCache.set(trimmed, normalized);
         if (!cancelled) setResults(normalized);
       } catch (err: any) {
         console.error('Search error:', err);
         if (!cancelled) {
           setError(err.message || t('common.error'));
-          setResults({ artists: [], albums: [], tracks: [] });
+          setResults(EMPTY_RESULTS);
         }
       } finally {
         if (!cancelled) setLoading(false);

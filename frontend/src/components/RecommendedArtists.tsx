@@ -23,12 +23,17 @@ import { Artwork } from './ui/Artwork';
 import { Button } from './ui/Button';
 import { SectionHeader } from './ui/SectionHeader';
 import { Toast } from './ui/Toast';
+import { createMemoryCache } from '../utils';
 
 interface ToastState {
   message: string;
   type: 'success' | 'error';
   action?: { label: string; onClick: () => void };
 }
+
+/** The last list shown: back on the page it's there right away, then refreshed */
+const cache = createMemoryCache<{ recommendations: RecommendedArtist[]; dismissedCount: number }>(1);
+const CACHE_KEY = 'recommendations';
 
 interface RecommendedArtistsProps {
   /** Shown instead when there's nothing to recommend and nothing dismissed */
@@ -41,8 +46,9 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
   const navigate = useNavigate();
   const canEdit = user?.role === 'administrator' || user?.role === 'member';
 
-  const [recommendations, setRecommendations] = useState<RecommendedArtist[] | null>(null);
-  const [dismissedCount, setDismissedCount] = useState(0);
+  const [cached] = useState(() => cache.get(CACHE_KEY));
+  const [recommendations, setRecommendations] = useState<RecommendedArtist[] | null>(cached?.recommendations ?? null);
+  const [dismissedCount, setDismissedCount] = useState(cached?.dismissedCount ?? 0);
   const [showDismissed, setShowDismissed] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
@@ -59,6 +65,11 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Dismissals and restores included
+  useEffect(() => {
+    if (recommendations) cache.set(CACHE_KEY, { recommendations, dismissedCount });
+  }, [recommendations, dismissedCount]);
 
   const listFormat = useMemo(() => new Intl.ListFormat(locale, { type: 'conjunction' }), [locale]);
   const similarTo = (rec: RecommendedArtist) => {

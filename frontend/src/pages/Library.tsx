@@ -18,10 +18,11 @@ import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
 import { SearchInput } from '../components/ui/SearchInput';
 import { ViewToggle, type ViewMode } from '../components/ui/ViewToggle';
-import { formatNumber, parseApiError, getAlbumStatus, getArtistStatus } from '../utils';
+import { formatNumber, parseApiError, getAlbumStatus, getArtistStatus, createMemoryCache } from '../utils';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { useProgressiveList } from '../hooks/useProgressiveList';
+import { useHistoryState } from '../hooks/useHistoryState';
 import type { Artist } from '../types';
 
 // Icon components
@@ -49,6 +50,19 @@ interface TrackMatches {
 
 const NO_TRACK_MATCHES: TrackMatches = { query: '', byAlbum: new Map(), byArtist: new Map() };
 
+/** What the page last loaded: shown right away when coming back, then refreshed */
+interface LibrarySnapshot {
+  artists: Artist[];
+  albums: any[];
+  stats: any;
+  playlists: SavedPlaylist[];
+}
+
+const LIBRARY_CACHE_KEY = 'library';
+const libraryCache = createMemoryCache<LibrarySnapshot>(1);
+/** Track search results by query */
+const trackMatchesCache = createMemoryCache<TrackMatches>(20);
+
 function groupTrackMatches(query: string, tracks: LibraryTrack[]): TrackMatches {
   const byAlbum = new Map<string, LibraryTrack[]>();
   const byArtist = new Map<string, LibraryTrack[]>();
@@ -72,15 +86,19 @@ function loadViewMode(): ViewMode {
 }
 
 export default function Library(): JSX.Element {
-  const [artists, setArtists] = useState<Artist[]>([]);
-  const [albums, setAlbums] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [cached] = useState(() => libraryCache.get(LIBRARY_CACHE_KEY));
+  const [artists, setArtists] = useState<Artist[]>(cached?.artists ?? []);
+  const [albums, setAlbums] = useState<any[]>(cached?.albums ?? []);
+  const [stats, setStats] = useState<any>(cached?.stats ?? null);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'artists' | 'albums' | 'playlists'>('all');
-  const [playlists, setPlaylists] = useState<SavedPlaylist[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [trackMatches, setTrackMatches] = useState<TrackMatches>(NO_TRACK_MATCHES);
+  // Tab and search come back with the back button, along with the scroll position
+  const [activeTab, setActiveTab] = useHistoryState<'all' | 'artists' | 'albums' | 'playlists'>('tab', 'all');
+  const [playlists, setPlaylists] = useState<SavedPlaylist[]>(cached?.playlists ?? []);
+  const [searchQuery, setSearchQuery] = useHistoryState('search', '');
+  const [trackMatches, setTrackMatches] = useState<TrackMatches>(
+    () => trackMatchesCache.get(searchQuery.trim()) ?? NO_TRACK_MATCHES
+  );
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
   const [exporting, setExporting] = useState(false);
   const debouncedQuery = useDebounce(searchQuery.trim(), TRACK_SEARCH_DEBOUNCE_MS);
@@ -97,7 +115,7 @@ export default function Library(): JSX.Element {
   }, [viewMode]);
 
   // Kept in a ref so the effects below don't refire on it
-  const fetchRef = useRef({ loaded: false, inFlight: false, queued: false, lastStartedAt: 0, unmounted: false });
+  const fetchRef = useRef({ loaded: !!cached, inFlight: false, queued: false, lastStartedAt: 0, unmounted: false });
 
   const loadLibrary = useCallback(async () => {
     const state = fetchRef.current;
@@ -123,10 +141,20 @@ export default function Library(): JSX.Element {
         }),
       ]);
 
+      const snapshot: LibrarySnapshot = {
+        artists: (artistsResponse as any)?.artists || artistsResponse || [],
+        albums: (albumsResponse as any)?.albums || albumsResponse || [],
+        stats: statsResponse || {},
+        // A failed playlists fetch keeps the ones already shown (the
+        // callback never changes, so state would be stale here)
+        playlists: playlistsResponse ?? libraryCache.get(LIBRARY_CACHE_KEY)?.playlists ?? [],
+      };
+      libraryCache.set(LIBRARY_CACHE_KEY, snapshot);
+
       if (state.unmounted) return;
-      setArtists((artistsResponse as any)?.artists || artistsResponse || []);
-      setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
-      setStats(statsResponse || {});
+      setArtists(snapshot.artists);
+      setAlbums(snapshot.albums);
+      setStats(snapshot.stats);
       if (playlistsResponse) setPlaylists(playlistsResponse);
       setError(null);
       state.loaded = true;
@@ -176,7 +204,9 @@ export default function Library(): JSX.Element {
 
     searchLibraryTracks(debouncedQuery)
       .then((response) => {
-        if (!cancelled) setTrackMatches(groupTrackMatches(debouncedQuery, response?.tracks || []));
+        const matches = groupTrackMatches(debouncedQuery, response?.tracks || []);
+        trackMatchesCache.set(debouncedQuery, matches);
+        if (!cancelled) setTrackMatches(matches);
       })
       .catch((err) => {
         console.error('Failed to search library tracks:', err);
@@ -241,12 +271,12 @@ export default function Library(): JSX.Element {
     visible: displayedArtists,
     hasMore: moreArtists,
     sentinelRef: artistsSentinelRef,
-  } = useProgressiveList(filteredArtists, PAGE_SIZE, listResetKey);
+  } = useProgressiveList(filteredArtists, PAGE_SIZE, listResetKey, 'artists');
   const {
     visible: displayedAlbums,
     hasMore: moreAlbums,
     sentinelRef: albumsSentinelRef,
-  } = useProgressiveList(filteredAlbums, PAGE_SIZE, listResetKey);
+  } = useProgressiveList(filteredAlbums, PAGE_SIZE, listResetKey, 'albums');
 
   const albumMatchHint = (albumId: string): string | undefined => {
     const matches = albumTrackMatches.get(albumId);

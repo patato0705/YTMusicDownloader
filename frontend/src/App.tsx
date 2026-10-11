@@ -7,6 +7,7 @@ import { useAuth } from './contexts/AuthContext';
 import Navbar from './components/layout/Navbar';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ScrollRestoration } from './components/ScrollRestoration';
 
 // Auth pages
 import { Login } from './pages/auth/Login';
@@ -82,6 +83,8 @@ export default function App(): JSX.Element {
           }
         />
       </Routes>
+      {/* After the routes: runs once the page has mounted (and focused its inputs) */}
+      <ScrollRestoration />
     </ErrorBoundary>
   );
 }

@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authApi from '../api/auth';
 import type { User } from '../api/auth';
 import { clearAccessToken, refreshAccessToken } from '../api/client';
+import { clearMemoryCaches } from '../utils';
 
 interface AuthContextType {
   user: User | null;
@@ -46,11 +47,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (username: string, password: string) => {
     const response = await authApi.login(username, password);
+    clearMemoryCaches();
     setUser(response.user);
   };
 
   const logout = async () => {
     await authApi.logout();
+    clearMemoryCaches();
     setUser(null);
   };
 
