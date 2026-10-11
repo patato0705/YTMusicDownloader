@@ -13,6 +13,7 @@ export * from './artists';
 export * from './library';
 export * from './media';
 export * from './playlists';
+export * from './recommendations';
 export * from './search';
 export * from './tracks';
 export * from './health';

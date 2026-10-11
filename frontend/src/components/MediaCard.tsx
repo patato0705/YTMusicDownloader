@@ -11,6 +11,10 @@ interface MediaCardProps {
   id: string;
   title: string;
   subtitle?: string;
+  /** Hover text for the subtitle line, when it's a shortened form of something longer */
+  subtitleTitle?: string;
+  /** Let the subtitle wrap to a second line instead of cutting it short */
+  subtitleWrap?: boolean;
   thumbnail?: string;
   type?: MediaKind;
   /** Release type as reported by YTMusic ("Album", "EP", "Single") - only used when type is 'album' */
@@ -76,6 +80,8 @@ const MediaCard: React.FC<MediaCardProps> = ({
   id,
   title,
   subtitle,
+  subtitleTitle,
+  subtitleWrap = false,
   thumbnail,
   type = 'album',
   albumType,
@@ -155,7 +161,11 @@ const MediaCard: React.FC<MediaCardProps> = ({
           {title}
         </h3>
 
-        {meta && <p className="text-xs text-muted-foreground truncate">{meta}</p>}
+        {meta && (
+          <p className={`text-xs text-muted-foreground ${subtitleWrap ? 'line-clamp-2' : 'truncate'}`} title={subtitleTitle}>
+            {meta}
+          </p>
+        )}
 
         {matchHint && (
           <p className="text-xs text-blue-600 dark:text-red-400 truncate" title={matchHint}>

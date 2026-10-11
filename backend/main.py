@@ -163,6 +163,7 @@ def create_app() -> FastAPI:
         "library",
         "media",
         "playlists",
+        "recommendations",
         "search",
         "tracks",
     ]

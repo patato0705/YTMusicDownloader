@@ -43,6 +43,12 @@ class Artist(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    # Its "Fans might also like" (see services/recommendations.py). Deleted
+    # by the ORM: SQLite isn't enforcing foreign keys here.
+    related: Mapped[List["RelatedArtist"]] = relationship(
+        "RelatedArtist",
+        cascade="all, delete-orphan",
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         image_local = getattr(self, "image_local", None)
@@ -238,6 +244,39 @@ class ArtistSubscription(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+# Recommendations (see services/recommendations.py)
+
+class RelatedArtist(Base):
+    """
+    One of an artist's similar artists ("Fans might also like" on YouTube
+    Music), as of its last fetch. The similar artist usually isn't in the
+    library, hence its name and thumbnail kept here.
+    """
+    __tablename__ = "related_artists"
+
+    artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True)
+    related_id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    thumbnail: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)  # 0 = most similar
+
+
+class DismissedRecommendation(Base):
+    """An artist someone marked "not interested": never recommended again, until restored."""
+    __tablename__ = "dismissed_recommendations"
+
+    artist_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Kept to list it, as the artist usually isn't in the library
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    thumbnail: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    dismissed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    dismissed_by: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
 
 # Charts

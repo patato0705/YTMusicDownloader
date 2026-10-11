@@ -20,6 +20,7 @@ export interface ExportDocument {
     artists: { id: string; name?: string | null; mode: 'light' | 'full' }[];
     albums: { id: string; title?: string | null; artist_id?: string | null; artist_name?: string | null }[];
     charts: { country_code: string; top_n_artists: number; enabled: boolean }[];
+    dismissed_recommendations?: { id: string; name: string; thumbnail?: string | null }[];
   } | null;
   catalog?: { artists: unknown[]; albums: unknown[]; tracks: unknown[] } | null;
   users?: unknown[] | null;
@@ -51,6 +52,7 @@ export interface ImportResult {
     charts_created: number;
     charts_existing: number;
     charts_skipped: number;
+    artists_dismissed: number;
   } | null;
   catalog: {
     artists: number;

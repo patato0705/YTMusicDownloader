@@ -5,6 +5,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { search } from '../api/index';
 import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
+import RecommendedArtists from '../components/RecommendedArtists';
 import { SearchInput } from '../components/ui/SearchInput';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
@@ -180,17 +181,21 @@ export default function Browse(): JSX.Element {
           </div>
         )}
 
-        {/* Empty state - No query */}
+        {/* No query: recommendations, or the "start your search" box when there are none */}
         {!query.trim() && !loading && (
-          <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-16 border border-slate-200/50 dark:border-white/10 text-center">
-            <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
-              <span className="text-5xl">🔍</span>
-            </div>
-            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('browse.startSearch')}</h3>
-            <p className="text-muted-foreground max-w-md mx-auto">
-              {t('browse.startSearchDescription')}
-            </p>
-          </div>
+          <RecommendedArtists
+            fallback={
+              <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-16 border border-slate-200/50 dark:border-white/10 text-center">
+                <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
+                  <span className="text-5xl">🔍</span>
+                </div>
+                <h3 className="text-2xl font-bold mb-3 text-foreground">{t('browse.startSearch')}</h3>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  {t('browse.startSearchDescription')}
+                </p>
+              </div>
+            }
+          />
         )}
 
         {/* Empty state - No results */}

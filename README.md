@@ -15,6 +15,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
 - **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year, genres and embedded cover art.
 - **Genres** from [MusicBrainz](https://musicbrainz.org) (specific, community-voted) with [Deezer](https://www.deezer.com) as a fallback, written to the tags and NFO files so Jellyfin can browse and mix by genre. No account or API key needed.
+- **Recommendations**: artists similar to the ones you follow, from YouTube Music's own "Fans might also like", ranked by how many of your artists point to them.
 - **Jellyfin-friendly layout** with `artist.nfo`, `album.nfo`, `backdrop.jpg` and `cover.jpg`.
 - **Multi-user** with three roles (visitor / member / administrator), optional public registration, optional [single sign-on](#single-sign-on-oidc) through your identity provider (Authelia, Authentik, Pocket ID, Keycloak…), and httpOnly-cookie sessions.
 - **Rate-limit aware**: detects YouTube throttling and bot checks, resets its session, and pauses all downloads with exponential backoff instead of hammering YouTube.
@@ -143,7 +144,7 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Role | Can do |
 |---|---|
 | **Visitor** | Read-only: browse the library, artists, albums, charts and lyrics. Default for new accounts. |
-| **Member** | Everything a visitor can, plus follow/unfollow artists, download albums, edit lyrics. |
+| **Member** | Everything a visitor can, plus follow/unfollow artists, download albums, edit lyrics, dismiss recommendations. |
 | **Administrator** | Everything a member can, plus delete artists/albums (including files), and manage users, charts, settings and backups. |
 
 Admins create users from **Admin Panel → Users**, or enable public registration in Settings.
@@ -163,6 +164,12 @@ Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**,
 ### Playlist import
 
 On the **Browse** page, click *Import from playlist* (next to the search bar) and paste a YouTube Music playlist URL (or a raw playlist ID). The page lists the unique artists and albums in it, and offers *Follow Main Artists*, *Follow All Artists* and *Download All Albums* bulk actions, plus per-item buttons.
+
+### Recommendations
+
+With the search box empty, the **Browse** page shows *Recommended for you*: artists similar to the ones you follow, with how many of yours each one is similar to ("Similar to 5 artists in your library", their names on hover). They're YouTube Music's own similar artists ("Fans might also like" on an artist's page), which every artist sync already receives: no extra request, no third party, and they refresh with the syncs. The more of your artists list one, the higher it comes; ties go to the one YouTube Music lists earlier. Only artists you follow count, not those of a single downloaded album, and artists you already follow are left out.
+
+Members and admins can dismiss a recommendation (*✕* on its card, undoable from the notice that follows). Dismissed artists are hidden for everyone, as follows are shared, and listed under *Dismissed (n)*, where they can be restored. Following a dismissed artist restores it too, so it can come back if you unfollow it later.
 
 ### Schedules
 
@@ -210,7 +217,7 @@ Keeping *Max concurrent downloads* at 1 is the best way to avoid this in the fir
 
 **Admin Panel → Backup** exports a JSON document with any of:
 
-- **Library** — followed artists, standalone albums. On import, the new instance follows them again and downloads their music.
+- **Library** — followed artists, standalone albums, artists dismissed from recommendations. On import, the new instance follows them again and downloads their music.
 - **Charts** — chart subscriptions.
 - **Catalog** — every artist/album/track row with relative file paths. Only useful if you also copy the `data/` folder: the import then recognises files already on disk instead of re-downloading.
 - **Users** — accounts, roles and password hashes (keep this file private).

@@ -138,6 +138,7 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
             "description": None,
             "albums": [],
             "singles": [],
+            "related": None,
         }
     if not isinstance(raw, dict):
         return {
@@ -148,6 +149,7 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
             "description": None,
             "albums": [],
             "singles": [],
+            "related": None,
         }
     
     # Extract basic artist info
@@ -191,7 +193,32 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
         "description": description,
         "albums": albums_data,
         "singles": singles_data,
+        "related": _related_artists(raw, channel_id),
     }
+
+
+def _related_artists(raw: Dict[str, Any], channel_id: str) -> List[Dict[str, Any]]:
+    """
+    The artist page's "Fans might also like", most similar first (YouTube
+    Music shows 10). None from the failure paths above means "unknown", as
+    opposed to an artist with none.
+    """
+    out: List[Dict[str, Any]] = []
+    seen = {str(channel_id)}
+    for item in (raw.get("related") or {}).get("results") or []:
+        if not isinstance(item, dict):
+            continue
+        related_id = item.get("browseId")
+        name = item.get("title")
+        if not related_id or not name or related_id in seen:
+            continue
+        seen.add(related_id)
+        out.append({
+            "id": str(related_id),
+            "name": str(name),
+            "thumbnail": N.pick_best_thumbnail_url(item.get("thumbnails") or []),
+        })
+    return out
 
 
 def get_artist_albums(browseId: str, params: str) -> List[Dict[str, Any]]:

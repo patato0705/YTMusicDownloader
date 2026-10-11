@@ -20,6 +20,7 @@ from .. import config
 from .. import settings as settings_module
 from ..models import (
     Artist, Album, Track, ArtistSubscription, ChartSubscription, User, Setting,
+    DismissedRecommendation,
 )
 from ..schemas.export import (
     FORMAT_VERSION,
@@ -111,7 +112,10 @@ def _document_shell() -> Dict[str, Any]:
 
 
 def build_library_section(session: Session) -> Dict[str, Any]:
-    """What this instance follows: artists, explicitly downloaded albums, charts."""
+    """
+    What this instance follows: artists, explicitly downloaded albums, charts,
+    and the artists dismissed from recommendations.
+    """
     artists = session.execute(
         select(Artist, ArtistSubscription)
         .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
@@ -134,6 +138,9 @@ def build_library_section(session: Session) -> Dict[str, Any]:
     ]
 
     charts = charts_svc.list_chart_subscriptions(session, include_disabled=True)
+    dismissed = session.execute(
+        select(DismissedRecommendation).order_by(DismissedRecommendation.name)
+    ).scalars().all()
 
     return {
         "artists": [
@@ -156,6 +163,10 @@ def build_library_section(session: Session) -> Dict[str, Any]:
                 "enabled": bool(sub.enabled),
             }
             for sub in charts
+        ],
+        "dismissed_recommendations": [
+            {"id": d.artist_id, "name": d.name, "thumbnail": d.thumbnail}
+            for d in dismissed
         ],
     }
 
@@ -269,6 +280,7 @@ def build_backup_export(
         if not include_library:
             library["artists"] = []
             library["albums"] = []
+            library["dismissed_recommendations"] = []
         if not include_charts:
             library["charts"] = []
         doc["library"] = library
@@ -537,6 +549,17 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
                 else:
                     sub.enabled = False
                 result.charts_created += 1
+
+    # --- Artists dismissed from recommendations ---
+    seen_dismissed: set[str] = set()
+    for item in library.dismissed_recommendations:
+        if item.id in seen_dismissed or session.get(DismissedRecommendation, item.id):
+            continue
+        seen_dismissed.add(item.id)
+        session.add(DismissedRecommendation(
+            artist_id=item.id, name=item.name, thumbnail=item.thumbnail, dismissed_by=user_id,
+        ))
+        result.artists_dismissed += 1
 
     return result
 

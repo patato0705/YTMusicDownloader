@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..jobs.priorities import Origin, promote
 from ..models import Artist, Album, ArtistSubscription, Job, Track
+from . import recommendations as recommendations_svc
 from ..time_utils import now_utc, ensure_timezone_aware
 
 logger = logging.getLogger("services.subscriptions")
@@ -49,7 +50,10 @@ def subscribe_to_artist(
     """
     if mode not in ("light", "full"):
         raise ValueError(f"Invalid mode: {mode}. Must be 'light' or 'full'")
-    
+
+    if mode == "full":
+        _clear_dismissal(session, artist_id)
+
     # Check if already exists
     existing = get_artist_subscription(session, artist_id)
     
@@ -73,6 +77,15 @@ def subscribe_to_artist(
     logger.info(f"Created artist subscription: {artist_id} (mode={mode})")
     
     return subscription
+
+
+def _clear_dismissal(session: Session, artist_id: str) -> None:
+    """
+    Following an artist overrides an earlier "not interested": otherwise,
+    unfollowed later, it would stay hidden from recommendations.
+    """
+    if recommendations_svc.restore(session, artist_id):
+        logger.info(f"Artist {artist_id} followed, no longer dismissed from recommendations")
 
 
 def unsubscribe_from_artist(session: Session, artist_id: str) -> bool:
@@ -116,6 +129,9 @@ def update_artist_subscription_mode(
     if not subscription:
         raise ValueError(f"No subscription found for artist {artist_id}")
     
+    if mode == "full":
+        _clear_dismissal(session, artist_id)
+
     old_mode = subscription.mode
     subscription.mode = mode
     session.add(subscription)

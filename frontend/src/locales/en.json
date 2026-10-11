@@ -182,6 +182,22 @@
       "artists": "Artists",
       "albums": "Albums",
       "tracks": "Tracks"
+    },
+    "recommendations": {
+      "title": "Recommended for you",
+      "subtitle": "Artists similar to the ones you follow",
+      "similarTo": "Similar to {names}",
+      "similarToMany": "Similar to {count} artists in your library",
+      "dismiss": "Not interested",
+      "dismissedToast": "{name} won't be recommended again",
+      "undo": "Undo",
+      "dismissedLink": "Dismissed ({count})",
+      "dismissedTitle": "Dismissed artists",
+      "dismissedDescription": "These artists aren't recommended. Restore one to see it again when it's similar to artists you follow.",
+      "noDismissed": "No dismissed artists",
+      "restore": "Restore",
+      "noneLeft": "No recommendations right now. Follow more artists to get some.",
+      "error": "Couldn't update recommendations"
     }
   },
   "artist": {
@@ -656,6 +672,7 @@
         "chartsCreated": "Charts to follow",
         "chartsExisting": "Charts already followed",
         "chartsSkipped": "Charts skipped",
+        "artistsDismissed": "Artists dismissed from recommendations",
         "catalogRows": "Catalog rows (artists / albums / tracks)",
         "tracksOnDisk": "Tracks found on disk",
         "tracksToDownload": "Tracks to download",

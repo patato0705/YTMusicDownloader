@@ -52,10 +52,18 @@ class LibraryChart(BaseModel):
     enabled: bool = True
 
 
+class LibraryDismissedArtist(BaseModel):
+    """An artist marked "not interested" in recommendations."""
+    id: str = Field(..., min_length=1, max_length=64)
+    name: str = Field(..., min_length=1, max_length=255)
+    thumbnail: Optional[str] = Field(None, max_length=1024)
+
+
 class LibrarySection(BaseModel):
     artists: List[LibraryArtist] = Field(default_factory=list, max_length=MAX_ARTISTS)
     albums: List[LibraryAlbum] = Field(default_factory=list, max_length=MAX_ALBUMS)
     charts: List[LibraryChart] = Field(default_factory=list, max_length=MAX_CHARTS)
+    dismissed_recommendations: List[LibraryDismissedArtist] = Field(default_factory=list, max_length=MAX_ARTISTS)
 
 
 # ============================================================================
@@ -167,6 +175,7 @@ class LibraryImportResult(BaseModel):
     charts_created: int = 0
     charts_existing: int = 0
     charts_skipped: int = 0
+    artists_dismissed: int = 0
 
 
 class CatalogImportResult(BaseModel):

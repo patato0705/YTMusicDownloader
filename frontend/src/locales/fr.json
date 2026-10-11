@@ -182,6 +182,22 @@
       "artists": "Artistes",
       "albums": "Albums",
       "tracks": "Titres"
+    },
+    "recommendations": {
+      "title": "Recommandés pour vous",
+      "subtitle": "Des artistes proches de ceux que vous suivez",
+      "similarTo": "Similaire à {names}",
+      "similarToMany": "Similaire à {count} artistes de votre bibliothèque",
+      "dismiss": "Pas intéressé",
+      "dismissedToast": "{name} ne sera plus recommandé",
+      "undo": "Annuler",
+      "dismissedLink": "Masqués ({count})",
+      "dismissedTitle": "Artistes masqués",
+      "dismissedDescription": "Ces artistes ne sont plus recommandés. Rétablissez-en un pour le revoir quand il ressemble à des artistes que vous suivez.",
+      "noDismissed": "Aucun artiste masqué",
+      "restore": "Rétablir",
+      "noneLeft": "Aucune recommandation pour le moment. Suivez d'autres artistes pour en obtenir.",
+      "error": "Impossible de mettre à jour les recommandations"
     }
   },
   "artist": {
@@ -656,6 +672,7 @@
         "chartsCreated": "Charts à suivre",
         "chartsExisting": "Charts déjà suivis",
         "chartsSkipped": "Charts ignorés",
+        "artistsDismissed": "Artistes masqués des recommandations",
         "catalogRows": "Lignes du catalogue (artistes / albums / titres)",
         "tracksOnDisk": "Titres trouvés sur le disque",
         "tracksToDownload": "Titres à télécharger",

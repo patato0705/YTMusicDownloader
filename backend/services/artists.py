@@ -13,6 +13,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from ..models import Artist
+from . import recommendations as recommendations_svc
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
 from .. import config
@@ -200,6 +201,8 @@ def fetch_and_upsert_artist(
     Fetch artist data from YTMusic and upsert to database.
     Returns the artist data with albums and singles.
     
+    Also stores its similar artists, for recommendations.
+
     Note: This does NOT upsert albums/tracks - use albums.fetch_and_upsert_albums_for_artist() for that.
     Note: Does NOT set followed status - use subscriptions for that.
     Note: Does NOT commit the session - caller controls transaction.
@@ -222,6 +225,11 @@ def fetch_and_upsert_artist(
         name=name,
         description=description,
     )
+
+    # None when the fetch failed: keep what's stored rather than wipe it
+    related = artist_data.get("related")
+    if related is not None:
+        recommendations_svc.store_related(session, artist_id, related)
 
     session.flush()
 

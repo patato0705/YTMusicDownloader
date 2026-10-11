@@ -5,6 +5,8 @@ export interface ToastProps {
   message: string;
   type?: 'success' | 'error' | 'info';
   duration?: number;
+  /** A button next to the message, e.g. "Undo"; closes the toast once clicked */
+  action?: { label: string; onClick: () => void };
   onClose: () => void;
 }
 
@@ -12,6 +14,7 @@ export const Toast: React.FC<ToastProps> = ({
   message, 
   type = 'success', 
   duration = 3000,
+  action,
   onClose 
 }) => {
   useEffect(() => {
@@ -43,6 +46,14 @@ export const Toast: React.FC<ToastProps> = ({
             {icons[type]}
           </div>
           <p className="flex-1 font-medium">{message}</p>
+          {action && (
+            <button
+              onClick={() => { action.onClick(); onClose(); }}
+              className="px-3 py-1 rounded-lg text-sm font-semibold bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 transition-colors"
+            >
+              {action.label}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="text-current hover:opacity-70 transition-opacity"
