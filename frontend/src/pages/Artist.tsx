@@ -14,7 +14,7 @@ import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { GenreChips } from '../components/ui/GenreChips';
-import { categorizeAlbums, getAlbumStatus } from '../utils';
+import { categorizeAlbums, getAlbumStatus, apiErrorMessage } from '../utils';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import type { Album, Artist as ArtistType } from '../types';
 
@@ -65,7 +65,7 @@ export default function Artist(): JSX.Element {
         }
       } catch (err: any) {
         console.error('Failed to load artist:', err);
-        if (!cancelled) setError(err.message || t('common.error'));
+        if (!cancelled) setError(apiErrorMessage(err, t, t('common.error')));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -108,7 +108,7 @@ export default function Artist(): JSX.Element {
       setSubscriptionMode('full');
     } catch (err: any) {
       console.error('Follow action failed:', err);
-      setToast({ message: err.message || t('common.error'), type: 'error' });
+      setToast({ message: apiErrorMessage(err, t, t('common.error')), type: 'error' });
     } finally {
       setActionLoading(false);
     }

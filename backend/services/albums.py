@@ -344,16 +344,12 @@ def fetch_and_upsert_album(
     if not browse_id:
         raise ValueError("browse_id required")
 
-    # Fetch album data
-    try:
-        album_data = ytm_adapter.get_album(browse_id=browse_id)
-    except Exception as e:
-        logger.exception(f"ytm_adapter.get_album failed for browse_id={browse_id}")
-        raise RuntimeError(f"Failed to fetch album from YTMusic: {e}")
+    # Raises ytm_adapter.YTMusicUnavailable when YouTube Music can't be read
+    album_data = ytm_adapter.get_album(browse_id=browse_id)
 
     # Extract metadata
     album_id = album_data.get("id") or browse_id
-    album_title = album_data.get("title") or "Unknown Album"
+    album_title = album_data["title"]
     thumbnails = album_data.get("thumbnails") or []
     year = album_data.get("year")
     album_type = album_data.get("type") or "Album"

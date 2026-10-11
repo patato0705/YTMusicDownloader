@@ -17,6 +17,15 @@ from backend.schemas import (
 logger = logging.getLogger("ytm_service.adapter")
 
 
+class YTMusicUnavailable(RuntimeError):
+    """
+    YouTube Music couldn't be read, after the client's own retries (it does
+    send empty or unparseable pages at times). Raised where an empty answer
+    would pass for real data -- an album with no tracks, an artist with no
+    releases -- so the caller fails, and its job retries, instead.
+    """
+
+
 def _safe_call(name: str, *args, **kwargs) -> Any:
     """
     Centralized call to client.call — Log and escalate exceptions.
@@ -125,32 +134,16 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
     """
     Get artist info including embedded albums/singles (limited to 10 each).
     Returns structured data with albums and singles separated.
+
+    Raises YTMusicUnavailable when it can't be read: an empty answer would
+    pass for an artist with no releases.
     """
-    raw = None
     try:
         raw = _safe_call("get_artist", channelId=channel_id)
-    except Exception:
-        return {
-            "id": str(channel_id),
-            "name": None,
-            "thumbnails": [],
-            "thumbnail": None,
-            "description": None,
-            "albums": [],
-            "singles": [],
-            "related": None,
-        }
+    except Exception as e:
+        raise YTMusicUnavailable(f"get_artist failed for {channel_id}: {e}") from e
     if not isinstance(raw, dict):
-        return {
-            "id": str(channel_id),
-            "name": None,
-            "thumbnails": [],
-            "thumbnail": None,
-            "description": None,
-            "albums": [],
-            "singles": [],
-            "related": None,
-        }
+        raise YTMusicUnavailable(f"Unexpected get_artist response for {channel_id}: {type(raw).__name__}")
     
     # Extract basic artist info
     name = raw.get("name")
@@ -198,11 +191,7 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
 
 
 def _related_artists(raw: Dict[str, Any], channel_id: str) -> List[Dict[str, Any]]:
-    """
-    The artist page's "Fans might also like", most similar first (YouTube
-    Music shows 10). None from the failure paths above means "unknown", as
-    opposed to an artist with none.
-    """
+    """The artist page's "Fans might also like", most similar first (YouTube Music shows 10)."""
     out: List[Dict[str, Any]] = []
     seen = {str(channel_id)}
     for item in (raw.get("related") or {}).get("results") or []:
@@ -226,14 +215,14 @@ def get_artist_albums(browseId: str, params: str) -> List[Dict[str, Any]]:
     Get full list of albums or singles for an artist.
     Use the params from get_artist() response to fetch complete list.
     """
+    # Raises YTMusicUnavailable, like get_artist: an empty list would pass
+    # for an artist with no albums
     try:
         raw_list = _safe_call("get_artist_albums", channelId=browseId, params=params)
-    except Exception:
-        logger.exception("get_artist_albums failed for browseId=%s, params=%s", browseId,params)
-        return []
-
+    except Exception as e:
+        raise YTMusicUnavailable(f"get_artist_albums failed for {browseId}: {e}") from e
     if not isinstance(raw_list, list):
-        return []
+        raise YTMusicUnavailable(f"Unexpected get_artist_albums response for {browseId}: {type(raw_list).__name__}")
 
     results = []
     for item in raw_list:
@@ -254,34 +243,24 @@ def get_album(browse_id: str) -> Dict[str, Any]:
         Dict representation of AlbumSchema with all album info and tracks
         
     Raises:
-        ValueError: If browse_id is empty or response is invalid
-        Exception: If API call fails
+        ValueError: If browse_id is empty
+        YTMusicUnavailable: If the album can't be read. Never answered with
+            an empty album: saved, it would pass for one with no tracks
     """
     if not browse_id:
         raise ValueError("browse_id required")
     
-    # Call YTMusic API
     try:
         raw = _safe_call("get_album", browseId=browse_id)
-    except Exception:
-        logger.exception("Failed to get album for browse_id=%s", browse_id)
-        # Return minimal schema on error
-        return AlbumSchema(
-            id=str(browse_id),
-            title="Unknown Album",
-            tracks=[]
-        ).model_dump()
-    
+    except Exception as e:
+        raise YTMusicUnavailable(f"get_album failed for {browse_id}: {e}") from e
     if not isinstance(raw, dict):
-        logger.error("Invalid response type for album %s: %s", browse_id, type(raw))
-        return AlbumSchema(
-            id=str(browse_id),
-            title="Unknown Album",
-            tracks=[]
-        ).model_dump()
+        raise YTMusicUnavailable(f"Unexpected get_album response for {browse_id}: {type(raw).__name__}")
     
     # Extract basic info with safe defaults
-    title = raw.get("title") or "Unknown Album"
+    title = raw.get("title")
+    if not title:
+        raise YTMusicUnavailable(f"Album {browse_id} came back without a title")
     album_type = raw.get("type") or "Album"
     is_explicit = bool(raw.get("isExplicit", False))
     description = raw.get("description")

@@ -12,7 +12,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import { PageHero } from '../components/ui/PageHero';
-import { formatDuration, formatDurationLong } from '../utils';
+import { formatDuration, formatDurationLong, apiErrorMessage } from '../utils';
 import type { PlaylistTrack } from '../api/playlists';
 
 function TrackThumb({ src, name, seed, className = '' }: { src?: string | null; name?: string | null; seed?: string | null; className?: string }) {
@@ -257,7 +257,7 @@ export default function PlaylistImport(): JSX.Element {
       setFollowedArtists((prev) => new Set(prev).add(artistId));
     } catch (err: any) {
       console.error('Follow failed:', err);
-      setToast({ message: err.message || t('common.error'), type: 'error' });
+      setToast({ message: apiErrorMessage(err, t, t('common.error')), type: 'error' });
     } finally {
       setActionLoadingId(null);
     }
@@ -270,7 +270,7 @@ export default function PlaylistImport(): JSX.Element {
       setDownloadedAlbums((prev) => new Set(prev).add(albumId));
     } catch (err: any) {
       console.error('Download failed:', err);
-      setToast({ message: err.message || t('common.error'), type: 'error' });
+      setToast({ message: apiErrorMessage(err, t, t('common.error')), type: 'error' });
     } finally {
       setActionLoadingId(null);
     }

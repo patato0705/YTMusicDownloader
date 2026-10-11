@@ -16,7 +16,8 @@
     "no": "Non",
     "or": "ou",
     "all": "Tout",
-    "searchMusic": "Rechercher de la musique..."
+    "searchMusic": "Rechercher de la musique...",
+    "ytmusicUnavailable": "YouTube Music ne répond pas pour le moment. Réessayez dans un instant."
   },
   "mediaCard": {
     "type": {

@@ -15,7 +15,7 @@ import { SectionHeader } from '../components/ui/SectionHeader';
 import { LyricsBadge } from '../components/ui/LyricsBadge';
 import { LyricsModal } from '../components/ui/LyricsModal';
 import { GenreChips } from '../components/ui/GenreChips';
-import { formatDuration, getPrimaryArtist } from '../utils';
+import { formatDuration, getPrimaryArtist, apiErrorMessage } from '../utils';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import type { Track } from '../types';
 
@@ -71,7 +71,7 @@ export default function Album(): JSX.Element {
         if (!cancelled) applyAlbum(data);
       } catch (err: any) {
         console.error('Failed to load album:', err);
-        if (!cancelled) setError(err.message || t('common.error'));
+        if (!cancelled) setError(apiErrorMessage(err, t, t('common.error')));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -117,7 +117,7 @@ export default function Album(): JSX.Element {
         .catch((err) => console.error('Failed to reload album:', err));
     } catch (err: any) {
       console.error('Download failed:', err);
-      setToast({ message: err.message || t('album.downloadFailed'), type: 'error' });
+      setToast({ message: apiErrorMessage(err, t, t('album.downloadFailed')), type: 'error' });
     } finally {
       setActionLoading(false);
     }

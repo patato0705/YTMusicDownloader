@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..deps import get_db
+from ..ytm_service.adapter import YTMusicUnavailable
 from ..services import artists as artists_svc
 from ..services import albums as albums_svc
 from ..services import subscriptions as subs_svc
@@ -28,6 +29,11 @@ from backend.models import User, Artist
 logger = logging.getLogger("routers.artists")
 
 router = APIRouter(prefix="/api/artists", tags=["Artists"])
+
+
+def _ytmusic_unavailable() -> HTTPException:
+    """YouTube Music couldn't be read: a code the frontend translates."""
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="ytmusic_unavailable")
 
 
 @router.get("/{artist_id}", status_code=status.HTTP_200_OK)
@@ -135,6 +141,8 @@ def get_artist(
         
     except HTTPException:
         raise
+    except YTMusicUnavailable:
+        raise _ytmusic_unavailable()
     except Exception as e:
         logger.exception("get_artist failed for %s", artist_id)
         raise HTTPException(status_code=500, detail=f"Failed retrieving artist: {e}")
@@ -217,6 +225,9 @@ def follow_artist(
     except HTTPException:
         db.rollback()
         raise
+    except YTMusicUnavailable:
+        db.rollback()
+        raise _ytmusic_unavailable()
     except Exception as e:
         db.rollback()
         logger.exception(f"follow_artist failed for {artist_id}")

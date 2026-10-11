@@ -207,11 +207,8 @@ def fetch_and_upsert_artist(
     Note: Does NOT set followed status - use subscriptions for that.
     Note: Does NOT commit the session - caller controls transaction.
     """
-    try:
-        artist_data = ytm_adapter.get_artist(channel_id=artist_id)
-    except Exception as e:
-        logger.exception(f"Failed to fetch artist {artist_id} from YTMusic")
-        raise RuntimeError(f"Failed to fetch artist from YTMusic: {e}")
+    # Raises ytm_adapter.YTMusicUnavailable when YouTube Music can't be read
+    artist_data = ytm_adapter.get_artist(channel_id=artist_id)
 
     # Extract artist metadata
     name = artist_data.get("name")
@@ -226,10 +223,7 @@ def fetch_and_upsert_artist(
         description=description,
     )
 
-    # None when the fetch failed: keep what's stored rather than wipe it
-    related = artist_data.get("related")
-    if related is not None:
-        recommendations_svc.store_related(session, artist_id, related)
+    recommendations_svc.store_related(session, artist_id, artist_data.get("related") or [])
 
     session.flush()
 

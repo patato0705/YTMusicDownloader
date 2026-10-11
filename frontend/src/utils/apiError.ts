@@ -38,3 +38,19 @@ export function retryAfterMinutes(err: any): number {
   const seconds = Number((err as ApiError)?.data?.retry_after);
   return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 1;
 }
+
+/** Error codes the backend sends as `detail`, with their translation keys */
+const CODED_ERRORS: Record<string, string> = {
+  // YouTube Music couldn't be read (502): usually passes in a moment
+  ytmusic_unavailable: 'common.ytmusicUnavailable',
+};
+
+/**
+ * A failed request's message for the user: a coded error translated,
+ * otherwise the backend's message, otherwise `fallback`.
+ */
+export function apiErrorMessage(err: any, t: (key: string) => string, fallback: string): string {
+  const code = (err as ApiError)?.data?.detail;
+  if (typeof code === 'string' && CODED_ERRORS[code]) return t(CODED_ERRORS[code]);
+  return err?.message || fallback;
+}

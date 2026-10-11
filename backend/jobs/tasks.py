@@ -1068,11 +1068,14 @@ def sync_artist(
         artist_data = artists_svc.fetch_and_upsert_artist(session, artist_id)
     except Exception as e:
         logger.exception(f"Failed to fetch artist {artist_id}")
+        session.rollback()
         subs_svc.mark_artist_synced(session, artist_id, error=str(e))
         def commit_error():
             session.commit()
         _db_operation_with_retry(commit_error)
-        return {"ok": False, "error": str(e)}
+        # Mostly YouTube Music having a moment (ytm_adapter.YTMusicUnavailable):
+        # try again shortly rather than wait for the next scheduled sync
+        return {"ok": False, "error": str(e), "retry_delay_seconds": 120}
     
     def commit_artist():
         session.commit()

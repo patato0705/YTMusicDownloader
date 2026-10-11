@@ -16,7 +16,8 @@
     "no": "No",
     "or": "or",
     "all": "All",
-    "searchMusic": "Search music..."
+    "searchMusic": "Search music...",
+    "ytmusicUnavailable": "YouTube Music isn't answering right now. Try again in a moment."
   },
   "mediaCard": {
     "type": {
