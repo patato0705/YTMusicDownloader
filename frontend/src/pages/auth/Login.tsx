@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
+import { PasswordInput } from '../../components/ui/PasswordInput';
 import { Spinner } from '../../components/ui/Spinner';
 import { retryAfterMinutes } from '../../utils';
 import * as authApi from '../../api/auth';
@@ -162,6 +163,7 @@ export const Login: React.FC = () => {
                     <input
                       id="username"
                       type="text"
+                      autoComplete="username"
                       required
                       value={username}
                       onChange={(e) => {
@@ -189,9 +191,9 @@ export const Login: React.FC = () => {
                     <label htmlFor="password" className="block text-sm font-semibold text-foreground mb-2">
                       {t('auth.login.password')}
                     </label>
-                    <input
+                    <PasswordInput
                       id="password"
-                      type="password"
+                      autoComplete="current-password"
                       required
                       value={password}
                       onChange={(e) => {

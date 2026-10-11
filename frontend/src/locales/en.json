@@ -35,6 +35,8 @@
     }
   },
   "auth": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "login": {
       "title": "Sign In",
       "subtitle": "Sign in to your account",

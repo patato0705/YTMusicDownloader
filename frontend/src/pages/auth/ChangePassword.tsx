@@ -4,6 +4,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
+import { PasswordInput } from '../../components/ui/PasswordInput';
 import * as authApi from '../../api/auth';
 import { retryAfterMinutes } from '../../utils';
 
@@ -167,9 +168,9 @@ export const ChangePassword: React.FC = () => {
               <label htmlFor="currentPassword" className="block text-sm font-semibold text-foreground mb-2">
                 {t('auth.changePassword.current')}
               </label>
-              <input
+              <PasswordInput
                 id="currentPassword"
-                type="password"
+                autoComplete="current-password"
                 required
                 value={currentPassword}
                 onChange={(e) => {
@@ -197,9 +198,9 @@ export const ChangePassword: React.FC = () => {
               <label htmlFor="newPassword" className="block text-sm font-semibold text-foreground mb-2">
                 {t('auth.changePassword.new')}
               </label>
-              <input
+              <PasswordInput
                 id="newPassword"
-                type="password"
+                autoComplete="new-password"
                 required
                 value={newPassword}
                 onChange={(e) => {
@@ -236,9 +237,9 @@ export const ChangePassword: React.FC = () => {
               <label htmlFor="confirmPassword" className="block text-sm font-semibold text-foreground mb-2">
                 {t('auth.changePassword.confirm')}
               </label>
-              <input
+              <PasswordInput
                 id="confirmPassword"
-                type="password"
+                autoComplete="new-password"
                 required
                 value={confirmPassword}
                 onChange={(e) => {

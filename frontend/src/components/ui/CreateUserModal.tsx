@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../ui/Button';
+import { PasswordInput } from './PasswordInput';
 import { Select } from '../ui/Select';
 import * as adminApi from '../../api/admin';
 import { parseApiError, getUsernameError, getPasswordError } from '../../utils';
@@ -151,6 +152,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
             </label>
             <input
               type="text"
+              autoComplete="off"
               required
               value={username}
               onChange={(e) => {
@@ -177,8 +179,8 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuc
             <label className="block text-sm font-semibold text-foreground mb-2">
               {t('auth.register.password')}
             </label>
-            <input
-              type="password"
+            <PasswordInput
+              autoComplete="new-password"
               required
               value={password}
               onChange={(e) => {

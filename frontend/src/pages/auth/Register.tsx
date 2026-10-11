@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../../components/ui/Button';
+import { PasswordInput } from '../../components/ui/PasswordInput';
 import * as authApi from '../../api/auth';
 import { getUsernameError, getPasswordError } from '../../utils';
 
@@ -268,6 +269,7 @@ export const Register: React.FC = () => {
               <input
                 id="username"
                 type="text"
+                autoComplete="username"
                 required
                 value={username}
                 onChange={(e) => {
@@ -304,9 +306,9 @@ export const Register: React.FC = () => {
               <label htmlFor="password" className="block text-sm font-semibold text-foreground mb-2">
                 {t('auth.register.password')}
               </label>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
+                autoComplete="new-password"
                 required
                 value={password}
                 onChange={(e) => {
@@ -343,9 +345,9 @@ export const Register: React.FC = () => {
               <label htmlFor="confirmPassword" className="block text-sm font-semibold text-foreground mb-2">
                 {t('auth.register.confirmPassword')}
               </label>
-              <input
+              <PasswordInput
                 id="confirmPassword"
-                type="password"
+                autoComplete="new-password"
                 required
                 value={confirmPassword}
                 onChange={(e) => {
