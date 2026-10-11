@@ -109,4 +109,6 @@ export interface FormattedMedia {
   year?: string;
   albumType?: string;
   albumId?: string;
+  /** Artist the subtitle names - albums and tracks only */
+  artistId?: string;
 }

@@ -112,6 +112,7 @@ def normalize_search_results(raw_results: Dict[str, List[dict]]) -> Dict[str, Li
             "id": album.get("id", ""),
             "title": album.get("title", "Untitled Album"),
             "artist": album.get("artist", "Unknown Artist"),
+            "artist_id": album.get("artist_id"),
             "year": album.get("year"),
             "type": album.get("type", "Album"),
             "thumbnail": album.get("thumbnail"),

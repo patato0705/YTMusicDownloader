@@ -181,11 +181,13 @@ def _normalize_search_item(it: dict, include_raw: bool, allowed_set: Optional[se
                 "thumbnail": pick_best_thumbnail_url(it.get("thumbnails") or []),
             })
     elif kind == "album":
+        main_artist = normalize_artist_entry((it.get("artists") or [None])[0])
         base.update({
             "id": it.get("browseId") or it.get("id") or it.get("playlistId"),
             "title": it.get("title") or it.get("name"),
             "thumbnail": pick_best_thumbnail_url(it.get("thumbnails") or []),
-            "artist": it.get("artists", [{}])[0].get("name") or "Unknown Artist",
+            "artist": main_artist["name"] or "Unknown Artist",
+            "artist_id": main_artist["id"],
             "year": it.get("year") or None,
         })
     else:

@@ -1,7 +1,7 @@
 // src/components/MediaList.tsx
 import React from 'react';
 import { useI18n } from '../contexts/I18nContext';
-import { STATUS_BADGES, albumTypeKey } from './MediaCard';
+import { STATUS_BADGES, SubtitleLink, albumTypeKey } from './MediaCard';
 import { Artwork } from './ui/Artwork';
 import type { MediaStatus } from '../types';
 
@@ -65,6 +65,8 @@ interface MediaRowProps {
   title: string;
   /** Artist name - albums only */
   subtitle?: string;
+  /** Makes the artist name a link of its own */
+  onSubtitleClick?: () => void;
   thumbnail?: string;
   type: MediaListKind;
   albumType?: string;
@@ -91,6 +93,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   id,
   title,
   subtitle,
+  onSubtitleClick,
   thumbnail,
   type,
   albumType,
@@ -117,9 +120,12 @@ export const MediaRow: React.FC<MediaRowProps> = ({
 
   // Everything that has no column at the current width gets folded into the
   // line under the title, so no info is lost on small screens.
+  const subtitleNode = subtitle && onSubtitleClick
+    ? <SubtitleLink onClick={onSubtitleClick}>{subtitle}</SubtitleLink>
+    : subtitle;
   const compactMeta = isArtist
     ? t(albumsCount === 1 ? 'library.meta.albumCountOne' : 'library.meta.albumCount', { count: albumsCount ?? 0 })
-    : [subtitle, year, typeLabel].filter(Boolean).join(' · ');
+    : [year, typeLabel].filter(Boolean).join(' · ');
 
   return (
     <button
@@ -147,9 +153,11 @@ export const MediaRow: React.FC<MediaRowProps> = ({
           {title}
         </h3>
         <p className="text-xs text-muted-foreground truncate lg:hidden">
+          {!isArtist && subtitleNode}
+          {!isArtist && subtitle && compactMeta && ' · '}
           {compactMeta}
           <span className="sm:hidden">
-            {compactMeta && ' · '}
+            {(compactMeta || (!isArtist && subtitle)) && ' · '}
             {t('library.meta.trackCount', { count: tracksText })}
           </span>
         </p>
@@ -165,7 +173,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
         <div className={`${COLUMNS.albums} text-sm tabular-nums text-muted-foreground`}>{albumsCount ?? 0}</div>
       ) : (
         <>
-          <div className={`${COLUMNS.artist} text-sm text-muted-foreground truncate`}>{subtitle || '—'}</div>
+          <div className={`${COLUMNS.artist} text-sm text-muted-foreground truncate`}>{subtitleNode || '—'}</div>
           <div className={COLUMNS.type}>
             <span className="inline-block rounded-full bg-slate-200/70 dark:bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               {typeLabel}

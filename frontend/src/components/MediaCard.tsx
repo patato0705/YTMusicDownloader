@@ -15,6 +15,8 @@ interface MediaCardProps {
   subtitleTitle?: string;
   /** Let the subtitle wrap to a second line instead of cutting it short */
   subtitleWrap?: boolean;
+  /** Makes the subtitle a link of its own (e.g. an album's artist) */
+  onSubtitleClick?: () => void;
   thumbnail?: string;
   type?: MediaKind;
   /** Release type as reported by YTMusic ("Album", "EP", "Single") - only used when type is 'album' */
@@ -64,6 +66,33 @@ export const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
   },
 };
 
+/**
+ * Clickable text inside a card / row. The card itself is a button, which can't
+ * hold another one, so this is a focusable span that keeps the click to itself.
+ */
+export const SubtitleLink: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => {
+  const activate = (e: React.SyntheticEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onClick();
+  };
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') activate(e);
+        // Space would otherwise press the card behind it
+        else if (e.key === ' ') e.stopPropagation();
+      }}
+      className="cursor-pointer rounded-sm outline-none hover:text-blue-600 dark:hover:text-red-400 hover:underline focus-visible:underline focus-visible:text-blue-600 dark:focus-visible:text-red-400 transition-colors"
+    >
+      {children}
+    </span>
+  );
+};
+
 /** Release type of an album, falling back to "Album" for anything unexpected */
 export function albumTypeKey(albumType?: string): string {
   switch (albumType?.trim().toLowerCase()) {
@@ -82,6 +111,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
   subtitle,
   subtitleTitle,
   subtitleWrap = false,
+  onSubtitleClick,
   thumbnail,
   type = 'album',
   albumType,
@@ -94,7 +124,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
   const { t } = useI18n();
   const isArtist = type === 'artist';
   const status = mediaStatus ? STATUS_BADGES[mediaStatus] : undefined;
-  const meta = [subtitle, year].filter(Boolean).join(' · ');
+  const hasMeta = Boolean(subtitle || year);
 
   // Artists are already told apart by their round artwork (and live in their own
   // sections), so the badge would only crowd the circle - square artwork keeps it
@@ -161,9 +191,11 @@ const MediaCard: React.FC<MediaCardProps> = ({
           {title}
         </h3>
 
-        {meta && (
+        {hasMeta && (
           <p className={`text-xs text-muted-foreground ${subtitleWrap ? 'line-clamp-2' : 'truncate'}`} title={subtitleTitle}>
-            {meta}
+            {subtitle && (onSubtitleClick ? <SubtitleLink onClick={onSubtitleClick}>{subtitle}</SubtitleLink> : subtitle)}
+            {subtitle && year && ' · '}
+            {year}
           </p>
         )}
 

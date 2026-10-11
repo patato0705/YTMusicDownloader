@@ -105,6 +105,10 @@ export default function Browse(): JSX.Element {
     return () => { cancelled = true; };
   }, [debouncedQuery]);
 
+  // The artist named under an album / track opens that artist, when YTM gave its id
+  const openArtist = (artistId?: string): (() => void) | undefined =>
+    artistId ? () => navigate(`/artists/${encodeURIComponent(artistId)}`) : undefined;
+
   const hasResults =
     (results.artists?.length || 0) +
     (results.albums?.length || 0) +
@@ -309,6 +313,7 @@ export default function Browse(): JSX.Element {
                           type="album"
                           albumType={formatted.albumType}
                           year={formatted.year}
+                          onSubtitleClick={openArtist(formatted.artistId)}
                           onClick={() => navigate(`/albums/${encodeURIComponent(formatted.id)}`)}
                         />
                       );
@@ -332,6 +337,7 @@ export default function Browse(): JSX.Element {
                           subtitle={formatted.subtitle}
                           thumbnail={getImageUrl(formatted.thumbnail)}
                           type="track"
+                          onSubtitleClick={openArtist(formatted.artistId)}
                           onClick={() => {
                             if (formatted.albumId) {
                               navigate(`/albums/${encodeURIComponent(formatted.albumId)}`);

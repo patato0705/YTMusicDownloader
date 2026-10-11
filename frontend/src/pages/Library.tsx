@@ -256,6 +256,12 @@ export default function Library(): JSX.Element {
       : t('library.trackMatch.many', { title: matches[0].title, count: matches.length - 1 });
   };
 
+  // An album's artist name opens the artist, when we know who it is
+  const openAlbumArtist = (album: any): (() => void) | undefined => {
+    const artistId = album.artist?.id ?? album.artist_id;
+    return artistId ? () => navigate(`/artists/${encodeURIComponent(artistId)}`) : undefined;
+  };
+
   const artistMatchHint = (artistId: string): string | undefined => {
     const matches = artistTrackMatches.get(artistId);
     if (!matches?.length) return undefined;
@@ -541,6 +547,7 @@ export default function Library(): JSX.Element {
                         id={album.id}
                         title={album.title}
                         subtitle={album.artist_name || album.artist?.name}
+                        onSubtitleClick={openAlbumArtist(album)}
                         thumbnail={getImageUrl(album.image_local || album.thumbnail)}
                         type="album"
                         albumType={album.type}
@@ -559,6 +566,7 @@ export default function Library(): JSX.Element {
                         id={album.id}
                         title={album.title}
                         subtitle={album.artist_name || album.artist?.name}
+                        onSubtitleClick={openAlbumArtist(album)}
                         thumbnail={getImageUrl(album.image_local || album.thumbnail)}
                         type="album"
                         albumType={album.type}

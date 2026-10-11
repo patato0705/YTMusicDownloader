@@ -75,11 +75,17 @@ export function formatAlbum(item: any): FormattedMedia {
     item.artists?.[0]?.name || 
     item.artist ||
     '';
+  const artistId =
+    item.artist_id ||
+    item.artist?.id ||
+    item.artists?.[0]?.id ||
+    '';
 
   return {
     id: item.id || item.browseId || '',
     title: item.title || 'Unknown Album',
     subtitle: artistName,
+    artistId,
     thumbnail: getBestThumbnail(item),
     year: item.year || '',
     albumType: item.type || item.album_type || '',
@@ -96,6 +102,10 @@ export function formatTrack(item: any): FormattedMedia {
     item.artist?.name || 
     item.artist ||
     '';
+  const artistId =
+    item.artists?.[0]?.id ||
+    item.artist?.id ||
+    '';
 
   // Extract album ID
   const albumId = 
@@ -109,6 +119,7 @@ export function formatTrack(item: any): FormattedMedia {
     subtitle: artistName,
     thumbnail: getBestThumbnail(item, 'small'),
     albumId,
+    artistId,
   };
 }
 
