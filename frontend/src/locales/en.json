@@ -718,6 +718,8 @@
     "tracksInPlaylist": "tracks in playlist",
     "followMainArtists": "Follow Main Artists",
     "followAll": "Follow All Artists",
+    "mainArtist": "Main",
+    "secondaryArtist": "Secondary",
     "downloadAll": "Download All Albums",
     "followingProgress": "Following {current} of {total}...",
     "downloadingProgress": "Downloading {current} of {total}...",

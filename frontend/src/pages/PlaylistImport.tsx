@@ -369,7 +369,8 @@ export default function PlaylistImport(): JSX.Element {
   const noAlbumCount = allTracks.filter((track) => !track.album?.id).length;
 
   const unfollowedArtistCount = uniqueArtists.filter((a) => !followedArtists.has(a.id)).length;
-  const unfollowedMainArtistCount = mainArtists.filter((a) => !followedArtists.has(a.id)).length;
+  const mainArtistIds = new Set(mainArtists.map((a) => a.id));
+  const unfollowedMainArtistCount =mainArtists.filter((a) => !followedArtists.has(a.id)).length;
   const undownloadedAlbumCount = uniqueAlbums.filter((a) => !downloadedAlbums.has(a.id)).length;
 
   const renderArtistLinks = (artists: PlaylistTrack['artists']) => {
@@ -688,12 +689,24 @@ export default function PlaylistImport(): JSX.Element {
                               {/* Artist info + action */}
                               <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                                 <div className="flex-1 min-w-0">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/artists/${encodeURIComponent(artist.id)}`); }}
-                                    className="font-semibold text-foreground truncate hover:text-blue-600 dark:hover:text-red-400 hover:underline transition-colors text-left block max-w-full"
-                                  >
-                                    {artist.name}
-                                  </button>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); navigate(`/artists/${encodeURIComponent(artist.id)}`); }}
+                                      className="font-semibold text-foreground truncate hover:text-blue-600 dark:hover:text-red-400 hover:underline transition-colors text-left min-w-0"
+                                    >
+                                      {artist.name}
+                                    </button>
+                                    {/* Same rule as "Follow main artists": first artist on at least one track */}
+                                    <span
+                                      className={`flex-shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border ${
+                                        mainArtistIds.has(artist.id)
+                                          ? 'bg-blue-500/10 text-blue-700 border-blue-500/30 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30'
+                                          : 'border-slate-300/70 dark:border-white/10 text-muted-foreground'
+                                      }`}
+                                    >
+                                      {t(mainArtistIds.has(artist.id) ? 'playlist.mainArtist' : 'playlist.secondaryArtist')}
+                                    </span>
+                                  </div>
                                   <p className="text-sm text-muted-foreground">
                                     {artist.trackCount} {artist.trackCount === 1 ? 'track' : 'tracks'}
                                   </p>

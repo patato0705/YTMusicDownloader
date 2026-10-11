@@ -718,6 +718,8 @@
     "tracksInPlaylist": "titres dans la playlist",
     "followMainArtists": "Suivre les artistes principaux",
     "followAll": "Suivre tous les artistes",
+    "mainArtist": "Principal",
+    "secondaryArtist": "Secondaire",
     "downloadAll": "Télécharger tous les albums",
     "followingProgress": "Suivi de {current} sur {total}...",
     "downloadingProgress": "Téléchargement de {current} sur {total}...",
