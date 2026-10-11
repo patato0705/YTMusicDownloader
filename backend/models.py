@@ -25,7 +25,10 @@ class Artist(Base):
  
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    # Square picture (folder.jpg), shown round in the app; the wide banner of
+    # the YouTube Music artist page (backdrop.jpg) is only for media servers
     image_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    banner_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Genres (see services/genres.py): the artist's own, used for albums the
     # genre sources know nothing specific about. The ids are this artist on

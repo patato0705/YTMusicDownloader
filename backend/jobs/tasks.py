@@ -1026,7 +1026,7 @@ def import_album(
 def sync_artist(
     session: Session,
     artist_id: str,
-    download_banner: bool = True,
+    download_images: bool = True,
     *,
     origin: str,
 ) -> Dict[str, Any]:
@@ -1034,13 +1034,13 @@ def sync_artist(
     Sync an artist: fetch latest releases and update database.
     
     Behavior depends on artist subscription mode:
-    - "light": Import all albums with mode="metadata", download covers and banner, NO track downloads
-    - "full": Import all albums with mode="download", download covers and banner, queue track downloads
+    - "light": Import all albums with mode="metadata", download covers and artist pictures, NO track downloads
+    - "full": Import all albums with mode="download", download covers and artist pictures, queue track downloads
     
     Args:
         session: SQLAlchemy session
         artist_id: Artist ID to sync
-        download_banner: False when the caller has just downloaded the banner
+        download_images: False when the caller has just downloaded the artist pictures
             itself (chart sync), so it isn't fetched a second time
     
     Returns:
@@ -1093,27 +1093,27 @@ def sync_artist(
     artist_name = artist_data.get("name", "Unknown")
     logger.info(f"Fetched artist: {artist_name}")
     
-    # ===== TRANSACTION 2.5: Download artist banner =====
+    # ===== TRANSACTION 2.5: Download artist pictures =====
     artist_obj = session.get(Artist, artist_id)
-    banner_updated = False
+    images_updated = False
     
-    if artist_obj and download_banner:
+    if artist_obj and download_images:
         try:
-            banner_path = artists_svc.ensure_artist_banner(
+            picture_path = artists_svc.ensure_artist_images(
                 session,
                 artist_obj,
                 thumbnails=artist_data.get("thumbnails")
             )
-            if banner_path:
-                banner_updated = True
-                logger.info(f"Updated artist banner: {banner_path}")
+            if picture_path:
+                images_updated = True
+                logger.info(f"Updated artist pictures: {picture_path}")
         except Exception as e:
-            logger.exception(f"Failed to download artist banner for {artist_id}")
+            logger.exception(f"Failed to download artist pictures for {artist_id}")
     
-    def commit_banner():
+    def commit_images():
         session.commit()
 
-    _db_operation_with_retry(commit_banner)
+    _db_operation_with_retry(commit_images)
 
     # Write artist.nfo for Jellyfin
     if artist_obj:
@@ -1258,7 +1258,7 @@ def sync_artist(
         f"{len(new_albums)} new albums, "
         f"{albums_created} albums created, "
         f"{jobs_queued} import jobs queued, "
-        f"banner {'updated' if banner_updated else 'unchanged'}"
+        f"pictures {'updated' if images_updated else 'unchanged'}"
     )
 
     return {
@@ -1267,7 +1267,7 @@ def sync_artist(
         "new_albums": len(new_albums),
         "albums_created": albums_created,
         "jobs_queued": jobs_queued,
-        "banner_updated": banner_updated,
+        "images_updated": images_updated,
     }
 
 
@@ -1291,8 +1291,8 @@ def sync_chart(
     3. For each artist (committed one at a time):
        - Fetch artist metadata from YTMusic
        - Create artist subscription (mode="full")
-       - Download its banner
-    4. Queue sync_artist jobs for each artist (skipping the banner when step 3 got it)
+       - Download its pictures
+    4. Queue sync_artist jobs for each artist (skipping the pictures when step 3 got them)
     
     Args:
         session: SQLAlchemy session
@@ -1326,7 +1326,7 @@ def sync_chart(
     # One short transaction per artist, never held across a network call:
     # SQLite has a single writer, and keeping it for the whole loop would make
     # the download workers' commits wait past busy_timeout. It also lets each
-    # artist show up in the library, with its banner, as soon as it's done.
+    # artist show up in the library, with its picture, as soon as it's done.
     from ..services import subscriptions as subs_svc
     
     def commit():
@@ -1334,7 +1334,7 @@ def sync_chart(
     
     artists_followed = 0
     failed_artists = []
-    banners_downloaded = set()
+    images_downloaded = set()
     
     for artist_id in artist_ids:
         try:
@@ -1360,26 +1360,26 @@ def sync_chart(
             failed_artists.append(artist_id)
             continue
         
-        # Banner now rather than in sync_artist, which can wait a long time
+        # Pictures now rather than in sync_artist, which can wait a long time
         # behind the other chart artists. The download happens outside any
-        # transaction; only setting image_local is committed.
+        # transaction; only setting their paths is committed.
         artist_obj = session.get(Artist, artist_id)
         try:
-            if artist_obj and artists_svc.ensure_artist_banner(
+            if artist_obj and artists_svc.ensure_artist_images(
                 session,
                 artist_obj,
                 thumbnails=artist_data.get("thumbnails"),
             ):
                 _db_operation_with_retry(commit)
-                banners_downloaded.add(artist_id)
+                images_downloaded.add(artist_id)
         except Exception:
             # sync_artist will try again
-            logger.exception(f"Failed to download banner for chart artist {artist_id}")
+            logger.exception(f"Failed to download pictures for chart artist {artist_id}")
             session.rollback()
     
     logger.info(
         f"Followed {artists_followed}/{len(artist_ids)} artists from {country_code} chart "
-        f"({len(banners_downloaded)} banners downloaded)"
+        f"({len(images_downloaded)} with pictures downloaded)"
     )
     
     # ===== TRANSACTION 3: Queue sync_artist jobs =====
@@ -1397,7 +1397,7 @@ def sync_chart(
                 payload={
                     "artist_id": artist_id,
                     # Already fetched above - only retried when that failed
-                    "download_banner": artist_id not in banners_downloaded,
+                    "download_images": artist_id not in images_downloaded,
                 },
                 origin=Origin.BULK,
             )

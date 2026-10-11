@@ -609,7 +609,7 @@ def delete_artist_from_library(
     Completely remove an artist from the library.
 
     Deletes everything:
-    - All track files, lyrics files, album covers, artist banner
+    - All track files, lyrics files, album covers, artist pictures
     - Artist folder on disk
     - All DB records: tracks, albums, artist
     - All subscriptions: artist subscription + all album subscriptions
@@ -657,9 +657,10 @@ def delete_artist_from_library(
                 db.delete(album)
                 albums_deleted += 1
 
-        # 2. Delete artist banner
+        # 2. Delete artist pictures
         if artist:
             _delete_file_safe(artist.image_local)
+            _delete_file_safe(artist.banner_local)
 
         # 3. Delete artist subscription
         if artist_sub:

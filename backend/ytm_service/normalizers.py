@@ -1,6 +1,7 @@
 # backend/ytm_service/normalizers.py
 from __future__ import annotations
 import logging
+import re
 from typing import Any, Dict, List, Optional, Sequence
 from backend.schemas import Thumbnail as ThumbnailSchema
 
@@ -90,6 +91,33 @@ def pick_best_thumbnail_url(ths: List[Dict[str, Optional[Any]]]) -> Optional[str
     return None
 
 
+# Card artwork: what YouTube Music itself uses for its biggest cards
+CARD_THUMBNAIL_SIZE = 544
+
+_RESIZABLE_HOSTS = ("googleusercontent.com", "ggpht.com")
+_SIZE_OPTION = re.compile(r"^[whs]\d+$")
+
+
+def resize_thumbnail_url(url: Optional[str], size: int, crop: bool = False) -> Optional[str]:
+    """
+    Ask Google's image server for a size x size version of a thumbnail.
+
+    Search results only list 60 and 120px versions of a picture that exists
+    at any size: the size is the "=w120-h120-..." options at the end of the
+    URL. Other options (quality, format) are kept. crop=True adds "p", which
+    crops the original picture to a square instead of fitting it inside one;
+    an artist's square crop shows more than its banner, which is a crop too.
+
+    URLs from other hosts (i.ytimg.com video stills) are returned unchanged.
+    """
+    if not url or not any(host in url for host in _RESIZABLE_HOSTS):
+        return url
+    base, _, options = url.partition("=")
+    kept = [o for o in options.split("-") if o and not _SIZE_OPTION.match(o) and o != "p"]
+    wanted = [f"w{size}", f"h{size}"] + (["p"] if crop or "p" in options.split("-") else [])
+    return f"{base}={'-'.join(wanted + kept)}"
+
+
 def _build_thumbnails(thumbs_raw: Any) -> List[ThumbnailSchema]:
     """
     Normalize thumbs list (via normalizers) and returns a list
@@ -137,6 +165,11 @@ def _extract_first_nested_artist(item: dict) -> dict | None:
                 return first
     return None
 
+def _artist_card_thumbnail(it: dict) -> Optional[str]:
+    """Search only lists 60 and 120px versions; artists are shown round, so square"""
+    return resize_thumbnail_url(pick_best_thumbnail_url(it.get("thumbnails") or []), CARD_THUMBNAIL_SIZE, crop=True)
+
+
 def _normalize_search_item(it: dict, include_raw: bool, allowed_set: Optional[set], default_exclude: set): # Used in search function
     """
     Returns normalized dict or None if filtered.
@@ -163,7 +196,8 @@ def _normalize_search_item(it: dict, include_raw: bool, allowed_set: Optional[se
             "album": it.get("album") or [],
             "artists": [normalize_artist_entry(a) for a in (it.get("artists") or it.get("artist") or [])],
             "duration_seconds": it.get("duration_seconds") or it.get("duration"),
-            "thumbnail": pick_best_thumbnail_url(it.get("thumbnails") or []),
+            # Search only lists 60 and 120px versions
+            "thumbnail": resize_thumbnail_url(pick_best_thumbnail_url(it.get("thumbnails") or []), CARD_THUMBNAIL_SIZE),
         })
     elif kind == "artist":
         artists_list = it.get("artists") or []
@@ -171,14 +205,14 @@ def _normalize_search_item(it: dict, include_raw: bool, allowed_set: Optional[se
             base.update({
                 "id": it.get("browseId") or it.get("id"),
                 "name": it.get("title") or it.get("name") or it.get("artist"),
-                "thumbnail": pick_best_thumbnail_url(it.get("thumbnails") or []),
+                "thumbnail": _artist_card_thumbnail(it),
             })
         else: # Top result
             nested = artists_list[0] if isinstance(artists_list, (list, tuple)) and len(artists_list) > 0 else {}
             base.update({
                 "id": nested.get("browseId") or nested.get("id") or it.get("browseId") or it.get("id"),
                 "name": nested.get("name") or it.get("title") or it.get("name") or it.get("artist"),
-                "thumbnail": pick_best_thumbnail_url(it.get("thumbnails") or []),
+                "thumbnail": _artist_card_thumbnail(it),
             })
     elif kind == "album":
         main_artist = normalize_artist_entry((it.get("artists") or [None])[0])

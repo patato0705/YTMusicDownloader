@@ -60,6 +60,9 @@ def write_artist_nfo(artist) -> Optional[Path]:
         thumb = getattr(artist, "image_local", None)
         if thumb:
             _set_text(root, "thumb", str(thumb))
+        banner = getattr(artist, "banner_local", None)
+        if banner:
+            _set_text(ET.SubElement(root, "fanart"), "thumb", str(banner))
 
         dest = _artist_dir(name) / "artist.nfo"
         _write_xml(root, dest)

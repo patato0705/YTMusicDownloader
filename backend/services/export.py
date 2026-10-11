@@ -215,6 +215,7 @@ def build_catalog_section(session: Session) -> Dict[str, Any]:
                 "id": a.id,
                 "name": a.name,
                 "image_local": relativize_path(a.image_local),
+                "banner_local": relativize_path(a.banner_local),
                 "description": a.description,
             }
             for a in artists
@@ -375,11 +376,13 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
 
     for a in catalog.artists:
         image = resolve_music_path(a.image_local)
+        banner = resolve_music_path(a.banner_local)
         artists_svc.upsert_artist(
             session,
             artist_id=a.id,
             name=a.name,
             image_local=str(image) if image and image.exists() else None,
+            banner_local=str(banner) if banner and banner.exists() else None,
             description=a.description,
         )
         result.artists += 1

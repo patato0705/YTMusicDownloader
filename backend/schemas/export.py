@@ -100,6 +100,7 @@ class CatalogArtist(BaseModel):
     id: str = Field(..., min_length=1, max_length=64)
     name: Optional[str] = Field(None, max_length=255)
     image_local: Optional[str] = Field(None, max_length=1024)
+    banner_local: Optional[str] = Field(None, max_length=1024)
     description: Optional[str] = None
 
 

@@ -150,8 +150,14 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
     description = _trim_to_complete_sentence(raw.get("description") or "")
     thumbs_models = N._build_thumbnails(raw.get("thumbnails", []))
     thumbs_dicts = [t.model_dump() for t in thumbs_models]
-    thumbnail = N.pick_best_thumbnail_url(thumbs_dicts) if thumbs_models else None
-    
+    # The thumbnails are the page's wide banner; the artist is shown round,
+    # so the same picture cropped square (thumbnails stay for the banner file)
+    thumbnail = N.resize_thumbnail_url(
+        N.pick_best_thumbnail_url(thumbs_dicts) if thumbs_models else None,
+        N.CARD_THUMBNAIL_SIZE,
+        crop=True,
+    )
+
     # Get artist's albums - handle missing 'albums' key
     albums_data = []
     if raw.get("albums"):

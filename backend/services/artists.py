@@ -6,6 +6,7 @@ Business logic for fetching artist data from YTMusic lives here.
 """
 from __future__ import annotations
 import logging
+import shutil
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
@@ -31,6 +32,7 @@ def upsert_artist(
     artist_id: str,
     name: Optional[str] = None,
     image_local: Optional[str] = None,
+    banner_local: Optional[str] = None,
     description: Optional[str] = None,
 ) -> Artist:
     """
@@ -49,6 +51,7 @@ def upsert_artist(
             id=str(artist_id),
             name=str(name) if name is not None else "",
             image_local=str(image_local) if image_local else None,
+            banner_local=str(banner_local) if banner_local else None,
             description=str(description) if description else None,
         )
         session.add(obj)
@@ -60,6 +63,9 @@ def upsert_artist(
             changed = True
         if image_local is not None and obj.image_local != image_local:
             obj.image_local = image_local
+            changed = True
+        if banner_local is not None and obj.banner_local != banner_local:
+            obj.banner_local = banner_local
             changed = True
         if description is not None and obj.description != description:
             obj.description = description
@@ -77,116 +83,80 @@ def get_artist_from_db(session: Session, artist_id: str) -> Optional[Artist]:
 
 
 # ============================================================================
-# ARTIST BANNER MANAGEMENT
+# ARTIST IMAGES
 # ============================================================================
 
-def ensure_artist_banner(
+# Square picture saved for the artist: about the height of YouTube Music's
+# originals, so Google crops it rather than blowing it up
+ARTIST_PICTURE_SIZE = 800
+
+
+def _download_image(url: str, temp_path: Path, final_path: Path) -> bool:
+    """Download url to final_path, through temp_path so a failed download never leaves half a file."""
+    try:
+        temp_path.parent.mkdir(parents=True, exist_ok=True)
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        temp_path.write_bytes(response.content)
+
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(temp_path), str(final_path))
+        try:
+            final_path.chmod(0o644)
+        except Exception as e:
+            logger.debug(f"Failed to set permissions on {final_path}: {e}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to download {url} to {final_path}: {e}")
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+        return False
+
+
+def ensure_artist_images(
     session: Session,
     artist_obj: Artist,
     thumbnails: Optional[List[Any]] = None,
 ) -> Optional[str]:
     """
-    Ensure the artist has a local banner image. Downloads the best thumbnail if needed.
+    Download the artist's pictures into its folder, from the thumbnails of its
+    YouTube Music page:
+      - folder.jpg: the picture cropped square, shown in the app (image_local)
+        and used by Jellyfin as the artist's main image
+      - backdrop.jpg: the page's wide banner (banner_local), Jellyfin's backdrop
 
-    Args:
-        session: SQLAlchemy session
-        artist_obj: Artist model instance (should be attached to session)
-        thumbnails: raw thumbnails (list[dict]) from the API
+    Both come from the same picture: Google crops the square from the
+    original, which shows more than the banner (itself a crop of it).
 
-    Returns:
-        Path to the saved banner (string) or None if failed
+    Returns the square picture's path, or None if it couldn't be saved.
     """
     if not artist_obj:
         return None
 
-    # Get artist name for folder path
-    artist_name = artist_obj.name or "Unknown Artist"
-    safe_artist_name = safe_name(artist_name)
-
-    # Artist folder: /data/{artist}/
-    artist_folder = Path(str(config.MUSIC_DIR)) / safe_artist_name
-
-    # Final banner path: /data/{artist}/backdrop.jpg
-    final_banner_path = artist_folder / "backdrop.jpg"
-
-    thumbs_src = thumbnails or []
-
-    logger.debug(f"Artist {artist_obj.id} has {len(thumbs_src)} thumbnails")
-    
-    # Normalize and pick best thumbnail
-    norm_thumbs = N.normalize_thumbnails(thumbs_src)
-    logger.debug(f"Normalized to {len(norm_thumbs) if norm_thumbs else 0} thumbnails")
-    
-    best_url = N.pick_best_thumbnail_url(norm_thumbs) if norm_thumbs else None
-    if not best_url:
+    banner_url = N.pick_best_thumbnail_url(N.normalize_thumbnails(thumbnails or []))
+    if not banner_url:
         logger.warning(f"No thumbnail URL found for artist {artist_obj.id}")
         return None
-    
-    logger.info(f"Selected best thumbnail URL: {best_url[:100]}..." if len(best_url) > 100 else f"Selected best thumbnail URL: {best_url}")
+    picture_url = N.resize_thumbnail_url(banner_url, ARTIST_PICTURE_SIZE, crop=True)
 
-    # Download to temp location first
-    temp_banner_path = Path(str(config.COVERS_DIR)) / f"artist_{artist_obj.id}_backdrop.jpg"
-    
-    try:
-        # Ensure temp directory exists
-        Path(str(config.COVERS_DIR)).mkdir(parents=True, exist_ok=True)
-        
-        logger.info(f"Downloading banner for artist {artist_obj.id} from {best_url}")
-        response = requests.get(best_url, timeout=30)
-        response.raise_for_status()
-        
-        # Save to temp location
-        temp_banner_path.write_bytes(response.content)
-        logger.debug(f"Downloaded banner to temp: {temp_banner_path}")
-        
-        # Create artist folder if it doesn't exist
-        artist_folder.mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Ensured artist folder exists: {artist_folder}")
-        
-        # Move to final location
-        if final_banner_path.exists():
-            # Backup old banner before replacing
-            try:
-                final_banner_path.unlink()
-                logger.debug(f"Removed old banner: {final_banner_path}")
-            except Exception as e:
-                logger.warning(f"Failed to remove old banner: {e}")
-        
-        # Move temp file to final location
-        import shutil
-        shutil.move(str(temp_banner_path), str(final_banner_path))
-        logger.info(f"Moved banner to: {final_banner_path}")
-        
-        # Set permissions
-        try:
-            final_banner_path.chmod(0o644)
-        except Exception as e:
-            logger.debug(f"Failed to set banner permissions: {e}")
-        
-        # Update database
-        artist_obj.image_local = str(final_banner_path)
-        session.add(artist_obj)
-        
-        return str(final_banner_path)
-        
-    except requests.RequestException as e:
-        logger.error(f"Failed to download banner for artist {artist_obj.id}: {e}")
-        # Clean up temp file if it exists
-        if temp_banner_path.exists():
-            try:
-                temp_banner_path.unlink()
-            except Exception:
-                pass
-        return None
-    except Exception as e:
-        logger.exception(f"Unexpected error ensuring banner for artist {artist_obj.id}: {e}")
-        # Clean up temp file if it exists
-        if temp_banner_path.exists():
-            try:
-                temp_banner_path.unlink()
-            except Exception:
-                pass
-        return None
+    artist_folder = Path(str(config.MUSIC_DIR)) / safe_name(artist_obj.name or "Unknown Artist")
+    covers_dir = Path(str(config.COVERS_DIR))
+
+    picture_path = artist_folder / "folder.jpg"
+    picture_saved = _download_image(picture_url, covers_dir / f"artist_{artist_obj.id}_folder.jpg", picture_path)
+    if picture_saved:
+        artist_obj.image_local = str(picture_path)
+
+    banner_path = artist_folder / "backdrop.jpg"
+    if _download_image(banner_url, covers_dir / f"artist_{artist_obj.id}_backdrop.jpg", banner_path):
+        artist_obj.banner_local = str(banner_path)
+
+    session.add(artist_obj)
+    logger.info(f"Saved pictures for artist {artist_obj.id} in {artist_folder}")
+    return str(picture_path) if picture_saved else None
 
 
 # ============================================================================

@@ -16,7 +16,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year, genres and embedded cover art.
 - **Genres** from [MusicBrainz](https://musicbrainz.org) (specific, community-voted) with [Deezer](https://www.deezer.com) as a fallback, written to the tags and NFO files so Jellyfin can browse and mix by genre. No account or API key needed.
 - **Recommendations**: artists similar to the ones you follow, from YouTube Music's own "Fans might also like", ranked by how many of your artists point to them.
-- **Jellyfin-friendly layout** with `artist.nfo`, `album.nfo`, `backdrop.jpg` and `cover.jpg`.
+- **Jellyfin-friendly layout** with `artist.nfo`, `album.nfo`, `folder.jpg`, `backdrop.jpg` and `cover.jpg`.
 - **Multi-user** with three roles (visitor / member / administrator), optional public registration, optional [single sign-on](#single-sign-on-oidc) through your identity provider (Authelia, Authentik, Pocket ID, Keycloak…), and httpOnly-cookie sessions.
 - **Rate-limit aware**: detects YouTube throttling and bot checks, resets its session, and pauses all downloads with exponential backoff instead of hammering YouTube.
 - **Age-restricted tracks** supported via an optional cookies.txt from a signed-in YouTube account (used *only* for those tracks).
@@ -77,6 +77,7 @@ Files are written to `/data` (bind-mounted from `./data` by default):
 data/
 └── Artist Name/
     ├── artist.nfo
+    ├── folder.jpg
     ├── backdrop.jpg
     └── Album Title/
         ├── album.nfo
