@@ -22,7 +22,6 @@ from ..models import Album, Job, Track
 from ..services import albums as albums_svc
 from ..services import tracks as tracks_svc
 from ..services import subscriptions as subs_svc
-from ..jobs.jobqueue import enqueue_job
 from ..jobs.priorities import Origin
 
 from backend.dependencies import require_auth, require_member_or_admin, require_admin
@@ -173,38 +172,22 @@ def download_album(
     current_user: User = Depends(require_member_or_admin),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """
-    Download an album: set it to download mode and queue its import, which
-    fetches the current tracklist from YTMusic, writes the cover and
-    album.nfo, then queues a download for every track not on disk -- the
-    same path as the albums of a followed artist.
-
-    An album not in the DB yet is fetched here first, so it shows up with
-    its real title, artist and tracks right away instead of as an empty
-    row until the import lands. Its artist gets a light subscription if it
-    has none (album metadata and banner, no downloads).
-    """
+    """Download an album (see subscriptions.start_album_download)."""
     if not album_id:
         raise HTTPException(status_code=400, detail="album_id required")
 
     try:
-        album_obj = db.get(Album, album_id)
-        if album_obj is None:
-            logger.info(f"Album {album_id} not in DB, fetching from YTMusic")
-            albums_svc.fetch_and_upsert_album(db, browse_id=album_id)
-            db.flush()  # autoflush=False: db.get can't see the new row before this
-            album_obj = db.get(Album, album_id)
-            if album_obj is None:
-                raise HTTPException(status_code=500, detail="Failed to fetch album from YTMusic")
-
+        result = subs_svc.start_album_download(
+            db, album_id, origin=Origin.USER, user_id=current_user.id
+        )
+        album_obj = result["album"]
         album_info = {
             "id": album_obj.id,
             "title": album_obj.title,
             "artist_id": album_obj.artist_id,
             "type": album_obj.type,
         }
-
-        if album_obj.mode == "download":
+        if not result["started"]:
             return {
                 "source": "database",
                 "mode": "download",
@@ -212,47 +195,13 @@ def download_album(
                 "album": album_info,
                 "artist_subscription_created": False,
             }
-
-        album_obj.mode = "download"
-        db.add(album_obj)
-        album_artist_id = album_obj.artist_id
-
-        # Auto-create light artist subscription if artist doesn't have one yet
-        artist_sub_created = False
-        if album_artist_id and not subs_svc.get_artist_subscription(db, album_artist_id):
-            subs_svc.subscribe_to_artist(db, artist_id=album_artist_id, mode="light")
-            artist_sub_created = True
-            logger.info(f"Auto-created light artist subscription for {album_artist_id}")
-
-        db.flush()  # autoflush=False: the rollup and the import check see the mode change
-        subs_svc.check_and_update_album_download_status(db, album_id)
-        subs_svc.queue_album_imports(
-            db, [album_id], artist_id=album_artist_id, user_id=current_user.id, origin=Origin.USER
-        )
-        db.commit()
-
-        # Queue sync_artist job for light subscription (fetches all albums metadata + banner)
-        if artist_sub_created:
-            try:
-                enqueue_job(
-                    db,
-                    job_type="sync_artist",
-                    payload={"artist_id": album_artist_id},
-                    origin=Origin.USER,
-                    user_id=current_user.id,
-                )
-                logger.info(f"Queued sync_artist job for light subscription of {album_artist_id}")
-            except Exception as e:
-                logger.exception(f"Failed to queue sync_artist job for {album_artist_id}")
-
-        logger.info(f"Album {album_id} set to download by user {current_user.id}: import queued")
-
+        logger.info(f"Album {album_id} set to download by user {current_user.id}")
         return {
             "source": "database",
             "mode": "download",
             "message": "Album download started",
             "album": album_info,
-            "artist_subscription_created": artist_sub_created,
+            "artist_subscription_created": result["artist_subscription_created"],
         }
 
     except HTTPException:

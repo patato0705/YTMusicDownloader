@@ -53,6 +53,21 @@ DEFAULT_SETTINGS = {
         "internal": True,
         "description": "Last fixed-time chart sync run",
     },
+    "scheduler.playlist_sync": {
+        # Daily: playlists change more often than artists release. Between
+        # the artist sync (02:00) and the chart sync (04:00).
+        "value": {"mode": "fixed", "time": "03:00", "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
+        "type": "schedule",
+        "unit": "hours",
+        "min": 1,
+        "description": "When followed playlists are rescanned for new songs",
+    },
+    "scheduler.playlist_sync_last_run": {
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last fixed-time playlist sync run",
+    },
     "scheduler.lyrics_retry": {
         "value": {"mode": "interval", "every": 24},
         "type": "schedule",

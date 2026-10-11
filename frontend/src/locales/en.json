@@ -335,6 +335,14 @@
     "export": {
       "button": "Export library",
       "description": "Download the list of followed artists, standalone albums and charts as a JSON file. An admin can import it on another instance."
+    },
+    "playlists": "Playlists",
+    "noPlaylists": "No playlist matches.",
+    "deletion": {
+      "artistUnfollowed": "{name} will be unfollowed, so this album isn't downloaded again: their new releases won't be downloaded anymore.",
+      "playlistsUnfollowed": "These followed playlists will be unfollowed, so they don't download it again: {titles}. They stay in the library as one-time playlists.",
+      "playlistsUnfollowed_one": "The followed playlist {titles} will be unfollowed, so it doesn't download it again. It stays in the library as a one-time playlist.",
+      "quoted": "“{title}”"
     }
   },
   "charts": {
@@ -470,6 +478,12 @@
             "description": "When followed charts are re-fetched to follow new top-N artists. YouTube Music only updates its charts weekly, so more often than every 7 days rarely finds anything new.",
             "intervalHint": "Each chart is re-fetched {count} days after its last sync.",
             "intervalHint_one": "Each chart is re-fetched a day after its last sync."
+          },
+          "playlist_sync": {
+            "label": "Playlist sync",
+            "description": "When followed playlists are rescanned: new songs bring in their albums or artists, and their M3U files follow the playlist.",
+            "intervalHint": "Each playlist is rescanned {count} hours after its last scan.",
+            "intervalHint_one": "Each playlist is rescanned an hour after its last scan."
           },
           "lyrics_retry": {
             "label": "Lyrics retry",
@@ -674,6 +688,7 @@
         "chartsExisting": "Charts already followed",
         "chartsSkipped": "Charts skipped",
         "artistsDismissed": "Artists dismissed from recommendations",
+        "playlistsAdded": "Playlists to add",
         "catalogRows": "Catalog rows (artists / albums / tracks)",
         "tracksOnDisk": "Tracks found on disk",
         "tracksToDownload": "Tracks to download",
@@ -716,6 +731,47 @@
     "noAlbums": "No downloadable albums found in this playlist",
     "partialSuccess": "{succeeded} of {total} succeeded, {failed} failed",
     "importFromPlaylist": "Import from playlist",
-    "trackView": "Tracks"
+    "trackView": "Tracks",
+    "unavailable": "This playlist can't be read. It has to be public or unlisted, or YouTube Music isn't answering right now.",
+    "noAlbumNote": "{count} songs have no album (music videos, uploads): skipped.",
+    "noAlbumNote_one": "1 song has no album (a music video or an upload): skipped.",
+    "options": {
+      "addTitle": "Add playlist to library",
+      "editTitle": "Playlist options",
+      "bringIn": "Its songs bring in",
+      "albums": "Their albums",
+      "albumsDescription": "Each song's whole album is downloaded.",
+      "artists": "Their artists",
+      "artistsDescription": "Each song's main artist is followed: all their releases are downloaded.",
+      "follow": "Keep following",
+      "followOn": "Rescanned on the playlist sync schedule: new songs bring in their albums or artists, and songs removed from the playlist leave the M3U.",
+      "followOff": "Added once: later changes to the playlist are ignored.",
+      "m3u": "M3U file",
+      "m3uDescription": "Written to Playlists/ in the music folder, for Jellyfin and other players. Songs are added to it as they're downloaded.",
+      "needOne": "Turn on at least one of these. For a one-time download without an M3U file, use the buttons under the playlist.",
+      "switchToArtists": "The main artist of every song in the playlist will be followed.",
+      "switchToAlbums": "Artists already followed stay followed. From now on, songs bring in their albums.",
+      "add": "Add",
+      "addButton": "Add to library",
+      "addHint": "Follow it, or keep it as an M3U playlist",
+      "editButton": "Options",
+      "remove": "Remove",
+      "removeTitle": "Remove playlist",
+      "removeMessage": "The playlist and its M3U file are removed from the library. The music stays.",
+      "added": "Playlist added: its songs are being brought in",
+      "saved": "Playlist updated",
+      "removed": "Playlist removed"
+    },
+    "status": {
+      "followed": "Followed",
+      "once": "Once",
+      "available": "{available} of {songs} songs in the library",
+      "skipped": "{count} skipped",
+      "lastScan": "Last scan {when}",
+      "scanning": "Scanning…",
+      "lastError": "Last scan failed: {error}",
+      "syncNow": "Sync now",
+      "syncQueued": "Scan queued"
+    }
   }
 }

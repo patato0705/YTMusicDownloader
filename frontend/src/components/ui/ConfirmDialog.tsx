@@ -50,7 +50,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             <h2 className="text-xl font-bold text-foreground mb-2">
               {title}
             </h2>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground whitespace-pre-line">
               {message}
             </p>
           </div>

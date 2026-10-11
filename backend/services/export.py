@@ -20,7 +20,7 @@ from .. import config
 from .. import settings as settings_module
 from ..models import (
     Artist, Album, Track, ArtistSubscription, ChartSubscription, User, Setting,
-    DismissedRecommendation,
+    DismissedRecommendation, Playlist, PlaylistEntry,
 )
 from ..schemas.export import (
     FORMAT_VERSION,
@@ -114,7 +114,7 @@ def _document_shell() -> Dict[str, Any]:
 def build_library_section(session: Session) -> Dict[str, Any]:
     """
     What this instance follows: artists, explicitly downloaded albums, charts,
-    and the artists dismissed from recommendations.
+    playlists, and the artists dismissed from recommendations.
     """
     artists = session.execute(
         select(Artist, ArtistSubscription)
@@ -141,6 +141,7 @@ def build_library_section(session: Session) -> Dict[str, Any]:
     dismissed = session.execute(
         select(DismissedRecommendation).order_by(DismissedRecommendation.name)
     ).scalars().all()
+    playlists = session.execute(select(Playlist).order_by(Playlist.title)).scalars().all()
 
     return {
         "artists": [
@@ -167,6 +168,26 @@ def build_library_section(session: Session) -> Dict[str, Any]:
         "dismissed_recommendations": [
             {"id": d.artist_id, "name": d.name, "thumbnail": d.thumbnail}
             for d in dismissed
+        ],
+        "playlists": [
+            {
+                "id": p.id,
+                "title": p.title,
+                "mode": p.mode,
+                "followed": bool(p.followed),
+                "m3u": bool(p.m3u),
+                "m3u_name": p.m3u_name,
+                "entries": [
+                    {
+                        "video_id": e.video_id, "title": e.title,
+                        "artist_id": e.artist_id, "artist_name": e.artist_name,
+                        "album_id": e.album_id, "album_title": e.album_title,
+                        "duration": e.duration,
+                    }
+                    for e in p.entries
+                ],
+            }
+            for p in playlists
         ],
     }
 
@@ -281,6 +302,7 @@ def build_backup_export(
             library["artists"] = []
             library["albums"] = []
             library["dismissed_recommendations"] = []
+            library["playlists"] = []
         if not include_charts:
             library["charts"] = []
         doc["library"] = library
@@ -551,6 +573,31 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
                 result.charts_created += 1
 
     # --- Artists dismissed from recommendations ---
+    # --- Playlists: their songs as exported, then a BULK scan that brings
+    # in their albums or artists (and fetches a followed one again) ---
+    from . import playlists as playlists_svc
+    seen_playlists: set[str] = set()
+    for item in library.playlists:
+        if item.id in seen_playlists or session.get(Playlist, item.id):
+            result.playlists_existing += 1
+            continue
+        seen_playlists.add(item.id)
+        name_taken = item.m3u_name and session.execute(
+            select(Playlist.id).where(Playlist.m3u_name == item.m3u_name)
+        ).first()
+        playlist = Playlist(
+            id=item.id, title=item.title, mode=item.mode,
+            followed=item.followed, m3u=item.m3u, created_by=user_id,
+            m3u_name=item.m3u_name if item.m3u and item.m3u_name and not name_taken
+                and not item.m3u_name.startswith(".") else None,
+        )
+        session.add(playlist)
+        for position, entry in enumerate(item.entries):
+            session.add(PlaylistEntry(playlist_id=item.id, position=position, **entry.model_dump()))
+        session.flush()
+        playlists_svc.queue_sync(session, playlist, origin=Origin.BULK, fetch=True)
+        result.playlists_added += 1
+
     seen_dismissed: set[str] = set()
     for item in library.dismissed_recommendations:
         if item.id in seen_dismissed or session.get(DismissedRecommendation, item.id):

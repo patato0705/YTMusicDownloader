@@ -335,6 +335,14 @@
     "export": {
       "button": "Exporter la bibliothèque",
       "description": "Télécharge la liste des artistes, albums isolés et charts suivis en JSON. Un administrateur peut l'importer sur une autre instance."
+    },
+    "playlists": "Playlists",
+    "noPlaylists": "Aucune playlist ne correspond.",
+    "deletion": {
+      "artistUnfollowed": "{name} ne sera plus suivi, pour que cet album ne soit pas retéléchargé : ses nouvelles sorties ne seront plus téléchargées.",
+      "playlistsUnfollowed": "Ces playlists suivies ne seront plus suivies, pour qu'elles ne le retéléchargent pas : {titles}. Elles restent dans la bibliothèque, comme playlists ajoutées une fois.",
+      "playlistsUnfollowed_one": "La playlist suivie {titles} ne sera plus suivie, pour qu'elle ne le retélécharge pas. Elle reste dans la bibliothèque, comme playlist ajoutée une fois.",
+      "quoted": "« {title} »"
     }
   },
   "charts": {
@@ -470,6 +478,12 @@
             "description": "Quand les charts suivis sont récupérés à nouveau pour suivre les nouveaux artistes du top N. YouTube Music ne met à jour ses charts qu'une fois par semaine : plus souvent que tous les 7 jours, on ne trouve presque jamais rien de nouveau.",
             "intervalHint": "Chaque chart est récupéré à nouveau {count} jours après sa dernière synchronisation.",
             "intervalHint_one": "Chaque chart est récupéré à nouveau un jour après sa dernière synchronisation."
+          },
+          "playlist_sync": {
+            "label": "Synchronisation des playlists",
+            "description": "Quand les playlists suivies sont réanalysées : les nouveaux titres ajoutent leurs albums ou artistes, et leurs fichiers M3U suivent la playlist.",
+            "intervalHint": "Chaque playlist est réanalysée {count} heures après sa dernière analyse.",
+            "intervalHint_one": "Chaque playlist est réanalysée une heure après sa dernière analyse."
           },
           "lyrics_retry": {
             "label": "Nouvel essai des paroles",
@@ -674,6 +688,7 @@
         "chartsExisting": "Charts déjà suivis",
         "chartsSkipped": "Charts ignorés",
         "artistsDismissed": "Artistes masqués des recommandations",
+        "playlistsAdded": "Playlists à ajouter",
         "catalogRows": "Lignes du catalogue (artistes / albums / titres)",
         "tracksOnDisk": "Titres trouvés sur le disque",
         "tracksToDownload": "Titres à télécharger",
@@ -716,6 +731,47 @@
     "noAlbums": "Aucun album téléchargeable dans cette playlist",
     "partialSuccess": "{succeeded} sur {total} réussis, {failed} échoués",
     "importFromPlaylist": "Importer depuis une playlist",
-    "trackView": "Titres"
+    "trackView": "Titres",
+    "unavailable": "Impossible de lire cette playlist. Elle doit être publique ou non répertoriée, ou YouTube Music ne répond pas pour le moment.",
+    "noAlbumNote": "{count} titres n'ont pas d'album (clips, mises en ligne) : ignorés.",
+    "noAlbumNote_one": "1 titre n'a pas d'album (un clip ou une mise en ligne) : ignoré.",
+    "options": {
+      "addTitle": "Ajouter la playlist à la bibliothèque",
+      "editTitle": "Options de la playlist",
+      "bringIn": "Ses titres ajoutent",
+      "albums": "Leurs albums",
+      "albumsDescription": "L'album complet de chaque titre est téléchargé.",
+      "artists": "Leurs artistes",
+      "artistsDescription": "L'artiste principal de chaque titre est suivi : toutes ses sorties sont téléchargées.",
+      "follow": "Continuer à suivre",
+      "followOn": "Réanalysée selon la planification des playlists : les nouveaux titres ajoutent leurs albums ou artistes, et les titres retirés de la playlist quittent le M3U.",
+      "followOff": "Ajoutée une fois : les changements ultérieurs de la playlist sont ignorés.",
+      "m3u": "Fichier M3U",
+      "m3uDescription": "Écrit dans Playlists/ du dossier de musique, pour Jellyfin et les autres lecteurs. Les titres y sont ajoutés au fil des téléchargements.",
+      "needOne": "Activez au moins l'une des deux options. Pour un téléchargement ponctuel sans fichier M3U, utilisez les boutons sous la playlist.",
+      "switchToArtists": "L'artiste principal de chaque titre de la playlist sera suivi.",
+      "switchToAlbums": "Les artistes déjà suivis le restent. Désormais, les titres ajoutent leurs albums.",
+      "add": "Ajouter",
+      "addButton": "Ajouter à la bibliothèque",
+      "addHint": "La suivre, ou la garder comme playlist M3U",
+      "editButton": "Options",
+      "remove": "Retirer",
+      "removeTitle": "Retirer la playlist",
+      "removeMessage": "La playlist et son fichier M3U sont retirés de la bibliothèque. La musique reste.",
+      "added": "Playlist ajoutée : ses titres sont en cours d'ajout",
+      "saved": "Playlist mise à jour",
+      "removed": "Playlist retirée"
+    },
+    "status": {
+      "followed": "Suivie",
+      "once": "Une fois",
+      "available": "{available} titres sur {songs} dans la bibliothèque",
+      "skipped": "{count} ignorés",
+      "lastScan": "Dernière analyse : {when}",
+      "scanning": "Analyse en cours…",
+      "lastError": "Échec de la dernière analyse : {error}",
+      "syncNow": "Synchroniser",
+      "syncQueued": "Analyse programmée"
+    }
   }
 }

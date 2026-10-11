@@ -230,3 +230,19 @@ export async function deleteLibraryArtist(artistId: string): Promise<{ message: 
 export async function deleteLibraryAlbum(albumId: string): Promise<{ message: string }> {
   return api.delete(`/library/albums/${encodeURIComponent(albumId)}`);
 }
+
+/** What deleting an album or artist also changes, for its confirmation dialog */
+export interface DeletionEffects {
+  /** The album's followed artist, switched to light so the album isn't downloaded again */
+  artist_unfollowed?: { id: string; name: string | null } | null;
+  /** Followed playlists that would bring it back, unfollowed */
+  playlists_unfollowed: { id: string; title: string }[];
+}
+
+export async function getAlbumDeletionEffects(albumId: string): Promise<DeletionEffects> {
+  return api.get(`/library/albums/${encodeURIComponent(albumId)}/deletion`);
+}
+
+export async function getArtistDeletionEffects(artistId: string): Promise<DeletionEffects> {
+  return api.get(`/library/artists/${encodeURIComponent(artistId)}/deletion`);
+}

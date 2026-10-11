@@ -5,6 +5,9 @@ import { useI18n } from '../contexts/I18nContext';
 import { getLibraryArtists, getLibraryAlbums, getLibraryStats, searchLibraryTracks } from '../api/library';
 import { exportLibrary, downloadJson, exportFilename } from '../api/export';
 import type { LibraryTrack } from '../api/library';
+import { listPlaylists } from '../api/playlists';
+import type { SavedPlaylist } from '../api/playlists';
+import { PlaylistsPanel } from '../components/playlists/PlaylistsPanel';
 import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
 import { MediaList, MediaRow } from '../components/MediaList';
@@ -74,7 +77,8 @@ export default function Library(): JSX.Element {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'artists' | 'albums'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'artists' | 'albums' | 'playlists'>('all');
+  const [playlists, setPlaylists] = useState<SavedPlaylist[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [trackMatches, setTrackMatches] = useState<TrackMatches>(NO_TRACK_MATCHES);
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
@@ -108,16 +112,22 @@ export default function Library(): JSX.Element {
     state.lastStartedAt = Date.now();
 
     try {
-      const [artistsResponse, albumsResponse, statsResponse] = await Promise.all([
+      const [artistsResponse, albumsResponse, statsResponse, playlistsResponse] = await Promise.all([
         getLibraryArtists(),
         getLibraryAlbums(),
         getLibraryStats(),
+        // The rest of the page doesn't depend on it
+        listPlaylists().catch((err) => {
+          console.error('Failed to load playlists:', err);
+          return null;
+        }),
       ]);
 
       if (state.unmounted) return;
       setArtists((artistsResponse as any)?.artists || artistsResponse || []);
       setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
       setStats(statsResponse || {});
+      if (playlistsResponse) setPlaylists(playlistsResponse);
       setError(null);
       state.loaded = true;
     } catch (err: any) {
@@ -209,14 +219,14 @@ export default function Library(): JSX.Element {
   const query = searchQuery.toLowerCase();
 
   const filteredArtists = useMemo(
-    () => activeTab === 'albums' ? [] : artists.filter(artist =>
+    () => activeTab === 'albums' || activeTab === 'playlists' ? [] : artists.filter(artist =>
       artist.name?.toLowerCase().includes(query) || artistTrackMatches.has(artist.id)
     ),
     [artists, activeTab, query, artistTrackMatches]
   );
 
   const filteredAlbums = useMemo(
-    () => activeTab === 'artists' ? [] : albums.filter(album =>
+    () => activeTab === 'artists' || activeTab === 'playlists' ? [] : albums.filter(album =>
       album.title?.toLowerCase().includes(query) ||
       (album.artist_name || album.artist?.name)?.toLowerCase().includes(query) ||
       albumTrackMatches.has(album.id)
@@ -404,10 +414,10 @@ export default function Library(): JSX.Element {
             {/* Filter tabs and search */}
             <div className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
               {/* Filter tabs */}
-              <div className="flex items-center gap-2 glass rounded-2xl p-2">
+              <div className="flex items-center gap-1 sm:gap-2 glass rounded-2xl p-2 max-w-full">
                 <button
                   onClick={() => setActiveTab('all')}
-                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                  className={`px-2.5 sm:px-4 py-2 rounded-xl text-sm sm:text-base font-medium whitespace-nowrap transition-all duration-300 ${
                     activeTab === 'all'
                       ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
                       : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
@@ -417,7 +427,7 @@ export default function Library(): JSX.Element {
                 </button>
                 <button
                   onClick={() => setActiveTab('artists')}
-                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                  className={`px-2.5 sm:px-4 py-2 rounded-xl text-sm sm:text-base font-medium whitespace-nowrap transition-all duration-300 ${
                     activeTab === 'artists'
                       ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
                       : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
@@ -427,7 +437,7 @@ export default function Library(): JSX.Element {
                 </button>
                 <button
                   onClick={() => setActiveTab('albums')}
-                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                  className={`px-2.5 sm:px-4 py-2 rounded-xl text-sm sm:text-base font-medium whitespace-nowrap transition-all duration-300 ${
                     activeTab === 'albums'
                       ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
                       : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
@@ -435,6 +445,18 @@ export default function Library(): JSX.Element {
                 >
                   {t('browse.sections.albums')} ({albums.length})
                 </button>
+                {(playlists.length > 0 || activeTab === 'playlists') && (
+                  <button
+                    onClick={() => setActiveTab('playlists')}
+                    className={`px-2.5 sm:px-4 py-2 rounded-xl text-sm sm:text-base font-medium whitespace-nowrap transition-all duration-300 ${
+                      activeTab === 'playlists'
+                        ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    {t('library.playlists')} ({playlists.length})
+                  </button>
+                )}
               </div>
 
               {/* Search bar + view switch - the input stretches to the toggle's height */}
@@ -449,9 +471,16 @@ export default function Library(): JSX.Element {
                   className="flex-1 md:flex-none md:w-64 lg:w-96"
                   inputClassName="h-full"
                 />
-                <ViewToggle value={viewMode} onChange={setViewMode} />
+                {activeTab !== 'playlists' && <ViewToggle value={viewMode} onChange={setViewMode} />}
               </div>
             </div>
+
+            {activeTab === 'playlists' && (
+              <PlaylistsPanel
+                playlists={playlists.filter((p) => p.title.toLowerCase().includes(query))}
+                onChanged={loadLibrary}
+              />
+            )}
 
             {/* Followed Artists */}
             {displayedArtists.length > 0 && (
@@ -549,7 +578,7 @@ export default function Library(): JSX.Element {
             )}
 
             {/* No results from search - wait for the track lookup so it doesn't flash */}
-            {searchQuery && trackMatchesReady && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
+            {searchQuery && activeTab !== 'playlists' && trackMatchesReady && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
               <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-12 border border-slate-200/50 dark:border-white/10 text-center">
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4">
                   <span className="text-4xl">🔍</span>

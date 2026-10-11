@@ -7,6 +7,8 @@ interface ToggleSwitchProps {
   disabled?: boolean;
   /** Text shown next to the switch (also used as the accessible name). */
   label?: string;
+  /** Accessible name when no label is shown (the text is next to it already) */
+  ariaLabel?: string;
   className?: string;
 }
 
@@ -15,6 +17,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
   onChange,
   disabled = false,
   label,
+  ariaLabel,
   className = '',
 }) => {
   return (
@@ -22,7 +25,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-label={label}
+      aria-label={label ?? ariaLabel}
       onClick={() => onChange(!checked)}
       disabled={disabled}
       className={`inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}

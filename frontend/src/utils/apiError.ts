@@ -43,6 +43,8 @@ export function retryAfterMinutes(err: any): number {
 const CODED_ERRORS: Record<string, string> = {
   // YouTube Music couldn't be read (502): usually passes in a moment
   ytmusic_unavailable: 'common.ytmusicUnavailable',
+  // A playlist that can't be read: private, or YouTube Music not answering
+  playlist_unavailable: 'playlist.unavailable',
 };
 
 /**

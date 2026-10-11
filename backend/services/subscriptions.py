@@ -387,6 +387,77 @@ def _stop_album_downloads(session: Session, album_ids: Collection[str]) -> None:
 # HELPER FUNCTIONS
 # ============================================================================
 
+def start_album_download(
+    session: Session,
+    album_id: str,
+    *,
+    origin: Origin,
+    user_id: Optional[int] = None,
+) -> dict:
+    """
+    Download an album: set it to download mode and queue its import, which
+    fetches the current tracklist from YTMusic, writes the cover and
+    album.nfo, then queues a download for every track not on disk -- the
+    same path as the albums of a followed artist.
+
+    An album not in the DB yet is fetched first (raises
+    ytm_adapter.YTMusicUnavailable when it can't be), so it shows up with
+    its real title, artist and tracks right away instead of as an empty row
+    until the import lands. Its artist gets a light subscription if it has
+    none (album metadata and banner, no downloads), synced right after.
+
+    Commits. Returns {"album": Album, "started": bool,
+    "artist_subscription_created": bool}; started is False for an album
+    already in download mode.
+    """
+    from . import albums as albums_svc
+    from ..jobs.jobqueue import enqueue_job
+
+    album_obj = session.get(Album, album_id)
+    if album_obj is None:
+        logger.info(f"Album {album_id} not in DB, fetching from YTMusic")
+        albums_svc.fetch_and_upsert_album(session, browse_id=album_id)
+        session.flush()  # autoflush=False: get can't see the new row before this
+        album_obj = session.get(Album, album_id)
+        if album_obj is None:
+            raise RuntimeError(f"Album {album_id} missing after its fetch")
+
+    if album_obj.mode == "download":
+        session.commit()  # the fetch above, if any
+        return {"album": album_obj, "started": False, "artist_subscription_created": False}
+
+    album_obj.mode = "download"
+    session.add(album_obj)
+    album_artist_id = album_obj.artist_id
+
+    artist_sub_created = False
+    if album_artist_id and not get_artist_subscription(session, album_artist_id):
+        subscribe_to_artist(session, artist_id=album_artist_id, mode="light")
+        artist_sub_created = True
+        logger.info(f"Auto-created light artist subscription for {album_artist_id}")
+
+    session.flush()  # autoflush=False: the rollup and the import check see the mode change
+    check_and_update_album_download_status(session, album_id)
+    queue_album_imports(session, [album_id], artist_id=album_artist_id, user_id=user_id, origin=origin)
+    session.commit()
+
+    # The light subscription's sync fetches the artist's album list and banner
+    if artist_sub_created:
+        try:
+            enqueue_job(
+                session,
+                job_type="sync_artist",
+                payload={"artist_id": album_artist_id},
+                origin=origin,
+                user_id=user_id,
+            )
+        except Exception:
+            logger.exception(f"Failed to queue sync_artist job for {album_artist_id}")
+
+    logger.info(f"Album {album_id} set to download: import queued")
+    return {"album": album_obj, "started": True, "artist_subscription_created": artist_sub_created}
+
+
 def check_and_update_album_download_status(
     session: Session,
     album_id: str,

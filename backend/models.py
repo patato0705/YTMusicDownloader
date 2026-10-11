@@ -246,6 +246,65 @@ class ArtistSubscription(Base):
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+# Playlists (see services/playlists.py)
+
+class Playlist(Base):
+    """
+    A YouTube Music playlist added to the library: what its songs bring in
+    (their albums, or their main artists), whether it's rescanned on a
+    schedule (followed) or kept as added (once), and whether it's written
+    out as an M3U file.
+    """
+    __tablename__ = "playlists"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # YouTube Music playlist id
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    author: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    thumbnail: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="albums")  # "albums" or "artists"
+    followed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    m3u: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # File name in MUSIC_DIR/Playlists, picked once so a title change or a
+    # namesake playlist never moves or overwrites it
+    m3u_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Songs found in the library at the last M3U refresh (written or not)
+    available_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    created_by: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # In playlist order. Deleted by the ORM: SQLite isn't enforcing foreign keys here.
+    entries: Mapped[List["PlaylistEntry"]] = relationship(
+        "PlaylistEntry",
+        cascade="all, delete-orphan",
+        order_by="PlaylistEntry.position",
+    )
+
+
+class PlaylistEntry(Base):
+    """
+    One song of a playlist, as YouTube Music lists it. Its video id is often
+    not the id of the album track downloaded for it, hence the title, artist
+    and album kept to find that track (services/playlists.resolve_entries).
+    """
+    __tablename__ = "playlist_entries"
+
+    playlist_id: Mapped[str] = mapped_column(String(64), ForeignKey("playlists.id", ondelete="CASCADE"), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    video_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(1024), nullable=False)
+    artist_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # main artist
+    artist_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    album_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    album_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
 # Recommendations (see services/recommendations.py)
 
 class RelatedArtist(Base):

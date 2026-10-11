@@ -26,6 +26,8 @@ MAX_TRACKS = 2_000_000
 MAX_USERS = 10_000
 MAX_SETTINGS = 1_000
 MAX_CHARTS = 300
+MAX_PLAYLISTS = 1_000
+MAX_PLAYLIST_ENTRIES = 50_000
 
 
 # ============================================================================
@@ -59,11 +61,35 @@ class LibraryDismissedArtist(BaseModel):
     thumbnail: Optional[str] = Field(None, max_length=1024)
 
 
+class LibraryPlaylistEntry(BaseModel):
+    video_id: Optional[str] = Field(None, max_length=64)
+    title: str = Field(..., min_length=1, max_length=1024)
+    artist_id: Optional[str] = Field(None, max_length=64)
+    artist_name: Optional[str] = Field(None, max_length=255)
+    album_id: Optional[str] = Field(None, max_length=64)
+    album_title: Optional[str] = Field(None, max_length=255)
+    duration: Optional[int] = Field(None, ge=0)
+
+
+class LibraryPlaylist(BaseModel):
+    """A playlist added to the library, with its songs (a one-time playlist is never fetched again)."""
+    id: str = Field(..., min_length=1, max_length=64)
+    title: str = Field(..., min_length=1, max_length=255)
+    mode: Literal["albums", "artists"] = "albums"
+    followed: bool = True
+    m3u: bool = False
+    # Its file in MUSIC_DIR/Playlists, reused on restore (with the data
+    # folder copied over, the file is already there)
+    m3u_name: Optional[str] = Field(None, max_length=255, pattern=r"^[^/\\]+\.m3u8$")
+    entries: List[LibraryPlaylistEntry] = Field(default_factory=list, max_length=MAX_PLAYLIST_ENTRIES)
+
+
 class LibrarySection(BaseModel):
     artists: List[LibraryArtist] = Field(default_factory=list, max_length=MAX_ARTISTS)
     albums: List[LibraryAlbum] = Field(default_factory=list, max_length=MAX_ALBUMS)
     charts: List[LibraryChart] = Field(default_factory=list, max_length=MAX_CHARTS)
     dismissed_recommendations: List[LibraryDismissedArtist] = Field(default_factory=list, max_length=MAX_ARTISTS)
+    playlists: List[LibraryPlaylist] = Field(default_factory=list, max_length=MAX_PLAYLISTS)
 
 
 # ============================================================================
@@ -176,6 +202,8 @@ class LibraryImportResult(BaseModel):
     charts_existing: int = 0
     charts_skipped: int = 0
     artists_dismissed: int = 0
+    playlists_added: int = 0
+    playlists_existing: int = 0
 
 
 class CatalogImportResult(BaseModel):

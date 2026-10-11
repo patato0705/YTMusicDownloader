@@ -4,7 +4,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getAlbum, downloadAlbum, retryAlbum } from '../api/albums';
-import { deleteLibraryAlbum } from '../api/library';
+import { deleteLibraryAlbum, getAlbumDeletionEffects } from '../api/library';
+import type { DeletionEffects } from '../api/library';
+import { useDeletionNotes } from '../hooks/useDeletionNotes';
 import { getImageUrl } from '../api/media';
 import { Spinner } from '../components/ui/Spinner';
 import { Artwork } from '../components/ui/Artwork';
@@ -30,6 +32,9 @@ export default function Album(): JSX.Element {
   const [retryLoading, setRetryLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  // What else the deletion changes, read when the confirmation opens
+  const [deleteEffects, setDeleteEffects] = useState<DeletionEffects | null>(null);
+  const deletionNotes = useDeletionNotes();
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [source, setSource] = useState<string>('');
   // A download-mode album with no tracks in the DB and no import waiting:
@@ -143,6 +148,17 @@ export default function Album(): JSX.Element {
     } finally {
       setRetryLoading(false);
     }
+  };
+
+  const openDeleteConfirm = async () => {
+    if (!albumId) return;
+    setDeleteEffects(null);
+    try {
+      setDeleteEffects(await getAlbumDeletionEffects(albumId));
+    } catch (err) {
+      console.error('Failed to read what the deletion changes:', err);
+    }
+    setDeleteConfirm(true);
   };
 
   const handleDelete = async () => {
@@ -288,7 +304,7 @@ export default function Album(): JSX.Element {
       <ConfirmDialog
         isOpen={deleteConfirm}
         title={t('album.deleteTitle')}
-        message={t('album.deleteMessage', { title: album.title })}
+        message={[t('album.deleteMessage', { title: album.title }), deletionNotes(deleteEffects)].filter(Boolean).join('\n\n')}
         confirmText={t('common.delete')}
         cancelText={t('common.cancel')}
         onConfirm={handleDelete}
@@ -426,7 +442,7 @@ export default function Album(): JSX.Element {
 
                 {isAdmin && source === 'database' && isFollowing && (
                   <Button
-                    onClick={() => setDeleteConfirm(true)}
+                    onClick={openDeleteConfirm}
                     variant="danger"
                     size="lg"
                     isLoading={deleteLoading}

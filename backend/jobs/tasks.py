@@ -423,6 +423,14 @@ def download_track(
             except Exception:
                 logger.exception(f"Failed to re-tag genres of track {track_id}")
 
+        # Playlists listing this song: their M3U gains it
+        try:
+            from ..services import playlists as playlists_svc
+            playlists_svc.refresh_for_track(session, track)
+        except Exception:
+            logger.exception(f"Failed to refresh playlists for track {track_id}")
+            session.rollback()
+
         # A success means YouTube is talking to us again: reset the pause
         # escalation so the next throttle starts from the base duration.
         try:
@@ -1526,6 +1534,18 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
 # TASK DISPATCHER
 # ============================================================================
 
+def sync_playlist(
+    session: Session,
+    playlist_id: str,
+    fetch: bool = True,
+    *,
+    origin: str,
+) -> Dict[str, Any]:
+    """Scan a playlist added to the library (services/playlists.run_sync)."""
+    from ..services import playlists as playlists_svc
+    return playlists_svc.run_sync(session, playlist_id, fetch=fetch, origin=Origin(origin))
+
+
 _TASK_MAP = {
     "download_track": download_track,
     "download_lyrics": download_lyrics,
@@ -1533,6 +1553,7 @@ _TASK_MAP = {
     "sync_artist": sync_artist,
     "sync_chart": sync_chart,
     "fetch_genres": fetch_genres,
+    "sync_playlist": sync_playlist,
 }
 
 ALL_JOB_TYPES = tuple(_TASK_MAP)

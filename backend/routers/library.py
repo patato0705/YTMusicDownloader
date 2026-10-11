@@ -22,6 +22,7 @@ from sqlalchemy import func, and_, or_, case
 from ..deps import get_db
 from ..models import Artist, Album, Track, ArtistSubscription
 from ..services import subscriptions as subs_svc
+from ..services import playlists as playlists_svc
 from ..jobs.jobqueue import cancel_download_jobs
 from .. import config
 from ..downloader.cover import move_cover_if_exists
@@ -558,6 +559,46 @@ def _delete_dir_safe(path: str) -> bool:
     return False
 
 
+def _playlist_refs(playlists) -> List[Dict[str, str]]:
+    return [{"id": p.id, "title": p.title} for p in playlists]
+
+
+@router.get("/artists/{artist_id}/deletion", status_code=status.HTTP_200_OK)
+def artist_deletion_effects(
+    artist_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """What deleting this artist also changes, for the confirmation dialog."""
+    album_ids = [a for (a,) in db.query(Album.id).filter(Album.artist_id == artist_id).all()]
+    playlists = playlists_svc.playlists_bringing_back(db, album_ids=album_ids, artist_ids=[artist_id])
+    return {"playlists_unfollowed": _playlist_refs(playlists)}
+
+
+@router.get("/albums/{album_id}/deletion", status_code=status.HTTP_200_OK)
+def album_deletion_effects(
+    album_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    What deleting this album also changes, for the confirmation dialog: its
+    followed artist is switched to light (see delete_album_from_library), and
+    the followed playlists that would bring it back are unfollowed.
+    """
+    album = db.get(Album, album_id)
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found in library")
+    artist = None
+    if album.artist_id:
+        sub = subs_svc.get_artist_subscription(db, album.artist_id)
+        if sub and sub.mode == "full":
+            artist_obj = db.get(Artist, album.artist_id)
+            artist = {"id": album.artist_id, "name": artist_obj.name if artist_obj else None}
+    playlists = playlists_svc.playlists_bringing_back(db, album_ids=[album_id], artist_ids=[album.artist_id])
+    return {"artist_unfollowed": artist, "playlists_unfollowed": _playlist_refs(playlists)}
+
+
 @router.delete("/artists/{artist_id}", status_code=status.HTTP_200_OK)
 def delete_artist_from_library(
     artist_id: str,
@@ -591,6 +632,13 @@ def delete_artist_from_library(
         files_deleted = 0
         tracks_deleted = 0
         albums_deleted = 0
+
+        # 0. Followed playlists that would bring the artist or its albums
+        # back on their next scan stop being followed
+        album_ids = [a for (a,) in db.query(Album.id).filter(Album.artist_id == artist_id).all()]
+        playlists_unfollowed = playlists_svc.unfollow_for_deletion(
+            db, playlists_svc.playlists_bringing_back(db, album_ids=album_ids, artist_ids=[artist_id])
+        )
 
         # 1. Delete all albums that exist in DB for this artist
         if artist:
@@ -631,6 +679,13 @@ def delete_artist_from_library(
 
         db.commit()
 
+        # Playlist M3U files listing the deleted songs
+        try:
+            playlists_svc.refresh_all(db)
+        except Exception:
+            logger.exception("Failed to refresh playlists after a deletion")
+            db.rollback()
+
         logger.info(
             f"Deleted artist {artist_id} ({artist_name}) from library: "
             f"{albums_deleted} albums, {tracks_deleted} tracks, "
@@ -643,6 +698,7 @@ def delete_artist_from_library(
             "albums_deleted": albums_deleted,
             "tracks_deleted": tracks_deleted,
             "files_deleted": files_deleted,
+            "playlists_unfollowed": playlists_unfollowed,
         }
 
     except HTTPException:
@@ -726,7 +782,19 @@ def delete_album_from_library(
                 artist_downgraded = True
                 logger.info(f"Downgraded artist {artist_id} to light mode after album deletion")
 
+        # 5. Same for the followed playlists that would bring it back
+        playlists_unfollowed = playlists_svc.unfollow_for_deletion(
+            db, playlists_svc.playlists_bringing_back(db, album_ids=[album_id], artist_ids=[artist_id])
+        )
+
         db.commit()
+
+        # Playlist M3U files listing the deleted songs
+        try:
+            playlists_svc.refresh_all(db)
+        except Exception:
+            logger.exception("Failed to refresh playlists after a deletion")
+            db.rollback()
 
         logger.info(
             f"Deleted album {album_id} ({album_title}) from library: "
@@ -739,6 +807,7 @@ def delete_album_from_library(
             "tracks_deleted": tracks_deleted,
             "files_deleted": files_deleted,
             "artist_downgraded": artist_downgraded,
+            "playlists_unfollowed": playlists_unfollowed,
         }
 
     except HTTPException:

@@ -363,14 +363,19 @@ def get_album(browse_id: str) -> Dict[str, Any]:
 
 
 def get_playlist(playlist_id: str) -> Dict[str, Any]:
+    """
+    A playlist with all its tracks (ytmusicapi stops at 100 unless told otherwise).
+
+    Raises YTMusicUnavailable when it can't be read -- YouTube Music having
+    a moment, or a playlist it won't show signed out (private ones): an
+    empty answer would pass for a playlist emptied of its songs.
+    """
     try:
-        raw = _safe_call("get_playlist", playlistId=playlist_id)
-    except Exception:
-        model = PlaylistSchema(id=str(playlist_id), title=None, tracks=[], raw=None)
-        return model.model_dump()
+        raw = _safe_call("get_playlist", playlistId=playlist_id, limit=None)
+    except Exception as e:
+        raise YTMusicUnavailable(f"get_playlist failed for {playlist_id}: {e}") from e
     if not isinstance(raw, dict):
-        model = PlaylistSchema(id=str(playlist_id), title=None, tracks=[], raw=raw)
-        return model.model_dump()
+        raise YTMusicUnavailable(f"Unexpected get_playlist response for {playlist_id}: {type(raw).__name__}")
     # Extract playlist metadata
     title = raw.get("title") or None
     description = raw.get("description") or None

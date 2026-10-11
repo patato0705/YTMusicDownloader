@@ -4,7 +4,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getArtist, followArtist, unfollowArtist } from '../api/artists';
-import { deleteLibraryArtist } from '../api/library';
+import { deleteLibraryArtist, getArtistDeletionEffects } from '../api/library';
+import type { DeletionEffects } from '../api/library';
+import { useDeletionNotes } from '../hooks/useDeletionNotes';
 import { getImageUrl } from '../api/media';
 import MediaCard from '../components/MediaCard';
 import { Spinner } from '../components/ui/Spinner';
@@ -29,6 +31,9 @@ export default function Artist(): JSX.Element {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [unfollowConfirm, setUnfollowConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  // What else the deletion changes, read when the confirmation opens
+  const [deleteEffects, setDeleteEffects] = useState<DeletionEffects | null>(null);
+  const deletionNotes = useDeletionNotes();
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [source, setSource] = useState<string>('');
   const navigate = useNavigate();
@@ -130,6 +135,17 @@ export default function Artist(): JSX.Element {
     }
   };
 
+  const openDeleteConfirm = async () => {
+    if (!artistId) return;
+    setDeleteEffects(null);
+    try {
+      setDeleteEffects(await getArtistDeletionEffects(artistId));
+    } catch (err) {
+      console.error('Failed to read what the deletion changes:', err);
+    }
+    setDeleteConfirm(true);
+  };
+
   const handleDelete = async () => {
     if (!artistId) return;
 
@@ -220,7 +236,7 @@ export default function Artist(): JSX.Element {
       <ConfirmDialog
         isOpen={deleteConfirm}
         title={t('artist.deleteTitle')}
-        message={t('artist.deleteMessage', { name: artist.name })}
+        message={[t('artist.deleteMessage', { name: artist.name }), deletionNotes(deleteEffects)].filter(Boolean).join('\n\n')}
         confirmText={t('common.delete')}
         cancelText={t('common.cancel')}
         onConfirm={handleDelete}
@@ -296,7 +312,7 @@ export default function Artist(): JSX.Element {
 
                 {isAdmin && subscriptionMode != null && (
                   <Button
-                    onClick={() => setDeleteConfirm(true)}
+                    onClick={openDeleteConfirm}
                     variant="danger"
                     size="lg"
                     isLoading={deleteLoading}

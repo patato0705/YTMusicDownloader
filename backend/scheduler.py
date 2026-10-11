@@ -4,7 +4,8 @@ Scheduler for periodic sync tasks.
 
 Responsibilities:
 1. Sync followed artists for new releases (`scheduler.artist_sync`)
-2. Re-sync followed charts (`scheduler.chart_sync`)
+2. Re-sync followed charts (`scheduler.chart_sync`) and rescan followed
+   playlists (`scheduler.playlist_sync`)
 3. Clean up old finished jobs, failed ones included (daily, keeping
    `scheduler.job_cleanup_days`)
 4. Clean up expired refresh tokens (daily)
@@ -16,7 +17,7 @@ Responsibilities:
 8. Queue genre lookups that are due (services/genres.py), along with the
    artist syncs
 
-1, 2 and 5 follow a schedule set in the admin panel (backend/schedules.py):
+1, 2 and 5 follow schedules set in the admin panel (backend/schedules.py):
 every N hours/days, or at a fixed time on chosen days of the week.
 
 Note: Album subscriptions are handled on-demand (follow album → immediate import)
@@ -44,6 +45,7 @@ logger = logging.getLogger("scheduler")
 # Where each schedule's last fixed-time run is recorded (internal settings)
 ARTIST_LAST_RUN = "scheduler.artist_sync_last_run"
 CHART_LAST_RUN = "scheduler.chart_sync_last_run"
+PLAYLIST_LAST_RUN = "scheduler.playlist_sync_last_run"
 LYRICS_LAST_RUN = "scheduler.lyrics_retry_last_run"
 
 
@@ -77,6 +79,7 @@ class Scheduler:
             return schedules.parse(value, value)
         self.artist_schedule = default("scheduler.artist_sync")
         self.chart_schedule = default("scheduler.chart_sync")
+        self.playlist_schedule = default("scheduler.playlist_sync")
         self.lyrics_schedule = default("scheduler.lyrics_retry")
         # Fixed cadences (the settings only control retention / age):
         self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours
@@ -134,6 +137,7 @@ class Scheduler:
 
             self.artist_schedule = load("scheduler.artist_sync")
             self.chart_schedule = load("scheduler.chart_sync")
+            self.playlist_schedule = load("scheduler.playlist_sync")
             self.lyrics_schedule = load("scheduler.lyrics_retry")
 
             logger.debug(
@@ -185,8 +189,9 @@ class Scheduler:
             self._refresh_settings_from_db()
             self._last_settings_refresh = time.time()
             logger.info(
-                "Scheduler settings loaded (artists=%s, charts=%s, lyrics=%s, TZ=%s)",
-                self.artist_schedule, self.chart_schedule, self.lyrics_schedule, schedules.timezone(),
+                "Scheduler settings loaded (artists=%s, charts=%s, playlists=%s, lyrics=%s, TZ=%s)",
+                self.artist_schedule, self.chart_schedule, self.playlist_schedule,
+                self.lyrics_schedule, schedules.timezone(),
             )
         except Exception:
             logger.exception("Failed to load initial settings from database, using defaults")
@@ -217,6 +222,10 @@ class Scheduler:
                     self._run_chart_syncs()
                 except Exception:
                     logger.exception("Unexpected error in chart syncs")
+                try:
+                    self._run_playlist_syncs()
+                except Exception:
+                    logger.exception("Unexpected error in playlist syncs")
                 self._last_sync = now
             
             # Check if job cleanup is due
@@ -322,6 +331,36 @@ class Scheduler:
             self._mark_fixed_run(CHART_LAST_RUN)
             return
         self.sync_charts(cutoff=now_utc() - timedelta(days=schedule.every))
+
+    def _run_playlist_syncs(self) -> None:
+        """Same as _run_artist_syncs for followed playlists."""
+        schedule = self.playlist_schedule
+        if schedule.fixed:
+            run = self._fixed_run_due(schedule, PLAYLIST_LAST_RUN)
+            if run is None:
+                return
+            logger.info(f"Fixed-time playlist sync ({schedule.time})")
+            self.sync_playlists(cutoff=run)
+            self._mark_fixed_run(PLAYLIST_LAST_RUN)
+            return
+        self.sync_playlists(cutoff=now_utc() - timedelta(hours=schedule.every))
+
+    def sync_playlists(self, cutoff: datetime) -> None:
+        """Queue a rescan (AUTO) of every followed playlist last scanned before `cutoff`."""
+        from .services import playlists as playlists_svc
+        session = SessionLocal()
+        try:
+            due = playlists_svc.followed_needing_sync(session, cutoff)
+            for playlist in due:
+                playlists_svc.queue_sync(session, playlist, origin=Origin.AUTO, fetch=True)
+            session.commit()
+            if due:
+                logger.info(f"Queued a scan of {len(due)} followed playlist(s)")
+        except Exception:
+            session.rollback()
+            logger.exception("Failed queueing playlist syncs")
+        finally:
+            session.close()
 
     def sync_monitored_artists(self, cutoff: datetime) -> None:
         """

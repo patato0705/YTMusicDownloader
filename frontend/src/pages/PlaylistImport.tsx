@@ -13,7 +13,9 @@ import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import { PageHero } from '../components/ui/PageHero';
 import { formatDuration, formatDurationLong, apiErrorMessage } from '../utils';
-import type { PlaylistTrack } from '../api/playlists';
+import type { PlaylistTrack, SavedPlaylist } from '../api/playlists';
+import { PlaylistOptionsDialog } from '../components/playlists/PlaylistOptionsDialog';
+import { PlaylistBadges, usePlaylistStats } from '../components/playlists/PlaylistBadges';
 
 function TrackThumb({ src, name, seed, className = '' }: { src?: string | null; name?: string | null; seed?: string | null; className?: string }) {
   return (
@@ -183,6 +185,11 @@ export default function PlaylistImport(): JSX.Element {
   } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  // The playlist loaded, and how it's added to the library (null: it isn't)
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedPlaylist | null>(null);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const playlistStats = usePlaylistStats();
 
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -223,6 +230,8 @@ export default function PlaylistImport(): JSX.Element {
     setDownloadedAlbums(new Set());
     setExpandedIds(new Set());
     setActiveFilter('artists');
+    setLoadedId(null);
+    setSaved(null);
 
     try {
       const playlist = await getPlaylist(playlistId);
@@ -231,13 +240,15 @@ export default function PlaylistImport(): JSX.Element {
       setPlaylistTitle(playlist.title || null);
       setPlaylistThumbnail(playlist.thumbnail || null);
       setPlaylistAuthor(playlist.author || null);
+      setLoadedId(playlistId);
+      setSaved(playlist.saved ?? null);
       setAllTracks(tracks);
       setUniqueArtists(extractUniqueArtists(tracks));
       setMainArtists(extractMainArtists(tracks));
       setUniqueAlbums(extractUniqueAlbums(tracks));
     } catch (err: any) {
       console.error('Failed to load playlist:', err);
-      setError(err.message || t('common.error'));
+      setError(apiErrorMessage(err, t, t('common.error')));
     } finally {
       setLoading(false);
     }
@@ -353,6 +364,9 @@ export default function PlaylistImport(): JSX.Element {
       handleLoad();
     }
   };
+
+  // Songs with no album (music videos, uploads): no import brings them in
+  const noAlbumCount = allTracks.filter((track) => !track.album?.id).length;
 
   const unfollowedArtistCount = uniqueArtists.filter((a) => !followedArtists.has(a.id)).length;
   const unfollowedMainArtistCount = mainArtists.filter((a) => !followedArtists.has(a.id)).length;
@@ -491,11 +505,54 @@ export default function PlaylistImport(): JSX.Element {
                     <p className="text-muted-foreground">
                       {allTracks.length} {t('playlist.tracksInPlaylist')} · {uniqueArtists.length} {t('playlist.artists').toLowerCase()} · {uniqueAlbums.length} {t('playlist.albums').toLowerCase()} · {formatDurationLong(allTracks.reduce((s, t) => s + (t.duration_seconds || 0), 0))}
                     </p>
+                    {noAlbumCount > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {t(noAlbumCount === 1 ? 'playlist.noAlbumNote_one' : 'playlist.noAlbumNote', { count: noAlbumCount })}
+                      </p>
+                    )}
                   </div>
                 </div>
 
+                {/* In the library: how it's added; otherwise the button to add it */}
+                <div className="sm:ml-auto flex flex-col items-start sm:items-end gap-2 flex-shrink-0">
+                  {saved ? (
+                    <>
+                      <PlaylistBadges saved={saved} className="sm:justify-end" />
+                      <p className="text-xs text-muted-foreground">{playlistStats(saved)}</p>
+                      {canModify && (
+                        <Button variant="secondary" size="sm" onClick={() => setOptionsOpen(true)} disabled={isBulkRunning}>
+                          {t('playlist.options.editButton')}
+                        </Button>
+                      )}
+                    </>
+                  ) : canModify && loadedId ? (
+                    <>
+                      <Button variant="primary" onClick={() => setOptionsOpen(true)} disabled={isBulkRunning}>
+                        {t('playlist.options.addButton')}
+                      </Button>
+                      <p className="text-xs text-muted-foreground max-w-[16rem] sm:text-right">{t('playlist.options.addHint')}</p>
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
+
+            {optionsOpen && loadedId && (
+              <PlaylistOptionsDialog
+                playlistId={loadedId}
+                playlistTitle={playlistTitle || loadedId}
+                saved={saved}
+                onClose={() => setOptionsOpen(false)}
+                onSaved={(result) => {
+                  setToast({ message: t(saved ? 'playlist.options.saved' : 'playlist.options.added'), type: 'success' });
+                  setSaved(result);
+                }}
+                onRemoved={() => {
+                  setToast({ message: t('playlist.options.removed'), type: 'success' });
+                  setSaved(null);
+                }}
+              />
+            )}
 
             {/* Filter tabs + bulk actions */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

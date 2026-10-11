@@ -9,7 +9,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Search YouTube Music** for artists, albums and tracks from a web UI.
 - **Follow artists** — all existing releases are downloaded, and new ones are picked up automatically.
 - **Download single albums** without following the artist.
-- **Import a playlist**: paste a YouTube Music playlist URL, then follow every artist in it or download every album it contains in bulk.
+- **Playlists**: paste a YouTube Music playlist URL, then follow every artist in it or download every album it contains in bulk, or add the playlist to the library: followed (new songs bring in their albums or artists), and/or written as an M3U file that Jellyfin picks up as a playlist.
 - **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly).
 - **Synced lyrics** from [LRCLIB](https://lrclib.net), saved as `.lrc` sidecar files. Missing lyrics are retried daily; plain lyrics are upgraded to synced when they become available. Lyrics can also be viewed and edited by hand in the UI.
 - **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
@@ -132,6 +132,7 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Charts | on | Enable the Charts page and chart subscriptions |
 | Artist sync | Tue, Thu, Sat at 02:00 | When followed artists are checked for new releases (see [Schedules](#schedules)) |
 | Chart sync | Mondays at 04:00 | When followed charts are re-fetched (YouTube Music updates its charts weekly) |
+| Playlist sync | every day at 03:00 | When followed playlists are rescanned for new songs |
 | Lyrics retry | every 24 h | When tracks with missing/plain lyrics are retried |
 | Job retention | 3 days | Finished jobs (completed, failed or cancelled) older than this are deleted |
 | YouTube Music language | `en` | Language of fetched metadata (bios, descriptions) |
@@ -159,11 +160,25 @@ Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**,
 - **Unfollow**: stops watching for new releases and cancels downloads that haven't started yet (one already in progress is allowed to finish). Nothing is deleted; the artist stays in your library in "light" (metadata-only) mode.
 - **Download an album** (album page → *Download Album*): grabs just that album. The artist is added to the library in light mode so the album has somewhere to live.
 - **Retry missing tracks** (album page): shown on a downloaded album when some tracks failed or have no download queued. Requeues every track that isn't on disk and isn't already waiting.
-- **Delete artist / album** (admin only): removes the database entries *and* the files on disk.
+- **Delete artist / album** (admin only): removes the database entries *and* the files on disk. Whatever would download it again is unfollowed, and the confirmation says so: deleting an album switches its followed artist to light mode, and a followed playlist that would bring the album or artist back on its next scan becomes a one-time playlist.
 
 ### Playlist import
 
-On the **Browse** page, click *Import from playlist* (next to the search bar) and paste a YouTube Music playlist URL (or a raw playlist ID). The page lists the unique artists and albums in it, and offers *Follow Main Artists*, *Follow All Artists* and *Download All Albums* bulk actions, plus per-item buttons.
+On the **Browse** page, click *Import from playlist* (next to the search bar) and paste a YouTube Music playlist URL (or a raw playlist ID). The page lists the unique artists and albums in it, and offers *Follow Main Artists*, *Follow All Artists* and *Download All Albums* bulk actions, plus per-item buttons. These act once: later changes to the playlist are ignored.
+
+Only public and unlisted playlists can be read (the app isn't signed in to YouTube), so private playlists and *Liked music* are out of reach. Songs with no album (music videos, uploads) are skipped by every option: build playlists from songs rather than videos (the page counts the songs it skips).
+
+### Playlists in the library
+
+*Add to library* (on the playlist page) keeps the playlist in the library, listed under **Library → Playlists**. You choose:
+
+- **What its songs bring in**: their **albums** (each song's whole album is downloaded) or their **artists** (each song's main artist is followed, so all their releases are downloaded).
+- **Keep following**: the playlist is rescanned on the *Playlist sync* schedule; new songs bring in their albums or artists. Off, it's added once and later changes are ignored.
+- **M3U file**: the playlist is written to `Playlists/<title>.m3u8` in the music folder, in playlist order, with paths relative to it. Jellyfin imports it as a playlist on its next library scan, and follows its changes. Songs are added to it as they're downloaded; on a followed playlist, a song removed from the playlist leaves the M3U, while its file stays (it belongs to its album).
+
+A playlist's song isn't always the very track that's downloaded for it (YouTube Music has several ids for one song), so each song is looked up by its id, then by title in its album, then by title and artist anywhere in the library. **Library → Playlists** shows how many songs are found, and how many are skipped.
+
+The options can be changed later. Switching from albums to artists follows the main artist of every song in the playlist; switching back keeps those artists followed, and new songs bring in their albums again. Unfollowing stops the rescans and keeps the M3U as last written. Deleting an album or artist that a followed playlist would bring back unfollows that playlist. *Remove* deletes the playlist and its M3U, never the music. What a playlist brings in when it's added (or switched to artists) runs at low priority, like a chart, so it doesn't hold up what you ask for meanwhile.
 
 ### Recommendations
 
@@ -173,7 +188,7 @@ Members and admins can dismiss a recommendation (*✕* on its card, undoable fro
 
 ### Schedules
 
-Artist syncs, chart syncs and lyrics retries each run on their own schedule, set in **Admin Panel → Settings → Scheduler**:
+Artist syncs, chart syncs, playlist syncs and lyrics retries each run on their own schedule, set in **Admin Panel → Settings → Scheduler**:
 
 - **Every N hours** (days for charts): each artist or chart is synced N hours after its own last sync, so the work spreads over the day.
 - **At a fixed time**, on the days of the week you tick: say 04:00 every day, or 07:00 on Mondays and Fridays. Everything due is queued at that time. The settings page shows the next run.
@@ -217,7 +232,7 @@ Keeping *Max concurrent downloads* at 1 is the best way to avoid this in the fir
 
 **Admin Panel → Backup** exports a JSON document with any of:
 
-- **Library** — followed artists, standalone albums, artists dismissed from recommendations. On import, the new instance follows them again and downloads their music.
+- **Library** — followed artists, standalone albums, playlists (with their songs), artists dismissed from recommendations. On import, the new instance follows them again and downloads their music.
 - **Charts** — chart subscriptions.
 - **Catalog** — every artist/album/track row with relative file paths. Only useful if you also copy the `data/` folder: the import then recognises files already on disk instead of re-downloading.
 - **Users** — accounts, roles and password hashes (keep this file private).

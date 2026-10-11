@@ -125,6 +125,9 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       if (r.library.charts_skipped) {
         rows.push({ label: t('admin.backup.summary.chartsSkipped'), value: r.library.charts_skipped });
       }
+      if (r.library.playlists_added) {
+        rows.push({ label: t('admin.backup.summary.playlistsAdded'), value: r.library.playlists_added });
+      }
       if (r.library.artists_dismissed) {
         rows.push({ label: t('admin.backup.summary.artistsDismissed'), value: r.library.artists_dismissed });
       }

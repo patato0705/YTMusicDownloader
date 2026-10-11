@@ -39,7 +39,7 @@ _RANK = {Origin.BULK: 0, Origin.AUTO: 1, Origin.USER: 2}
 
 # Only the metadata job types share a queue in which order between steps
 # matters; download and lyrics jobs each have their own workers.
-_STAGE = {"sync_chart": 0, "sync_artist": 1, "import_album": 2}
+_STAGE = {"sync_chart": 0, "sync_playlist": 0, "sync_artist": 1, "import_album": 2}
 
 
 def priority_for(job_type: str, origin: Origin) -> int:
