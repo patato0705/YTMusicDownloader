@@ -51,7 +51,8 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 # cookies rather than the response body. This keeps them out of reach of
 # JavaScript (so an XSS bug can't read them out of localStorage), and lets
 # the access_token cookie ride along automatically on plain <img> requests
-# to /api/media/images/... which can't carry an Authorization header.
+# to /api/media/images/... and /api/media/thumbnail, which can't carry an
+# Authorization header.
 # See backend/config.py for the COOKIE_SECURE toggle.
 # ============================================================================
 

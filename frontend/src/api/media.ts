@@ -33,7 +33,8 @@ export function getLocalImageUrl(imagePath: string | null | undefined): string {
 
 /**
  * Get thumbnail URL for external images (YouTube, Google, etc.)
- * Goes through proxy/cache, no auth required
+ * Goes through the proxy/cache. Requires auth, carried by the access_token
+ * cookie exactly as for getLocalImageUrl.
  */
 export function getThumbnailUrl(url: string): string {
   const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
