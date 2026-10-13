@@ -336,8 +336,8 @@
     "disabled": "La fonctionnalité Charts est actuellement désactivée. Un administrateur peut l'activer depuis le panneau d'administration."
   },
   "admin": {
-    "title": "Admin",
-    "panel": "Panneau",
+    "title": "Panneau",
+    "panel": "d'administration",
     "subtitle": "Gérer les paramètres de l'application et les utilisateurs",
     "tabs": {
       "settings": "Paramètres",
