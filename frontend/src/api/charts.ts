@@ -4,6 +4,7 @@
  */
 
 import { api } from './client';
+import type { MessageResponse } from './client';
 
 // ============================================================================
 // TYPES
@@ -23,7 +24,6 @@ export interface Chart {
   artists: ChartArtist[];
   followed: boolean;
   subscription: ChartSubscription | null;
-  cached: boolean;
 }
 
 export interface ChartSubscription {
@@ -37,17 +37,9 @@ export interface ChartSubscription {
   last_error: string | null;
 }
 
-export interface FollowChartRequest {
-  top_n_artists: number;
-}
-
 export interface UpdateChartRequest {
   top_n_artists?: number;
   enabled?: boolean;
-}
-
-export interface MessageResponse {
-  message: string;
 }
 
 // ============================================================================

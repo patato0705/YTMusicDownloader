@@ -1,31 +1,21 @@
 # backend/services/artists.py
-
-"""
-Artist entity CRUD operations only.
-Business logic for fetching artist data from YTMusic lives here.
-"""
+"""Artist rows: what YTMusic says about an artist, and its pictures."""
 from __future__ import annotations
 import logging
-import shutil
 from typing import Any, Dict, List, Optional
-from pathlib import Path
 
-import requests
 from sqlalchemy.orm import Session
 
+from .. import config
+from ..downloader import cover as cover_mod
+from ..downloader.core import safe_name
 from ..models import Artist
-from . import recommendations as recommendations_svc
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
-from .. import config
-from ..downloader.core import safe_name
+from . import recommendations as recommendations_svc
 
 logger = logging.getLogger("services.artists")
 
-
-# ============================================================================
-# ARTIST CRUD
-# ============================================================================
 
 def upsert_artist(
     session: Session,
@@ -36,94 +26,34 @@ def upsert_artist(
     description: Optional[str] = None,
 ) -> Artist:
     """
-    Upsert an Artist row.
-    Returns the Artist instance (not committed).
-
-    Note: Does NOT set followed status - use subscriptions for that.
+    Create or update an Artist row. Fields passed as None are left as they
+    are on an existing row. Following is the subscriptions' business. Does
+    not commit.
     """
     if not artist_id:
         raise ValueError("artist_id required")
 
-    obj = session.get(Artist, str(artist_id))
+    artist = session.get(Artist, artist_id)
+    if artist is None:
+        artist = Artist(id=artist_id, name=name or "")
+        session.add(artist)
+    elif name is not None:
+        artist.name = name
+    for field, value in (("image_local", image_local), ("banner_local", banner_local), ("description", description)):
+        if value is not None:
+            setattr(artist, field, value)
+    return artist
 
-    if obj is None:
-        obj = Artist(
-            id=str(artist_id),
-            name=str(name) if name is not None else "",
-            image_local=str(image_local) if image_local else None,
-            banner_local=str(banner_local) if banner_local else None,
-            description=str(description) if description else None,
-        )
-        session.add(obj)
-        logger.debug(f"Created new artist: {artist_id}")
-    else:
-        changed = False
-        if name is not None and obj.name != name:
-            obj.name = name
-            changed = True
-        if image_local is not None and obj.image_local != image_local:
-            obj.image_local = image_local
-            changed = True
-        if banner_local is not None and obj.banner_local != banner_local:
-            obj.banner_local = banner_local
-            changed = True
-        if description is not None and obj.description != description:
-            obj.description = description
-            changed = True
-        if changed:
-            session.add(obj)
-            logger.debug(f"Updated artist: {artist_id}")
-
-    return obj
-
-
-def get_artist_from_db(session: Session, artist_id: str) -> Optional[Artist]:
-    """Get artist from database by ID."""
-    return session.get(Artist, artist_id)
-
-
-# ============================================================================
-# ARTIST IMAGES
-# ============================================================================
 
 # Square picture saved for the artist: about the height of YouTube Music's
 # originals, so Google crops it rather than blowing it up
 ARTIST_PICTURE_SIZE = 800
 
 
-def _download_image(url: str, temp_path: Path, final_path: Path) -> bool:
-    """Download url to final_path, through temp_path so a failed download never leaves half a file."""
-    try:
-        temp_path.parent.mkdir(parents=True, exist_ok=True)
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        temp_path.write_bytes(response.content)
-
-        final_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(temp_path), str(final_path))
-        try:
-            final_path.chmod(0o644)
-        except Exception as e:
-            logger.debug(f"Failed to set permissions on {final_path}: {e}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to download {url} to {final_path}: {e}")
-        if temp_path.exists():
-            try:
-                temp_path.unlink()
-            except Exception:
-                pass
-        return False
-
-
-def ensure_artist_images(
-    session: Session,
-    artist_obj: Artist,
-    thumbnails: Optional[List[Any]] = None,
-) -> Optional[str]:
+def ensure_artist_images(session: Session, artist: Artist, thumbnails: Optional[List[Any]]) -> Optional[str]:
     """
     Download the artist's pictures into its folder, from the thumbnails of its
-    YouTube Music page:
+    YouTube Music page (again at every sync, so a changed picture is mirrored):
       - folder.jpg: the picture cropped square, shown in the app (image_local)
         and used by Jellyfin as the artist's main image
       - backdrop.jpg: the page's wide banner (banner_local), Jellyfin's backdrop
@@ -132,78 +62,42 @@ def ensure_artist_images(
     original, which shows more than the banner (itself a crop of it).
 
     Returns the square picture's path, or None if it couldn't be saved.
+    Does not commit.
     """
-    if not artist_obj:
-        return None
-
-    banner_url = N.pick_best_thumbnail_url(N.normalize_thumbnails(thumbnails or []))
+    banner_url = N.best_thumbnail(thumbnails)
     if not banner_url:
-        logger.warning(f"No thumbnail URL found for artist {artist_obj.id}")
+        logger.warning("No thumbnail URL found for artist %s", artist.id)
         return None
     picture_url = N.resize_thumbnail_url(banner_url, ARTIST_PICTURE_SIZE, crop=True)
-
-    artist_folder = Path(str(config.MUSIC_DIR)) / safe_name(artist_obj.name or "Unknown Artist")
-    covers_dir = Path(str(config.COVERS_DIR))
+    artist_folder = config.MUSIC_DIR / safe_name(artist.name or "Unknown Artist")
 
     picture_path = artist_folder / "folder.jpg"
-    picture_saved = _download_image(picture_url, covers_dir / f"artist_{artist_obj.id}_folder.jpg", picture_path)
+    picture_saved = cover_mod.download_image(picture_url, picture_path)
     if picture_saved:
-        artist_obj.image_local = str(picture_path)
-
+        artist.image_local = str(picture_path)
     banner_path = artist_folder / "backdrop.jpg"
-    if _download_image(banner_url, covers_dir / f"artist_{artist_obj.id}_backdrop.jpg", banner_path):
-        artist_obj.banner_local = str(banner_path)
+    if cover_mod.download_image(banner_url, banner_path):
+        artist.banner_local = str(banner_path)
 
-    session.add(artist_obj)
-    logger.info(f"Saved pictures for artist {artist_obj.id} in {artist_folder}")
+    logger.info("Saved pictures for artist %s in %s", artist.id, artist_folder)
     return str(picture_path) if picture_saved else None
 
 
-# ============================================================================
-# FETCH ARTIST FROM YTMUSIC
-# ============================================================================
-
-def fetch_and_upsert_artist(
-    session: Session,
-    artist_id: str,
-) -> Dict[str, Any]:
+def fetch_and_upsert_artist(session: Session, artist_id: str) -> Dict[str, Any]:
     """
-    Fetch artist data from YTMusic and upsert to database.
-    Returns the artist data with albums and singles.
-    
-    Also stores its similar artists, for recommendations.
-
-    Note: This does NOT upsert albums/tracks - use albums.fetch_and_upsert_albums_for_artist() for that.
-    Note: Does NOT set followed status - use subscriptions for that.
-    Note: Does NOT commit the session - caller controls transaction.
+    Fetch an artist from YTMusic and store its details and similar artists
+    (for recommendations). Its albums are left to the caller, which gets
+    them in the returned dict (adapter.get_artist's). Raises
+    ytm_adapter.YTMusicUnavailable when it can't be read. Does not commit.
     """
-    # Raises ytm_adapter.YTMusicUnavailable when YouTube Music can't be read
-    artist_data = ytm_adapter.get_artist(channel_id=artist_id)
-
-    # Extract artist metadata
-    name = artist_data.get("name")
-    thumbnails = artist_data.get("thumbnails") or []
-    description = artist_data.get("description")
-
-    # Upsert artist (without albums/tracks)
-    artist_obj = upsert_artist(
-        session=session,
+    artist_data = ytm_adapter.get_artist(artist_id)
+    upsert_artist(
+        session,
         artist_id=artist_id,
-        name=name,
-        description=description,
+        name=artist_data["name"],
+        description=artist_data["description"],
     )
-
-    recommendations_svc.store_related(session, artist_id, artist_data.get("related") or [])
-
+    recommendations_svc.store_related(session, artist_id, artist_data["related"])
     session.flush()
-
-    logger.info(f"Fetched artist {artist_id}: {name}")
-
-    return {
-        "artist_id": artist_id,
-        "name": name,
-        "description": description,
-        "thumbnails": thumbnails,
-        "albums": artist_data.get("albums", []),
-        "singles": artist_data.get("singles", []),
-    }
+    logger.info("Fetched artist %s: %s", artist_id, artist_data["name"])
+    return artist_data

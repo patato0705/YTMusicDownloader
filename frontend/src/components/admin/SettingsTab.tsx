@@ -9,19 +9,19 @@ import { SectionHeader } from '../ui/SectionHeader';
 import { Select } from '../ui/Select';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import * as adminApi from '../../api/admin';
-import type { Setting, YoutubeCookiesStatus } from '../../api/admin';
-import { parseApiError } from '../../utils';
+import type { Setting, SettingOption, YoutubeCookiesStatus } from '../../api/admin';
+import { apiErrorMessage } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
 import { ScheduleControls, ScheduleHint, isValidSchedule, useScheduleSummary } from './ScheduleInput';
 import type { AdminTabProps } from './AdminTabShell';
 
 interface SettingsTabProps extends AdminTabProps {
   /** Called after a successful save; feature flags may have changed. */
-  onSaved?: () => void;
+  onSaved: () => void;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) => {
-  const { t, locale, formatLocale } = useI18n();
+  const { t, tOr, locale, formatLocale } = useI18n();
   const scheduleSummary = useScheduleSummary();
 
   const [settings, setSettings] = useState<Setting[]>([]);
@@ -35,13 +35,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
   const [cookiesBusy, setCookiesBusy] = useState(false);
   const cookiesFileRef = useRef<HTMLInputElement>(null);
 
-  // t() hands back the key itself when a translation is missing; settings are
-  // defined on the backend, so fall back to the backend's English text.
-  const tr = (key: string, fallback: string): string => {
-    const value = t(key);
-    return value === key ? fallback : value;
-  };
-
   // Localized language names for the ytmusic.language dropdown
   const languageNames = useMemo(() => {
     try {
@@ -52,19 +45,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
   }, [locale]);
 
   const loadSettings = async () => {
-    const [settingsArray, cookiesStatus] = await Promise.all([
-      adminApi.getAllSettings(),
-      adminApi.getYoutubeCookies(),
-    ]);
+    const settingsArray = await adminApi.getAllSettings();
     setSettings(settingsArray);
-    setCookies(cookiesStatus);
-
-    // Initialize edited settings
-    const initial: Record<string, any> = {};
-    settingsArray.forEach(setting => {
-      initial[setting.key] = setting.value;
-    });
-    setEditedSettings(initial);
+    setEditedSettings(Object.fromEntries(settingsArray.map(setting => [setting.key, setting.value])));
   };
 
   useEffect(() => {
@@ -73,10 +56,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
       setLoading(true);
       setError(null);
       try {
-        await loadSettings();
+        await Promise.all([
+          loadSettings(),
+          adminApi.getYoutubeCookies().then(setCookies),
+        ]);
       } catch (err: any) {
         console.error('Failed to load settings:', err);
-        if (!cancelled) setError(parseApiError(err, 'Failed to load data'));
+        if (!cancelled) setError(apiErrorMessage(err, t, t('common.error')));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -92,7 +78,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
       // saveSettings() refuses to submit it.
       parsedValue = value === '' ? '' : Number(value);
     } else if (type === 'bool') {
-      parsedValue = value === 'true' || value === true;
+      parsedValue = Boolean(value);
     }
 
     setEditedSettings(prev => ({
@@ -101,30 +87,31 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
     }));
   };
 
+  // Settings are defined on the backend: a key without a translation falls
+  // back to the backend's English text
   const settingLabel = (setting: Setting): string =>
-    tr(
+    tOr(
       `admin.settings.keys.${setting.key}.label`,
       setting.key.split('.').slice(1).join('.').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
     );
 
   const settingDescription = (setting: Setting): string =>
-    tr(`admin.settings.keys.${setting.key}.description`, setting.description ?? '');
+    tOr(`admin.settings.keys.${setting.key}.description`, setting.description ?? '');
 
-  const settingOptionLabel = (setting: Setting, option: adminApi.SettingOption): string => {
-    const translated = t(`admin.settings.options.${setting.key}.${option.value}`);
-    if (translated !== `admin.settings.options.${setting.key}.${option.value}`) return translated;
+  const settingOptionLabel = (setting: Setting, option: SettingOption): string => {
+    let fallback = option.label;
     if (setting.key === 'ytmusic.language' && languageNames) {
       try {
         const name = languageNames.of(option.value.replace('_', '-'));
-        if (name) return name.charAt(0).toUpperCase() + name.slice(1);
+        if (name) fallback = name.charAt(0).toUpperCase() + name.slice(1);
       } catch {
-        // unknown tag — use the backend label
+        // Unknown tag: the backend label
       }
     }
-    return option.label;
+    return tOr(`admin.settings.options.${setting.key}.${option.value}`, fallback);
   };
 
-  // Compared as JSON so a json-typed setting matches by content, not identity.
+  // Compared as JSON so a schedule matches by content, not identity.
   // Keys without a built-in default never count as changed.
   const isAtDefault = (setting: Setting): boolean =>
     setting.default == null ||
@@ -187,10 +174,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
       await Promise.all(updatePromises);
 
       await loadSettings();
-      onSaved?.();
+      onSaved();
       onToast(t('admin.settings.saved'), 'success');
     } catch (err: any) {
-      onToast(parseApiError(err, t('admin.settings.saveFailed')), 'error');
+      onToast(apiErrorMessage(err, t, t('admin.settings.saveFailed')), 'error');
     } finally {
       setSaveLoading(false);
     }
@@ -206,7 +193,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
       setCookies(await adminApi.uploadYoutubeCookies(content));
       onToast(t('admin.settings.cookies.uploaded'), 'success');
     } catch (err: any) {
-      onToast(parseApiError(err, t('admin.settings.cookies.uploadFailed')), 'error');
+      onToast(apiErrorMessage(err, t, t('admin.settings.cookies.uploadFailed')), 'error');
     } finally {
       setCookiesBusy(false);
     }
@@ -219,7 +206,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
       setCookies({ present: false, cookie_count: 0, size_bytes: 0, modified_at: null });
       onToast(t('admin.settings.cookies.deleted'), 'success');
     } catch (err: any) {
-      onToast(parseApiError(err), 'error');
+      onToast(apiErrorMessage(err, t, t('common.error')), 'error');
     } finally {
       setCookiesBusy(false);
     }
@@ -245,10 +232,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
         {Object.entries(grouped).map(([category, categorySettings]) => (
           <section key={category}>
             <SectionHeader>
-              {tr(`admin.settings.categories.${category}`, category.charAt(0).toUpperCase() + category.slice(1))}
+              {tOr(`admin.settings.categories.${category}`, category.charAt(0).toUpperCase() + category.slice(1))}
             </SectionHeader>
 
-            <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
+            <div className="glass rounded-2xl p-6 space-y-4">
               {categorySettings.map(setting => (
                 <div key={setting.key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-3 border-b border-slate-200 dark:border-white/10 last:border-0">
                   <div className="flex-1 basis-40 min-w-0">

@@ -4,76 +4,59 @@ Job task handlers called by the worker.
 
 Each task function:
 - Takes (session: Session, **payload) as arguments
-- Returns dict with {"ok": bool, "error": str (optional), ...}
-- COMMITS at strategic points to avoid long-running transactions
-- Updates database state (Track status, file paths, etc.)
+- Returns dict with {"ok": bool, "error": str (optional), ...}, plus
+  "retry_delay_seconds" when a failure is worth another attempt later
+- Commits in short transactions, never held across a network call: SQLite
+  has a single writer, shared with every other worker
 
 Task types:
 - download_track: Download a single track using yt-dlp
 - download_lyrics: Download synced lyrics from LRCLIB
-- import_album: Fetch and upsert album from YTMusic
+- import_album: Fetch an album's tracklist from YTMusic, then queue its downloads
 - sync_artist: Check artist for new releases
+- sync_chart: Follow a chart's top artists
+- sync_playlist: Scan a playlist added to the library
 - fetch_genres: Look up an artist's and its albums' genres (MusicBrainz, Deezer)
 """
 from __future__ import annotations
+import contextlib
+import fcntl
 import logging
-from typing import Any, Dict, Optional
+import os
+import time
 from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+from urllib.parse import urlencode
 
+import requests
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError, OperationalError
 
+from .. import config, settings as settings_module
+from ..config import YDL_COOKIEFILE, YDL_USER_COOKIEFILE
+from ..downloader import embed as embed_mod, nfo as nfo_mod
+from ..downloader.core import download_track_by_videoid
 from ..models import Job, Track, Album, Artist
-from ..settings import get_setting
-from ..time_utils import now_utc
 from ..services import albums as albums_svc
 from ..services import artists as artists_svc
-from ..services import tracks as tracks_svc
 from ..services import charts as charts_svc
-from .. import downloader
-
-from ..config import YDL_COOKIEFILE, YDL_USER_COOKIEFILE
+from ..services import genres as genres_svc
+from ..services import playlists as playlists_svc
+from ..services import subscriptions as subs_svc
+from ..services import tracks as tracks_svc
+from ..text_utils import fold
+from ..time_utils import now_utc
+from ..ytm_service.adapter import YTMusicUnavailable
+from . import gate
+from .jobqueue import enqueue_job
 from .priorities import Origin
 
 logger = logging.getLogger("jobs.tasks")
 
 
 # ============================================================================
-# HELPER: DATABASE OPERATION WITH RETRY
-# ============================================================================
-
-def _db_operation_with_retry(operation, max_retries=3, delay=0.1):
-    """
-    Execute a database operation with automatic retry on lock errors.
-    
-    Args:
-        operation: Callable that performs the database operation
-        max_retries: Maximum number of retry attempts
-        delay: Base delay between retries (exponential backoff)
-    
-    Returns:
-        Result from the operation
-    
-    Raises:
-        OperationalError: If operation fails after all retries
-    """
-    import time
-    
-    for attempt in range(max_retries):
-        try:
-            return operation()
-        except OperationalError as e:
-            if "database is locked" in str(e).lower():
-                if attempt < max_retries - 1:
-                    sleep_time = delay * (2 ** attempt)
-                    logger.warning(f"Database locked, retry {attempt + 1}/{max_retries} after {sleep_time}s")
-                    time.sleep(sleep_time)
-                    continue
-            raise
-
-# ============================================================================
-# HELPER: YTCOOKIES MANAGEMENT FOR RATE LIMITING
+# YOUTUBE COOKIES AND ERRORS
 # ============================================================================
 
 def _youtube_cookiefile() -> Path:
@@ -88,7 +71,6 @@ def _youtube_cookiefile() -> Path:
     a moment later. A process without WORKER_NAME (dev shell) keeps the
     plain config.YDL_COOKIEFILE.
     """
-    import os
     worker = os.environ.get("WORKER_NAME", "").strip()
     if not worker:
         return YDL_COOKIEFILE
@@ -116,22 +98,6 @@ _YOUTUBE_THROTTLE_MARKERS = (
     "http error 403",
 )
 
-
-def _is_youtube_rate_limit_error(error_msg: str) -> bool:
-    """
-    Whether a yt-dlp error means YouTube is throttling us (rate limit or
-    bot check) rather than something wrong with this particular video.
-    """
-    if not error_msg:
-        return False
-
-    # yt-dlp quotes YouTube's message verbatim, curly apostrophe included
-    error_lower = str(error_msg).lower().replace("\u2019", "'")
-    if any(marker in error_lower for marker in _YOUTUBE_THROTTLE_MARKERS):
-        return True
-    return "this content isn't available" in error_lower and "try again later" in error_lower
-
-
 # yt-dlp errors that mean "this video needs a signed-in, age-verified
 # account" -- the one case the user's own cookie jar is used for.
 _YOUTUBE_AGE_GATE_MARKERS = (
@@ -142,11 +108,25 @@ _YOUTUBE_AGE_GATE_MARKERS = (
 )
 
 
-def _is_youtube_age_gate_error(error_msg: str) -> bool:
-    if not error_msg:
-        return False
-    error_lower = str(error_msg).lower().replace("\u2019", "'")
-    return any(marker in error_lower for marker in _YOUTUBE_AGE_GATE_MARKERS)
+def _error_text(error: Any) -> str:
+    # yt-dlp quotes YouTube's message verbatim, curly apostrophe included
+    return str(error or "").lower().replace("’", "'")
+
+
+def _is_youtube_rate_limit_error(error: Any) -> bool:
+    """
+    Whether a yt-dlp error means YouTube is throttling us (rate limit or
+    bot check) rather than something wrong with this particular video.
+    """
+    text = _error_text(error)
+    if any(marker in text for marker in _YOUTUBE_THROTTLE_MARKERS):
+        return True
+    return "this content isn't available" in text and "try again later" in text
+
+
+def _is_youtube_age_gate_error(error: Any) -> bool:
+    text = _error_text(error)
+    return any(marker in text for marker in _YOUTUBE_AGE_GATE_MARKERS)
 
 
 def _user_cookiefile_available() -> bool:
@@ -156,7 +136,8 @@ def _user_cookiefile_available() -> bool:
         return False
 
 
-class _user_cookie_lock:
+@contextlib.contextmanager
+def _user_cookie_lock():
     """
     Serialise use of the account cookie jar across worker processes.
 
@@ -165,425 +146,262 @@ class _user_cookie_lock:
     workers doing so at once would corrupt it. Age-gated tracks are rare,
     so waiting on the lock costs nothing in practice.
     """
-
-    def __enter__(self):
-        import fcntl
-        self._fh = open(YDL_USER_COOKIEFILE.with_suffix(".lock"), "w")
-        fcntl.flock(self._fh, fcntl.LOCK_EX)
-        return self
-
-    def __exit__(self, *exc):
-        import fcntl
+    with open(YDL_USER_COOKIEFILE.with_suffix(".lock"), "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
         try:
-            fcntl.flock(self._fh, fcntl.LOCK_UN)
+            yield
         finally:
-            self._fh.close()
-        return False
+            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 def _reset_youtube_cookies() -> bool:
     """
     Delete this worker's YouTube cookies file to reset the rate-limited
     session; yt-dlp starts a fresh anonymous one and writes a new file on
-    the next download.
-    
-    Returns:
-        True if cookies were deleted, False otherwise
+    the next download. Returns whether there was one to delete.
     """
     cookiefile = _youtube_cookiefile()
     try:
-        if cookiefile.exists():
-            cookiefile.unlink()
-            logger.info(f"Deleted YouTube cookies at {cookiefile} to reset rate limit")
-            return True
-        else:
-            logger.warning(f"YouTube cookies file not found at {cookiefile}")
-            return False
-    except Exception as e:
-        logger.exception(f"Failed to delete YouTube cookies: {e}")
+        cookiefile.unlink()
+    except FileNotFoundError:
+        logger.warning("YouTube cookies file not found at %s", cookiefile)
         return False
+    except OSError:
+        logger.exception("Failed to delete YouTube cookies at %s", cookiefile)
+        return False
+    logger.info("Deleted YouTube cookies at %s to reset rate limit", cookiefile)
+    return True
+
+
 # ============================================================================
 # TASK: DOWNLOAD TRACK
 # ============================================================================
 
-def download_track(
-    session: Session,
-    track_id: str,
-    album_id: Optional[str] = None,
-    artist_id: Optional[str] = None,
-    *,
-    origin: str,
-) -> Dict[str, Any]:
+def _download_with_fallbacks(track_id: str, **metadata: Any) -> Tuple[str, Optional[str]]:
     """
-    Download a track by video ID using yt-dlp.
-    
-    Flow:
-    1. Get track info from DB (skip if already on disk)
-    2. Get album/artist info for metadata
-    3. Update status to "downloading" and COMMIT
-    4. Call downloader.core.download_track_by_videoid() (no transaction held)
-    5. If rate-limited, reset this worker's cookies and retry; if the video
-       is age-restricted, retry with the admin-uploaded account cookies
-    6. Update Track table with file_path and status, COMMIT
-    7. Update Album cover if new cover path returned, COMMIT
-    
-    Args:
-        session: SQLAlchemy session
-        track_id: Track video ID (from Track.id)
-        album_id: Optional album ID for metadata
-        artist_id: Optional artist ID for metadata
-    
-    Returns:
-        {"ok": bool, "file_path": str, "error": str}
+    downloader.core.download_track_by_videoid with two fallbacks, each tried
+    at most once:
+      - YouTube throttles us -> reset this worker's anonymous cookie jar
+        (fresh session) and retry;
+      - the video is age-gated -> retry with the account cookies the admin
+        uploaded, if any. That jar is used for nothing else: not for
+        ordinary downloads, and NOT to get past a rate limit, so the
+        account only ever sees a handful of requests.
     """
-    if not track_id:
-        return {"ok": False, "error": "track_id required"}
-    
-    try:
-        # Get track info and update status
-        track = session.get(Track, str(track_id))
-        if not track:
-            return {"ok": False, "error": f"Track {track_id} not found in database"}
+    cookiefile = _youtube_cookiefile()
+    cookies_reset = False
+    user_jar_tried = False
 
-        # A job left over for a track that's already on disk (an admin
-        # requeue, a duplicate) has nothing to do.
-        if track.status == "done" and track.file_path and Path(track.file_path).exists():
-            logger.info(f"Track {track_id} is already on disk, skipping download")
-            return {"ok": True, "file_path": track.file_path, "track_id": track_id, "skipped": True}
-        
-        # Get album info for metadata
-        album = None
-        if track.album_id:
-            album = session.get(Album, track.album_id)
-        elif album_id:
-            album = session.get(Album, album_id)
-        
-        # Get artist info for metadata
-        artist = None
-        if album and album.artist_id:
-            artist = session.get(Artist, album.artist_id)
-        elif artist_id:
-            artist = session.get(Artist, artist_id)
-        
-        # Extract metadata (before we detach objects)
-        artist_name = artist.name if artist else None
-        album_name = album.title if album else None
-        track_title = track.title
-        track_number = track.track_number
-        year = int(album.year) if album and album.year else None
-        cover_path = album.image_local if album else None
-        genres = list(album.genres or []) if album else []
-        album_id_final = album.id if album else None
-        track_album_id = track.album_id
-        
-        # Update status to "downloading"
-        track.status = "downloading"
-        track.last_error = None
-        session.add(track)
-
-        # Roll that up to the album now, not just when the track finishes -
-        # otherwise an album in progress reports "pending" to the API.
-        # The flush matters: the session is autoflush=False (see db.py), so
-        # without it the aggregate below still counts this track as "queued".
-        if track_album_id:
-            from ..services import subscriptions as subs_svc
-            session.flush()
-            subs_svc.check_and_update_album_download_status(session, track_album_id)
-
-        def commit_status():
-            session.commit()
-        
-        _db_operation_with_retry(commit_status)
-        
-        logger.info(f"Downloading track {track_id}: {track_title}")
-        
-        # Perform download. Two fallbacks, each tried at most once:
-        #   - YouTube throttles us -> reset this worker's anonymous cookie
-        #     jar (fresh session) and retry;
-        #   - the video is age-gated -> retry with the account cookies the
-        #     admin uploaded, if any. That jar is used for nothing else: not
-        #     for ordinary downloads, and NOT to get past a rate limit, so
-        #     the account only ever sees a handful of requests.
-        dl_func = getattr(downloader.core, "download_track_by_videoid", None)
-        if dl_func is None:
-            raise AttributeError("downloader.core.download_track_by_videoid not found")
-
-        cookiefile = _youtube_cookiefile()
-        cookies_reset = False
-        user_jar_tried = False
-        result = None
-
-        while True:
-            try:
-                if cookiefile == YDL_USER_COOKIEFILE:
-                    with _user_cookie_lock():
-                        result = dl_func(
-                            video_id=track_id,
-                            artist_name=artist_name,
-                            album_name=album_name,
-                            track_title=track_title,
-                            track_number=track_number,
-                            year=year,
-                            cover_path_override=cover_path,
-                            skip_metadata=True,
-                            cookiefile=cookiefile,
-                            genres=genres,
-                        )
-                else:
-                    result = dl_func(
-                        video_id=track_id,
-                        artist_name=artist_name,
-                        album_name=album_name,
-                        track_title=track_title,
-                        track_number=track_number,
-                        year=year,
-                        cover_path_override=cover_path,
-                        skip_metadata=True,
-                        cookiefile=cookiefile,
-                        genres=genres,
+    while True:
+        lock = _user_cookie_lock() if cookiefile == YDL_USER_COOKIEFILE else contextlib.nullcontext()
+        try:
+            with lock:
+                return download_track_by_videoid(video_id=track_id, cookiefile=cookiefile, **metadata)
+        except Exception as error:
+            if _is_youtube_age_gate_error(error):
+                if not user_jar_tried and _user_cookiefile_available():
+                    user_jar_tried = True
+                    cookiefile = YDL_USER_COOKIEFILE
+                    logger.info("Track %s is age-restricted; retrying with the account cookies", track_id)
+                    continue
+                if not user_jar_tried:
+                    logger.warning(
+                        "Track %s is age-restricted and no account cookies are uploaded "
+                        "(admin panel > Settings > Downloads)", track_id,
                     )
-                break
-
-            except Exception as download_error:
-                error_msg = str(download_error)
-
-                if _is_youtube_age_gate_error(error_msg):
-                    if not user_jar_tried and _user_cookiefile_available():
-                        user_jar_tried = True
-                        cookiefile = YDL_USER_COOKIEFILE
-                        logger.info(f"Track {track_id} is age-restricted; retrying with the account cookies")
-                        continue
-                    if not user_jar_tried:
-                        logger.warning(
-                            f"Track {track_id} is age-restricted and no account cookies are uploaded "
-                            f"(admin panel > Settings > Downloads)"
-                        )
-                    raise
-
-                if _is_youtube_rate_limit_error(error_msg) and cookiefile != YDL_USER_COOKIEFILE:
-                    logger.warning(f"YouTube rate limit detected for track {track_id}")
-                    if not cookies_reset and _reset_youtube_cookies():
-                        cookies_reset = True
-                        logger.info(f"Retrying download for track {track_id} after cookie reset")
-                        import time
-                        time.sleep(2)
-                        continue
-                    logger.error(f"YouTube rate limit persists for track {track_id}")
-
                 raise
 
-        # Handle tuple return (file_path, cover_path)
-        file_path = None
-        new_cover_path = None
-        
-        if isinstance(result, tuple) and len(result) == 2:
-            file_path, new_cover_path = result
-        elif isinstance(result, str):
-            file_path = result
-        elif isinstance(result, dict):
-            file_path = result.get("file_path")
-        else:
-            raise ValueError(f"Downloader returned unexpected type: {type(result)}")
-        
-        if not file_path:
-            raise ValueError("Downloader did not return a valid file_path")
-        
-        # Update track with success
-        track = session.get(Track, str(track_id))  # Re-fetch after commit
-        if not track:
-            raise RuntimeError(f"Track {track_id} disappeared after commit")
-        track.status = "done"
-        track.last_error = None
-        track.file_path = str(file_path)
-        try:
-            track.file_size = Path(file_path).stat().st_size
-        except OSError:
-            logger.warning(f"Could not stat downloaded file for track {track_id}: {file_path}")
-            track.file_size = None
-        session.add(track)
-        
-        def commit_track_update():
-            session.commit()
-        
-        _db_operation_with_retry(commit_track_update)
-        
-        logger.info(f"Successfully downloaded track {track_id} to {file_path}")
+            if _is_youtube_rate_limit_error(error) and cookiefile != YDL_USER_COOKIEFILE:
+                logger.warning("YouTube rate limit detected for track %s", track_id)
+                if not cookies_reset and _reset_youtube_cookies():
+                    cookies_reset = True
+                    logger.info("Retrying download for track %s after cookie reset", track_id)
+                    time.sleep(2)
+                    continue
+                logger.error("YouTube rate limit persists for track %s", track_id)
+            raise
 
-        # Genres found while this track was downloading: the genre lookup
-        # only re-tags tracks that were already done, so this one catches up.
-        # Read from the DB, not the session (expire_on_commit=False).
-        if album_id_final:
-            try:
-                current = session.execute(
-                    select(Album.genres).where(Album.id == album_id_final)
-                ).scalar() or []
-                if list(current) != genres:
-                    from ..downloader import embed as embed_mod
-                    embed_mod.set_genres(file_path, list(current))
-            except Exception:
-                logger.exception(f"Failed to re-tag genres of track {track_id}")
 
-        # Playlists listing this song: their M3U gains it
+def download_track(session: Session, track_id: str, *, origin: str) -> Dict[str, Any]:
+    """
+    Download a track with yt-dlp into MUSIC_DIR/<artist>/<album>/, tagged
+    (see _download_track). Any error, not only the download's own, ends as
+    a failed attempt with a retry later rather than a job failed for good.
+    """
+    try:
+        return _download_track(session, track_id, origin=origin)
+    except Exception as error:
+        return _download_failed(session, track_id, error)
+
+
+def _download_track(session: Session, track_id: str, *, origin: str) -> Dict[str, Any]:
+    """
+    Download a track with yt-dlp into MUSIC_DIR/<artist>/<album>/, tagged.
+
+    Flow:
+    1. Skip a track already on disk (an admin requeue, a duplicate job)
+    2. Mark it "downloading" and roll that up to its album, COMMIT
+    3. Download, outside any transaction (see _download_with_fallbacks)
+    4. Mark it "done" with its file, COMMIT; the first track of an album
+       also moves the cover into the album folder
+    5. Catch up on genres found meanwhile, refresh the playlists listing
+       it, queue its lyrics
+
+    A failure keeps the reason on the track; the worker's next step
+    (jobqueue.mark_job_failed) settles its status: "queued" for a retry,
+    "failed" once out of attempts.
+    """
+    track = session.get(Track, track_id)
+    if not track:
+        return {"ok": False, "error": f"Track {track_id} not found in database"}
+
+    if track.status == "done" and track.file_path and Path(track.file_path).exists():
+        logger.info("Track %s is already on disk, skipping download", track_id)
+        return {"ok": True, "file_path": track.file_path, "skipped": True}
+
+    album = track.album
+    artist = album.artist if album else None
+    album_id = album.id if album else None
+    genres = list(album.genres or []) if album else []
+    metadata = {
+        "artist_name": artist.name if artist else None,
+        "album_name": album.title if album else None,
+        "track_title": track.title,
+        "track_number": track.track_number,
+        "year": album.year if album else None,
+        "cover_path": album.image_local if album else None,
+        "genres": genres,
+    }
+
+    track.status = "downloading"
+    track.last_error = None
+    if album_id:
+        # Rolled up now, not just when the track finishes: otherwise an album
+        # in progress reports "pending". Flushed first: the session is
+        # autoflush=False, so the rollup would still count it as "queued".
+        session.flush()
+        subs_svc.check_and_update_album_download_status(session, album_id)
+    session.commit()
+
+    logger.info("Downloading track %s: %s", track_id, track.title)
+    file_path, moved_cover = _download_with_fallbacks(track_id, **metadata)
+
+    # Read again from the DB (the session keeps objects across commits): the
+    # album may have been deleted from the library during the download
+    session.expire_all()
+    track = session.get(Track, track_id)
+    if track is None:
+        logger.info("Track %s was removed during its download, deleting %s", track_id, file_path)
+        Path(file_path).unlink(missing_ok=True)
+        return {"ok": True, "skipped": "track removed during the download"}
+    track.status = "done"
+    track.last_error = None
+    track.file_path = file_path
+    try:
+        track.file_size = Path(file_path).stat().st_size
+    except OSError:
+        logger.warning("Could not stat downloaded file for track %s: %s", track_id, file_path)
+        track.file_size = None
+    album = session.get(Album, album_id) if album_id else None
+    if album:
+        if moved_cover:
+            album.image_local = moved_cover
+        session.flush()
+        subs_svc.check_and_update_album_download_status(session, album_id)
+    session.commit()
+    logger.info("Downloaded track %s to %s", track_id, file_path)
+
+    if album and moved_cover:
+        # album.nfo was written while the cover was still in COVERS_DIR
+        nfo_mod.write_album_nfo(album, album.artist)
+
+    # Genres found while this track was downloading: the genre lookup only
+    # re-tags tracks that were already done, so this one catches up. Read
+    # from the DB, not the session (expire_on_commit=False).
+    if album_id:
         try:
-            from ..services import playlists as playlists_svc
-            playlists_svc.refresh_for_track(session, track)
+            current = session.execute(select(Album.genres).where(Album.id == album_id)).scalar() or []
+            if list(current) != genres:
+                embed_mod.set_genres(file_path, list(current))
         except Exception:
-            logger.exception(f"Failed to refresh playlists for track {track_id}")
+            logger.exception("Failed to re-tag genres of track %s", track_id)
+
+    # Playlists listing this song: their M3U gains it
+    try:
+        playlists_svc.refresh_for_track(session, track)
+    except Exception:
+        logger.exception("Failed to refresh playlists for track %s", track_id)
+        session.rollback()
+
+    # A success means YouTube is talking to us again: reset the pause
+    # escalation so the next throttle starts from the base duration.
+    try:
+        gate.note_download_succeeded(session)
+    except Exception:
+        logger.debug("Failed to reset pause streak", exc_info=True)
+        session.rollback()
+
+    if settings_module.feature_enabled(session, "lyrics"):
+        try:
+            enqueue_job(session, job_type="download_lyrics", payload={"track_id": track_id}, origin=Origin(origin))
+        except Exception:
+            logger.exception("Failed to queue lyrics job for track %s", track_id)
             session.rollback()
 
-        # A success means YouTube is talking to us again: reset the pause
-        # escalation so the next throttle starts from the base duration.
-        try:
-            from .gate import note_download_succeeded
-            note_download_succeeded(session)
-        except Exception:
-            logger.debug("Failed to reset pause streak", exc_info=True)
-            session.rollback()
-        
-        # Update album cover
-        if new_cover_path and album_id_final:
-            try:
-                album = session.get(Album, album_id_final)  # Re-fetch
-                if album:
-                    from ..services.albums import ensure_album_cover
-                    ensure_album_cover(
-                        session=session,
-                        album_obj=album,
-                        final_cover_path=new_cover_path
-                    )
-                    
-                    def commit_cover():
-                        session.commit()
-                    
-                    _db_operation_with_retry(commit_cover)
-                    logger.info(f"Updated album {album_id_final} cover to {new_cover_path}")
-            except Exception as e:
-                session.rollback()
-                logger.warning(f"Failed to update album cover: {e}")
+    return {"ok": True, "file_path": file_path}
 
-        # Update album download status
-        if track_album_id:
-            try:
-                from ..services import subscriptions as subs_svc
-                new_status = subs_svc.check_and_update_album_download_status(
-                    session,
-                    track_album_id
-                )
-                
-                def commit_album_status():
-                    session.commit()
-                
-                _db_operation_with_retry(commit_album_status)
-                logger.debug(f"Album {track_album_id} download status updated to: {new_status}")
-            except Exception as e:
-                session.rollback()
-                logger.warning(f"Failed to update album download status: {e}")
-        
-        # Queue lyrics download job (unless the feature is switched off)
+
+def _download_failed(session: Session, track_id: str, error: Exception) -> Dict[str, Any]:
+    """The task result for a failed download, with the reason recorded on the track."""
+    session.rollback()
+    throttled = _is_youtube_rate_limit_error(error)
+    if throttled:
+        logger.warning("Download of track %s hit YouTube's rate limit; requeued", track_id)
+    else:
+        logger.error("Download failed for track %s", track_id, exc_info=error)
+
+    track = session.get(Track, track_id)
+    if track:
+        track.last_error = tracks_svc.truncate_error(error)
+        session.commit()
+
+    if _is_youtube_age_gate_error(error):
+        # Nothing will change until someone uploads account cookies (or the
+        # uploaded ones are from an account that isn't age-verified), so
+        # don't burn attempts every five minutes.
+        hint = (
+            "age-restricted even with the uploaded account cookies (is that account age-verified?)"
+            if _user_cookiefile_available()
+            else "age-restricted; upload cookies from a signed-in YouTube account in the admin panel"
+        )
+        return {"ok": False, "error": f"Download failed: {hint} -- {error}", "retry_delay_seconds": 86400}
+
+    if throttled:
+        # Still limited after a fresh session: it's the IP, not the cookies.
+        # Stop every download worker for a while rather than letting the
+        # others keep hammering (jobs.gate).
         try:
-            if get_setting(session, "features.lyrics_enabled", True):
-                from .jobqueue import enqueue_job
-                enqueue_job(
-                    session,
-                    job_type="download_lyrics",
-                    payload={"track_id": track_id},
-                    origin=Origin(origin),
-                )
-                logger.debug(f"Queued lyrics download for track {track_id}")
-            else:
-                logger.debug(f"Lyrics feature disabled, not queuing lyrics for track {track_id}")
-        except Exception as e:
-            logger.warning(f"Failed to queue lyrics job for track {track_id}: {e}")
-        
+            gate.pause_downloads(session, reason=f"track {track_id}: {tracks_svc.truncate_error(error)}")
+        except Exception:
+            logger.exception("Failed to pause downloads after rate limit")
+            session.rollback()
         return {
-            "ok": True,
-            "file_path": str(file_path),
-            "track_id": track_id,
-            "cover_path": new_cover_path,
+            "ok": False,
+            "error": f"Download failed: {error}",
+            "retry_delay_seconds": 600,
+            # A rate limit says nothing about the track: a long block
+            # mustn't burn through its attempts and fail it for good.
+            "refund_attempt": True,
         }
-        
-    except Exception as e:
-        error_msg = str(e)
-        throttled = _is_youtube_rate_limit_error(error_msg)
-        if throttled:
-            logger.warning(f"Download of track {track_id} hit YouTube's rate limit; requeued")
-        else:
-            logger.exception(f"Download failed for track {track_id}")
 
-        # Hand the track back to the queue with the reason attached. Whether
-        # it really gets another attempt is mark_job_failed's call (the
-        # worker's next step): it settles the track on "failed" if not.
-        try:
-            track = session.get(Track, str(track_id))  # Re-fetch
-            if not track:
-                logger.error(f"Track {track_id} not found when marking failed")
-            else:
-                track.status = "queued"
-                track.last_error = tracks_svc.truncate_error(e)
-                session.add(track)
-
-                # Roll it up to the album, as the success path does - otherwise
-                # the album keeps the "downloading" it got when this track
-                # started. Flush first: the session is autoflush=False.
-                if track.album_id:
-                    from ..services import subscriptions as subs_svc
-                    session.flush()
-                    subs_svc.check_and_update_album_download_status(session, track.album_id)
-
-                def commit_failed_status():
-                    session.commit()
-                
-                _db_operation_with_retry(commit_failed_status)
-        except Exception as commit_error:
-            logger.exception(f"Failed to update track status to failed: {commit_error}")
-            session.rollback()
-        
-        # Check if this is a rate limit error for retry logic
-        if _is_youtube_age_gate_error(error_msg):
-            # Nothing will change until someone uploads account cookies (or
-            # the uploaded ones are from an account that isn't age-verified),
-            # so don't burn attempts every five minutes.
-            hint = (
-                "age-restricted; upload cookies from a signed-in YouTube account in the admin panel"
-                if not _user_cookiefile_available()
-                else "age-restricted even with the uploaded account cookies (is that account age-verified?)"
-            )
-            return {
-                "ok": False,
-                "error": f"Download failed: {hint} -- {error_msg}",
-                "retry_delay_seconds": 86400,
-            }
-        if throttled:
-            # Still limited after a fresh session: it's the IP, not the
-            # cookies. Stop every download worker for a while rather than
-            # letting the others keep hammering (jobs.gate).
-            try:
-                from .gate import pause_downloads
-                pause_downloads(session, reason=f"track {track_id}: {tracks_svc.truncate_error(e)}")
-            except Exception:
-                logger.exception("Failed to pause downloads after rate limit")
-                session.rollback()
-            return {
-                "ok": False,
-                "error": f"Download failed: {error_msg}",
-                "retry_delay_seconds": 600,  # Retry in 10 minutes if still rate-limited
-                # A rate limit says nothing about the track: a long block
-                # mustn't burn through its attempts and fail it for good.
-                "refund_attempt": True,
-            }
-        else:
-            return {
-                "ok": False,
-                "error": f"Download failed: {error_msg}",
-                "retry_delay_seconds": 300,  # Standard retry delay
-            }
+    return {"ok": False, "error": f"Download failed: {error}", "retry_delay_seconds": 300}
 
 
 # ============================================================================
-# HELPER: LRCLIB LOOKUP
+# TASK: DOWNLOAD LYRICS
 # ============================================================================
 
-_LRCLIB_HEADERS = {"User-Agent": "YTMusicDownloader v0.1 (https://github.com/patato0705/YTMusicDownloader)"}
+_LRCLIB_HEADERS = {"User-Agent": f"YTMusicDownloader v{config.APP_VERSION} (https://github.com/patato0705/YTMusicDownloader)"}
 
 # YTMusic and LRCLIB (mostly Spotify-sourced) durations routinely disagree by
 # a second; anything beyond this is treated as a different version/edit.
@@ -594,24 +412,16 @@ class LrclibUnavailable(Exception):
     """LRCLIB answered with a rate-limit/5xx or didn't answer at all."""
 
 
-def _norm(text: Optional[str]) -> str:
-    """Case/accent/punctuation-insensitive form for comparing titles and artists."""
-    import re
-    import unicodedata
-    text = unicodedata.normalize("NFKD", text or "")
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
-
-
-def _lrclib_get(url: str, timeout: int) -> Optional[Dict[str, Any]]:
+def _lrclib_get(endpoint: str, params: Dict[str, Any], timeout: int) -> Optional[Any]:
     """
     GET an LRCLIB endpoint. Returns the parsed JSON, None on 404, and raises
     LrclibUnavailable for anything transient (429/5xx/network) so callers
     retry soon instead of recording a misleading "not found".
     """
-    import requests
     try:
-        response = requests.get(url, timeout=timeout, headers=_LRCLIB_HEADERS)
+        response = requests.get(
+            f"https://lrclib.net/api/{endpoint}?{urlencode(params)}", timeout=timeout, headers=_LRCLIB_HEADERS
+        )
     except requests.RequestException as e:
         raise LrclibUnavailable(str(e)) from e
     if response.status_code == 200:
@@ -641,17 +451,17 @@ def _pick_search_candidate(
     """
     if not isinstance(results, list):
         return None
-    want_title = _norm(track_name)
-    want_artist = _norm(artist_name)
-    want_album = _norm(album_name)
+    want_title = fold(track_name)
+    want_artist = fold(artist_name)
+    want_album = fold(album_name)
 
     ranked = []
     for c in results:
         if not isinstance(c, dict) or not c.get("syncedLyrics") or c.get("instrumental"):
             continue
-        if _norm(c.get("trackName")) != want_title:
+        if fold(c.get("trackName")) != want_title:
             continue
-        cand_artist = _norm(c.get("artistName"))
+        cand_artist = fold(c.get("artistName"))
         if not (cand_artist == want_artist or want_artist in cand_artist or cand_artist in want_artist):
             continue
         try:
@@ -660,7 +470,7 @@ def _pick_search_candidate(
             continue
         if duration and delta > LRCLIB_DURATION_TOLERANCE:
             continue
-        album_rank = 0 if _norm(c.get("albumName")) == want_album else 1
+        album_rank = 0 if fold(c.get("albumName")) == want_album else 1
         ranked.append((album_rank, delta, int(c.get("id") or 0), c))
 
     if not ranked:
@@ -683,8 +493,6 @@ def _lrclib_lookup(
     str|None, "found": bool, "source": str}. Raises LrclibUnavailable when
     LRCLIB is down/rate-limiting.
     """
-    from urllib.parse import urlencode
-
     params = {
         "track_name": track_name,
         "artist_name": artist_name,
@@ -698,9 +506,9 @@ def _lrclib_lookup(
 
     # get-cached is best-effort; a hiccup there just means we ask /api/get
     try:
-        data = _lrclib_get(f"https://lrclib.net/api/get-cached?{urlencode(params)}", timeout=10)
+        data = _lrclib_get("get-cached", params, timeout=10)
     except LrclibUnavailable as e:
-        logger.debug(f"LRCLIB get-cached unavailable: {e}")
+        logger.debug("LRCLIB get-cached unavailable: %s", e)
         data = None
     if data:
         found = True
@@ -709,7 +517,7 @@ def _lrclib_lookup(
         plain = data.get("plainLyrics")
 
     if not synced:
-        data = _lrclib_get(f"https://lrclib.net/api/get?{urlencode(params)}", timeout=15)
+        data = _lrclib_get("get", params, timeout=15)
         if data:
             found = True
             source = "get"
@@ -717,8 +525,7 @@ def _lrclib_lookup(
             plain = data.get("plainLyrics") or plain
 
     if not synced:
-        search_params = {"track_name": track_name, "artist_name": artist_name}
-        results = _lrclib_get(f"https://lrclib.net/api/search?{urlencode(search_params)}", timeout=15)
+        results = _lrclib_get("search", {"track_name": track_name, "artist_name": artist_name}, timeout=15)
         best = _pick_search_candidate(results, track_name, artist_name, album_name, duration)
         if best:
             found = True
@@ -726,16 +533,12 @@ def _lrclib_lookup(
             synced = best.get("syncedLyrics")
             plain = best.get("plainLyrics") or plain
             logger.info(
-                f"LRCLIB search matched {artist_name} - {track_name}: "
-                f"album={best.get('albumName')!r} duration={best.get('duration')} (ours={duration})"
+                "LRCLIB search matched %s - %s: album=%r duration=%s (ours=%s)",
+                artist_name, track_name, best.get("albumName"), best.get("duration"), duration,
             )
 
     return {"synced": synced, "plain": plain, "found": found, "source": source}
 
-
-# ============================================================================
-# TASK: DOWNLOAD LYRICS
-# ============================================================================
 
 def download_lyrics(
     session: Session,
@@ -745,167 +548,84 @@ def download_lyrics(
     origin: str,  # sets this job's priority; queues nothing itself
 ) -> Dict[str, Any]:
     """
-    Download lyrics for a track using LRCLIB API.
+    Download lyrics for a track from LRCLIB into a .lrc file next to it
+    (see _download_lyrics). An unexpected error is retried in an hour.
+    """
+    try:
+        return _download_lyrics(session, track_id, mode)
+    except Exception as e:
+        session.rollback()
+        logger.exception("download_lyrics failed for %s", track_id)
+        return {"ok": False, "error": str(e), "retry_delay_seconds": 3600}
 
-    Flow:
-    1. Get track info from DB
-    2. Query LRCLIB API (see _lrclib_lookup: cached, full, then search fallback)
-    3. Save .lrc file next to audio file
-    4. Update Track.lyrics and Track.lyrics_local
 
+def _download_lyrics(session: Session, track_id: str, mode: str) -> Dict[str, Any]:
+    """
     Modes:
     - "normal": Download lyrics, prefer synced, fall back to plain if allowed
     - "upgrade": Only replace existing lyrics if synced are found
-
-    Args:
-        session: SQLAlchemy session
-        track_id: Track video ID
-        mode: "normal" or "upgrade"
-
-    Returns:
-        {"ok": bool, "lyrics_path": str, "error": str}
     """
-    if not track_id:
-        return {"ok": False, "error": "track_id required"}
+    # Jobs queued before the feature was switched off: drop them quietly.
+    # The scheduler's retry sweep picks the track up again once re-enabled.
+    if not settings_module.feature_enabled(session, "lyrics"):
+        return {"ok": True, "message": "Lyrics feature disabled, skipped"}
 
+    track = session.get(Track, track_id)
+    if not track:
+        return {"ok": False, "error": f"Track {track_id} not found in database"}
+    if mode == "upgrade" and track.lyrics == "synced":
+        return {"ok": True, "message": "Already has synced lyrics"}
+    if not track.file_path:
+        return {"ok": False, "error": "Track has no audio file yet"}
+    audio_path = Path(track.file_path)
+    if not audio_path.exists():
+        return {"ok": False, "error": f"Audio file not found: {track.file_path}"}
+
+    track_name = track.title or ""
+    artist_name = (track.artists[0].get("name") or "") if track.artists else ""
+    album_name = track.album.title if track.album else ""
+    duration = track.duration or 0
+    if not track_name or not artist_name:
+        return {"ok": False, "error": "Missing track name or artist name"}
+
+    logger.info("Fetching lyrics for: %s - %s (mode=%s)", artist_name, track_name, mode)
     try:
-        from pathlib import Path
+        found = _lrclib_lookup(track_name, artist_name, album_name, duration)
+    except LrclibUnavailable as e:
+        logger.warning("LRCLIB unavailable for track %s: %s", track_id, e)
+        return {"ok": False, "error": f"LRCLIB unavailable: {e}", "retry_delay_seconds": 3600}
 
-        # Jobs queued before the feature was switched off: drop them quietly.
-        # The scheduler's retry sweep picks the track up again once re-enabled.
-        if not get_setting(session, "features.lyrics_enabled", True):
-            return {"ok": True, "message": "Lyrics feature disabled, skipped"}
+    if not found["found"]:
+        logger.info("No lyrics found for track %s", track_id)
+        return {"ok": False, "error": "Lyrics not found", "retry_delay_seconds": 86400}
 
-        # ===== TRANSACTION 1: Get track info =====
-        track = session.get(Track, str(track_id))
-        if not track:
-            return {"ok": False, "error": f"Track {track_id} not found in database"}
-
-        # In upgrade mode, skip if already synced
-        if mode == "upgrade" and track.lyrics == "synced":
-            return {"ok": True, "message": "Already has synced lyrics"}
-
-        # Check if track has audio file
-        if not track.file_path:
-            return {"ok": False, "error": "Track has no audio file yet"}
-
-        audio_path = Path(track.file_path)
-        if not audio_path.exists():
-            return {"ok": False, "error": f"Audio file not found: {track.file_path}"}
-
-        # Get metadata for LRCLIB query
-        track_name = track.title or ""
-
-        # Get artist name
-        artist_name = ""
-        if track.artists and len(track.artists) > 0:
-            artist_name = track.artists[0].get("name", "")
-
-        # Get album name
-        album_name = ""
-        album = None
-        if track.album_id:
-            album = session.get(Album, track.album_id)
-            if album:
-                album_name = album.title or ""
-
-        # Get duration
-        duration = track.duration or 0
-
-        if not track_name or not artist_name:
-            return {"ok": False, "error": "Missing track name or artist name"}
-
-        logger.info(f"Fetching lyrics for: {artist_name} - {track_name} (mode={mode})")
-
-        # ===== NO TRANSACTION: Fetch lyrics from API =====
-        try:
-            found = _lrclib_lookup(track_name, artist_name, album_name, duration)
-        except LrclibUnavailable as e:
-            logger.warning(f"LRCLIB unavailable for track {track_id}: {e}")
-            return {
-                "ok": False,
-                "error": f"LRCLIB unavailable: {e}",
-                "retry_delay_seconds": 3600,  # Retry in 1 hour
-            }
-        synced_lyrics = found["synced"]
-        plain_lyrics = found["plain"]
-        if not found["found"]:
-            logger.info(f"No lyrics found for track {track_id}")
-            return {
-                "ok": False,
-                "error": "Lyrics not found",
-                "retry_delay_seconds": 86400,  # Retry in 24 hours
-            }
-        if synced_lyrics:
-            logger.info(f"Found synced lyrics for track {track_id} via {found['source']}")
-
-        # Determine which lyrics to save
-        if synced_lyrics:
-            lyrics_to_save = synced_lyrics
-            lyrics_value = "synced"
-        elif mode == "upgrade":
-            # Upgrade mode: only save if synced found, otherwise no-op
-            return {"ok": True, "message": "No synced lyrics available yet, keeping plain"}
-        else:
-            synced_only = get_setting(session, "features.synced_lyrics_only", True)
-            if synced_only or not plain_lyrics:
-                logger.info(f"Only plain lyrics available for track {track_id}, will retry later")
-                return {
-                    "ok": False,
-                    "error": "Only plain lyrics available (synced lyrics required)",
-                    "retry_delay_seconds": 86400,  # Retry in 24 hours
-                }
-            lyrics_to_save = plain_lyrics
-            lyrics_value = "plain"
-            logger.info(f"Using plain lyrics for track {track_id} (synced_lyrics_only=False)")
-
-        # Save .lrc file next to audio file
-        lrc_path = audio_path.with_suffix(".lrc")
-        try:
-            with open(lrc_path, "w", encoding="utf-8") as f:
-                f.write(lyrics_to_save)
-            logger.info(f"Saved lyrics to {lrc_path}")
-        except Exception as e:
-            logger.exception(f"Failed to save lyrics file: {e}")
-            return {
-                "ok": False,
-                "error": f"Failed to save lyrics: {str(e)}",
-                "retry_delay_seconds": 300,  # Retry in 5 minutes
-            }
-
-        # ===== TRANSACTION 2: Update track with lyrics info =====
-        track = session.get(Track, str(track_id))  # Re-fetch to be safe
-        if not track:
-            raise RuntimeError(f"Track {track_id} disappeared after lyrics fetch")
-        track.lyrics = lyrics_value
-        track.lyrics_local = str(lrc_path)
-        session.add(track)
-
-        def commit_lyrics():
-            session.commit()
-
-        _db_operation_with_retry(commit_lyrics)
-
-        logger.info(f"Successfully downloaded {lyrics_value} lyrics for track {track_id}")
-
-        return {
-            "ok": True,
-            "lyrics_path": str(lrc_path),
-            "lyrics_type": lyrics_value,
-            "track_id": track_id,
-        }
-
-    except Exception as e:
-        logger.exception(f"download_lyrics failed for {track_id}")
-        try:
-            session.rollback()
-        except Exception:
-            pass
+    if found["synced"]:
+        logger.info("Found synced lyrics for track %s via %s", track_id, found["source"])
+        lyrics_to_save, lyrics_kind = found["synced"], "synced"
+    elif mode == "upgrade":
+        return {"ok": True, "message": "No synced lyrics available yet, keeping plain"}
+    elif settings_module.get_setting(session, "features.synced_lyrics_only") or not found["plain"]:
+        logger.info("Only plain lyrics available for track %s, will retry later", track_id)
         return {
             "ok": False,
-            "error": str(e),
-            "retry_delay_seconds": 3600,  # Retry in 1 hour for unexpected errors
+            "error": "Only plain lyrics available (synced lyrics required)",
+            "retry_delay_seconds": 86400,
         }
+    else:
+        lyrics_to_save, lyrics_kind = found["plain"], "plain"
+
+    lrc_path = audio_path.with_suffix(".lrc")
+    try:
+        lrc_path.write_text(lyrics_to_save, encoding="utf-8")
+    except OSError as e:
+        logger.exception("Failed to save lyrics file %s", lrc_path)
+        return {"ok": False, "error": f"Failed to save lyrics: {e}", "retry_delay_seconds": 300}
+
+    track.lyrics = lyrics_kind
+    track.lyrics_local = str(lrc_path)
+    session.commit()
+    logger.info("Saved %s lyrics for track %s to %s", lyrics_kind, track_id, lrc_path)
+    return {"ok": True, "lyrics_path": str(lrc_path), "lyrics_type": lyrics_kind}
 
 
 # ============================================================================
@@ -920,361 +640,146 @@ def import_album(
     origin: str,
 ) -> Dict[str, Any]:
     """
-    Fetch and import an album from YTMusic, then queue download jobs.
-    
-    Flow:
-    1. Fetch album data from YTMusic (includes full track list)
-    2. Upsert album and tracks to database
-    3. Queue download_track jobs for tracks not on disk (download-mode albums only)
-    4. Return summary
-    
-    Args:
-        session: SQLAlchemy session
-        browse_id: Album browse ID from YTMusic
-        artist_id: Optional artist ID to link album to
-    
-    Returns:
-        {"ok": bool, "album_id": str, "tracks_inserted": int, "downloads_queued": int}
+    Fetch a download-mode album's tracklist from YTMusic and store it, then
+    write its album.nfo and queue the download of every track not on disk
+    (albums_svc.complete_import).
     """
-    if not browse_id:
-        return {"ok": False, "error": "browse_id required"}
-    
+    album = session.get(Album, browse_id)
+    # Unfollowed (or deleted) since it was queued
+    if album is None or album.mode != "download":
+        return {"ok": True, "skipped": "album not in download mode"}
+
     try:
-        logger.info(f"Importing album {browse_id}")
-        
-        # ===== NO TRANSACTION: Fetch from YTMusic API =====
-        # This is an external API call, no database locks needed
-        
-        # ===== TRANSACTION 1: Upsert album and tracks =====
-        result = albums_svc.fetch_and_upsert_album(
-            session=session,
-            browse_id=browse_id,
-            artist_id=artist_id,
-        )
-        
-        def commit_album():
-            session.commit()
-        
-        _db_operation_with_retry(commit_album)
-        
-        album_id = result["album_id"]
-
-        logger.info(
-            f"Imported album {album_id}: "
-            f"{result['inserted_tracks']} new tracks, "
-            f"{result['updated_tracks']} updated tracks"
-        )
-
-        # Write album.nfo for Jellyfin
-        try:
-            from ..downloader.nfo import write_album_nfo
-            album_obj = session.get(Album, album_id)
-            if album_obj:
-                artist_obj = session.get(Artist, album_obj.artist_id) if album_obj.artist_id else None
-                write_album_nfo(album_obj, artist_obj)
-        except Exception:
-            logger.exception(f"Failed writing album.nfo for {album_id}")
-
-        # ===== TRANSACTION 2: Queue download jobs for tracks not on disk =====
-        # Only while the album is still wanted: it may have been unfollowed
-        # (downgraded to metadata) since this import was queued.
-        queued = 0
-        album_obj = session.get(Album, album_id)
-        if album_obj and album_obj.mode == "download":
-            try:
-                queued = tracks_svc.queue_album_downloads(
-                    session, album_id, artist_id=artist_id, origin=Origin(origin)
-                )
-                _db_operation_with_retry(session.commit)
-                logger.info(f"Queued {queued} download jobs for album {album_id}")
-            except Exception as e:
-                session.rollback()
-                logger.warning(f"Failed to queue download jobs for album {album_id}: {e}")
-                queued = 0
-        else:
-            logger.info(f"Album {album_id} is not in download mode, no downloads queued")
-
-        # Genres for a new album -- in particular one whose artist is never
-        # synced again (an album downloaded on its own)
-        _queue_genre_lookup(session, album_obj.artist_id if album_obj else None, origin)
-
-        return {
-            "ok": True,
-            "album_id": album_id,
-            "tracks_inserted": result["inserted_tracks"],
-            "tracks_updated": result["updated_tracks"],
-            "downloads_queued": queued,
-        }
-    
+        result = albums_svc.fetch_and_upsert_album(session, browse_id=browse_id, artist_id=artist_id)
+        session.commit()
+        queued = albums_svc.complete_import(session, result["album_id"], origin=Origin(origin))
     except Exception as e:
-        logger.exception(f"import_album failed for {browse_id}")
-        try:
-            session.rollback()
-        except Exception:
-            pass
-        return {
-            "ok": False,
-            "error": str(e),
-            "retry_delay_seconds": 120,  # Retry in 2 minutes
-        }
+        session.rollback()
+        logger.exception("import_album failed for %s", browse_id)
+        return {"ok": False, "error": str(e), "retry_delay_seconds": 120}
+
+    logger.info(
+        "Imported album %s: %s new tracks, %s updated, %s downloads queued",
+        browse_id, result["inserted_tracks"], result["updated_tracks"], queued,
+    )
+    return {
+        "ok": True,
+        "album_id": result["album_id"],
+        "tracks_inserted": result["inserted_tracks"],
+        "tracks_updated": result["updated_tracks"],
+        "downloads_queued": queued,
+    }
 
 
 # ============================================================================
 # TASK: SYNC ARTIST
 # ============================================================================
 
-def sync_artist(
-    session: Session,
-    artist_id: str,
-    download_images: bool = True,
-    *,
-    origin: str,
-) -> Dict[str, Any]:
+def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, Any]:
     """
-    Sync an artist: fetch latest releases and update database.
-    
-    Behavior depends on artist subscription mode:
-    - "light": Import all albums with mode="metadata", download covers and artist pictures, NO track downloads
-    - "full": Import all albums with mode="download", download covers and artist pictures, queue track downloads
-    
-    Args:
-        session: SQLAlchemy session
-        artist_id: Artist ID to sync
-        download_images: False when the caller has just downloaded the artist pictures
-            itself (chart sync), so it isn't fetched a second time
-    
-    Returns:
-        Dict with sync results
+    Fetch an artist from YTMusic: its details and pictures, and an Album row
+    for each release not seen before.
+
+    - "light" subscription: the albums stay metadata-only
+    - "full" subscription: every album is in download mode, and those
+      without tracks yet get an import (which queues their downloads)
     """
-    if not artist_id:
-        raise ValueError("artist_id required")
-    
-    logger.info(f"Starting sync for artist {artist_id}")
-    
-    # ===== TRANSACTION 1: Get subscription and check mode =====
-    from ..services import subscriptions as subs_svc
-    
-    artist_subscription = subs_svc.get_artist_subscription(session, artist_id)
-    
-    if not artist_subscription:
-        logger.warning(f"No subscription found for artist {artist_id}, creating light mode subscription")
-        # Auto-create light subscription (happens when album is followed)
-        artist_subscription = subs_svc.subscribe_to_artist(
-            session,
-            artist_id=artist_id,
-            mode="light"
-        )
-        def commit_subscription():
-            session.commit()
-        _db_operation_with_retry(commit_subscription)
-    
-    sync_mode = artist_subscription.mode  # "light" or "full"
-    logger.info(f"Syncing artist {artist_id} in {sync_mode} mode")
-    
-    # ===== TRANSACTION 2: Fetch and upsert artist =====
+    subscription = subs_svc.get_artist_subscription(session, artist_id)
+    if subscription is None:
+        # Removed from the library since this job was queued
+        return {"ok": True, "skipped": "artist not followed"}
+    sync_mode = subscription.mode
+    logger.info("Syncing artist %s in %s mode", artist_id, sync_mode)
+
     try:
         artist_data = artists_svc.fetch_and_upsert_artist(session, artist_id)
+        session.commit()
     except Exception as e:
-        logger.exception(f"Failed to fetch artist {artist_id}")
+        logger.exception("Failed to fetch artist %s", artist_id)
         session.rollback()
         subs_svc.mark_artist_synced(session, artist_id, error=str(e))
-        def commit_error():
-            session.commit()
-        _db_operation_with_retry(commit_error)
-        # Mostly YouTube Music having a moment (ytm_adapter.YTMusicUnavailable):
-        # try again shortly rather than wait for the next scheduled sync
+        session.commit()
+        # Mostly YouTube Music having a moment (YTMusicUnavailable): try
+        # again shortly rather than wait for the next scheduled sync
         return {"ok": False, "error": str(e), "retry_delay_seconds": 120}
-    
-    def commit_artist():
-        session.commit()
-    
-    _db_operation_with_retry(commit_artist)
-    
-    artist_name = artist_data.get("name", "Unknown")
-    logger.info(f"Fetched artist: {artist_name}")
-    
-    # ===== TRANSACTION 2.5: Download artist pictures =====
-    artist_obj = session.get(Artist, artist_id)
-    images_updated = False
-    
-    if artist_obj and download_images:
-        try:
-            picture_path = artists_svc.ensure_artist_images(
-                session,
-                artist_obj,
-                thumbnails=artist_data.get("thumbnails")
-            )
-            if picture_path:
-                images_updated = True
-                logger.info(f"Updated artist pictures: {picture_path}")
-        except Exception as e:
-            logger.exception(f"Failed to download artist pictures for {artist_id}")
-    
-    def commit_images():
-        session.commit()
 
-    _db_operation_with_retry(commit_images)
-
-    # Write artist.nfo for Jellyfin
-    if artist_obj:
-        try:
-            from ..downloader.nfo import write_artist_nfo
-            write_artist_nfo(artist_obj)
-        except Exception:
-            logger.exception(f"Failed writing artist.nfo for {artist_id}")
-
-    # ===== TRANSACTION 3: Fetch all albums and identify new ones =====
+    artist = session.get(Artist, artist_id)
     try:
-        all_albums = albums_svc.fetch_albums_for_artist(
-            session=session,
-            artist_id=artist_id,
-            albums_from_api=artist_data.get("albums", []),
-            singles_from_api=artist_data.get("singles", []),
-        )
-    except Exception as e:
-        logger.exception(f"Failed to fetch albums for artist {artist_id}")
-        subs_svc.mark_artist_synced(session, artist_id, error=str(e))
-        def commit_error():
-            session.commit()
-        _db_operation_with_retry(commit_error)
-        return {"ok": False, "error": str(e)}
-    
-    # Categorise albums into two buckets:
-    #  - new: no Album row in DB yet
-    #  - upgradeable: existing Album with mode="metadata" when syncing in full mode
-    album_mode = "download" if sync_mode == "full" else "metadata"
-    new_albums = []
-    upgradeable_albums = []
+        artists_svc.ensure_artist_images(session, artist, thumbnails=artist_data["thumbnails"])
+        session.commit()
+    except Exception:
+        logger.exception("Failed to download artist pictures for %s", artist_id)
+        session.rollback()
+    nfo_mod.write_artist_nfo(artist)
 
-    for album_item in all_albums:
-        album_id = album_item.get("id") or album_item.get("browseId")
-        if not album_id:
-            continue
-
-        existing_album = session.get(Album, album_id)
-        if not existing_album:
-            new_albums.append(album_item)
-        elif sync_mode == "full" and existing_album.mode == "metadata":
-            upgradeable_albums.append(album_item)
-
-    logger.info(
-        f"Artist {artist_id}: {len(new_albums)} new albums, "
-        f"{len(upgradeable_albums)} to upgrade"
-    )
-
-    # ===== TRANSACTION 4: Create Album rows (one transaction each) + upgrade existing =====
     # One commit per album: another sync running in parallel can create the
     # same album (one that is in both artists' discographies) between our
-    # check above and our commit. Its IntegrityError then only rolls back
-    # that one album, which is left to the sync that created it -- the same
-    # outcome as if it had already existed when this sync looked.
+    # check and our commit. Its IntegrityError then only rolls back that one
+    # album, which is left to the sync that created it -- the same outcome
+    # as if it had already existed when this sync looked.
+    album_mode = "download" if sync_mode == "full" else "metadata"
+    new_releases = [r for r in albums_svc.list_artist_releases(artist_data) if session.get(Album, r["id"]) is None]
     albums_created = 0
-
-    for album_item in new_albums:
-        album_id = album_item.get("id") or album_item.get("browseId")
-        if not album_id:
-            continue
+    for release in new_releases:
         try:
-            album_obj = albums_svc.upsert_album(
+            album = albums_svc.upsert_album(
                 session,
-                album_id=album_id,
-                title=album_item.get("title"),
+                album_id=release["id"],
+                title=release["title"],
                 artist_id=artist_id,
-                year=album_item.get("year"),
-                album_type=album_item.get("type"),
+                year=release["year"],
+                album_type=release["type"],
             )
-            album_obj.mode = album_mode
-
-            # Download cover image
-            try:
-                albums_svc.ensure_album_cover(
-                    session, album_obj,
-                    thumbnails=album_item.get("thumbnails"),
-                )
-            except Exception as e:
-                logger.warning(f"Failed to download cover for album {album_id}: {e}")
-
-            _db_operation_with_retry(session.commit)
+            album.mode = album_mode
+            albums_svc.ensure_album_cover(session, album, thumbnails=release["thumbnails"])
+            session.commit()
             albums_created += 1
         except IntegrityError:
             session.rollback()
-            logger.info(f"Album {album_id} was created by another sync meanwhile, skipping")
-        except Exception as e:
-            session.rollback()
-            logger.exception(f"Failed to create album {album_id}")
-
-    # Upgrade metadata → download for existing albums (queues their imports)
-    upgraded_count = 0
-    if upgradeable_albums:
-        upgraded_count = subs_svc.upgrade_all_albums_to_download(
-            session, artist_id, origin=Origin(origin)
-        )
-
-    def commit_albums():
-        session.commit()
-
-    _db_operation_with_retry(commit_albums)
-
-    logger.info(
-        f"Created {albums_created} albums (mode={album_mode}), "
-        f"upgraded {upgraded_count} to download for artist {artist_id}"
-    )
-
-    # ===== TRANSACTION 5: Queue import_album jobs (full mode only) =====
-    # Every download-mode album still without tracks: the ones just created,
-    # and any whose earlier import never landed, which nothing else would
-    # ever import again. The imports queued by the upgrade above were
-    # committed with the albums, so they're skipped here, not doubled.
-    jobs_queued = 0
-    if sync_mode == "full":
-        try:
-            jobs_queued = subs_svc.queue_trackless_album_imports(
-                session, artist_id, origin=Origin(origin)
-            )
-            _db_operation_with_retry(session.commit)
+            logger.info("Album %s was created by another sync meanwhile, skipping", release["id"])
         except Exception:
             session.rollback()
-            jobs_queued = 0
-            logger.exception(f"Failed to queue import_album jobs for artist {artist_id}")
+            logger.exception("Failed to create album %s", release["id"])
 
+    # Full mode: metadata albums (from an earlier light follow) switch to
+    # download mode, and every download-mode album still without tracks
+    # gets an import -- the ones just created, and any whose earlier import
+    # never landed, which nothing else would ever import again.
+    imports_queued = 0
     if sync_mode == "full":
-        logger.info(f"Queued {jobs_queued} import_album jobs for artist {artist_id}")
-    else:
-        logger.info(f"Light mode: {albums_created} albums created with metadata for artist {artist_id}")
-    
-    # Genres for the albums this sync created, if any
-    _queue_genre_lookup(session, artist_id, origin)
+        try:
+            imports_queued = subs_svc.upgrade_all_albums_to_download(session, artist_id, origin=Origin(origin))
+            session.commit()
+        except Exception:
+            session.rollback()
+            logger.exception("Failed to queue album imports for artist %s", artist_id)
 
-    # ===== TRANSACTION 6: Update sync timestamp =====
-    subs_svc.mark_artist_synced(session, artist_id)
-    
-    def commit_final_sync():
+    try:
+        genres_svc.queue_lookup(session, artist_id, origin=Origin(origin))
         session.commit()
-    
-    _db_operation_with_retry(commit_final_sync)
-    
-    logger.info(
-        f"Synced artist {artist_id} ({sync_mode} mode): "
-        f"{len(new_albums)} new albums, "
-        f"{albums_created} albums created, "
-        f"{jobs_queued} import jobs queued, "
-        f"pictures {'updated' if images_updated else 'unchanged'}"
-    )
+    except Exception:
+        session.rollback()
+        logger.exception("Failed to queue genre lookup for artist %s", artist_id)
 
+    subs_svc.mark_artist_synced(session, artist_id)
+    session.commit()
+
+    logger.info(
+        "Synced artist %s (%s mode): %s new releases, %s albums created, %s imports queued",
+        artist_id, sync_mode, len(new_releases), albums_created, imports_queued,
+    )
     return {
         "ok": True,
         "mode": sync_mode,
-        "new_albums": len(new_albums),
+        "new_albums": len(new_releases),
         "albums_created": albums_created,
-        "jobs_queued": jobs_queued,
-        "images_updated": images_updated,
+        "jobs_queued": imports_queued,
     }
 
 
 # ============================================================================
 # TASK: SYNC CHART
 # ============================================================================
-
 
 def sync_chart(
     session: Session,
@@ -1283,161 +788,47 @@ def sync_chart(
     origin: str,  # always BULK, see services/charts.enqueue_chart_sync
 ) -> Dict[str, Any]:
     """
-    Sync a country chart: fetch latest data and follow top N artists.
-    
-    Flow:
-    1. Fetch chart data and save snapshot
-    2. Identify artists to follow (not already subscribed)
-    3. For each artist (committed one at a time):
-       - Fetch artist metadata from YTMusic
-       - Create artist subscription (mode="full")
-       - Download its pictures
-    4. Queue sync_artist jobs for each artist (skipping the pictures when step 3 got them)
-    
-    Args:
-        session: SQLAlchemy session
-        country_code: Country code (from job payload)
-    
-    Returns:
-        Dict with sync results
+    Fetch a country chart and follow its top N artists not followed in full
+    yet. Following needs no network: each artist's sync job fetches it
+    (and its pictures) like any other follow.
     """
-    if not country_code:
-        raise ValueError("country_code required")
-    
-    logger.info(f"Starting chart sync for {country_code}")
-    
-    # ===== TRANSACTION 1: Sync chart (fetch, save snapshot, identify artists) =====
-    result = charts_svc.sync_chart(session, country_code)
-    
+    try:
+        result = charts_svc.sync_chart(session, country_code)
+    except YTMusicUnavailable as e:
+        return {"ok": False, "error": str(e), "retry_delay_seconds": 900}
     if result.get("skipped"):
-        logger.info(f"Chart sync skipped for {country_code}: {result.get('reason')}")
+        logger.info("Chart sync skipped for %s: %s", country_code, result.get("reason"))
         return {**result, "ok": True}
-    
-    # Get artists to follow
-    artist_ids = result.get("artists_to_follow", [])
-    
-    logger.info(f"Chart sync for {country_code}: {len(artist_ids)} artists to follow")
-    
-    if not artist_ids:
-        logger.info(f"No new artists to follow for {country_code}")
-        return {**result, "ok": True, "jobs_queued": 0}
-    
-    # ===== TRANSACTION 2: Follow artists (create subscriptions in full mode) =====
-    # One short transaction per artist, never held across a network call:
-    # SQLite has a single writer, and keeping it for the whole loop would make
-    # the download workers' commits wait past busy_timeout. It also lets each
-    # artist show up in the library, with its picture, as soon as it's done.
-    from ..services import subscriptions as subs_svc
-    
-    def commit():
+
+    followed = 0
+    for artist in result["artists_to_follow"]:
+        # One short transaction per artist (single SQLite writer)
+        if subs_svc.follow_artist(session, artist["id"], artist["name"], origin=Origin.BULK):
+            followed += 1
         session.commit()
-    
-    artists_followed = 0
-    failed_artists = []
-    images_downloaded = set()
-    
-    for artist_id in artist_ids:
-        try:
-            # Fetch artist metadata from YTMusic and upsert to DB
-            artist_data = artists_svc.fetch_and_upsert_artist(session, artist_id)
-            artist_name = artist_data.get("name", "Unknown")
-            
-            # Create artist subscription in FULL mode (charts get full downloads)
-            subs_svc.subscribe_to_artist(
-                session,
-                artist_id=artist_id,
-                mode="full",
-            )
-            
-            _db_operation_with_retry(commit)
-            
-            artists_followed += 1
-            logger.debug(f"Followed artist {artist_id} ({artist_name}) from {country_code} chart in full mode")
-            
-        except Exception as e:
-            logger.exception(f"Failed to follow artist {artist_id} from chart {country_code}")
-            session.rollback()
-            failed_artists.append(artist_id)
-            continue
-        
-        # Pictures now rather than in sync_artist, which can wait a long time
-        # behind the other chart artists. The download happens outside any
-        # transaction; only setting their paths is committed.
-        artist_obj = session.get(Artist, artist_id)
-        try:
-            if artist_obj and artists_svc.ensure_artist_images(
-                session,
-                artist_obj,
-                thumbnails=artist_data.get("thumbnails"),
-            ):
-                _db_operation_with_retry(commit)
-                images_downloaded.add(artist_id)
-        except Exception:
-            # sync_artist will try again
-            logger.exception(f"Failed to download pictures for chart artist {artist_id}")
-            session.rollback()
-    
-    logger.info(
-        f"Followed {artists_followed}/{len(artist_ids)} artists from {country_code} chart "
-        f"({len(images_downloaded)} with pictures downloaded)"
-    )
-    
-    # ===== TRANSACTION 3: Queue sync_artist jobs =====
-    from .jobqueue import enqueue_job
-    jobs_queued = 0
-    
-    # Only queue jobs for successfully followed artists
-    successfully_followed = [aid for aid in artist_ids if aid not in failed_artists]
-    
-    for artist_id in successfully_followed:
-        try:
-            job = enqueue_job(
-                session,
-                job_type="sync_artist",
-                payload={
-                    "artist_id": artist_id,
-                    # Already fetched above - only retried when that failed
-                    "download_images": artist_id not in images_downloaded,
-                },
-                origin=Origin.BULK,
-            )
-            jobs_queued += 1
-            logger.debug(f"Queued sync_artist job {job.id} for artist {artist_id}")
-        except Exception as e:
-            logger.exception(f"Failed to queue sync_artist job for {artist_id}")
-    
-    session.commit()
-    
-    logger.info(
-        f"Chart sync complete for {country_code}: "
-        f"{artists_followed} artists followed, {jobs_queued} sync jobs queued"
-    )
-    
-    return {
-        **result,
-        "ok": True,
-        "artists_followed": artists_followed,
-        "jobs_queued": jobs_queued,
-        "failed_artists": len(failed_artists),
-    }
+
+    logger.info("Chart sync for %s: %s artists followed", country_code, followed)
+    return {**result, "ok": True, "artists_followed": followed}
+
+
+# ============================================================================
+# TASK: SYNC PLAYLIST
+# ============================================================================
+
+def sync_playlist(
+    session: Session,
+    playlist_id: str,
+    fetch: bool = True,
+    *,
+    origin: str,
+) -> Dict[str, Any]:
+    """Scan a playlist added to the library (services/playlists.run_sync)."""
+    return playlists_svc.run_sync(session, playlist_id, fetch=fetch, origin=Origin(origin))
 
 
 # ============================================================================
 # TASK: FETCH GENRES
 # ============================================================================
-
-def _queue_genre_lookup(session: Session, artist_id: Optional[str], origin: str) -> None:
-    """Queue a fetch_genres for the artist if one is due (services/genres.py). Commits."""
-    if not artist_id:
-        return
-    from ..services import genres as genres_svc
-    try:
-        genres_svc.queue_lookup(session, artist_id, origin=Origin(origin))
-        _db_operation_with_retry(session.commit)
-    except Exception:
-        session.rollback()
-        logger.exception(f"Failed to queue genre lookup for artist {artist_id}")
-
 
 def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, Any]:
     """
@@ -1450,10 +841,7 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
     Only worker-genres runs this, which is what keeps MusicBrainz at one
     request per second.
     """
-    from ..services import genres as genres_svc
-    from ..downloader import embed as embed_mod, nfo as nfo_mod
-
-    if not genres_svc.genres_enabled(session):
+    if not settings_module.feature_enabled(session, "genres"):
         return {"ok": True, "skipped": "genre lookups are switched off"}
 
     artist = session.get(Artist, artist_id)
@@ -1466,7 +854,7 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
     try:
         found = genres_svc.lookup_artist(artist_id, name, albums, musicbrainz_id, deezer_id)
     except genres_svc.GenreSourceUnavailable as e:
-        logger.warning(f"Genre lookup for {name} postponed: {e}")
+        logger.warning("Genre lookup for %s postponed: %s", name, e)
         return {"ok": False, "error": str(e), "retry_delay_seconds": 900}
 
     # ===== Store (one short transaction) =====
@@ -1488,7 +876,7 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
         album.genres = picked.genres
         album.genres_source = picked.source
         album.genres_checked_at = now
-    _db_operation_with_retry(session.commit)
+    session.commit()
 
     # ===== Files (no transaction) =====
     if artist_changed and nfo_mod.artist_dir_exists(artist.name):
@@ -1501,7 +889,7 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
         done_tracks = session.query(Track).filter(
             Track.album_id.in_(list(changed)),
             Track.status == "done",
-            Track.file_path != None,  # noqa: E711
+            Track.file_path.is_not(None),
         ).all()
         for track in done_tracks:
             if embed_mod.set_genres(track.file_path, changed[track.album_id]):
@@ -1510,16 +898,16 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
     # Albums a sync added while this ran get a follow-up lookup
     try:
         if genres_svc.queue_lookup(session, artist_id, origin=Origin(origin), from_lookup=True):
-            logger.info(f"Albums of {name} added during the lookup: follow-up queued")
-        _db_operation_with_retry(session.commit)
+            logger.info("Albums of %s added during the lookup: follow-up queued", name)
+        session.commit()
     except Exception:
         session.rollback()
-        logger.exception(f"Failed to queue follow-up genre lookup for {name}")
+        logger.exception("Failed to queue follow-up genre lookup for %s", name)
 
     with_genres = sum(1 for g in found.albums.values() if g.genres)
     logger.info(
-        f"Genres for {name}: {with_genres}/{len(found.albums)} albums, "
-        f"{len(changed)} changed, {retagged} files re-tagged"
+        "Genres for %s: %s/%s albums, %s changed, %s files re-tagged",
+        name, with_genres, len(found.albums), len(changed), retagged,
     )
     return {
         "ok": True,
@@ -1533,18 +921,6 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
 # ============================================================================
 # TASK DISPATCHER
 # ============================================================================
-
-def sync_playlist(
-    session: Session,
-    playlist_id: str,
-    fetch: bool = True,
-    *,
-    origin: str,
-) -> Dict[str, Any]:
-    """Scan a playlist added to the library (services/playlists.run_sync)."""
-    from ..services import playlists as playlists_svc
-    return playlists_svc.run_sync(session, playlist_id, fetch=fetch, origin=Origin(origin))
-
 
 _TASK_MAP = {
     "download_track": download_track,
@@ -1561,63 +937,21 @@ ALL_JOB_TYPES = tuple(_TASK_MAP)
 
 def run_job_task(session: Session, job: Job) -> Dict[str, Any]:
     """
-    Dispatch job to appropriate task handler.
-    Called by the worker for each reserved job.
-    
-    Args:
-        session: SQLAlchemy session
-        job: Reserved Job instance
-    
-    Returns:
-        Task result dict with {"ok": bool, "error": str (optional), ...}
+    Run the handler of a reserved job with its payload as arguments. Never
+    raises: an error comes back as {"ok": False, "error": ...}.
     """
     # Read now: once a task fails mid-transaction, touching `job` again
     # before the rollback raises a second error, and that one escaped to the
     # worker loop, leaving the job "reserved" until the orphan sweep.
-    job_id = job.id
+    job_id, job_type, payload = job.id, job.type, dict(job.payload or {})
+    handler = _TASK_MAP.get(job_type)
+    if handler is None:
+        logger.error("Unknown job type: %s", job_type)
+        return {"ok": False, "error": f"Unknown job type: {job_type}"}
+
     try:
-        # Parse payload
-        payload = job.payload or {}
-        if isinstance(payload, str):
-            try:
-                import json
-                payload = json.loads(payload)
-            except Exception:
-                payload = {}
-        
-        # Get task handler
-        job_type = (job.type or "").strip()
-        handler = _TASK_MAP.get(job_type)
-        
-        if handler is None:
-            logger.error(f"Unknown job type: {job_type}")
-            return {"ok": False, "error": f"Unknown job type: {job_type}"}
-        
-        # Execute task (task handles its own commits)
-        logger.debug(f"Executing task {job_type} with payload: {payload}")
-        result = handler(session, **payload)
-        
-        return result or {"ok": True}
-    
-    except TypeError as e:
-        # Wrong arguments passed to handler (or a TypeError raised inside it)
-        try:
-            session.rollback()
-        except Exception:
-            pass
-        logger.exception(f"Task handler signature mismatch for job {job_id}")
-        return {
-            "ok": False,
-            "error": f"Invalid task arguments: {str(e)}",
-        }
-    
+        return handler(session, **payload)
     except Exception as e:
-        try:
-            session.rollback()
-        except Exception:
-            pass
-        logger.exception(f"Unexpected error in run_job_task for job {job_id}")
-        return {
-            "ok": False,
-            "error": f"Unexpected error: {str(e)}",
-        }
+        session.rollback()
+        logger.exception("Job %s (%s) failed", job_id, job_type)
+        return {"ok": False, "error": f"Unexpected error: {e}"}

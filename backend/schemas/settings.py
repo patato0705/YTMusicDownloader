@@ -13,7 +13,7 @@ class SettingResponse(BaseModel):
     """Response model for a setting"""
     key: str
     value: Any  # Can be int, bool, str, dict depending on type
-    type: str  # "string", "int", "bool", "json", "schedule"
+    type: str  # "string", "int", "bool", "schedule"
     description: Optional[str] = None
     allowed_values: Optional[List[Dict[str, str]]] = None
     min: Optional[int] = None  # lower bound for int settings
@@ -31,17 +31,18 @@ class SettingResponse(BaseModel):
 class SettingUpdateRequest(BaseModel):
     """Request to update a setting value"""
     value: Any = Field(..., description="New value for the setting")
-    
+
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {"value": 12},
                 {"value": True},
-                {"value": "best"},
-                {"value": {"key": "value"}},
+                {"value": "en"},
+                {"value": {"mode": "interval", "every": 6}},
             ]
         }
     }
+
 
 class YoutubeCookiesStatus(BaseModel):
     """State of the admin-uploaded YouTube account cookie jar"""

@@ -1,3 +1,5 @@
+# backend/downloader/nfo.py
+"""artist.nfo and album.nfo files, the metadata Jellyfin reads next to the music."""
 from __future__ import annotations
 import logging
 from pathlib import Path
@@ -5,17 +7,13 @@ from typing import Optional
 from xml.etree import ElementTree as ET
 
 from ..config import MUSIC_DIR
-from .core import safe_name
+from .core import album_dir, safe_name
 
 logger = logging.getLogger("downloader.nfo")
 
 
 def _artist_dir(artist_name: Optional[str]) -> Path:
-    return Path(str(MUSIC_DIR)) / safe_name(artist_name)
-
-
-def _album_dir(artist_name: Optional[str], album_title: Optional[str]) -> Path:
-    return _artist_dir(artist_name) / safe_name(album_title)
+    return MUSIC_DIR / safe_name(artist_name)
 
 
 def _set_text(parent: ET.Element, tag: str, value: Optional[str]) -> None:
@@ -36,7 +34,7 @@ def artist_dir_exists(artist_name: Optional[str]) -> bool:
 
 
 def album_dir_exists(artist_name: Optional[str], album_title: Optional[str]) -> bool:
-    return bool(artist_name and album_title) and _album_dir(artist_name, album_title).is_dir()
+    return bool(artist_name and album_title) and album_dir(artist_name, album_title).is_dir()
 
 
 def _write_xml(root: ET.Element, dest: Path) -> None:
@@ -49,51 +47,46 @@ def _write_xml(root: ET.Element, dest: Path) -> None:
 def write_artist_nfo(artist) -> Optional[Path]:
     """Write {music_dir}/{artist}/artist.nfo. Returns the path or None on failure."""
     try:
-        name = getattr(artist, "name", None)
+        name = artist.name
         if not name:
             return None
 
         root = ET.Element("artist")
         _set_text(root, "name", name)
-        _set_text(root, "biography", getattr(artist, "description", None))
-        _set_genres(root, getattr(artist, "genres", None))
-        thumb = getattr(artist, "image_local", None)
-        if thumb:
-            _set_text(root, "thumb", str(thumb))
-        banner = getattr(artist, "banner_local", None)
-        if banner:
-            _set_text(ET.SubElement(root, "fanart"), "thumb", str(banner))
+        _set_text(root, "biography", artist.description)
+        _set_genres(root, artist.genres)
+        _set_text(root, "thumb", artist.image_local)
+        if artist.banner_local:
+            _set_text(ET.SubElement(root, "fanart"), "thumb", artist.banner_local)
 
         dest = _artist_dir(name) / "artist.nfo"
         _write_xml(root, dest)
         logger.info("Wrote artist.nfo: %s", dest)
         return dest
     except Exception:
-        logger.exception("Failed writing artist.nfo for %s", getattr(artist, "id", None))
+        logger.exception("Failed writing artist.nfo for %s", artist.id)
         return None
 
 
 def write_album_nfo(album, artist) -> Optional[Path]:
     """Write {music_dir}/{artist}/{album}/album.nfo. Returns the path or None on failure."""
     try:
-        title = getattr(album, "title", None)
-        artist_name = getattr(artist, "name", None) if artist else None
+        title = album.title
+        artist_name = artist.name if artist else None
         if not title or not artist_name:
             return None
 
         root = ET.Element("album")
         _set_text(root, "title", title)
         _set_text(root, "artist", artist_name)
-        _set_text(root, "year", getattr(album, "year", None))
-        _set_genres(root, getattr(album, "genres", None))
-        thumb = getattr(album, "image_local", None)
-        if thumb:
-            _set_text(root, "thumb", str(thumb))
+        _set_text(root, "year", album.year)
+        _set_genres(root, album.genres)
+        _set_text(root, "thumb", album.image_local)
 
-        dest = _album_dir(artist_name, title) / "album.nfo"
+        dest = album_dir(artist_name, title) / "album.nfo"
         _write_xml(root, dest)
         logger.info("Wrote album.nfo: %s", dest)
         return dest
     except Exception:
-        logger.exception("Failed writing album.nfo for %s", getattr(album, "id", None))
+        logger.exception("Failed writing album.nfo for %s", album.id)
         return None

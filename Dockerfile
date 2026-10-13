@@ -17,8 +17,9 @@ RUN npm run build
 # -------------------------
 FROM python:3.14-slim
 
-# tzdata for TZ, ffmpeg for yt-dlp and cover conversion, curl for the compose
+# tzdata for TZ, ffmpeg for yt-dlp's audio extraction, curl for the compose
 # healthcheck. No compiler: every Python dependency ships a prebuilt wheel.
+ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tzdata \
@@ -27,7 +28,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1
-ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
@@ -47,8 +47,8 @@ COPY deploy/supervisord.conf /etc/supervisor/supervisord.conf
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# create data dirs (will be mounted by compose typically)
-RUN mkdir -p /data /config && chmod -R 0777 /data /config
+# Mount points (bind-mounted by compose); deploy/entrypoint.sh gives them to PUID:PGID
+RUN mkdir -p /data /config
 
 # ensure backend package import works
 ENV PYTHONPATH=/app

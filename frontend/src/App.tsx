@@ -1,18 +1,19 @@
 // src/App.tsx
-import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 
 // Layout
-import Navbar from './components/layout/Navbar';
+import { Navbar } from './components/layout/Navbar';
+import { PageBackground } from './components/layout/PageBackground';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ScrollRestoration } from './components/ScrollRestoration';
+import { LoadingState } from './components/ui/PageStatus';
 
 // Auth pages
-import { Login } from './pages/auth/Login';
-import { Register } from './pages/auth/Register';
-import { ChangePassword } from './pages/auth/ChangePassword';
+import Login from './pages/auth/Login';
+import Register from './pages/auth/Register';
+import ChangePassword from './pages/auth/ChangePassword';
 
 // Main pages
 import Home from './pages/Home';
@@ -27,14 +28,12 @@ import AdminPanel from './pages/AdminPanel';
 export default function App(): JSX.Element {
   const { isLoading } = useAuth();
 
-  // Show loading spinner while checking auth
+  // Restoring the session from the refresh cookie
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <PageBackground />
+        <LoadingState className="relative" />
       </div>
     );
   }
@@ -42,19 +41,27 @@ export default function App(): JSX.Element {
   return (
     <ErrorBoundary>
       <Routes>
-        {/* Public auth routes - full screen, no navbar */}
+        {/* Auth pages: full screen, no navbar */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/change-password" element={<ChangePassword />} />
+        <Route
+          path="/change-password"
+          element={
+            <ProtectedRoute allowTemporaryPassword>
+              <ChangePassword />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Protected routes - with navbar */}
+        {/* The app: signed in, with the navbar */}
         <Route
           path="/*"
           element={
             <ProtectedRoute>
-              <div className="min-h-screen flex flex-col bg-background">
+              <div className="min-h-screen flex flex-col">
+                <PageBackground />
                 <Navbar />
-                <main className="flex-1 container mx-auto px-4 py-6">
+                <main className="relative flex-1 container mx-auto px-4 py-6">
                   <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/browse" element={<Browse />} />
@@ -63,18 +70,14 @@ export default function App(): JSX.Element {
                     <Route path="/albums/:albumId" element={<Album />} />
                     <Route path="/charts" element={<Charts />} />
                     <Route path="/playlist-import" element={<PlaylistImport />} />
-                    
-                    {/* Admin Panel */}
                     <Route
                       path="/admin"
                       element={
-                        <ProtectedRoute requiredRole="administrator">
+                        <ProtectedRoute adminOnly>
                           <AdminPanel />
                         </ProtectedRoute>
                       }
                     />
-                    
-                    {/* Catch-all redirect */}
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </main>

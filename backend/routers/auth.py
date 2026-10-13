@@ -21,13 +21,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from backend.db import get_session
-from backend.dependencies import get_current_user, require_admin
-from backend.settings import get_setting
-from backend.services import auth as auth_svc
-from backend.services import login_throttle
-from backend.services import oidc
-from backend.schemas import (
+from .. import config
+from ..db import get_session
+from ..dependencies import require_auth
+from ..models import User
+from ..schemas import (
     LoginRequest,
     RegisterRequest,
     ChangePasswordRequest,
@@ -36,8 +34,10 @@ from backend.schemas import (
     UserResponse,
     MessageResponse,
 )
-from backend.models import User
-from .. import config
+from ..services import auth as auth_svc
+from ..services import login_throttle
+from ..services import oidc
+from ..settings import get_setting
 
 logger = logging.getLogger("routers.auth")
 
@@ -110,15 +110,9 @@ _OIDC_FLOW_PATH = "/api/auth/oidc"
 
 def _start_session(response: Response, session: Session, user: User) -> str:
     """Open a session for an authenticated user: cookies set, access token returned."""
-    access_token = auth_svc.create_access_token(
-        user_id=user.id,
-        username=user.username,
-        role=user.role,
-    )
+    access_token = auth_svc.create_access_token(user)
     refresh_token = auth_svc.create_refresh_token(session, user.id)
     auth_svc.update_last_login(session, user.id)
-    # Refresh user object to get updated last_login_at
-    session.refresh(user)
     _set_access_cookie(response, access_token)
     _set_refresh_cookie(response, refresh_token)
     return access_token
@@ -166,7 +160,7 @@ def get_auth_config(
     return {
         "password_login_enabled": config.PASSWORD_LOGIN_ENABLED,
         "registration_enabled": config.PASSWORD_LOGIN_ENABLED
-        and bool(get_setting(session, "auth.registration_enabled", default=False)),
+        and bool(get_setting(session, "auth.registration_enabled")),
         "oidc_enabled": config.OIDC_ENABLED,
         "oidc_provider_name": config.OIDC_PROVIDER_NAME if config.OIDC_ENABLED else None,
         # Role changes for SSO accounts would be undone at their next sign-in
@@ -181,17 +175,17 @@ def register(
 ):
     """
     Register a new user (public registration).
-    
+
     Registration must be enabled via the 'auth.registration_enabled' setting.
     """
     _require_password_login()
     # Check if registration is enabled
-    if not get_setting(session, "auth.registration_enabled", default=False):
+    if not get_setting(session, "auth.registration_enabled"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Registration is currently disabled. If you think this is a mistake, please contact an administrator.",
         )
-    
+
     try:
         user = auth_svc.create_user(
             session=session,
@@ -199,9 +193,9 @@ def register(
             password=data.password,
             role=config.ROLE_VISITOR,  # Default role for public registration
         )
-        
+
         return UserResponse.model_validate(user)
-    
+
     except auth_svc.UsernameTakenError:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username_taken")
     except ValueError as e:
@@ -287,7 +281,7 @@ def oidc_login():
     try:
         flow = oidc.start_flow()
     except oidc.OidcError as e:
-        logger.error(f"Single sign-on unavailable: {e}")
+        logger.error("Single sign-on unavailable: %s", e)
         return RedirectResponse(f"/login?oidc_error={e.code}", status_code=status.HTTP_303_SEE_OTHER)
 
     response = RedirectResponse(flow["url"], status_code=status.HTTP_303_SEE_OTHER)
@@ -322,7 +316,7 @@ def oidc_callback(
 
     def fail(reason: str, detail: str) -> RedirectResponse:
         log = logger.info if reason in ("denied", "not_allowed", "inactive") else logger.warning
-        log(f"Single sign-on failed ({reason}): {detail}")
+        log("Single sign-on failed (%s): %s", reason, detail)
         response = RedirectResponse(f"/login?oidc_error={reason}", status_code=status.HTTP_303_SEE_OTHER)
         response.delete_cookie(_OIDC_FLOW_COOKIE, path=_OIDC_FLOW_PATH)
         return response
@@ -345,7 +339,7 @@ def oidc_callback(
     response = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie(_OIDC_FLOW_COOKIE, path=_OIDC_FLOW_PATH)
     _start_session(response, session, user)
-    logger.info(f"User {user.username} signed in with single sign-on")
+    logger.info("User %s signed in with single sign-on", user.username)
     return response
 
 
@@ -378,13 +372,7 @@ def refresh(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create new access token
-    access_token = auth_svc.create_access_token(
-        user_id=user.id,
-        username=user.username,
-        role=user.role,
-    )
-
+    access_token = auth_svc.create_access_token(user)
     _set_access_cookie(response, access_token)
 
     return TokenResponse(
@@ -421,12 +409,11 @@ def logout(
 
 @router.get("/me", response_model=UserResponse)
 def get_current_user_info(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
 ):
     """
     Get current authenticated user's information.
-    
-    Requires valid access token in Authorization header.
+
     """
     return UserResponse.model_validate(current_user)
 
@@ -436,12 +423,12 @@ def change_password(
     data: ChangePasswordRequest,
     request: Request,
     response: Response,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     session: Session = Depends(get_session),
 ):
     """
     Change current user's password.
-    
+
     Requires current password for verification. Wrong current passwords
     count against the per-account limit, so a stolen session can't be used
     to brute-force the password.
@@ -467,7 +454,7 @@ def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
-    
+
     revoked = auth_svc.change_password(
         session,
         current_user,
@@ -475,14 +462,10 @@ def change_password(
         keep_refresh_token=request.cookies.get("refresh_token"),
     )
     login_throttle.clear(buckets[0][0])
-    
-    logger.info(f"Password changed for user {current_user.username}, {revoked} other session(s) signed out")
 
-    access_token = auth_svc.create_access_token(
-        user_id=current_user.id,
-        username=current_user.username,
-        role=current_user.role,
-    )
+    logger.info("Password changed for user %s, %s other session(s) signed out", current_user.username, revoked)
+
+    access_token = auth_svc.create_access_token(current_user)
     _set_access_cookie(response, access_token)
     _set_device_cookie(response, auth_svc.create_device_token(current_user.id))
 

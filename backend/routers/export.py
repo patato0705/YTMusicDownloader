@@ -13,7 +13,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_db
+from ..db import get_session
 from ..dependencies import require_auth, require_admin
 from ..models import User
 from ..schemas.export import ExportDocument, ImportResult
@@ -27,9 +27,9 @@ router = APIRouter(tags=["Export"])
 @router.get("/api/export/library", status_code=status.HTTP_200_OK)
 def export_library(
     current_user: User = Depends(require_auth),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    """Followed artists, downloaded albums and chart subscriptions. Nothing personal."""
+    """What this instance follows: artists, albums, charts, playlists, dismissed recommendations. Nothing personal."""
     try:
         return export_svc.build_library_export(db)
     except Exception as e:
@@ -45,7 +45,7 @@ def export_backup(
     users: bool = Query(True, description="Include user accounts (with password hashes)"),
     settings: bool = Query(True, description="Include application settings"),
     current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     if not any((library, charts, catalog, users, settings)):
         raise HTTPException(status_code=400, detail="Nothing selected to export")
@@ -68,7 +68,7 @@ def import_document(
     doc: ExportDocument,
     dry_run: bool = Query(False, description="Report what would change without applying it"),
     current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> ImportResult:
     """
     Apply an export document (library manifest or full backup).

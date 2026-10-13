@@ -1,10 +1,8 @@
 // src/utils/formatting.ts
 
 /**
- * Formats a number with thousand separators
+ * A number with the locale's thousand separators
  */
-export function formatNumber(num: number | null | undefined): string {
-  if (num === null || num === undefined) return '0';
-
-  return num.toLocaleString('en-US');
+export function formatNumber(num: number, locale: string): string {
+  return num.toLocaleString(locale);
 }

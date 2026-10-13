@@ -1,22 +1,30 @@
 # backend/services/charts.py
 """
-Charts service - handles chart subscriptions and sync operations.
+Chart subscriptions: a country's YouTube Music top artists chart, whose top
+N artists are followed in full (re-checked on the scheduler.chart_sync schedule).
 """
 from __future__ import annotations
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 
 from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 
-from ..models import ChartSubscription, ChartSnapshot, ArtistSubscription, Job
-from ..jobs.jobqueue import enqueue_job
+from ..jobs.jobqueue import enqueue_job, pending_jobs
 from ..jobs.priorities import Origin
-from ..ytm_service import adapter as ytm_adapter
+from ..models import ArtistSubscription, ChartSubscription, Job
 from ..time_utils import now_utc
+from ..ytm_service import adapter as ytm_adapter
 
 logger = logging.getLogger("services.charts")
+
+MAX_TOP_N = 40
+
+
+def _check_top_n(top_n_artists: int) -> None:
+    if not 1 <= top_n_artists <= MAX_TOP_N:
+        raise ValueError(f"top_n_artists must be between 1 and {MAX_TOP_N}")
 
 
 # ============================================================================
@@ -29,18 +37,11 @@ def get_chart_subscription(session: Session, country_code: str) -> Optional[Char
     return session.execute(stmt).scalars().first()
 
 
-def list_chart_subscriptions(
-    session: Session,
-    include_disabled: bool = False
-) -> List[ChartSubscription]:
-    """List all chart subscriptions."""
-    stmt = select(ChartSubscription)
-    
+def list_chart_subscriptions(session: Session, include_disabled: bool = False) -> List[ChartSubscription]:
+    """The chart subscriptions by country code, the disabled ones only if asked."""
+    stmt = select(ChartSubscription).order_by(ChartSubscription.country_code)
     if not include_disabled:
-        stmt = stmt.where(ChartSubscription.enabled == True)
-    
-    stmt = stmt.order_by(ChartSubscription.country_code)
-    
+        stmt = stmt.where(ChartSubscription.enabled.is_(True))
     return list(session.execute(stmt).scalars().all())
 
 
@@ -51,33 +52,16 @@ def create_chart_subscription(
     created_by: Optional[int] = None,
 ) -> ChartSubscription:
     """
-    Create a chart subscription.
-    
-    Args:
-        session: SQLAlchemy session
-        country_code: 2-letter country code (e.g., "US", "FR")
-        top_n_artists: Number of top artists to follow (1-40)
-        created_by: User ID who created the subscription
-    
-    Returns:
-        Created ChartSubscription instance
-    
-    Raises:
-        ValueError: If subscription already exists or invalid parameters
+    Subscribe to a country's chart. Raises ValueError for a bad country
+    code or count, or when it's already followed. Does not commit.
     """
     country_code = country_code.upper().strip()
-    
     if len(country_code) != 2:
         raise ValueError("Country code must be 2 letters")
-    
-    if not 1 <= top_n_artists <= 40:
-        raise ValueError("top_n_artists must be between 1 and 40")
-    
-    # Check if already exists
-    existing = get_chart_subscription(session, country_code)
-    if existing:
+    _check_top_n(top_n_artists)
+    if get_chart_subscription(session, country_code):
         raise ValueError(f"Chart subscription for {country_code} already exists")
-    
+
     subscription = ChartSubscription(
         country_code=country_code,
         enabled=True,
@@ -85,11 +69,9 @@ def create_chart_subscription(
         created_at=now_utc(),
         created_by=created_by,
     )
-    
     session.add(subscription)
     session.flush()
-    
-    logger.info(f"Created chart subscription: {country_code} (top {top_n_artists} artists)")
+    logger.info("Created chart subscription: %s (top %s artists)", country_code, top_n_artists)
     return subscription
 
 
@@ -99,78 +81,37 @@ def update_chart_subscription(
     top_n_artists: Optional[int] = None,
     enabled: Optional[bool] = None,
 ) -> ChartSubscription:
-    """
-    Update chart subscription settings.
-    
-    Returns:
-        Updated ChartSubscription instance
-    
-    Raises:
-        ValueError: If subscription not found or invalid parameters
-    """
+    """Change a chart subscription. Raises ValueError if it doesn't exist or for a bad count. Does not commit."""
     subscription = get_chart_subscription(session, country_code)
     if not subscription:
         raise ValueError(f"Chart subscription for {country_code} not found")
-    
     if top_n_artists is not None:
-        if not 1 <= top_n_artists <= 40:
-            raise ValueError("top_n_artists must be between 1 and 40")
+        _check_top_n(top_n_artists)
         subscription.top_n_artists = top_n_artists
-    
     if enabled is not None:
         subscription.enabled = enabled
-    
-    session.add(subscription)
     session.flush()
-    
-    logger.info(f"Updated chart subscription: {country_code}")
+    logger.info("Updated chart subscription: %s", country_code)
     return subscription
 
 
 def delete_chart_subscription(session: Session, country_code: str) -> bool:
-    """
-    Delete a chart subscription.
-    
-    Returns:
-        True if deleted, False if not found
-    """
+    """Unfollow a chart (its artists stay followed). False if it wasn't followed. Does not commit."""
     subscription = get_chart_subscription(session, country_code)
     if not subscription:
         return False
-    
     session.delete(subscription)
     session.flush()
-    
-    logger.info(f"Deleted chart subscription: {country_code}")
+    logger.info("Deleted chart subscription: %s", country_code)
     return True
 
 
-def update_sync_status(
-    session: Session,
-    country_code: str,
-    success: bool = True,
-    error: Optional[str] = None,
-) -> None:
-    """Update chart subscription sync status."""
-    subscription = get_chart_subscription(session, country_code)
-    if not subscription:
-        return
-    
-    subscription.last_synced_at = now_utc()
-    subscription.last_error = error if not success else None
-    
-    session.add(subscription)
-
-
-def get_chart_subscriptions_needing_sync(
-    session: Session,
-    cutoff: datetime,
-) -> List[ChartSubscription]:
+def get_chart_subscriptions_needing_sync(session: Session, cutoff: datetime) -> List[ChartSubscription]:
     """Enabled subscriptions never synced, or last synced before `cutoff`."""
     stmt = (
         select(ChartSubscription)
         .where(
-            ChartSubscription.enabled == True,
+            ChartSubscription.enabled.is_(True),
             or_(
                 ChartSubscription.last_synced_at.is_(None),
                 ChartSubscription.last_synced_at < cutoff,
@@ -181,36 +122,21 @@ def get_chart_subscriptions_needing_sync(
     return list(session.execute(stmt).scalars().all())
 
 
-def pending_sync_job(session: Session, country_code: str) -> Optional[Job]:
-    """Return the sync_chart job for this country still waiting to run, if any."""
-    country_code = country_code.upper()
-    stmt = select(Job).where(
-        Job.type == "sync_chart",
-        Job.status.in_(["queued", "reserved"]),
-    )
-    for job in session.execute(stmt).scalars().all():
-        payload = job.payload if isinstance(job.payload, dict) else {}
-        if str(payload.get("country_code", "")).upper() == country_code:
-            return job
-    return None
-
-
 def enqueue_chart_sync(
     session: Session,
     country_code: str,
     user_id: Optional[int] = None,
-) -> Job:
+) -> Tuple[Job, bool]:
     """
-    Queue a sync_chart job for a country, reusing one that is already waiting.
-    
-    Does not commit; callers own the transaction.
+    Queue a sync_chart job for a country, reusing one that is already
+    waiting or running. Does not commit. Returns (the job, whether it's new).
     """
     country_code = country_code.upper()
-    existing = pending_sync_job(session, country_code)
+    existing = pending_jobs(session, "sync_chart", country_code=country_code)
     if existing:
-        logger.debug(f"sync_chart job {existing.id} already pending for {country_code}")
-        return existing
-    
+        logger.debug("sync_chart job %s already pending for %s", existing[0].id, country_code)
+        return existing[0], False
+
     job = enqueue_job(
         session,
         job_type="sync_chart",
@@ -222,72 +148,8 @@ def enqueue_chart_sync(
         commit=False,
     )
     session.flush()
-    logger.info(f"Queued sync_chart job {job.id} for {country_code}")
-    return job
-
-
-# ============================================================================
-# CHART DATA
-# ============================================================================
-
-def fetch_chart(session: Session, country_code: str) -> Dict[str, Any]:
-    """
-    Fetch chart data from YTMusic.
-    
-    Returns:
-        Dict with "artists" list
-    """
-    country_code = country_code.upper().strip()
-    
-    try:
-        chart_data = ytm_adapter.get_charts(country=country_code)
-        return chart_data
-    except Exception as e:
-        logger.exception(f"Failed to fetch chart for {country_code}")
-        raise RuntimeError(f"Failed to fetch chart: {e}")
-
-
-def save_chart_snapshot(
-    session: Session,
-    country_code: str,
-    chart_data: Dict[str, Any],
-) -> ChartSnapshot:
-    """
-    Save a chart snapshot to database.
-    
-    Args:
-        session: SQLAlchemy session
-        country_code: Country code
-        chart_data: Chart data from adapter
-    
-    Returns:
-        Created ChartSnapshot instance
-    """
-    snapshot = ChartSnapshot(
-        country_code=country_code.upper(),
-        snapshot_date=now_utc(),
-        data=chart_data,
-    )
-    
-    session.add(snapshot)
-    session.flush()
-    
-    logger.info(f"Saved chart snapshot for {country_code}")
-    return snapshot
-
-
-def get_latest_snapshot(
-    session: Session,
-    country_code: str
-) -> Optional[ChartSnapshot]:
-    """Get the most recent chart snapshot for a country."""
-    stmt = (
-        select(ChartSnapshot)
-        .where(ChartSnapshot.country_code == country_code.upper())
-        .order_by(ChartSnapshot.snapshot_date.desc())
-        .limit(1)
-    )
-    return session.execute(stmt).scalars().first()
+    logger.info("Queued sync_chart job %s for %s", job.id, country_code)
+    return job, True
 
 
 # ============================================================================
@@ -295,83 +157,53 @@ def get_latest_snapshot(
 # ============================================================================
 
 def get_followed_artist_ids(session: Session) -> set[str]:
-    """Get set of all artist IDs with active subscriptions."""
-    stmt = select(ArtistSubscription.artist_id).where(ArtistSubscription.enabled == True)
-    results = session.execute(stmt).scalars().all()
-    return set(results)
+    """Artists followed in full (a light subscription only covers an album or two)."""
+    stmt = select(ArtistSubscription.artist_id).where(
+        ArtistSubscription.enabled.is_(True),
+        ArtistSubscription.mode == "full",
+    )
+    return set(session.execute(stmt).scalars().all())
 
 
-def sync_chart(
-    session: Session,
-    country_code: str,
-) -> Dict[str, Any]:
+def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
     """
-    Sync a chart: fetch latest data and follow top N artists.
-    
-    This is called by the sync_chart job worker.
-    
-    Args:
-        session: SQLAlchemy session
-        country_code: Country code to sync
-    
-    Returns:
-        Dict with sync results
+    Fetch a followed chart and pick its top N artists not followed in full
+    yet. Records the sync (and its error, re-raised, if the fetch fails).
+    Commits. Returns {"artists_to_follow": [{"id", "name"}], ...}, or
+    {"skipped": True, "reason"} for a disabled or removed subscription.
     """
     country_code = country_code.upper()
-    
-    # Get subscription
     subscription = get_chart_subscription(session, country_code)
     if not subscription:
-        raise ValueError(f"No chart subscription for {country_code}")
-    
+        return {"skipped": True, "reason": "not followed"}
     if not subscription.enabled:
-        logger.info(f"Chart subscription for {country_code} is disabled, skipping sync")
         return {"skipped": True, "reason": "disabled"}
-    
+
     try:
-        # Fetch chart data
-        chart_data = fetch_chart(session, country_code)
-        artists = chart_data.get("artists", [])
-        
-        # Save snapshot
-        save_chart_snapshot(session, country_code, chart_data)
-        
-        # Get top N artists to follow
-        top_n = subscription.top_n_artists
-        artists_to_follow = artists[:top_n]
-        
-        logger.info(f"Syncing chart {country_code}: {len(artists_to_follow)} artists to follow")
-        
-        # Get currently followed artists
-        followed_ids = get_followed_artist_ids(session)
-        
-        # Collect artist IDs to follow
-        artist_ids_to_follow = []
-        for artist in artists_to_follow:
-            artist_id = artist.get("id")
-            if artist_id and artist_id not in followed_ids:
-                artist_ids_to_follow.append(artist_id)
-        
-        # Update sync status
-        update_sync_status(session, country_code, success=True)
-        session.commit()
-        
-        logger.info(
-            f"Chart sync complete for {country_code}: "
-            f"{len(artist_ids_to_follow)} new artists to follow, "
-            f"{len(artists_to_follow) - len(artist_ids_to_follow)} already followed"
-        )
-        
-        return {
-            "country_code": country_code,
-            "total_artists": len(artists),
-            "top_n": top_n,
-            "artists_to_follow": artist_ids_to_follow,
-            "already_followed": len(artists_to_follow) - len(artist_ids_to_follow),
-        }
-        
-    except Exception as e:
-        logger.exception(f"Chart sync failed for {country_code}")
-        update_sync_status(session, country_code, success=False, error=str(e))
+        artists = ytm_adapter.get_charts(country_code)["artists"]
+    except ytm_adapter.YTMusicUnavailable as e:
+        logger.warning("Chart sync failed for %s: %s", country_code, e)
+        subscription.last_synced_at = now_utc()
+        subscription.last_error = str(e)
         session.commit()
         raise
+
+    top = [a for a in artists[:subscription.top_n_artists] if a.get("id")]
+    followed_ids = get_followed_artist_ids(session)
+    to_follow = [{"id": a["id"], "name": a.get("name")} for a in top if a["id"] not in followed_ids]
+
+    subscription.last_synced_at = now_utc()
+    subscription.last_error = None
+    session.commit()
+
+    logger.info(
+        "Chart %s: %s new artists to follow, %s already followed",
+        country_code, len(to_follow), len(top) - len(to_follow),
+    )
+    return {
+        "country_code": country_code,
+        "total_artists": len(artists),
+        "top_n": subscription.top_n_artists,
+        "artists_to_follow": to_follow,
+        "already_followed": len(top) - len(to_follow),
+    }

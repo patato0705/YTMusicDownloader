@@ -3,7 +3,7 @@
 Pydantic schemas for charts endpoints.
 """
 from __future__ import annotations
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -34,7 +34,7 @@ class ChartArtist(BaseModel):
     name: Optional[str] = None
     thumbnail: Optional[str] = None
     rank: Optional[int] = None
-    trend: Optional[str] = None  # "up", "down", "same", "new"
+    trend: Optional[str] = None  # "up", "down" or "neutral"
     followed: bool = False  # Whether this artist is already followed
 
     model_config = {"from_attributes": True}
@@ -50,7 +50,7 @@ class ChartSubscriptionResponse(BaseModel):
     created_by: Optional[int] = None
     last_synced_at: Optional[datetime] = None
     last_error: Optional[str] = None
-    
+
     model_config = {"from_attributes": True}
 
 
@@ -60,4 +60,3 @@ class ChartResponse(BaseModel):
     artists: List[ChartArtist]
     followed: bool = False
     subscription: Optional[ChartSubscriptionResponse] = None
-    cached: bool = False

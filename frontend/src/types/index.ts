@@ -1,79 +1,17 @@
 // src/types/index.ts
+/**
+ * Shapes shared by several endpoints. Types used by a single endpoint live
+ * next to its call in src/api/.
+ */
 
-// ============================================================================
-// MUSIC TYPES
-// ============================================================================
-
-export interface Thumbnail {
-  url: string;
-  width: number;
-  height: number;
+/** An artist named on a track or an album; YouTube Music doesn't always give the id */
+export interface ArtistRef {
+  id: string | null;
+  name: string | null;
 }
 
-export interface Artist {
-  id: string;
-  name: string;
-  thumbnail?: string;
-  thumbnails?: Thumbnail[];
-  image_local?: string | null;
-  subscribers?: string;
-  resultType?: string;
-  genres?: string[];
-  // Library endpoint extras
-  albums_count?: number;
-  tracks_total?: number;
-  tracks_downloaded?: number;
-  followed_at?: string | null;
-}
-
-export type AlbumType = 'Album' | 'Single' | 'EP';
-
-/** Badge shown on a MediaCard - undefined means "nothing to show" */
+/** Badge shown on a MediaCard; undefined means "nothing to show" */
 export type MediaStatus = 'downloaded' | 'in_library' | 'downloading' | 'queued' | 'failed' | undefined;
-
-export interface Album {
-  id: string;
-  title: string;
-  genres?: string[];
-  artist?: string;
-  artist_id?: string;
-  artist_name?: string;
-  year?: string;
-  type?: AlbumType | string;
-  thumbnail?: string;
-  thumbnails?: Thumbnail[];
-  image_local?: string | null;
-  playlist_id?: string;
-  playlistId?: string;
-  resultType?: string;
-  // Library endpoint extras
-  tracks_total?: number;
-  tracks_downloaded?: number;
-  created_at?: string | null;
-}
-
-export interface Track {
-  id: string;
-  title: string;
-  artists?: Array<{ id: string; name: string }>;
-  album?: string | { id: string; name: string } | null;
-  album_id?: string;
-  cover?: string | null;
-  thumbnail?: string;
-  thumbnails?: Thumbnail[] | null;
-  duration?: number;
-  duration_seconds?: number;
-  track_number?: number;
-  isExplicit?: boolean;
-  status?: TrackStatus;
-  last_error?: string | null;
-  lyrics?: LyricsKind;
-  lyrics_local?: string | null;
-  file_path?: string | null;
-  videoId?: string;
-  resultType?: string;
-  raw?: any;
-}
 
 /**
  * Download state of a track in the DB (backend/services/tracks.py):
@@ -83,32 +21,32 @@ export interface Track {
  */
 export type TrackStatus = 'available' | 'queued' | 'downloading' | 'done' | 'failed';
 
-/** What kind of .lrc a downloaded track has on disk; null/undefined = none yet */
+/** What kind of .lrc a downloaded track has on disk; null = none yet */
 export type LyricsKind = 'synced' | 'plain' | null;
 
-// ============================================================================
-// SEARCH TYPES
-// ============================================================================
+/** Album download state (backend/services/subscriptions.py), null for albums not being downloaded */
+export type AlbumDownloadStatus = 'completed' | 'downloading' | 'pending' | 'failed' | 'idle' | null;
 
-export interface SearchResults {
-  artists?: Artist[];
-  albums?: Album[];
-  tracks?: Track[];
-  songs?: Track[]; // Alias for tracks
-}
+/** How an album is kept: its music downloaded, or only its metadata (from a followed artist's light sync) */
+export type AlbumMode = 'download' | 'metadata';
 
-// ============================================================================
-// UI COMPONENT TYPES
-// ============================================================================
+/** How an artist is followed: in full (every release downloaded), or light (metadata only) */
+export type SubscriptionMode = 'full' | 'light';
 
-export interface FormattedMedia {
+/**
+ * A track of an album page (Track.to_dict). Those served from YouTube Music
+ * (album not imported yet) have no download state.
+ */
+export interface Track {
   id: string;
   title: string;
-  subtitle?: string;
-  thumbnail?: string;
-  year?: string;
-  albumType?: string;
-  albumId?: string;
-  /** Artist the subtitle names - albums and tracks only */
-  artistId?: string;
+  artists: ArtistRef[];
+  track_number: number | null;
+  /** Seconds */
+  duration: number | null;
+  album_id?: string;
+  status?: TrackStatus;
+  last_error?: string | null;
+  lyrics?: LyricsKind;
+  lyrics_local?: string | null;
 }

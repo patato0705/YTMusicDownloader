@@ -1,94 +1,53 @@
 # backend/ytm_service/normalizers.py
+"""Turn ytmusicapi's loosely shaped items into the dicts the adapter returns."""
 from __future__ import annotations
 import logging
 import re
-from typing import Any, Dict, List, Optional, Sequence
-from backend.schemas import Thumbnail as ThumbnailSchema
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("ytm_service.normalizers")
 
 
-def normalize_thumbnails(raw: Any) -> List[Dict[str, Optional[Any]]]:
-    """
-    Outputs a list of dicts {'url': str, 'width': Optional[int], 'height': Optional[int]}
-    Accepts:
-      - list of dicts like {'url':..., 'width':..., 'height':...}
-      - list of dicts nested as {'thumbnail': {'thumbnails': [...]}} (we flatten)
-      - list of strings (urls)
-      - a single dict with 'thumbnails' key
-    """
-    out: List[Dict[str, Optional[Any]]] = []
+def _int_or_none(value: Any) -> Optional[int]:
     try:
-        if raw is None:
-            return out
-        # if a dict with 'thumbnails' -> unwrap
-        if isinstance(raw, dict) and "thumbnails" in raw:
-            raw = raw.get("thumbnails") or []
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
-        if isinstance(raw, list):
-            for it in raw:
-                if it is None:
-                    continue
-                # case: simple string url
-                if isinstance(it, str):
-                    out.append({"url": it, "width": None, "height": None})
-                    continue
-                # case: dict representing thumbnail or nested thumbnail
-                if isinstance(it, dict):
-                    # some items use 'url' key directly
-                    url = it.get("url") or it.get("thumbnail") or None
-                    # some nested forms: {'thumbnail': {'thumbnails': [...]}} -> skip here
-                    if isinstance(url, dict):
-                        # maybe nested thumbnail entry
-                        url = url.get("url") or None
-                    width = None
-                    height = None
-                    # attempt to parse width/height if present
-                    w = it.get("width") or it.get("w")
-                    h = it.get("height") or it.get("h")
-                    try:
-                        width = int(w) if w is not None else None
-                    except Exception:
-                        width = None
-                    try:
-                        height = int(h) if h is not None else None
-                    except Exception:
-                        height = None
-                    if url and isinstance(url, str):
-                        out.append({"url": url, "width": width, "height": height})
-    except Exception:
-        logger.exception("normalize_thumbnails failed for %r", raw)
+
+def normalize_thumbnails(raw: Any) -> List[Dict[str, Any]]:
+    """
+    Thumbnails as a list of {"url", "width", "height"}. Accepts a list of
+    dicts or url strings, or a dict holding them under "thumbnails".
+    """
+    if isinstance(raw, dict):
+        raw = raw.get("thumbnails") or []
+    out: List[Dict[str, Any]] = []
+    for it in raw if isinstance(raw, list) else []:
+        if isinstance(it, str):
+            out.append({"url": it, "width": None, "height": None})
+        elif isinstance(it, dict):
+            url = it.get("url") or it.get("thumbnail")
+            if isinstance(url, dict):
+                url = url.get("url")
+            if isinstance(url, str) and url:
+                out.append({"url": url, "width": _int_or_none(it.get("width")), "height": _int_or_none(it.get("height"))})
     return out
 
 
-def pick_best_thumbnail_url(ths: List[Dict[str, Optional[Any]]]) -> Optional[str]:
-    """
-    Try simple heuristics:
-    - prefer the thumbnail with largest width
-    - fallback to the last url available
-    Accepts list of thumbnails as dicts (url,width,height).
-    """
-    if not ths:
+def pick_best_thumbnail_url(thumbnails: List[Dict[str, Any]]) -> Optional[str]:
+    """The widest thumbnail's URL; the last one when none has a width."""
+    if not thumbnails:
         return None
-    best = None
-    best_w = -1
-    for t in ths:
-        try:
-            url = t.get("url")
-            w = t.get("width")
-            if isinstance(w, int) and w > best_w and isinstance(url, str):
-                best = url
-                best_w = w
-        except Exception:
-            continue
-    if best:
-        return best
-    # fallback: last url
-    for t in reversed(ths):
-        u = t.get("url")
-        if isinstance(u, str):
-            return u
-    return None
+    with_width = [t for t in thumbnails if isinstance(t.get("width"), int)]
+    if with_width:
+        return max(with_width, key=lambda t: t["width"])["url"]
+    return thumbnails[-1].get("url")
+
+
+def best_thumbnail(raw: Any) -> Optional[str]:
+    """pick_best_thumbnail_url of raw thumbnails in any shape normalize_thumbnails takes."""
+    return pick_best_thumbnail_url(normalize_thumbnails(raw))
 
 
 # Card artwork: what YouTube Music itself uses for its biggest cards
@@ -104,315 +63,148 @@ def resize_thumbnail_url(url: Optional[str], size: int, crop: bool = False) -> O
 
     Search results only list 60 and 120px versions of a picture that exists
     at any size: the size is the "=w120-h120-..." options at the end of the
-    URL. Other options (quality, format) are kept. crop=True adds "p", which
-    crops the original picture to a square instead of fitting it inside one;
-    an artist's square crop shows more than its banner, which is a crop too.
+    URL. Other options (quality, format) are kept, except "dc<hex>": a colour
+    hint computed for the original picture, which Google refuses (HTTP 400)
+    once the size changes. crop=True adds "p", which crops the original
+    picture to a square instead of fitting it inside one; an artist's square
+    crop shows more than its banner, which is a crop too.
 
     URLs from other hosts (i.ytimg.com video stills) are returned unchanged.
     """
     if not url or not any(host in url for host in _RESIZABLE_HOSTS):
         return url
     base, _, options = url.partition("=")
-    kept = [o for o in options.split("-") if o and not _SIZE_OPTION.match(o) and o != "p"]
+    kept = [
+        o for o in options.split("-")
+        if o and not _SIZE_OPTION.match(o) and o != "p" and not o.startswith("dc")
+    ]
     wanted = [f"w{size}", f"h{size}"] + (["p"] if crop or "p" in options.split("-") else [])
     return f"{base}={'-'.join(wanted + kept)}"
 
 
-def _build_thumbnails(thumbs_raw: Any) -> List[ThumbnailSchema]:
+def normalize_artist_entry(raw: Any) -> Dict[str, Optional[str]]:
     """
-    Normalize thumbs list (via normalizers) and returns a list
-    of valid S.Thumbnail instances (filter input with no URL).
+    An artist reference as {"id", "name"}, from a dict (browseId/id/channelId,
+    name/title, or a nested navigationEndpoint) or a plain name.
     """
-    out: List[ThumbnailSchema] = []
-    th_list = normalize_thumbnails(thumbs_raw)
-    if not isinstance(th_list, Sequence):
-        return out
-
-    for t in th_list:
-        if not isinstance(t, dict):
-            continue
-        url = t.get("url")
-        if not isinstance(url, str):
-            continue
-
-        def _to_int_or_none(v: Any) -> Optional[int]:
-            if v is None:
-                return None
-            if isinstance(v, int):
-                return v
-            try:
-                return int(v)
-            except Exception:
-                return None
-
-        w = _to_int_or_none(t.get("width"))
-        h = _to_int_or_none(t.get("height"))
-
-        out.append(ThumbnailSchema(url=url, width=w, height=h))
-    return out
+    if isinstance(raw, str):
+        return {"id": None, "name": raw}
+    if not isinstance(raw, dict):
+        return {"id": None, "name": None}
+    aid = raw.get("id") or raw.get("browseId") or raw.get("channelId")
+    if not aid:
+        endpoint = (raw.get("navigationEndpoint") or {}).get("browseEndpoint") or {}
+        aid = endpoint.get("browseId") if isinstance(endpoint, dict) else None
+    name = raw.get("name") or raw.get("title") or raw.get("artist")
+    return {"id": str(aid) if aid else None, "name": str(name) if name else None}
 
 
-def _extract_first_nested_artist(item: dict) -> dict | None:
+def normalize_track(raw: Dict[str, Any], index: Optional[int] = None) -> Dict[str, Any]:
     """
-    Returns first nested 'artist' object if present (dict), or None.
-    Handles different possible keys ('artists', 'artist').
+    A track/song item as the fields of schemas.TrackSchema. `index` (1-based
+    position in its album) stands in for a missing track number.
     """
-    for key in ("artists", "artist"):
-        val = item.get(key)
-        if isinstance(val, list) and val:
-            first = val[0]
-            if isinstance(first, dict):
-                return first
-    return None
+    artists = raw.get("artists") or raw.get("artist") or []
+    if not isinstance(artists, list):
+        artists = [artists]
+    album = raw.get("album")
+    album_ref = None
+    if isinstance(album, dict) and (album.get("id") or album.get("name")):
+        album_ref = {"id": album.get("id"), "name": album.get("name")}
+    elif isinstance(album, str):
+        album_ref = {"id": None, "name": album}
+    return {
+        "id": str(raw.get("videoId") or raw.get("id") or ""),
+        "title": str(raw.get("title") or raw.get("name") or ""),
+        "artists": [normalize_artist_entry(a) for a in artists],
+        "album": album_ref,
+        "cover": best_thumbnail(raw.get("thumbnails")),
+        "duration_seconds": _int_or_none(raw.get("duration_seconds")) or 0,
+        "track_number": _int_or_none(raw.get("trackNumber")) or index,
+        "isExplicit": bool(raw.get("isExplicit")),
+    }
+
 
 def _artist_card_thumbnail(it: dict) -> Optional[str]:
     """Search only lists 60 and 120px versions; artists are shown round, so square"""
-    return resize_thumbnail_url(pick_best_thumbnail_url(it.get("thumbnails") or []), CARD_THUMBNAIL_SIZE, crop=True)
+    return resize_thumbnail_url(best_thumbnail(it.get("thumbnails")), CARD_THUMBNAIL_SIZE, crop=True)
 
 
-def _normalize_search_item(it: dict, include_raw: bool, allowed_set: Optional[set], default_exclude: set): # Used in search function
-    """
-    Returns normalized dict or None if filtered.
-    """
+def normalize_search_item(it: Any, allowed_types: set) -> Optional[Dict[str, Any]]:
+    """A search result as the dict the frontend lists, or None if it isn't of an allowed type."""
     if not isinstance(it, dict):
         return None
     kind = (it.get("resultType") or it.get("type") or "").lower()
-    if not kind:
-        if it.get("videoId") or it.get("id"):
-            kind = "song"
+    if not kind and (it.get("videoId") or it.get("id")):
+        kind = "song"
+    if kind not in allowed_types:
+        return None
 
-    if allowed_set is not None:
-        if kind not in allowed_set:
-            return None
-    else:
-        if kind in default_exclude:
-            return None
-
-    base: Dict[str, Any] = {"resultType": kind}
     if kind in ("song", "track"):
-        base.update({
+        album = it.get("album")
+        return {
+            "resultType": kind,
             "id": it.get("videoId") or it.get("id"),
             "title": it.get("title") or it.get("name"),
-            "album": it.get("album") or [],
+            "album": album if isinstance(album, dict) else {},
             "artists": [normalize_artist_entry(a) for a in (it.get("artists") or it.get("artist") or [])],
             "duration_seconds": it.get("duration_seconds") or it.get("duration"),
             # Search only lists 60 and 120px versions
-            "thumbnail": resize_thumbnail_url(pick_best_thumbnail_url(it.get("thumbnails") or []), CARD_THUMBNAIL_SIZE),
-        })
-    elif kind == "artist":
-        artists_list = it.get("artists") or []
-        if not artists_list:
-            base.update({
-                "id": it.get("browseId") or it.get("id"),
-                "name": it.get("title") or it.get("name") or it.get("artist"),
-                "thumbnail": _artist_card_thumbnail(it),
-            })
-        else: # Top result
-            nested = artists_list[0] if isinstance(artists_list, (list, tuple)) and len(artists_list) > 0 else {}
-            base.update({
-                "id": nested.get("browseId") or nested.get("id") or it.get("browseId") or it.get("id"),
-                "name": nested.get("name") or it.get("title") or it.get("name") or it.get("artist"),
-                "thumbnail": _artist_card_thumbnail(it),
-            })
-    elif kind == "album":
-        main_artist = normalize_artist_entry((it.get("artists") or [None])[0])
-        base.update({
-            "id": it.get("browseId") or it.get("id") or it.get("playlistId"),
-            "title": it.get("title") or it.get("name"),
-            "thumbnail": pick_best_thumbnail_url(it.get("thumbnails") or []),
-            "artist": main_artist["name"] or "Unknown Artist",
-            "artist_id": main_artist["id"],
-            "year": it.get("year") or None,
-        })
-    else:
-        if not include_raw:
-            if it.get("browseId"):
-                base["id"] = it.get("browseId")
-            elif it.get("videoId"):
-                base["id"] = it.get("videoId")
-            if it.get("title"):
-                base["title"] = it.get("title")
-    return base
-
-def _normalize_album_item(item: dict) -> Dict[str, Any]:
-    """
-    Normalize an album/single item from YTMusic response.
-    Handles inconsistent formats from YTMusic API:
-    """
-    browse_id = item.get("browseId") or item.get("id") or ""
-    playlist_id = item.get("audioPlaylistId") or item.get("playlistId") or ""
-    title = item.get("title") or item.get("name") or None
-    
-    thumbs_models = _build_thumbnails(item.get("thumbnails", []))
-    thumbs_dicts = [t.model_dump() for t in thumbs_models]
-    thumbnail = pick_best_thumbnail_url(thumbs_dicts) if thumbs_models else None
-    
-    # Extract raw values
-    raw_type = item.get("type")
-    raw_year = item.get("year")
-    
-    item_type = None
-    year = None
-    
-    # Valid type values
-    valid_types = {"album", "single", "ep"}
-    
-    # STRATEGY: Check both fields and determine which format we have
-    
-    # Check if raw_type looks like a year (4 digits)
-    type_is_year = (
-        raw_type is not None 
-        and str(raw_type).strip().isdigit() 
-        and len(str(raw_type).strip()) == 4
-    )
-    
-    # Check if raw_year looks like a type (valid type string)
-    year_is_type = (
-        raw_year is not None 
-        and str(raw_year).strip().lower() in valid_types
-    )
-    
-    # CASE 1: Buggy format - type/year are swapped
-    if type_is_year and not year_is_type:
-        # Year is in type field (albums from get_artist)
-        year = str(raw_type).strip()
-        item_type = "Album"  # Default for albums
-    elif year_is_type and not type_is_year:
-        # Type is in year field (singles from get_artist)
-        item_type = str(raw_year).strip().capitalize()
-        year = None
-    # CASE 2: Both fields are swapped (rare but possible)
-    elif type_is_year and year_is_type:
-        year = str(raw_type).strip()
-        item_type = str(raw_year).strip().capitalize()
-    # CASE 3: Correct format (from get_artist_albums)
-    else:
-        # Check type field normally
-        if raw_type is not None:
-            type_str = str(raw_type).strip()
-            if type_str.lower() in valid_types:
-                item_type = type_str.capitalize()
-            elif not type_str.isdigit():
-                # Unknown type string, use it anyway
-                item_type = type_str
-        
-        # Check year field normally
-        if raw_year is not None:
-            year_str = str(raw_year).strip()
-            if year_str.isdigit() and len(year_str) == 4:
-                year = year_str
-    
-    # Final defaults
-    if item_type is None:
-        item_type = "Album"
-    
+            "thumbnail": resize_thumbnail_url(best_thumbnail(it.get("thumbnails")), CARD_THUMBNAIL_SIZE),
+        }
+    if kind == "artist":
+        # The top result nests the artist under "artists"
+        nested = (it.get("artists") or [{}])[0]
+        return {
+            "resultType": kind,
+            "id": nested.get("browseId") or nested.get("id") or it.get("browseId") or it.get("id"),
+            "name": nested.get("name") or it.get("title") or it.get("name") or it.get("artist"),
+            "thumbnail": _artist_card_thumbnail(it),
+        }
+    # album
+    main_artist = normalize_artist_entry((it.get("artists") or [None])[0])
     return {
-        "id": browse_id,
-        "playlistId": playlist_id,
-        "title": str(title),
-        "thumbnails": thumbs_dicts,
-        "thumbnail": thumbnail,
-        "type": item_type,
+        "resultType": kind,
+        "id": it.get("browseId") or it.get("id") or it.get("playlistId"),
+        "title": it.get("title") or it.get("name"),
+        "thumbnail": best_thumbnail(it.get("thumbnails")),
+        "artist": main_artist["name"] or "Unknown Artist",
+        "artist_id": main_artist["id"],
+        "year": it.get("year") or None,
+        "type": it.get("type") or "Album",
+        # Its audio playlist; missing on stale entries (adapter._live_albums)
+        "playlist_id": it.get("playlistId") or None,
+    }
+
+
+_RELEASE_TYPES = {"album", "single", "ep"}
+
+
+def _is_year(value: Any) -> bool:
+    text = str(value).strip() if value is not None else ""
+    return len(text) == 4 and text.isdigit()
+
+
+def normalize_album_item(item: dict) -> Dict[str, Any]:
+    """
+    An album/single item of an artist page. ytmusicapi swaps "type" and
+    "year" in some lists (the year in "type" for albums from get_artist,
+    the type in "year" for singles), so both are read from either field.
+    """
+    raw_type, raw_year = item.get("type"), item.get("year")
+    values = [str(v).strip() for v in (raw_type, raw_year) if v is not None]
+    year = next((v for v in values if _is_year(v)), None)
+    item_type = next((v.capitalize() for v in values if v.lower() in _RELEASE_TYPES), None)
+    if item_type is None and raw_type is not None and not str(raw_type).strip().isdigit():
+        item_type = str(raw_type).strip()  # an unknown type string, kept as is
+
+    thumbnails = normalize_thumbnails(item.get("thumbnails"))
+    return {
+        "id": item.get("browseId") or item.get("id") or "",
+        "playlistId": item.get("audioPlaylistId") or item.get("playlistId") or "",
+        "title": str(item.get("title") or item.get("name") or ""),
+        "thumbnails": thumbnails,
+        "thumbnail": pick_best_thumbnail_url(thumbnails),
+        "type": item_type or "Album",
         "year": year,
     }
-
-
-def normalize_artist_entry(raw: Any) -> Dict[str, Optional[str]]:
-    """
-    Normalize an artist entry which can be:
-      - dict with 'browseId'/'id' and 'name'/'title'
-      - string name
-      - dict with nested browseEndpoint
-    Returns { 'id': Optional[str], 'name': Optional[str] }
-    """
-    if raw is None:
-        return {"id": None, "name": None}
-    try:
-        if isinstance(raw, str):
-            return {"id": None, "name": raw}
-        if isinstance(raw, dict):
-            # look for several possible keys
-            aid = raw.get("id") or raw.get("browseId") or raw.get("channelId") or None
-            name = raw.get("name") or raw.get("title") or None
-            # sometimes it's nested inside navigationEndpoint -> browseEndpoint
-            if not aid:
-                nav = raw.get("navigationEndpoint") or {}
-                if isinstance(nav, dict):
-                    be = nav.get("browseEndpoint") or {}
-                    if isinstance(be, dict):
-                        aid = be.get("browseId") or aid
-            return {"id": str(aid) if aid is not None else None, "name": str(name) if name is not None else None}
-    except Exception:
-        logger.exception("normalize_artist_entry failed for %r", raw)
-    return {"id": None, "name": None}
-
-
-def normalize_track_item(raw: Any) -> Dict[str, Optional[Any]]:
-    """
-    Standardizes different YT Music track objects into a consistent schema
-    """
-    out: Dict[str, Optional[Any]] = {
-        "id": None,
-        "title": None,
-        "artists": [],
-        "duration_seconds": None,
-        "track_number": None,
-        "album": {},
-        "thumbnails": [],  # Add this line
-    }
-    try:
-        if raw is None:
-            return out
-        if isinstance(raw, dict):
-            # ID
-            vid = raw.get("videoId") or raw.get("id") or raw.get("video_id")
-            out["id"] = str(vid) if vid is not None else None
-            # TITLE
-            title = raw.get("title") or raw.get("name")
-            out["title"] = str(title) if title is not None else None
-            # ARTISTS
-            artists_src = (
-                raw.get("artists")
-                or raw.get("artist")
-                or raw.get("artistsList")
-                or []
-            )
-            artists_list = []
-            if isinstance(artists_src, list):
-                for a in artists_src:
-                    artists_list.append(normalize_artist_entry(a))
-            elif isinstance(artists_src, dict):
-                artists_list.append(normalize_artist_entry(artists_src))
-            elif isinstance(artists_src, str):
-                artists_list.append({"id": None, "name": artists_src})
-            out["artists"] = artists_list
-            # ALBUM
-            album_raw = raw.get("album")
-            if isinstance(album_raw, dict):
-                out["album"] = {
-                    "id": album_raw.get("id"),
-                    "name": album_raw.get("name")
-                }
-            # THUMBNAILS - Add this section
-            out["thumbnails"] = raw.get("thumbnails", [])
-            
-            # DURATION
-            dur = raw.get("duration_seconds")
-            try:
-                out["duration_seconds"] = int(dur) if dur is not None else None
-            except Exception:
-                out["duration_seconds"] = None
-            # TRACK NUMBER
-            tn = raw.get("trackNumber")
-            try:
-                out["track_number"] = int(tn) if tn is not None else None
-            except Exception:
-                out["track_number"] = None
-            return out
-        # string fallback
-        if isinstance(raw, str):
-            out["title"] = raw
-            return out
-    except Exception:
-        logger.exception("normalize_track_item failed for %r", raw)
-    return out

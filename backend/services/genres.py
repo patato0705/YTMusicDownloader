@@ -46,7 +46,6 @@ from __future__ import annotations
 import logging
 import re
 import time
-import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -56,8 +55,12 @@ import requests
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from ..models import Album, Artist, ArtistSubscription, Job
-from ..settings import get_setting
+from .. import config
+from ..jobs.jobqueue import enqueue_job, pending_jobs
+from ..jobs.priorities import promote
+from ..models import Album, Artist, ArtistSubscription
+from ..settings import feature_enabled
+from ..text_utils import fold
 from ..time_utils import now_utc
 
 logger = logging.getLogger("services.genres")
@@ -72,13 +75,8 @@ class GenreSourceUnavailable(Exception):
     """A source failed in a way that may pass (network, 5xx, rate limit): retry later."""
 
 
-def _user_agent() -> str:
-    # MusicBrainz asks every client to name itself and give a contact
-    try:
-        from ..ytm_service import __version__ as version
-    except Exception:
-        version = "unknown"
-    return f"YTMusicDownloader/{version} ( https://github.com/patato0705/YTMusicDownloader )"
+# MusicBrainz asks every client to name itself and give a contact
+_USER_AGENT = f"YTMusicDownloader/{config.APP_VERSION} ( https://github.com/patato0705/YTMusicDownloader )"
 
 
 # ============================================================================
@@ -99,7 +97,7 @@ class _MusicBrainz:
     def __init__(self) -> None:
         self._last = 0.0
         self._http = requests.Session()
-        self._http.headers.update({"User-Agent": _user_agent(), "Accept": "application/json"})
+        self._http.headers.update({"User-Agent": _USER_AGENT, "Accept": "application/json"})
 
     def get(self, path: str, **params: Any) -> Optional[Dict[str, Any]]:
         """GET a ws/2 resource as JSON; None when it doesn't exist (404)."""
@@ -140,7 +138,7 @@ class _Deezer:
         self._http = requests.Session()
         # Genre names are translated to the server's location otherwise
         # ("Chanson française", "Films/Jeux vidéo")
-        self._http.headers.update({"User-Agent": _user_agent(), "Accept-Language": "en"})
+        self._http.headers.update({"User-Agent": _USER_AGENT, "Accept-Language": "en"})
         self._genre_names: Optional[Dict[int, str]] = None
 
     def get(self, path: str, **params: Any) -> Optional[Dict[str, Any]]:
@@ -207,13 +205,6 @@ def title_case(genre: str) -> str:
     return " ".join(words)
 
 
-def _norm(text: Optional[str]) -> str:
-    """Case, accents and punctuation ignored: "Destinée, Vol. 2" -> "destinee vol 2"."""
-    text = unicodedata.normalize("NFKD", text or "")
-    text = "".join(c for c in text if not unicodedata.combining(c)).casefold()
-    return " ".join(re.sub(r"[^\w\s]", " ", text).split())
-
-
 _EDITION_WORDS = (
     "deluxe", "edition", "remaster", "remastered", "anniversary", "expanded",
     "bonus", "version", "explicit", "clean", "special", "collector", "reissue",
@@ -228,13 +219,13 @@ def _title_keys(title: Optional[str]) -> Tuple[str, str]:
     "Random Access Memories (10th Anniversary Edition)" matches
     "Random Access Memories" on the second.
     """
-    full = _norm(title)
+    full = fold(title)
 
     def drop_edition(match: re.Match) -> str:
         return "" if any(w in match.group(1).casefold() for w in _EDITION_WORDS) else match.group(0)
 
     base = _DASH_EDITION.sub("", _BRACKETED.sub(drop_edition, title or ""))
-    return full, (_norm(base) or full)
+    return full, (fold(base) or full)
 
 
 @dataclass
@@ -351,7 +342,7 @@ def _dz_find_artist(
         return known_id, _dz_albums(known_id)
     found = _deezer.get("search/artist", q=name, limit=5) or {}
     # Deezer's search is fuzzy: same name only, then the album check
-    candidates = [a for a in found.get("data") or [] if _norm(a.get("name")) == _norm(name)][:3]
+    candidates = [a for a in found.get("data") or [] if fold(a.get("name")) == fold(name)][:3]
     for candidate in candidates:
         releases = _dz_albums(str(candidate["id"]))
         if _shares_an_album(our_titles, releases):
@@ -435,25 +426,11 @@ def lookup_artist(
 # WHEN (DB)
 # ============================================================================
 
-def genres_enabled(session: Session) -> bool:
-    return bool(get_setting(session, "features.genres_enabled", True))
-
-
 def _due_condition(cutoff):
     """SQL condition on Artist: never looked up, looked up too long ago, or
     an album that wasn't there at the last lookup."""
-    unchecked_album = select(Album.id).where(Album.artist_id == Artist.id, Album.genres_checked_at == None).exists()  # noqa: E711
-    return or_(Artist.genres_checked_at == None, Artist.genres_checked_at < cutoff, unchecked_album)  # noqa: E711
-
-
-def _pending_lookup(session: Session, artist_id: str, statuses: Tuple[str, ...]) -> Optional[Job]:
-    return session.execute(
-        select(Job).where(
-            Job.type == "fetch_genres",
-            Job.status.in_(statuses),
-            Job.payload["artist_id"].as_string() == artist_id,
-        )
-    ).scalars().first()
+    unchecked_album = select(Album.id).where(Album.artist_id == Artist.id, Album.genres_checked_at.is_(None)).exists()
+    return or_(Artist.genres_checked_at.is_(None), Artist.genres_checked_at < cutoff, unchecked_album)
 
 
 def queue_lookup(session: Session, artist_id: str, *, origin, from_lookup: bool = False) -> bool:
@@ -466,14 +443,12 @@ def queue_lookup(session: Session, artist_id: str, *, origin, from_lookup: bool 
     meanwhile, if any, get a follow-up lookup. Does not commit. Returns
     whether a job was queued.
     """
-    from ..jobs.jobqueue import enqueue_job
-    from ..jobs.priorities import promote
-
-    if not artist_id or not genres_enabled(session):
+    if not artist_id or not feature_enabled(session, "genres"):
         return False
-    waiting = _pending_lookup(session, artist_id, ("queued",) if from_lookup else ("queued", "reserved"))
+    statuses = ("queued",) if from_lookup else ("queued", "reserved")
+    waiting = pending_jobs(session, "fetch_genres", statuses=statuses, artist_id=artist_id)
     if waiting:
-        promote(waiting, origin)
+        promote(waiting[0], origin)
         return False
     due = session.execute(
         select(Artist.id).where(Artist.id == artist_id, _due_condition(now_utc() - REFRESH_AFTER))

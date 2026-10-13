@@ -1,97 +1,43 @@
 # backend/secrets.py
 """
-Manage security-sensitive configuration (JWT secret, etc).
-Generates and persists secrets to a JSON file on first startup.
+The JWT signing key, generated on first use and kept in
+CONFIG_DIR/secrets.json so sessions survive restarts. Only the web process
+signs and checks tokens, so only it ever reads (or creates) the file.
 """
 from __future__ import annotations
+import functools
 import json
 import logging
+import os
 import secrets
-from pathlib import Path
-from typing import Dict, Any
 
 from . import config
 
 logger = logging.getLogger("secrets")
 
-SECRETS_FILE = config.CONFIG_DIR / "secrets.json"
 
-
-def generate_jwt_secret() -> str:
-    """Generate a cryptographically secure JWT secret key"""
-    return secrets.token_urlsafe(64)
-
-
-def load_secrets() -> Dict[str, Any]:
+@functools.cache
+def jwt_secret() -> str:
     """
-    Load secrets from file. If file doesn't exist, generate and save defaults.
-    
-    Returns:
-        Dict with at minimum: {"jwt_secret": "..."}
+    The key, read once per process. Raises if a new one can't be saved:
+    an unsaved key would sign everyone out at every restart.
     """
-    if not SECRETS_FILE.exists():
-        logger.info("Secrets file not found, generating new secrets")
-        return _generate_and_save_secrets()
-    
+    path = config.CONFIG_DIR / "secrets.json"
     try:
-        with open(SECRETS_FILE, "r") as f:
-            data = json.load(f)
-        
-        # Validate required keys
-        if not data.get("jwt_secret"):
-            logger.warning("jwt_secret missing from secrets file, regenerating")
-            return _generate_and_save_secrets()
-        
-        logger.info("Loaded secrets from %s", SECRETS_FILE)
-        return data
-    
-    except Exception as e:
-        logger.exception(f"Failed to load secrets file: {e}")
-        logger.warning("Regenerating secrets")
-        return _generate_and_save_secrets()
+        secret = json.loads(path.read_text(encoding="utf-8")).get("jwt_secret")
+        if secret:
+            return secret
+        logger.warning("No jwt_secret in %s, generating a new one", path)
+    except FileNotFoundError:
+        logger.info("No %s yet, generating the JWT signing key", path)
+    except (OSError, ValueError, AttributeError) as e:
+        logger.warning("Unreadable %s (%s), generating a new key: every session is signed out", path, e)
 
-
-def _generate_and_save_secrets() -> Dict[str, Any]:
-    """Generate fresh secrets and save to file"""
-    secrets_data = {
-        "jwt_secret": generate_jwt_secret(),
-        # Add other secrets here as needed
-        # "api_key": secrets.token_urlsafe(32),
-    }
-    
-    try:
-        # Ensure config directory exists
-        config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        
-        # Write with restricted permissions (readable only by owner)
-        with open(SECRETS_FILE, "w") as f:
-            json.dump(secrets_data, f, indent=2)
-        
-        # Set file permissions to 600 (owner read/write only) on Unix
-        try:
-            SECRETS_FILE.chmod(0o600)
-        except Exception:
-            pass  # Windows doesn't support this
-        
-        logger.info("Generated and saved new secrets to %s - losing this file will invalidate all JWT tokens!", SECRETS_FILE)
-        
-        return secrets_data
-    
-    except Exception as e:
-        logger.exception(f"Failed to save secrets: {e}")
-        # Return generated secrets even if save failed (so app can start)
-        return secrets_data
-
-
-def get_jwt_secret() -> str:
-    """Get JWT secret key (loads from file if needed)"""
-    return load_secrets()["jwt_secret"]
-
-
-# Load secrets on module import
-_SECRETS = load_secrets()
-
-
-def get_secret(key: str, default: Any = None) -> Any:
-    """Get a secret value by key"""
-    return _SECRETS.get(key, default)
+    secret = secrets.token_urlsafe(64)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Readable by the app's user only, from the moment it exists
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump({"jwt_secret": secret}, f, indent=2)
+    logger.info("Saved a new JWT signing key to %s: losing this file signs everyone out", path)
+    return secret

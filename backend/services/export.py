@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from .. import config
 from .. import settings as settings_module
 from ..models import (
-    Artist, Album, Track, ArtistSubscription, ChartSubscription, User, Setting,
+    Artist, Album, Track, ArtistSubscription, User, Setting,
     DismissedRecommendation, Playlist, PlaylistEntry,
 )
 from ..schemas.export import (
@@ -33,7 +33,6 @@ from ..schemas.export import (
     SettingsImportResult,
 )
 from ..time_utils import now_utc
-from ..jobs.jobqueue import enqueue_job
 # Everything a restore queues is BULK (see jobs/priorities.py): a whole
 # library's worth of work, which shouldn't hold up what users ask for while
 # it runs. Users and settings are written directly, never queued.
@@ -44,6 +43,7 @@ from . import albums as albums_svc
 from . import tracks as tracks_svc
 from . import charts as charts_svc
 from . import auth as auth_svc
+from . import playlists as playlists_svc
 
 logger = logging.getLogger("services.export")
 
@@ -91,14 +91,6 @@ def resolve_music_path(value: Optional[str]) -> Optional[Path]:
     return full
 
 
-def _app_version() -> str:
-    try:
-        from ..ytm_service import __version__
-        return str(__version__)
-    except Exception:
-        return "unknown"
-
-
 # ============================================================================
 # EXPORT
 # ============================================================================
@@ -106,7 +98,7 @@ def _app_version() -> str:
 def _document_shell() -> Dict[str, Any]:
     return {
         "format_version": FORMAT_VERSION,
-        "app_version": _app_version(),
+        "app_version": config.APP_VERSION,
         "exported_at": now_utc().isoformat(),
     }
 
@@ -275,7 +267,7 @@ def build_settings_section(session: Session) -> List[Dict[str, Any]]:
     # Internal keys (e.g. download.paused_until) are transient state, not
     # preferences -- carrying them over to another install makes no sense.
     return [
-        {"key": s.key, "type": s.type, "value": s.get_typed_value()}
+        {"key": s.key, "value": s.get_typed_value()}
         for s in settings
         if not settings_module.is_internal(s.key)
     ]
@@ -323,10 +315,10 @@ def build_backup_export(
 def _import_settings(session: Session, doc: ExportDocument, user_id: Optional[int], warnings: List[ImportWarning]) -> SettingsImportResult:
     result = SettingsImportResult()
     for item in doc.settings or []:
-        # Only keys this build knows about, each through the same validation
-        # the settings panel uses. Unknown keys are the compatibility story
-        # between app versions.
-        if item.key not in settings_module.DEFAULT_SETTINGS:
+        # Only the keys this build knows about, and not its bookkeeping, each
+        # through the same validation the settings panel uses. Unknown keys
+        # are the compatibility story between app versions.
+        if not settings_module.is_user_setting(item.key):
             result.ignored.append(item.key)
             continue
         try:
@@ -493,22 +485,14 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
             result.artists_existing += 1
             continue
 
-        artists_svc.upsert_artist(session, artist_id=item.id, name=item.name)
-        subs_svc.subscribe_to_artist(session, artist_id=item.id, mode=item.mode)
         if item.mode == "full":
+            # A light one upgraded: its sync switches the albums to download
+            subs_svc.follow_artist(session, item.id, item.name, user_id=user_id, origin=Origin.BULK)
             full_artists.add(item.id)
-            if old_mode == "light":
-                subs_svc.upgrade_all_albums_to_download(
-                    session, item.id, user_id=user_id, origin=Origin.BULK
-                )
-        enqueue_job(
-            session,
-            job_type="sync_artist",
-            payload={"artist_id": item.id},
-            origin=Origin.BULK,
-            user_id=user_id,
-            commit=False,
-        )
+        else:
+            artists_svc.upsert_artist(session, artist_id=item.id, name=item.name)
+            subs_svc.subscribe_to_artist(session, artist_id=item.id, mode="light")
+            subs_svc.queue_artist_sync(session, item.id, user_id=user_id, origin=Origin.BULK)
         result.artists_followed += 1
     session.flush()
 
@@ -527,32 +511,19 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
             artists_svc.upsert_artist(session, artist_id=item.artist_id, name=item.artist_name)
             if not subs_svc.get_artist_subscription(session, item.artist_id):
                 subs_svc.subscribe_to_artist(session, artist_id=item.artist_id, mode="light")
-                enqueue_job(
-                    session,
-                    job_type="sync_artist",
-                    payload={"artist_id": item.artist_id},
-                    origin=Origin.BULK,
-                    user_id=user_id,
-                    commit=False,
-                )
+                subs_svc.queue_artist_sync(session, item.artist_id, user_id=user_id, origin=Origin.BULK)
 
         album = albums_svc.upsert_album(session, album_id=item.id, title=item.title, artist_id=item.artist_id)
         album.mode = "download"
-        enqueue_job(
-            session,
-            job_type="import_album",
-            payload={"browse_id": item.id, "artist_id": item.artist_id},
-            origin=Origin.BULK,
-            user_id=user_id,
-            commit=False,
+        subs_svc.queue_album_imports(
+            session, [item.id], artist_id=item.artist_id, user_id=user_id, origin=Origin.BULK
         )
         result.albums_queued += 1
     session.flush()
 
     # --- Charts ---
     if library.charts:
-        charts_enabled = bool(settings_module.get_setting(session, "features.charts_enabled", True))
-        if not charts_enabled:
+        if not settings_module.feature_enabled(session, "charts"):
             result.charts_skipped = len(library.charts)
             warnings.append(ImportWarning(code="charts_disabled"))
         else:
@@ -575,10 +546,8 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
                     sub.enabled = False
                 result.charts_created += 1
 
-    # --- Artists dismissed from recommendations ---
     # --- Playlists: their songs as exported, then a BULK scan that brings
     # in their albums or artists (and fetches a followed one again) ---
-    from . import playlists as playlists_svc
     seen_playlists: set[str] = set()
     for item in library.playlists:
         if item.id in seen_playlists or session.get(Playlist, item.id):
@@ -601,6 +570,7 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
         playlists_svc.queue_sync(session, playlist, origin=Origin.BULK, fetch=True)
         result.playlists_added += 1
 
+    # --- Artists dismissed from recommendations ---
     seen_dismissed: set[str] = set()
     for item in library.dismissed_recommendations:
         if item.id in seen_dismissed or session.get(DismissedRecommendation, item.id):

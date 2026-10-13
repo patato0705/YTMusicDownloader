@@ -21,7 +21,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   // On mount there's no access token in memory yet (it's never persisted
-  // across reloads by design) -- try to silently re-acquire one via the
+  // across reloads by design): try to silently re-acquire one via the
   // httpOnly refresh_token cookie before deciding the user is logged out.
   useEffect(() => {
     const loadUser = async () => {

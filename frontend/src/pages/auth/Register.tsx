@@ -3,164 +3,72 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
+import { AuthCard, AuthLayout } from '../../components/layout/AuthLayout';
 import { Button } from '../../components/ui/Button';
+import { FormField, inputClass } from '../../components/ui/FormField';
 import { PasswordInput } from '../../components/ui/PasswordInput';
+import { ErrorBanner, LoadingState } from '../../components/ui/PageStatus';
 import * as authApi from '../../api/auth';
-import { getUsernameError, getPasswordError } from '../../utils';
+import { confirmErrorKey, invalidFields, passwordErrorKey, usernameErrorKey } from '../../utils';
 
-export const Register: React.FC = () => {
+export default function Register(): JSX.Element {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
-  const [usernameError, setUsernameError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  // null while checking whether public registration is on
   const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
-  const [checkingRegistration, setCheckingRegistration] = useState(true);
-  
+
   const { login, isAuthenticated } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
+  const keyText = (key: string | null) => (key ? t(key) : '');
 
-  // Redirect if already logged in
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/');
-    }
+    if (isAuthenticated) navigate('/');
   }, [isAuthenticated, navigate]);
 
-  // Check if registration is enabled using public API endpoint
   useEffect(() => {
-    const checkRegistration = async () => {
-      try {
-        const authConfig = await authApi.getAuthConfig();
-        setRegistrationEnabled(authConfig.registration_enabled);
-      } catch (err) {
+    authApi.getAuthConfig()
+      .then((config) => setRegistrationEnabled(config.registration_enabled))
+      .catch((err) => {
         console.error('Failed to check registration status:', err);
-        // On error, assume enabled - backend will validate on submit
+        // Shown anyway: the backend refuses the submit if it's off
         setRegistrationEnabled(true);
-      } finally {
-        setCheckingRegistration(false);
-      }
-    };
-
-    checkRegistration();
+      });
   }, []);
-
-  // Validate username
-  const validateUsername = (name: string) => {
-    const reason = getUsernameError(name);
-    if (reason === 'too_short') {
-      setUsernameError(t('auth.errors.usernameTooShort'));
-    } else if (reason === 'too_long') {
-      setUsernameError(t('auth.errors.usernameTooLong'));
-    } else if (reason === 'invalid_chars') {
-      setUsernameError(t('auth.errors.usernameInvalidChars'));
-    } else {
-      setUsernameError('');
-    }
-  };
-
-  // Validate password
-  const validatePassword = (pass: string) => {
-    if (getPasswordError(pass) === 'too_short') {
-      setPasswordError(t('auth.errors.passwordTooShort'));
-    } else {
-      setPasswordError('');
-    }
-  };
-
-  // Validate confirm password
-  const validateConfirmPassword = (confirm: string) => {
-    if (confirm && password && confirm !== password) {
-      setConfirmError(t('auth.errors.passwordMismatch'));
-    } else {
-      setConfirmError('');
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setUsernameError('');
-    setPasswordError('');
-    setConfirmError('');
 
-    // Check for empty fields
-    if (!username) {
-      setUsernameError(t('auth.errors.usernameRequired'));
-      return;
-    }
-
-    if (!password) {
-      setPasswordError(t('auth.errors.passwordRequired'));
-      return;
-    }
-
-    if (!confirmPassword) {
-      setConfirmError(t('auth.errors.confirmPasswordRequired'));
-      return;
-    }
-
-    // Validate username length
-    if (username.length < 3) {
-      setUsernameError(t('auth.errors.usernameTooShort'));
-      return;
-    }
-    if (username.length > 64) {
-      setUsernameError(t('auth.errors.usernameTooLong'));
-      return;
-    }
-    if (getUsernameError(username) === 'invalid_chars') {
-      setUsernameError(t('auth.errors.usernameInvalidChars'));
-      return;
-    }
-
-    // Validate password length
-    if (password.length < 8) {
-      setPasswordError(t('auth.errors.passwordTooShort'));
-      return;
-    }
-
-    // Validate password match
-    if (password !== confirmPassword) {
-      setConfirmError(t('auth.errors.passwordMismatch'));
-      return;
-    }
+    const usernameProblem = keyText(usernameErrorKey(username, 'auth.errors.usernameRequired'));
+    const passwordProblem = keyText(passwordErrorKey(password, 'auth.errors.passwordRequired'));
+    const confirmProblem = keyText(confirmErrorKey(confirmPassword, password, 'auth.errors.confirmPasswordRequired'));
+    setUsernameError(usernameProblem);
+    setPasswordError(passwordProblem);
+    setConfirmError(confirmProblem);
+    if (usernameProblem || passwordProblem || confirmProblem) return;
 
     setIsLoading(true);
-
     try {
       await authApi.register({ username, password });
-
-      // Auto-login after registration
       await login(username, password);
       navigate('/');
     } catch (err: any) {
-      const data = err.data;
-
-      // Route field-specific errors from FastAPI validation
-      if (data?.detail && Array.isArray(data.detail)) {
-        let hasFieldError = false;
-        data.detail.forEach((e: any) => {
-          const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
-
-          // Form validation mirrors the backend rules, so this is only a safety
-          // net — show a localized generic message rather than Pydantic's English msg
-          if (field === 'username') {
-            setUsernameError(t('auth.errors.usernameInvalid'));
-            hasFieldError = true;
-          } else if (field === 'password') {
-            setPasswordError(t('auth.errors.passwordInvalid'));
-            hasFieldError = true;
-          }
-        });
-        if (!hasFieldError) setError(t('auth.errors.registrationFailed'));
+      // The checks above mirror the backend's, so a 422 is only a safety
+      // net: a translated message rather than the validator's English one
+      const fields = invalidFields(err);
+      if (fields.has('username') || fields.has('password')) {
+        if (fields.has('username')) setUsernameError(t('auth.errors.usernameInvalid'));
+        if (fields.has('password')) setPasswordError(t('auth.errors.passwordInvalid'));
       } else if (err?.status === 403) {
         setError(t('auth.register.disabled.message'));
-      } else if (err?.status === 409 && data?.detail === 'username_taken') {
+      } else if (err?.status === 409 && err.data?.detail === 'username_taken') {
         setUsernameError(t('auth.errors.usernameTaken'));
       } else {
         setError(t('auth.errors.registrationFailed'));
@@ -170,237 +78,105 @@ export const Register: React.FC = () => {
     }
   };
 
-  // Loading state while checking registration
-  if (checkingRegistration) {
+  if (registrationEnabled === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden bg-background">
-        <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-        
-        <div className="relative z-10 text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 dark:border-red-500 border-t-transparent" />
-          <p className="text-muted-foreground mt-4">{t('common.loading')}</p>
-        </div>
-      </div>
+      <AuthLayout>
+        <LoadingState />
+      </AuthLayout>
     );
   }
 
-  // Registration disabled state
-  if (registrationEnabled === false) {
+  if (!registrationEnabled) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden bg-background">
-        {/* Background effects */}
-        <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-        
-        {/* Static background orbs */}
-        <div className="fixed top-20 left-20 w-96 h-96 bg-blue-500/20 dark:bg-red-500/20 rounded-full blur-3xl" />
-        <div className="fixed bottom-20 right-20 w-96 h-96 bg-indigo-500/20 dark:bg-red-700/20 rounded-full blur-3xl" />
-        
-        {/* Main content */}
-        <div className="relative z-10 max-w-md w-full">
-          <div className="glass rounded-3xl p-8 md:p-10 border-gradient shadow-2xl text-center">
-            <div className="mb-6">
-              <div className="w-20 h-20 mx-auto rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center mb-4">
-                <span className="text-4xl">🔒</span>
-              </div>
-              <h1 className="text-3xl font-bold mb-3">
-                <span className="text-gradient">{t('auth.register.disabled.title')}</span>
-              </h1>
-              <p className="text-muted-foreground mb-6">
-                {t('auth.register.disabled.message')}
-              </p>
-            </div>
-
-            <Link to="/login">
-              <Button variant="primary" size="lg" className="w-full">
-                {t('auth.register.disabled.goToLogin')}
-              </Button>
-            </Link>
+      <AuthLayout>
+        <AuthCard className="text-center">
+          <div className="w-20 h-20 mx-auto rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center mb-4">
+            <span className="text-4xl" aria-hidden="true">🔒</span>
           </div>
-        </div>
-      </div>
+          <h1 className="text-3xl font-bold mb-3">
+            <span className="text-gradient">{t('auth.register.disabled.title')}</span>
+          </h1>
+          <p className="text-muted-foreground mb-6">{t('auth.register.disabled.message')}</p>
+          <Button variant="primary" size="lg" className="w-full" onClick={() => navigate('/login')}>
+            {t('auth.register.disabled.goToLogin')}
+          </Button>
+        </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden bg-background">
-      {/* Background effects */}
-      <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-      <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-      
-      {/* Static background orbs */}
-      <div className="fixed top-20 left-20 w-96 h-96 bg-blue-500/20 dark:bg-red-500/20 rounded-full blur-3xl" />
-      <div className="fixed bottom-20 right-20 w-96 h-96 bg-indigo-500/20 dark:bg-red-700/20 rounded-full blur-3xl" />
-      
-      {/* Main content */}
-      <div className="relative z-10 max-w-md w-full">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            <span className="text-gradient">{t('auth.register.title')}</span>
-          </h1>
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent to-blue-500 dark:to-red-500" />
-            <span className="text-xl">✨</span>
-            <div className="h-px flex-1 bg-gradient-to-l from-transparent to-blue-500 dark:to-red-500" />
+    <AuthLayout title={t('auth.register.title')} emoji="✨" subtitle={t('auth.register.subtitle')}>
+      <AuthCard>
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          {error && <ErrorBanner>{error}</ErrorBanner>}
+
+          <FormField id="username" label={t('auth.register.username')} error={usernameError} hint={t('auth.register.usernameHint')}>
+            <input
+              id="username"
+              type="text"
+              autoComplete="username"
+              required
+              value={username}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                setUsernameError(keyText(usernameErrorKey(e.target.value)));
+              }}
+              className={inputClass(usernameError)}
+              placeholder={t('auth.register.username')}
+              disabled={isLoading}
+            />
+          </FormField>
+
+          <FormField id="password" label={t('auth.register.password')} error={passwordError} hint={t('auth.errors.passwordTooShort')}>
+            <PasswordInput
+              id="password"
+              autoComplete="new-password"
+              required
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setPasswordError(keyText(passwordErrorKey(e.target.value)));
+              }}
+              className={inputClass(passwordError)}
+              placeholder="••••••••"
+              disabled={isLoading}
+            />
+          </FormField>
+
+          <FormField id="confirmPassword" label={t('auth.register.confirmPassword')} error={confirmError}>
+            <PasswordInput
+              id="confirmPassword"
+              autoComplete="new-password"
+              required
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                setConfirmError(keyText(confirmErrorKey(e.target.value, password)));
+              }}
+              className={inputClass(confirmError)}
+              placeholder="••••••••"
+              disabled={isLoading}
+            />
+          </FormField>
+
+          <Button type="submit" variant="primary" size="lg" isLoading={isLoading} className="w-full mt-6">
+            {isLoading ? t('auth.register.loading') : t('auth.register.button')}
+          </Button>
+
+          <div className="text-center pt-4 border-t border-slate-200 dark:border-white/10">
+            <p className="text-sm text-muted-foreground">
+              {t('auth.register.hasAccount')}{' '}
+              <Link
+                to="/login"
+                className="font-semibold text-blue-600 dark:text-red-400 hover:text-blue-700 dark:hover:text-red-300 transition-colors"
+              >
+                {t('auth.register.login')}
+              </Link>
+            </p>
           </div>
-          <p className="text-muted-foreground text-lg">{t('auth.register.subtitle')}</p>
-        </div>
-
-        {/* Register form */}
-        <div className="glass rounded-3xl p-8 md:p-10 border-gradient shadow-2xl">
-          <form onSubmit={handleSubmit} noValidate className="space-y-5">
-            {/* Error message */}
-            {error && (
-              <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-4 border border-red-500/20">
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">⚠️</span>
-                  <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Username field */}
-            <div>
-              <label htmlFor="username" className="block text-sm font-semibold text-foreground mb-2">
-                {t('auth.register.username')}
-              </label>
-              <input
-                id="username"
-                type="text"
-                autoComplete="username"
-                required
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  if (e.target.value) {
-                    validateUsername(e.target.value);
-                  } else {
-                    setUsernameError('');
-                  }
-                }}
-                onBlur={(e) => validateUsername(e.target.value)}
-                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
-                  usernameError 
-                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
-                } focus:border-transparent transition-all duration-300`}
-                placeholder={t('auth.register.username')}
-                disabled={isLoading}
-              />
-              {usernameError ? (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                  <span>⚠️</span>
-                  {usernameError}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  {t('auth.register.usernameHint')}
-                </p>
-              )}
-            </div>
-
-            {/* Password field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-foreground mb-2">
-                {t('auth.register.password')}
-              </label>
-              <PasswordInput
-                id="password"
-                autoComplete="new-password"
-                required
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (e.target.value) {
-                    validatePassword(e.target.value);
-                  } else {
-                    setPasswordError('');
-                  }
-                }}
-                onBlur={(e) => validatePassword(e.target.value)}
-                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
-                  passwordError 
-                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
-                } focus:border-transparent transition-all duration-300`}
-                placeholder="••••••••"
-                disabled={isLoading}
-              />
-              {passwordError ? (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                  <span>⚠️</span>
-                  {passwordError}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  {t('auth.errors.passwordTooShort')}
-                </p>
-              )}
-            </div>
-
-            {/* Confirm password field */}
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-foreground mb-2">
-                {t('auth.register.confirmPassword')}
-              </label>
-              <PasswordInput
-                id="confirmPassword"
-                autoComplete="new-password"
-                required
-                value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                  if (e.target.value) {
-                    validateConfirmPassword(e.target.value);
-                  } else {
-                    setConfirmError('');
-                  }
-                }}
-                onBlur={(e) => validateConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
-                  confirmError 
-                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
-                } focus:border-transparent transition-all duration-300`}
-                placeholder="••••••••"
-                disabled={isLoading}
-              />
-              {confirmError && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                  <span>⚠️</span>
-                  {confirmError}
-                </p>
-              )}
-            </div>
-
-            {/* Submit button */}
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              isLoading={isLoading}
-              className="w-full mt-6"
-            >
-              {isLoading ? t('auth.register.loading') : t('auth.register.button')}
-            </Button>
-
-            {/* Login link */}
-            <div className="text-center pt-4 border-t border-slate-200 dark:border-white/10">
-              <p className="text-sm text-muted-foreground">
-                {t('auth.register.hasAccount')}{' '}
-                <Link 
-                  to="/login" 
-                  className="font-semibold text-blue-600 dark:text-red-400 hover:text-blue-700 dark:hover:text-red-300 transition-colors"
-                >
-                  {t('auth.register.login')}
-                </Link>
-              </p>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+        </form>
+      </AuthCard>
+    </AuthLayout>
   );
-};
+}

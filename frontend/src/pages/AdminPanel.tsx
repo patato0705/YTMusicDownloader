@@ -1,40 +1,26 @@
 // src/pages/AdminPanel.tsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useI18n } from '../contexts/I18nContext';
+import { useFeatures } from '../contexts/FeaturesContext';
 import { PageHero } from '../components/ui/PageHero';
 import { Toast } from '../components/ui/Toast';
+import { FilterTabs } from '../components/ui/FilterTabs';
+import type { FilterTab } from '../components/ui/FilterTabs';
 import { UsersTab } from '../components/admin/UsersTab';
 import { ChartsTab } from '../components/admin/ChartsTab';
 import { SettingsTab } from '../components/admin/SettingsTab';
 import { BackupTab } from '../components/admin/BackupTab';
-import { getFeatures } from '../api/features';
-import type { Features } from '../api/features';
 
 type Tab = 'users' | 'charts' | 'settings' | 'backup';
 
+// Role gating happens in <ProtectedRoute adminOnly> around this route (App.tsx)
 export default function AdminPanel(): JSX.Element {
   const [activeTab, setActiveTab] = useState<Tab>('users');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-  // Feature flags (drive which tabs are shown)
-  const [features, setFeatures] = useState<Features | null>(null);
-
+  const { features, refreshFeatures } = useFeatures();
   const { t } = useI18n();
 
-  // Role gating happens in <ProtectedRoute requiredRole="administrator">
-  // around this route (see App.tsx) — a non-admin never mounts this component.
-
-  const loadFeatures = async () => {
-    try {
-      setFeatures(await getFeatures());
-    } catch (err) {
-      console.error('Failed to load feature flags:', err);
-    }
-  };
-
-  useEffect(() => { loadFeatures(); }, []);
-
-  const chartsEnabled = features?.charts_enabled ?? true;
+  const chartsEnabled = !!features?.charts_enabled;
 
   // Don't leave the user on a tab that just got switched off
   useEffect(() => {
@@ -43,66 +29,34 @@ export default function AdminPanel(): JSX.Element {
 
   const showToast = (message: string, type: 'success' | 'error') => setToast({ message, type });
 
-  const tabs: { id: Tab; icon: string; visible: boolean }[] = [
-    { id: 'users', icon: '👥', visible: true },
-    { id: 'charts', icon: '📊', visible: chartsEnabled },
-    { id: 'settings', icon: '⚙️', visible: true },
-    { id: 'backup', icon: '💾', visible: true },
+  const tabs: FilterTab<Tab>[] = [
+    { id: 'users', icon: '👥', label: t('admin.tabs.users') },
+    ...(chartsEnabled ? [{ id: 'charts' as const, icon: '📊', label: t('admin.tabs.charts') }] : []),
+    { id: 'settings', icon: '⚙️', label: t('admin.tabs.settings') },
+    { id: 'backup', icon: '💾', label: t('admin.tabs.backup') },
   ];
 
   return (
-    <div className="relative min-h-screen">
-      {/* Background effects */}
-      <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-      <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
+    <div className="space-y-8 pb-12">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Toast notification */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+      <PageHero
+        title={
+          <>
+            <span className="text-foreground">{t('admin.title')} </span>
+            <span className="text-gradient">{t('admin.panel')}</span>
+          </>
+        }
+        subtitle={t('admin.subtitle')}
+      />
 
-      {/* Main content */}
-      <div className="relative z-10 space-y-8 pb-12">
-        {/* Page header */}
-        <PageHero
-          title={
-            <>
-              <span className="text-foreground">{t('admin.title')} </span>
-              <span className="text-gradient">{t('admin.panel')}</span>
-            </>
-          }
-          subtitle={t('admin.subtitle')}
-        />
+      <FilterTabs tabs={tabs} active={activeTab} onChange={setActiveTab} fill />
 
-        {/* Tab navigation */}
-        {/* Phones: four equal tabs with the icon above the label; sm+: the usual row */}
-        <div className="flex items-center gap-1 sm:gap-2 glass rounded-2xl p-2 w-full sm:w-fit">
-          {tabs.filter(tab => tab.visible).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-2 sm:px-6 py-2 sm:py-3 rounded-xl text-xs sm:text-base font-medium whitespace-nowrap transition-all duration-300 ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              <span>{t(`admin.tabs.${tab.id}`)}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content — each tab owns its data and state; switching remounts it */}
-        {activeTab === 'users' && <UsersTab onToast={showToast} />}
-        {activeTab === 'charts' && <ChartsTab onToast={showToast} />}
-        {activeTab === 'settings' && <SettingsTab onToast={showToast} onSaved={loadFeatures} />}
-        {activeTab === 'backup' && <BackupTab onToast={showToast} />}
-      </div>
+      {/* Each tab owns its data and state; switching remounts it */}
+      {activeTab === 'users' && <UsersTab onToast={showToast} />}
+      {activeTab === 'charts' && <ChartsTab onToast={showToast} />}
+      {activeTab === 'settings' && <SettingsTab onToast={showToast} onSaved={refreshFeatures} />}
+      {activeTab === 'backup' && <BackupTab onToast={showToast} />}
     </div>
   );
 }

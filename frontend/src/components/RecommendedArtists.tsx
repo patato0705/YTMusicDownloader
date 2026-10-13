@@ -18,9 +18,10 @@ import {
 } from '../api/recommendations';
 import type { RecommendedArtist, DismissedArtist } from '../api/recommendations';
 import { getImageUrl } from '../api/media';
-import MediaCard from './MediaCard';
+import { MediaCard } from './MediaCard';
 import { Artwork } from './ui/Artwork';
 import { Button } from './ui/Button';
+import { Modal } from './ui/Modal';
 import { SectionHeader } from './ui/SectionHeader';
 import { Toast } from './ui/Toast';
 import { createMemoryCache } from '../utils';
@@ -206,12 +207,6 @@ const DismissedArtistsModal: React.FC<DismissedArtistsModalProps> = ({ onClose, 
       });
   }, []);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const restore = async (artistId: string) => {
     setRestoring(artistId);
     await onRestore(artistId);
@@ -220,65 +215,48 @@ const DismissedArtistsModal: React.FC<DismissedArtistsModalProps> = ({ onClose, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="dismissed-artists-title"
-        className="glass rounded-3xl p-6 sm:p-8 max-w-md w-full max-h-[80vh] flex flex-col border-gradient shadow-2xl animate-in fade-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <h2 id="dismissed-artists-title" className="text-2xl font-bold text-gradient">
-            {t('browse.recommendations.dismissedTitle')}
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label={t('common.close')}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/10 transition-all text-sm"
-          >
-            ✕
-          </button>
-        </div>
-        <p className="text-sm text-muted-foreground mb-5">{t('browse.recommendations.dismissedDescription')}</p>
+    <Modal
+      title={t('browse.recommendations.dismissedTitle')}
+      onClose={onClose}
+      className="flex flex-col"
+    >
+      <p className="text-sm text-muted-foreground -mt-4 mb-5">{t('browse.recommendations.dismissedDescription')}</p>
 
-        <div className="overflow-y-auto -mx-2 px-2">
-          {dismissed === null ? null : dismissed.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">{t('browse.recommendations.noDismissed')}</p>
-          ) : (
-            <ul className="space-y-2">
-              {dismissed.map((artist) => (
-                <li key={artist.id} className="flex items-center gap-3 rounded-2xl p-2 hover:bg-slate-100/60 dark:hover:bg-white/5 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
-                    className="flex flex-1 min-w-0 items-center gap-3 text-left"
-                  >
-                    <Artwork
-                      src={getImageUrl(artist.thumbnail)}
-                      name={artist.name}
-                      seed={artist.id}
-                      className="w-11 h-11 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
-                    />
-                    <span className="font-medium text-foreground truncate">{artist.name}</span>
-                  </button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    isLoading={restoring === artist.id}
-                    disabled={restoring !== null}
-                    onClick={() => restore(artist.id)}
-                  >
-                    {t('browse.recommendations.restore')}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <div className="overflow-y-auto -mx-2 px-2">
+        {dismissed === null ? null : dismissed.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">{t('browse.recommendations.noDismissed')}</p>
+        ) : (
+          <ul className="space-y-2">
+            {dismissed.map((artist) => (
+              <li key={artist.id} className="flex items-center gap-3 rounded-2xl p-2 hover:bg-slate-100/60 dark:hover:bg-white/5 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
+                  className="flex flex-1 min-w-0 items-center gap-3 text-left"
+                >
+                  <Artwork
+                    src={getImageUrl(artist.thumbnail)}
+                    name={artist.name}
+                    seed={artist.id}
+                    className="w-11 h-11 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
+                  />
+                  <span className="font-medium text-foreground truncate">{artist.name}</span>
+                </button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  isLoading={restoring === artist.id}
+                  disabled={restoring !== null}
+                  onClick={() => restore(artist.id)}
+                >
+                  {t('browse.recommendations.restore')}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 };
 
-export default RecommendedArtists;

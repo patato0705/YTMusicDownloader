@@ -4,7 +4,6 @@ import { useI18n } from '../contexts/I18nContext';
 import { Artwork } from './ui/Artwork';
 import type { MediaStatus } from '../types';
 
-export type { MediaStatus };
 export type MediaKind = 'artist' | 'album' | 'track';
 
 interface MediaCardProps {
@@ -19,7 +18,7 @@ interface MediaCardProps {
   onSubtitleClick?: () => void;
   thumbnail?: string;
   type?: MediaKind;
-  /** Release type as reported by YTMusic ("Album", "EP", "Single") - only used when type is 'album' */
+  /** Release type as reported by YTMusic ("Album", "EP", "Single"), only used when type is 'album' */
   albumType?: string;
   year?: string;
   mediaStatus?: MediaStatus;
@@ -29,8 +28,8 @@ interface MediaCardProps {
   className?: string;
 }
 
-/** Status pip shown on the artwork - one entry per status, so the markup stays in one place */
-export const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
+/** The look of each status pip */
+const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
   labelKey: string;
   className: string;
   iconClassName?: string;
@@ -65,6 +64,25 @@ export const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
     path: 'M12 8v5m0 3.5h.01',
   },
 };
+
+/** Round badge telling a media status apart by colour and icon, with its name on hover */
+export const StatusPip: React.FC<{ status: NonNullable<MediaStatus>; className?: string }> = ({ status, className = '' }) => {
+  const { t } = useI18n();
+  const badge = STATUS_BADGES[status];
+  return (
+    <span
+      className={`flex w-6 h-6 shrink-0 items-center justify-center rounded-full ${badge.className} ${className}`}
+      title={t(badge.labelKey)}
+    >
+      <svg className={`w-3.5 h-3.5 text-white ${badge.iconClassName || ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={badge.path} />
+      </svg>
+    </span>
+  );
+};
+
+/** Translation key of a status's name */
+export const statusLabelKey = (status: NonNullable<MediaStatus>): string => STATUS_BADGES[status].labelKey;
 
 /**
  * Clickable text inside a card / row. The card itself is a button, which can't
@@ -105,7 +123,7 @@ export function albumTypeKey(albumType?: string): string {
   }
 }
 
-const MediaCard: React.FC<MediaCardProps> = ({
+export const MediaCard: React.FC<MediaCardProps> = ({
   id,
   title,
   subtitle,
@@ -123,11 +141,10 @@ const MediaCard: React.FC<MediaCardProps> = ({
 }) => {
   const { t } = useI18n();
   const isArtist = type === 'artist';
-  const status = mediaStatus ? STATUS_BADGES[mediaStatus] : undefined;
   const hasMeta = Boolean(subtitle || year);
 
   // Artists are already told apart by their round artwork (and live in their own
-  // sections), so the badge would only crowd the circle - square artwork keeps it
+  // sections), so the badge would only crowd the circle: square artwork keeps it
   const typeLabel = isArtist
     ? null
     : type === 'track'
@@ -144,7 +161,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
       onClick={onClick}
       className={`group w-full text-left rounded-2xl outline-none transition-transform duration-300 hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-blue-500/70 dark:focus-visible:ring-red-500/70 ${className}`}
     >
-      {/* Artwork - the badges live outside the clipping box so they survive the round shape */}
+      {/* Artwork: the badges live outside the clipping box so they survive the round shape */}
       <div className="relative mb-3">
         <div
           className={`relative aspect-square overflow-hidden bg-slate-200 dark:bg-zinc-800 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 transition-shadow duration-300 group-hover:shadow-xl group-hover:shadow-blue-500/10 dark:group-hover:shadow-red-500/10 ${shape}`}
@@ -167,25 +184,15 @@ const MediaCard: React.FC<MediaCardProps> = ({
           </span>
         )}
 
-        {/* Status badge */}
-        {status && (
-          <span
-            className={`absolute z-10 ${statusBadgePosition} flex w-6 h-6 items-center justify-center rounded-full ${status.className} shadow-md ring-2 ring-white dark:ring-zinc-900`}
-            title={t(status.labelKey)}
-          >
-            <svg
-              className={`w-3.5 h-3.5 text-white ${status.iconClassName || ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={status.path} />
-            </svg>
-          </span>
+        {mediaStatus && (
+          <StatusPip
+            status={mediaStatus}
+            className={`absolute z-10 ${statusBadgePosition} shadow-md ring-2 ring-white dark:ring-zinc-900`}
+          />
         )}
       </div>
 
-      {/* Text content - centered for artists */}
+      {/* Text content, centered for artists */}
       <div className={`space-y-0.5 px-0.5 ${isArtist ? 'text-center' : ''}`}>
         <h3 className="font-semibold text-sm text-foreground truncate transition-colors group-hover:text-blue-600 dark:group-hover:text-red-400">
           {title}
@@ -209,4 +216,3 @@ const MediaCard: React.FC<MediaCardProps> = ({
   );
 };
 
-export default MediaCard;

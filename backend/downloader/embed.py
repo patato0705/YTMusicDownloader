@@ -1,198 +1,80 @@
-# downloader/embed.py
+# backend/downloader/embed.py
+"""Tags of downloaded files: M4A/MP4 via mutagen.mp4, anything else as MP3 (ID3)."""
 from __future__ import annotations
+import fcntl
 import logging
-import os
 from pathlib import Path
-from typing import Iterable, List, Optional, Union
+from typing import List, Optional
+
+from mutagen import File as MutagenFile
+from mutagen.id3 import ID3, ID3NoHeaderError, TIT2, TALB, TPE1, TPE2, TRCK, TDRC, TCON, APIC
+from mutagen.mp4 import MP4, MP4Cover
 
 logger = logging.getLogger("downloader.embed")
-if not logging.getLogger().handlers:
-    import sys, logging as _logging
-    _logging.basicConfig(stream=sys.stderr, level=os.environ.get("LOG_LEVEL", "INFO"))
 
-# try import mutagen helpers
-try:
-    from mutagen import File as MutagenFile  # type: ignore
-    from mutagen.mp4 import MP4, MP4Cover  # type: ignore
-    from mutagen.id3 import ID3, TIT2, TALB, TPE1, TPE2, TRCK, TDRC, TCON, APIC, USLT  # type: ignore
-    _HAS_MUTAGEN = True
-except Exception:
-    _HAS_MUTAGEN = False
-    logger.warning("mutagen not importable — audio files will be untagged")
+_MP4_SUFFIXES = (".m4a", ".mp4", ".aac", ".m4b")
 
 
-def _read_bytes(p: Union[str, Path]) -> Optional[bytes]:
+def _open(path: Path):
+    """The file's tags: an MP4 object, or ID3 (empty when the file has none yet)."""
+    mf = MutagenFile(str(path))
+    if isinstance(mf, MP4) or path.suffix.lower() in _MP4_SUFFIXES:
+        return mf if isinstance(mf, MP4) else MP4(str(path))
     try:
-        return Path(str(p)).read_bytes()
-    except Exception:
-        return None
+        return ID3(str(path))
+    except ID3NoHeaderError:
+        return ID3()
 
 
-def _embed_mp4_tags(path: Path,
-                    title: Optional[str],
-                    album: Optional[str],
-                    artists: Optional[Iterable[str]],
-                    album_artist: Optional[str],
-                    lyrics_path: Optional[Union[str, Path]],
-                    cover_path: Optional[Union[str, Path]],
-                    track_number: Optional[int],
-                    year: Optional[str],
-                    genres: Optional[List[str]] = None) -> None:
-    """
-    Embed tags into M4A/MP4 file using mutagen.mp4.MP4.
-    """
+def embed_tags(
+    path: Path,
+    title: str,
+    album: str,
+    artist: str,
+    cover_path: Optional[Path] = None,
+    track_number: Optional[int] = None,
+    year: Optional[str] = None,
+    genres: Optional[List[str]] = None,
+) -> None:
+    """Write a downloaded track's tags (artist doubles as album artist). Errors are logged, not raised."""
     try:
-        mp4 = MP4(str(path))
-        if title is not None:
-            mp4["\xa9nam"] = [str(title)]
-        if album is not None:
-            mp4["\xa9alb"] = [str(album)]
-        if artists:
-            mp4["\xa9ART"] = [str(a) for a in artists]
-        if album_artist:
-            mp4["aART"] = [str(album_artist)]
-        if track_number:
-            try:
-                mp4["trkn"] = [(int(track_number), 0)]
-            except Exception:
-                pass
-        if year:
-            try:
-                mp4["\xa9day"] = [str(year)]
-            except Exception:
-                pass
-        if genres:
-            mp4["\xa9gen"] = [str(g) for g in genres]
-        # lyrics
-        if lyrics_path:
-            lyrics_bytes = _read_bytes(lyrics_path)
-            if lyrics_bytes:
-                try:
-                    # MP4 lyric tag key often ©lyr
-                    mp4["©lyr"] = [lyrics_bytes.decode("utf-8", errors="ignore")]
-                except Exception:
-                    try:
-                        mp4["\xa9lyr"] = [lyrics_bytes.decode("utf-8", errors="ignore")]
-                    except Exception:
-                        logger.debug("Could not set MP4 lyric tag, skipping")
-        # cover
-        if cover_path:
-            cover_bytes = _read_bytes(cover_path)
-            if cover_bytes:
-                # choose format by extension
-                fmt = None
-                ext = str(cover_path).lower()
-                if ext.endswith(".png"):
-                    fmt = MP4Cover.FORMAT_PNG
-                else:
-                    fmt = MP4Cover.FORMAT_JPEG
-                mp4["covr"] = [MP4Cover(cover_bytes, imageformat=fmt)]
-        mp4.save()
-    except Exception:
-        logger.exception("MP4 embedding failed for %s", path)
-
-def _embed_mp3_tags(path: Path,
-                    title: Optional[str],
-                    album: Optional[str],
-                    artists: Optional[Iterable[str]],
-                    album_artist: Optional[str],
-                    lyrics_path: Optional[Union[str, Path]],
-                    cover_path: Optional[Union[str, Path]],
-                    track_number: Optional[int],
-                    year: Optional[str],
-                    genres: Optional[List[str]] = None) -> None:
-    """
-    Embed tags into MP3 file using ID3 frames.
-    """
-    try:
-        try:
-            id3 = ID3(str(path))
-        except Exception:
-            id3 = ID3()
-        if title is not None:
-            id3.delall("TIT2")
-            id3.add(TIT2(encoding=3, text=[str(title)]))
-        if album is not None:
-            id3.delall("TALB")
-            id3.add(TALB(encoding=3, text=[str(album)]))
-        if artists:
-            id3.delall("TPE1")
-            id3.add(TPE1(encoding=3, text=[", ".join(str(a) for a in artists)]))
-        if album_artist:
-            id3.delall("TPE2")
-            id3.add(TPE2(encoding=3, text=[str(album_artist)]))
-        if track_number:
-            id3.delall("TRCK")
-            id3.add(TRCK(encoding=3, text=[str(track_number)]))
-        if year:
-            id3.delall("TDRC")
-            id3.add(TDRC(encoding=3, text=[str(year)]))
-        if genres:
-            id3.delall("TCON")
-            id3.add(TCON(encoding=3, text=[str(g) for g in genres]))
-        # lyrics
-        if lyrics_path:
-            lyrics_bytes = _read_bytes(lyrics_path)
-            if lyrics_bytes:
-                try:
-                    txt = lyrics_bytes.decode("utf-8", errors="ignore")
-                    id3.delall("USLT")
-                    id3.add(USLT(encoding=3, lang="eng", desc="", text=txt))
-                except Exception:
-                    logger.debug("Could not add USLT lyrics")
-        # cover
-        if cover_path:
-            cover_bytes = _read_bytes(cover_path)
-            if cover_bytes:
-                # try to detect mime
-                mime = "image/jpeg"
-                if str(cover_path).lower().endswith(".png"):
-                    mime = "image/png"
-                id3.delall("APIC")
-                id3.add(APIC(encoding=3, mime=mime, type=3, desc="cover", data=cover_bytes))
-        id3.save(str(path))
-    except Exception:
-        logger.exception("MP3 embedding failed for %s", path)
-
-
-def embed_tags(file_path: str,
-               title: Optional[str] = None,
-               album: Optional[str] = None,
-               artists: Optional[List[str]] = None,
-               album_artist: Optional[str] = None,
-               lyrics_path: Optional[Union[str, Path]] = None,
-               cover_path: Optional[Union[str, Path]] = None,
-               track_number: Optional[int] = None,
-               year: Optional[str] = None,
-               genres: Optional[List[str]] = None) -> None:
-    """
-    Embeds metadata into an audio file. Supports MP4/M4A and MP3 via mutagen.
-    If mutagen is not installed, logs and returns.
-    """
-    if not _HAS_MUTAGEN:
-        logger.warning("mutagen not available, skipping embedding for %s", file_path)
-        return
-
-    p = Path(str(file_path))
-    if not p.exists():
-        logger.warning("embed_tags: file does not exist %s", file_path)
-        return
-
-    # normalize artists iterable
-    artists_list = list(artists) if artists else []
-
-    try:
-        # autodetect container
-        mf = MutagenFile(str(p))
-        if isinstance(mf, MP4) or p.suffix.lower() in (".m4a", ".mp4", ".aac", ".m4b"):
-            _embed_mp4_tags(p, title, album, artists_list, album_artist, lyrics_path, cover_path, track_number, year, genres)
+        tags = _open(path)
+        cover = cover_path.read_bytes() if cover_path else None
+        is_png = bool(cover_path) and cover_path.suffix.lower() == ".png"
+        if isinstance(tags, MP4):
+            tags["\xa9nam"] = [title]
+            tags["\xa9alb"] = [album]
+            tags["\xa9ART"] = [artist]
+            tags["aART"] = [artist]
+            if track_number:
+                tags["trkn"] = [(int(track_number), 0)]
+            if year:
+                tags["\xa9day"] = [str(year)]
+            if genres:
+                tags["\xa9gen"] = list(genres)
+            if cover:
+                fmt = MP4Cover.FORMAT_PNG if is_png else MP4Cover.FORMAT_JPEG
+                tags["covr"] = [MP4Cover(cover, imageformat=fmt)]
+            tags.save()
         else:
-            # fallback to MP3 ID3 embedding where possible
-            _embed_mp3_tags(p, title, album, artists_list, album_artist, lyrics_path, cover_path, track_number, year, genres)
+            for frame in (TIT2(encoding=3, text=[title]), TALB(encoding=3, text=[album]),
+                          TPE1(encoding=3, text=[artist]), TPE2(encoding=3, text=[artist])):
+                tags.setall(frame.FrameID, [frame])
+            if track_number:
+                tags.setall("TRCK", [TRCK(encoding=3, text=[str(track_number)])])
+            if year:
+                tags.setall("TDRC", [TDRC(encoding=3, text=[str(year)])])
+            if genres:
+                tags.setall("TCON", [TCON(encoding=3, text=list(genres))])
+            if cover:
+                mime = "image/png" if is_png else "image/jpeg"
+                tags.setall("APIC", [APIC(encoding=3, mime=mime, type=3, desc="cover", data=cover)])
+            tags.save(str(path))
     except Exception:
-        logger.exception("Embedding metadata failed for %s", file_path)
+        logger.exception("Embedding metadata failed for %s", path)
 
-def set_genres(file_path: Union[str, Path], genres: List[str]) -> bool:
+
+def set_genres(file_path: str, genres: List[str]) -> bool:
     """
     Replace the genre tag of a file already in the library (an empty list
     removes it), leaving every other tag alone. Returns whether it was written.
@@ -202,36 +84,28 @@ def set_genres(file_path: Union[str, Path], genres: List[str]) -> bool:
     arrived mid-download) can both get here for the same file, from
     different processes.
     """
-    if not _HAS_MUTAGEN:
+    path = Path(file_path)
+    if not path.is_file():
         return False
-    p = Path(str(file_path))
-    if not p.is_file():
-        return False
-    import fcntl
     try:
-        with open(p, "rb") as lock:
+        with open(path, "rb") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             try:
-                mf = MutagenFile(str(p))
-                if isinstance(mf, MP4) or p.suffix.lower() in (".m4a", ".mp4", ".aac", ".m4b"):
-                    mp4 = mf if isinstance(mf, MP4) else MP4(str(p))
+                tags = _open(path)
+                if isinstance(tags, MP4):
                     if genres:
-                        mp4["\xa9gen"] = [str(g) for g in genres]
+                        tags["\xa9gen"] = list(genres)
                     else:
-                        mp4.pop("\xa9gen", None)
-                    mp4.save()
+                        tags.pop("\xa9gen", None)
+                    tags.save()
                 else:
-                    try:
-                        id3 = ID3(str(p))
-                    except Exception:
-                        id3 = ID3()
-                    id3.delall("TCON")
+                    tags.delall("TCON")
                     if genres:
-                        id3.add(TCON(encoding=3, text=[str(g) for g in genres]))
-                    id3.save(str(p))
+                        tags.add(TCON(encoding=3, text=list(genres)))
+                    tags.save(str(path))
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
         return True
     except Exception:
-        logger.exception("Setting genres failed for %s", p)
+        logger.exception("Setting genres failed for %s", path)
         return False

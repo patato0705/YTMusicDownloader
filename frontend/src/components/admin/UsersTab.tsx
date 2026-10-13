@@ -15,22 +15,12 @@ import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { InfoTooltip } from '../ui/InfoTooltip';
 import * as adminApi from '../../api/admin';
 import * as authApi from '../../api/auth';
-import type { AuthConfig } from '../../api/auth';
-import type { User } from '../../api/admin';
-import { parseApiError } from '../../utils';
+import { ROLES } from '../../api/auth';
+import type { AuthConfig, Role, User } from '../../api/auth';
+import { ROLE_COLORS } from '../../config/roles';
+import { apiErrorMessage } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
 import type { AdminTabProps } from './AdminTabShell';
-
-type Role = User['role'];
-
-// Lowest to highest privilege
-const ROLES: Role[] = ['visitor', 'member', 'administrator'];
-
-const roleColors: Record<Role, string> = {
-  administrator: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
-  member: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
-  visitor: 'bg-slate-500/20 text-slate-600 dark:text-slate-400',
-};
 
 export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
   const { user } = useAuth();
@@ -70,7 +60,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
         if (!cancelled) setAuthConfig(config);
       } catch (err: any) {
         console.error('Failed to load users:', err);
-        if (!cancelled) setError(parseApiError(err, 'Failed to load data'));
+        if (!cancelled) setError(apiErrorMessage(err, t, t('common.error')));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -88,17 +78,17 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
       await loadUsers();
       onToast(currentStatus ? t('admin.users.deactivated') : t('admin.users.activated'), 'success');
     } catch (err: any) {
-      onToast(parseApiError(err), 'error');
+      onToast(apiErrorMessage(err, t, t('common.error')), 'error');
     }
   };
 
-  const changeUserRole = async (userId: number, newRole: string) => {
+  const changeUserRole = async (userId: number, newRole: Role) => {
     try {
       await adminApi.updateUserRole(userId, newRole);
       await loadUsers();
       onToast(t('admin.users.roleUpdated'), 'success');
     } catch (err: any) {
-      onToast(parseApiError(err), 'error');
+      onToast(apiErrorMessage(err, t, t('common.error')), 'error');
     }
   };
 
@@ -109,7 +99,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
       const { temporary_password } = await adminApi.resetUserPassword(resetConfirm.userId);
       setTemporaryPassword({ username: resetConfirm.username, password: temporary_password });
     } catch (err: any) {
-      onToast(parseApiError(err), 'error');
+      onToast(apiErrorMessage(err, t, t('common.error')), 'error');
     } finally {
       setResetLoading(false);
       setResetConfirm(null);
@@ -123,7 +113,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
       await loadUsers();
       onToast(t('admin.users.deleted'), 'success');
     } catch (err: any) {
-      onToast(parseApiError(err), 'error');
+      onToast(apiErrorMessage(err, t, t('common.error')), 'error');
     } finally {
       setDeleteConfirm(null);
     }
@@ -150,7 +140,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
     <div className="space-y-3">
       {ROLES.map(role => (
         <div key={role}>
-          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold mb-1 ${roleColors[role]}`}>
+          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold mb-1 ${ROLE_COLORS[role]}`}>
             {t(`admin.users.roles.${role}`)}
           </span>
           <p className="text-xs leading-snug text-muted-foreground">{t(`admin.users.roleInfo.${role}`)}</p>
@@ -176,7 +166,6 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
         title={t('admin.users.deleteTitle')}
         message={deleteConfirm ? t('admin.users.confirmDelete', { username: deleteConfirm.username }) : ''}
         confirmText={t('admin.users.delete')}
-        cancelText={t('common.cancel')}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirm(null)}
         variant="danger"
@@ -187,7 +176,6 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
         title={t('admin.users.resetPasswordTitle')}
         message={resetConfirm ? t('admin.users.confirmResetPassword', { username: resetConfirm.username }) : ''}
         confirmText={t('admin.users.resetPassword')}
-        cancelText={t('common.cancel')}
         onConfirm={confirmReset}
         onCancel={() => setResetConfirm(null)}
         variant="warning"
@@ -204,7 +192,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
 
       <div className="space-y-6">
         {/* Search and Filters */}
-        <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
+        <div className="glass rounded-2xl p-6 space-y-4">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <SearchInput
@@ -218,7 +206,8 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
 
             <Select
               value={statusFilter}
-              onChange={(value) => setStatusFilter(value as any)}
+              onChange={(value) => setStatusFilter(value as typeof statusFilter)}
+              ariaLabel={t('admin.users.status')}
               options={[
                 { value: 'all', label: t('admin.users.allStatuses') },
                 { value: 'active', label: t('admin.users.active') },
@@ -228,7 +217,8 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
 
             <Select
               value={roleFilter}
-              onChange={(value) => setRoleFilter(value as any)}
+              onChange={(value) => setRoleFilter(value as typeof roleFilter)}
+              ariaLabel={t('admin.users.role')}
               options={[
                 { value: 'all', label: t('admin.users.allRoles') },
                 ...roleOptions,
@@ -243,12 +233,12 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
           </div>
 
           <div className="text-sm text-muted-foreground">
-            {t('admin.users.showing')} {filteredUsers.length} {t('admin.users.of')} {users.length} {t('admin.users.users')}
+            {t('admin.users.showing', { shown: filteredUsers.length, count: users.length })}
           </div>
         </div>
 
         {/* Users Table */}
-        <div className="glass rounded-2xl overflow-hidden border border-slate-200/50 dark:border-white/10">
+        <div className="glass rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
@@ -273,7 +263,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
               <tbody className="divide-y divide-slate-200 dark:divide-white/10">
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center">
+                    <td colSpan={4} className="px-6 py-12 text-center">
                       <div className="text-muted-foreground">
                         <span className="text-4xl mb-2 block">👥</span>
                         <p>{t('admin.users.noResults')}</p>
@@ -301,10 +291,11 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                         <span title={u.is_oidc && authConfig?.oidc_roles_from_groups ? t('admin.users.roleFromGroups') : undefined}>
                           <Select
                             value={u.role}
-                            onChange={(value) => changeUserRole(u.id, value)}
+                            onChange={(value) => changeUserRole(u.id, value as Role)}
                             options={roleOptions}
+                            ariaLabel={t('admin.users.role')}
                             disabled={u.id === user?.id || (u.is_oidc && !!authConfig?.oidc_roles_from_groups)}
-                            className={`text-xs font-medium ${roleColors[u.role]} border-0 py-1`}
+                            className={`text-xs font-medium ${ROLE_COLORS[u.role]} border-0 py-1`}
                           />
                         </span>
                       </td>

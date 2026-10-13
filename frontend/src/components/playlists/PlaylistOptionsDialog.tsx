@@ -5,11 +5,13 @@
  * their main artists), whether it's followed (rescanned on a schedule) and
  * whether it's written as an M3U file. Editing also offers removing it.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../ui/Button';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Modal } from '../ui/Modal';
+import { ErrorBanner } from '../ui/PageStatus';
 import { addPlaylist, updatePlaylist, removePlaylist } from '../../api/playlists';
 import type { PlaylistMode, SavedPlaylist } from '../../api/playlists';
 import { apiErrorMessage } from '../../utils';
@@ -40,12 +42,6 @@ export const PlaylistOptionsDialog: React.FC<PlaylistOptionsDialogProps> = ({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, busy]);
 
   const valid = followed || m3u;
   const unchanged = editing && saved!.mode === mode && saved!.followed === followed && saved!.m3u === m3u;
@@ -87,97 +83,76 @@ export const PlaylistOptionsDialog: React.FC<PlaylistOptionsDialogProps> = ({
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => !busy && onClose()}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="playlist-options-title"
-        className="glass rounded-3xl p-6 sm:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto border-gradient shadow-2xl animate-in fade-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 mb-1">
-          <h2 id="playlist-options-title" className="text-2xl font-bold text-gradient">
-            {t(editing ? 'playlist.options.editTitle' : 'playlist.options.addTitle')}
-          </h2>
-          <button
-            onClick={onClose}
-            disabled={busy}
-            aria-label={t('common.close')}
-            className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/10 transition-all text-sm"
-          >
-            ✕
-          </button>
-        </div>
-        <p className="text-sm text-muted-foreground mb-6 truncate">{playlistTitle}</p>
+    <Modal
+      title={t(editing ? 'playlist.options.editTitle' : 'playlist.options.addTitle')}
+      subtitle={playlistTitle}
+      onClose={onClose}
+      dismissible={!busy}
+      size="lg"
+    >
+      {error && <ErrorBanner className="mb-5">{error}</ErrorBanner>}
 
-        {error && (
-          <div className="bg-red-500/10 dark:bg-red-500/5 rounded-xl p-3 border border-red-500/20 mb-5">
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          </div>
+      {/* What its songs bring in */}
+      <fieldset className="mb-6">
+        <legend className="text-sm font-semibold text-foreground mb-3">{t('playlist.options.bringIn')}</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(['albums', 'artists'] as const).map((value) => {
+            const selected = mode === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setMode(value)}
+                className={`text-left rounded-2xl p-4 border transition-colors ${
+                  selected
+                    ? 'border-blue-500 bg-blue-500/10 dark:border-red-500 dark:bg-red-500/10'
+                    : 'border-slate-200 dark:border-white/10 hover:bg-slate-100/60 dark:hover:bg-white/5'
+                }`}
+              >
+                <span className={`block font-semibold mb-1 ${selected ? 'text-blue-700 dark:text-red-400' : 'text-foreground'}`}>
+                  {t(`playlist.options.${value}`)}
+                </span>
+                <span className="block text-xs text-muted-foreground">{t(`playlist.options.${value}Description`)}</span>
+              </button>
+            );
+          })}
+        </div>
+        {modeNote && <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">{modeNote}</p>}
+      </fieldset>
+
+      {/* Followed / once, M3U */}
+      <div className="space-y-4 mb-6">
+        <OptionRow
+          label={t('playlist.options.follow')}
+          description={t(followed ? 'playlist.options.followOn' : 'playlist.options.followOff')}
+          checked={followed}
+          onChange={setFollowed}
+        />
+        <OptionRow
+          label={t('playlist.options.m3u')}
+          description={t('playlist.options.m3uDescription')}
+          checked={m3u}
+          onChange={setM3u}
+        />
+        {!valid && (
+          <p className="text-xs text-red-600 dark:text-red-400">{t('playlist.options.needOne')}</p>
         )}
+      </div>
 
-        {/* What its songs bring in */}
-        <fieldset className="mb-6">
-          <legend className="text-sm font-semibold text-foreground mb-3">{t('playlist.options.bringIn')}</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(['albums', 'artists'] as const).map((value) => {
-              const selected = mode === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setMode(value)}
-                  className={`text-left rounded-2xl p-4 border transition-colors ${
-                    selected
-                      ? 'border-blue-500 bg-blue-500/10 dark:border-red-500 dark:bg-red-500/10'
-                      : 'border-slate-200 dark:border-white/10 hover:bg-slate-100/60 dark:hover:bg-white/5'
-                  }`}
-                >
-                  <span className={`block font-semibold mb-1 ${selected ? 'text-blue-700 dark:text-red-400' : 'text-foreground'}`}>
-                    {t(`playlist.options.${value}`)}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">{t(`playlist.options.${value}Description`)}</span>
-                </button>
-              );
-            })}
-          </div>
-          {modeNote && <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">{modeNote}</p>}
-        </fieldset>
-
-        {/* Followed / once, M3U */}
-        <div className="space-y-4 mb-6">
-          <OptionRow
-            label={t('playlist.options.follow')}
-            description={t(followed ? 'playlist.options.followOn' : 'playlist.options.followOff')}
-            checked={followed}
-            onChange={setFollowed}
-          />
-          <OptionRow
-            label={t('playlist.options.m3u')}
-            description={t('playlist.options.m3uDescription')}
-            checked={m3u}
-            onChange={setM3u}
-          />
-          {!valid && (
-            <p className="text-xs text-red-600 dark:text-red-400">{t('playlist.options.needOne')}</p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {editing ? (
-            <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(true)} disabled={busy}
-              className="!text-red-600 dark:!text-red-400">
-              {t('playlist.options.remove')}
-            </Button>
-          ) : <span />}
-          <div className="flex gap-3 ml-auto">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>
-            <Button variant="primary" onClick={submit} isLoading={busy} disabled={!valid || unchanged}>
-              {t(editing ? 'common.save' : 'playlist.options.add')}
-            </Button>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {editing ? (
+          <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(true)} disabled={busy}
+            className="!text-red-600 dark:!text-red-400">
+            {t('playlist.options.remove')}
+          </Button>
+        ) : <span />}
+        <div className="flex gap-3 ml-auto">
+          <Button variant="secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>
+          <Button variant="primary" onClick={submit} isLoading={busy} disabled={!valid || unchanged}>
+            {t(editing ? 'common.save' : 'playlist.options.add')}
+          </Button>
         </div>
       </div>
 
@@ -186,12 +161,11 @@ export const PlaylistOptionsDialog: React.FC<PlaylistOptionsDialogProps> = ({
         title={t('playlist.options.removeTitle')}
         message={t('playlist.options.removeMessage')}
         confirmText={t('playlist.options.remove')}
-        cancelText={t('common.cancel')}
         onConfirm={remove}
         onCancel={() => setConfirmRemove(false)}
         isLoading={busy}
       />
-    </div>
+    </Modal>
   );
 };
 
@@ -210,4 +184,3 @@ const OptionRow: React.FC<{
   </div>
 );
 
-export default PlaylistOptionsDialog;

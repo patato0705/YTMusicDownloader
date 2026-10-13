@@ -3,12 +3,15 @@ import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
+import { AuthCard, AuthLayout } from '../../components/layout/AuthLayout';
 import { Button } from '../../components/ui/Button';
+import { FormField, inputClass } from '../../components/ui/FormField';
 import { PasswordInput } from '../../components/ui/PasswordInput';
+import { ErrorBanner } from '../../components/ui/PageStatus';
 import * as authApi from '../../api/auth';
-import { retryAfterMinutes } from '../../utils';
+import { confirmErrorKey, passwordErrorKey, retryAfterMinutes } from '../../utils';
 
-export const ChangePassword: React.FC = () => {
+export default function ChangePassword(): JSX.Element {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -17,69 +20,28 @@ export const ChangePassword: React.FC = () => {
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const { t } = useI18n();
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
+  const keyText = (key: string | null) => (key ? t(key) : '');
 
   // Temporary password (first admin, or reset by an admin): no way out but changing it
   const forced = !!user?.must_change_password;
 
-  // Validate new password on blur or change
-  const validateNewPassword = (password: string) => {
-    if (password && password.length < 8) {
-      setPasswordError(t('auth.errors.passwordTooShort'));
-    } else {
-      setPasswordError('');
-    }
-  };
-
-  // Validate confirm password on blur or change
-  const validateConfirmPassword = (confirm: string) => {
-    if (confirm && newPassword && confirm !== newPassword) {
-      setConfirmError(t('auth.errors.passwordMismatch'));
-    } else {
-      setConfirmError('');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setCurrentPasswordError('');
-    setPasswordError('');
-    setConfirmError('');
 
-    // Check for empty fields
-    if (!currentPassword) {
-      setCurrentPasswordError(t('auth.errors.currentPasswordRequired'));
-      return;
-    }
-
-    if (!newPassword) {
-      setPasswordError(t('auth.errors.newPasswordRequired'));
-      return;
-    }
-
-    if (!confirmPassword) {
-      setConfirmError(t('auth.errors.confirmPasswordRequired'));
-      return;
-    }
-
-    // Validate password length
-    if (newPassword.length < 8) {
-      setPasswordError(t('auth.errors.passwordTooShort'));
-      return;
-    }
-
-    // Validate password match
-    if (newPassword !== confirmPassword) {
-      setConfirmError(t('auth.errors.passwordMismatch'));
-      return;
-    }
+    const currentProblem = currentPassword ? '' : t('auth.errors.currentPasswordRequired');
+    const passwordProblem = keyText(passwordErrorKey(newPassword, 'auth.errors.newPasswordRequired'));
+    const confirmProblem = keyText(confirmErrorKey(confirmPassword, newPassword, 'auth.errors.confirmPasswordRequired'));
+    setCurrentPasswordError(currentProblem);
+    setPasswordError(passwordProblem);
+    setConfirmError(confirmProblem);
+    if (currentProblem || passwordProblem || confirmProblem) return;
 
     setIsLoading(true);
-
     try {
       await authApi.changePassword({
         current_password: currentPassword,
@@ -109,208 +71,98 @@ export const ChangePassword: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden bg-background">
-      {/* Background effects */}
-      <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-      <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-      
-      {/* Static background orbs */}
-      <div className="fixed top-20 left-20 w-96 h-96 bg-blue-500/20 dark:bg-red-500/20 rounded-full blur-3xl" />
-      <div className="fixed bottom-20 right-20 w-96 h-96 bg-indigo-500/20 dark:bg-red-700/20 rounded-full blur-3xl" />
-      
-      {/* Main content */}
-      <div className="relative z-10 max-w-md w-full">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            <span className="text-gradient">{t('auth.changePassword.title')}</span>
-          </h1>
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent to-blue-500 dark:to-red-500" />
-            <span className="text-xl">🔐</span>
-            <div className="h-px flex-1 bg-gradient-to-l from-transparent to-blue-500 dark:to-red-500" />
-          </div>
-          <p className="text-muted-foreground text-lg">
-            {t('auth.changePassword.subtitle')}
-          </p>
-        </div>
-
-        {/* Warning message for forced password change */}
-        {forced && (
-          <div className="mb-6 bg-yellow-500/10 dark:bg-yellow-500/5 backdrop-blur-sm rounded-2xl p-5 border border-yellow-500/30">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">⚠️</span>
-              <div>
-                <h3 className="font-semibold text-yellow-600 dark:text-yellow-400 mb-1">
-                  {t('auth.changePassword.required')}
-                </h3>
-                <p className="text-sm text-yellow-600/80 dark:text-yellow-400/80">{t('auth.changePassword.temporaryWarning')}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Change password form */}
-        <div className="glass rounded-3xl p-8 md:p-10 border-gradient shadow-2xl">
-          <form onSubmit={handleSubmit} noValidate className="space-y-5">
-            {/* Error message */}
-            {error && (
-              <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-4 border border-red-500/20">
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">⚠️</span>
-                  <p className="text-sm text-red-600 dark:text-red-400 font-medium">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Current password field */}
-            <div>
-              <label htmlFor="currentPassword" className="block text-sm font-semibold text-foreground mb-2">
-                {t('auth.changePassword.current')}
-              </label>
-              <PasswordInput
-                id="currentPassword"
-                autoComplete="current-password"
-                required
-                value={currentPassword}
-                onChange={(e) => {
-                  setCurrentPassword(e.target.value);
-                  if (currentPasswordError) setCurrentPasswordError('');
-                }}
-                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
-                  currentPasswordError 
-                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
-                } focus:border-transparent transition-all duration-300`}
-                placeholder="••••••••"
-                disabled={isLoading}
-              />
-              {currentPasswordError && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                  <span>⚠️</span>
-                  {currentPasswordError}
-                </p>
-              )}
-            </div>
-
-            {/* New password field */}
-            <div>
-              <label htmlFor="newPassword" className="block text-sm font-semibold text-foreground mb-2">
-                {t('auth.changePassword.new')}
-              </label>
-              <PasswordInput
-                id="newPassword"
-                autoComplete="new-password"
-                required
-                value={newPassword}
-                onChange={(e) => {
-                  setNewPassword(e.target.value);
-                  if (e.target.value) {
-                    validateNewPassword(e.target.value);
-                  } else {
-                    setPasswordError('');
-                  }
-                }}
-                onBlur={(e) => validateNewPassword(e.target.value)}
-                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
-                  passwordError 
-                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
-                } focus:border-transparent transition-all duration-300`}
-                placeholder="••••••••"
-                disabled={isLoading}
-              />
-              {passwordError ? (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                  <span>⚠️</span>
-                  {passwordError}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  {t('auth.errors.passwordTooShort')}
-                </p>
-              )}
-            </div>
-
-            {/* Confirm password field */}
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-foreground mb-2">
-                {t('auth.changePassword.confirm')}
-              </label>
-              <PasswordInput
-                id="confirmPassword"
-                autoComplete="new-password"
-                required
-                value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                  if (e.target.value) {
-                    validateConfirmPassword(e.target.value);
-                  } else {
-                    setConfirmError('');
-                  }
-                }}
-                onBlur={(e) => validateConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
-                  confirmError 
-                    ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                    : 'focus:ring-blue-500 dark:focus:ring-red-600'
-                } focus:border-transparent transition-all duration-300`}
-                placeholder="••••••••"
-                disabled={isLoading}
-              />
-              {confirmError && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                  <span>⚠️</span>
-                  {confirmError}
-                </p>
-              )}
-            </div>
-
-            {/* Submit button */}
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              isLoading={isLoading}
-              className="w-full mt-6"
-            >
-              {isLoading ? t('common.loading') : t('auth.changePassword.button')}
-            </Button>
-
-            {/* Cancel button - only show if not forced */}
-            {!forced && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="lg"
-                onClick={() => navigate(-1)}
-                className="w-full"
-                disabled={isLoading}
-              >
-                {t('common.cancel')}
-              </Button>
-            )}
-          </form>
-        </div>
-
-        {/* Security note */}
-        <div className="mt-6 glass rounded-2xl p-4 border-gradient">
+    <AuthLayout title={t('auth.changePassword.title')} emoji="🔐" subtitle={t('auth.changePassword.subtitle')}>
+      {forced && (
+        <div className="mb-6 bg-yellow-500/10 dark:bg-yellow-500/5 backdrop-blur-sm rounded-2xl p-5 border border-yellow-500/30">
           <div className="flex items-start gap-3">
-            <span className="text-lg">💡</span>
-            <div className="text-xs text-muted-foreground">
-              <p className="font-semibold text-foreground mb-1">
-                {t('auth.changePassword.tips.title')}
-              </p>
-              <ul className="space-y-1">
-                <li>• {t('auth.changePassword.tips.length')}</li>
-                <li>• {t('auth.changePassword.tips.mix')}</li>
-                <li>• {t('auth.changePassword.tips.unique')}</li>
-              </ul>
+            <span className="text-2xl" aria-hidden="true">⚠️</span>
+            <div>
+              <h3 className="font-semibold text-yellow-600 dark:text-yellow-400 mb-1">
+                {t('auth.changePassword.required')}
+              </h3>
+              <p className="text-sm text-yellow-600/80 dark:text-yellow-400/80">{t('auth.changePassword.temporaryWarning')}</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      <AuthCard>
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          {error && <ErrorBanner>{error}</ErrorBanner>}
+
+          <FormField id="currentPassword" label={t('auth.changePassword.current')} error={currentPasswordError}>
+            <PasswordInput
+              id="currentPassword"
+              autoComplete="current-password"
+              required
+              value={currentPassword}
+              onChange={(e) => {
+                setCurrentPassword(e.target.value);
+                setCurrentPasswordError('');
+              }}
+              className={inputClass(currentPasswordError)}
+              placeholder="••••••••"
+              disabled={isLoading}
+            />
+          </FormField>
+
+          <FormField id="newPassword" label={t('auth.changePassword.new')} error={passwordError} hint={t('auth.errors.passwordTooShort')}>
+            <PasswordInput
+              id="newPassword"
+              autoComplete="new-password"
+              required
+              value={newPassword}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                setPasswordError(keyText(passwordErrorKey(e.target.value)));
+              }}
+              className={inputClass(passwordError)}
+              placeholder="••••••••"
+              disabled={isLoading}
+            />
+          </FormField>
+
+          <FormField id="confirmPassword" label={t('auth.changePassword.confirm')} error={confirmError}>
+            <PasswordInput
+              id="confirmPassword"
+              autoComplete="new-password"
+              required
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                setConfirmError(keyText(confirmErrorKey(e.target.value, newPassword)));
+              }}
+              className={inputClass(confirmError)}
+              placeholder="••••••••"
+              disabled={isLoading}
+            />
+          </FormField>
+
+          <Button type="submit" variant="primary" size="lg" isLoading={isLoading} className="w-full mt-6">
+            {isLoading ? t('common.loading') : t('auth.changePassword.button')}
+          </Button>
+
+          {!forced && (
+            <Button type="button" variant="ghost" size="lg" onClick={() => navigate(-1)} className="w-full" disabled={isLoading}>
+              {t('common.cancel')}
+            </Button>
+          )}
+        </form>
+      </AuthCard>
+
+      <div className="mt-6 glass rounded-2xl p-4 border-gradient">
+        <div className="flex items-start gap-3">
+          <span className="text-lg" aria-hidden="true">💡</span>
+          <div className="text-xs text-muted-foreground">
+            <p className="font-semibold text-foreground mb-1">{t('auth.changePassword.tips.title')}</p>
+            <ul className="space-y-1">
+              <li>• {t('auth.changePassword.tips.length')}</li>
+              <li>• {t('auth.changePassword.tips.mix')}</li>
+              <li>• {t('auth.changePassword.tips.unique')}</li>
+            </ul>
           </div>
         </div>
       </div>
-    </div>
+    </AuthLayout>
   );
-};
+}

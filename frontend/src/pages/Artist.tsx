@@ -1,32 +1,30 @@
 // src/pages/Artist.tsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useJobActivity } from '../contexts/JobActivityContext';
 import { getArtist, followArtist, unfollowArtist } from '../api/artists';
+import type { ArtistPage, ArtistRelease } from '../api/artists';
 import { deleteLibraryArtist, getArtistDeletionEffects } from '../api/library';
 import type { DeletionEffects } from '../api/library';
-import { useDeletionNotes } from '../hooks/useDeletionNotes';
 import { getImageUrl } from '../api/media';
-import MediaCard from '../components/MediaCard';
-import { Spinner } from '../components/ui/Spinner';
+import { useDeletionNotes } from '../hooks/useDeletionNotes';
+import { MediaCard } from '../components/MediaCard';
 import { Artwork } from '../components/ui/Artwork';
 import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { GenreChips } from '../components/ui/GenreChips';
+import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
 import { categorizeAlbums, getAlbumStatus, apiErrorMessage } from '../utils';
-import { useJobActivity } from '../contexts/JobActivityContext';
-import type { Album, Artist as ArtistType } from '../types';
 
 export default function Artist(): JSX.Element {
   const { artistId } = useParams<{ artistId: string }>();
-  const [artist, setArtist] = useState<ArtistType | null>(null);
-  const [albums, setAlbums] = useState<Album[]>([]);
+  const [page, setPage] = useState<ArtistPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [subscriptionMode, setSubscriptionMode] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [unfollowConfirm, setUnfollowConfirm] = useState(false);
@@ -35,84 +33,87 @@ export default function Artist(): JSX.Element {
   const [deleteEffects, setDeleteEffects] = useState<DeletionEffects | null>(null);
   const deletionNotes = useDeletionNotes();
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [source, setSource] = useState<string>('');
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
-  const { revision } = useJobActivity();
+  const { revision, refresh: refreshJobs } = useJobActivity();
+  // The queue revision the artist on screen is up to date with
+  const fetchedRevision = useRef(revision);
   const isAdmin = user?.role === 'administrator';
   // Visitors are read-only: follow/unfollow is a member+ action on the backend
   const canFollow = isAdmin || user?.role === 'member';
 
+  const fetchArtist = async (id: string): Promise<ArtistPage> => {
+    fetchedRevision.current = revision;
+    return getArtist(id);
+  };
+
   useEffect(() => {
     if (!artistId) return;
-
     let cancelled = false;
 
-    (async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const data = await getArtist(artistId);
-        if (!cancelled) {
-          setArtist(data.artist || data);
-
-          // Combine albums and singles
-          const allAlbums = [
-            ...(data.albums || []),
-            ...(data.singles || [])
-          ];
-
-          setAlbums(allAlbums);
-          setSubscriptionMode(data.subscription_mode ?? null);
-          setSource(data.source || '');
-        }
-      } catch (err: any) {
+    setLoading(true);
+    setError(null);
+    fetchArtist(artistId)
+      .then((data) => { if (!cancelled) setPage(data); })
+      .catch((err) => {
         console.error('Failed to load artist:', err);
-        if (!cancelled) setError(apiErrorMessage(err, t, t('common.error')));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+        if (!cancelled) setError(apiErrorMessage(err, t, t('artist.notFound')));
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
   }, [artistId]);
 
-  // Keep the album grid's status badges in step with the job queue.
-  // Only for fully-followed artists: for the others this endpoint goes out to
-  // YTMusic (see routers/artists.py), which is far too costly to repeat here.
+  // Keep the album badges in step with the job queue. Only for artists
+  // followed in full: for the others this endpoint goes out to YTMusic
+  // (see routers/artists.py), far too costly to repeat here.
+  const source = page?.source;
   useEffect(() => {
-    if (!artistId || revision === 0 || source !== 'database') return;
-
+    if (!artistId || source !== 'database' || revision === fetchedRevision.current) return;
     let cancelled = false;
 
-    getArtist(artistId)
-      .then((data) => {
-        if (cancelled) return;
-        setArtist(data.artist || data);
-        setAlbums([...(data.albums || []), ...(data.singles || [])]);
-        setSubscriptionMode(data.subscription_mode ?? null);
-      })
+    fetchArtist(artistId)
+      .then((data) => { if (!cancelled) setPage(data); })
       .catch((err) => console.error('Failed to refresh artist:', err));
 
     return () => { cancelled = true; };
   }, [artistId, revision, source]);
 
-  const handleFollow = async () => {
-    if (!artistId) return;
+  if (loading) return <LoadingState />;
 
-    if (subscriptionMode === 'full') {
+  if (error || !page) {
+    return (
+      <div className="space-y-6 py-8">
+        <ErrorBanner title={t('common.error')}>{error || t('artist.notFound')}</ErrorBanner>
+        <Button onClick={() => navigate('/browse')} variant="primary">
+          ← {t('common.back')}
+        </Button>
+      </div>
+    );
+  }
+
+  const { artist, albums: releases } = page;
+  const id = artistId!;
+  const followed = page.subscription_mode === 'full';
+  const { albums, singles } = categorizeAlbums(releases);
+
+  const setSubscriptionMode = (mode: ArtistPage['subscription_mode']) =>
+    setPage((current) => current && { ...current, subscription_mode: mode });
+
+  const handleFollow = async () => {
+    if (followed) {
       setUnfollowConfirm(true);
       return;
     }
 
     setActionLoading(true);
     try {
-      await followArtist(artistId);
+      await followArtist(id, artist.name);
       setSubscriptionMode('full');
+      refreshJobs();
     } catch (err: any) {
-      console.error('Follow action failed:', err);
+      console.error('Follow failed:', err);
       setToast({ message: apiErrorMessage(err, t, t('common.error')), type: 'error' });
     } finally {
       setActionLoading(false);
@@ -120,15 +121,14 @@ export default function Artist(): JSX.Element {
   };
 
   const handleUnfollow = async () => {
-    if (!artistId) return;
-
     setActionLoading(true);
     try {
-      await unfollowArtist(artistId);
-      setSubscriptionMode(null);
+      await unfollowArtist(id);
+      setSubscriptionMode('light');
+      refreshJobs();
     } catch (err: any) {
       console.error('Unfollow failed:', err);
-      setToast({ message: err.message || t('common.error'), type: 'error' });
+      setToast({ message: apiErrorMessage(err, t, t('common.error')), type: 'error' });
     } finally {
       setActionLoading(false);
       setUnfollowConfirm(false);
@@ -136,10 +136,9 @@ export default function Artist(): JSX.Element {
   };
 
   const openDeleteConfirm = async () => {
-    if (!artistId) return;
     setDeleteEffects(null);
     try {
-      setDeleteEffects(await getArtistDeletionEffects(artistId));
+      setDeleteEffects(await getArtistDeletionEffects(id));
     } catch (err) {
       console.error('Failed to read what the deletion changes:', err);
     }
@@ -147,77 +146,43 @@ export default function Artist(): JSX.Element {
   };
 
   const handleDelete = async () => {
-    if (!artistId) return;
-
     setDeleteLoading(true);
     try {
-      await deleteLibraryArtist(artistId);
+      await deleteLibraryArtist(id);
       setToast({ message: t('artist.deleted'), type: 'success' });
       setTimeout(() => navigate('/library'), 1500);
     } catch (err: any) {
       console.error('Delete failed:', err);
-      setToast({ message: err.message || t('common.error'), type: 'error' });
+      setToast({ message: apiErrorMessage(err, t, t('common.error')), type: 'error' });
     } finally {
       setDeleteLoading(false);
       setDeleteConfirm(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="relative min-h-screen">
-        {/* Background effects */}
-        <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-        
-        <div className="relative z-10 flex items-center justify-center py-20">
-          <div className="text-center">
-            <Spinner size="lg" className="mx-auto mb-4 text-blue-600 dark:text-red-500" />
-            <p className="text-muted-foreground">{t('common.loading')}</p>
-          </div>
-        </div>
+  const releaseGrid = (title: string, list: ArtistRelease[]) => list.length > 0 && (
+    <section>
+      <SectionHeader>{title}</SectionHeader>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        {list.map((album) => (
+          <MediaCard
+            key={album.id}
+            id={album.id}
+            title={album.title}
+            thumbnail={getImageUrl(album.thumbnail)}
+            type="album"
+            albumType={album.type}
+            year={album.year ?? undefined}
+            mediaStatus={getAlbumStatus(album)}
+            onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+          />
+        ))}
       </div>
-    );
-  }
-
-  if (error || !artist) {
-    return (
-      <div className="relative min-h-screen">
-        {/* Background effects */}
-        <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-        
-        <div className="relative z-10 space-y-6 py-8">
-          <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-6 border border-red-500/20">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">⚠️</span>
-              <div>
-                <h3 className="font-semibold text-red-600 dark:text-red-400 mb-1">
-                  {t('common.error')}
-                </h3>
-                <p className="text-sm text-red-600/80 dark:text-red-400/80">
-                  {error || t('artist.notFound')}
-                </p>
-              </div>
-            </div>
-          </div>
-          <Button onClick={() => navigate('/browse')} variant="primary">
-            ← {t('common.back')}
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  const { albums: regularAlbums, singles } = categorizeAlbums(albums);
-  const artistThumbnailUrl = getImageUrl(artist.image_local || artist.thumbnail);
+    </section>
+  );
 
   return (
-    <div className="relative min-h-screen">
-      {/* Background effects */}
-      <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-      <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-
+    <>
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
@@ -227,34 +192,32 @@ export default function Artist(): JSX.Element {
         title={t('artist.unfollowTitle')}
         message={t('artist.unfollowMessage')}
         confirmText={t('artist.unfollow')}
-        cancelText={t('common.cancel')}
         onConfirm={handleUnfollow}
         onCancel={() => setUnfollowConfirm(false)}
         variant="warning"
+        isLoading={actionLoading}
       />
 
       <ConfirmDialog
         isOpen={deleteConfirm}
         title={t('artist.deleteTitle')}
-        message={[t('artist.deleteMessage', { name: artist.name }), deletionNotes(deleteEffects)].filter(Boolean).join('\n\n')}
+        message={[t('artist.deleteMessage'), deletionNotes(deleteEffects)].filter(Boolean).join('\n\n')}
         confirmText={t('common.delete')}
-        cancelText={t('common.cancel')}
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm(false)}
         variant="danger"
+        isLoading={deleteLoading}
       />
 
-      {/* Main content */}
-      <div className="relative z-10 space-y-12 pb-12">
+      <div className="space-y-12 pb-12">
         {/* Artist header */}
         <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
           <div className="flex flex-col md:flex-row gap-8 items-start">
-            {/* Artist image */}
             <div className="relative group">
               <Artwork
-                src={artistThumbnailUrl}
+                src={getImageUrl(artist.thumbnail)}
                 name={artist.name}
-                seed={artist.id || artistId}
+                seed={artist.id}
                 loading="eager"
                 className="w-48 h-48 md:w-64 md:h-64 rounded-full bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
@@ -262,22 +225,21 @@ export default function Artist(): JSX.Element {
               <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 dark:from-red-500/20 dark:to-red-700/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />
             </div>
 
-            {/* Artist info */}
             <div className="flex-1">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-4">
                 <span className="text-sm text-blue-600 dark:text-red-400 font-medium">
                   🎤 {t('artist.title')}
                 </span>
               </div>
-              
+
               <h1 className="text-4xl md:text-5xl font-bold mb-4">
                 <span className="text-gradient">{artist.name}</span>
               </h1>
-              
+
               <GenreChips genres={artist.genres} className="mb-4" />
 
               <p className="text-lg text-muted-foreground mb-8">
-                {albums.length} {albums.length === 1 ? t('artist.release') : t('artist.releases')}
+                {t('artist.releaseCount', { count: releases.length })}
               </p>
 
               <div className="flex flex-wrap gap-3">
@@ -285,38 +247,20 @@ export default function Artist(): JSX.Element {
                   <Button
                     onClick={handleFollow}
                     isLoading={actionLoading}
-                    variant={subscriptionMode === 'full' ? 'secondary' : 'primary'}
+                    variant={followed ? 'secondary' : 'primary'}
                     size="lg"
                   >
-                    {subscriptionMode === 'full' ? (
-                      <>
-                        <span className="mr-2">✓</span>
-                        {t('artist.unfollow')}
-                      </>
-                    ) : (
-                      <>
-                        <span className="mr-2">+</span>
-                        {t('artist.follow')}
-                      </>
-                    )}
+                    <span className="mr-2" aria-hidden="true">{followed ? '✓' : '+'}</span>
+                    {followed ? t('artist.unfollow') : t('artist.follow')}
                   </Button>
                 )}
 
-                <Button
-                  onClick={() => navigate(-1)}
-                  variant="ghost"
-                  size="lg"
-                >
+                <Button onClick={() => navigate(-1)} variant="ghost" size="lg">
                   ← {t('common.back')}
                 </Button>
 
-                {isAdmin && subscriptionMode != null && (
-                  <Button
-                    onClick={openDeleteConfirm}
-                    variant="danger"
-                    size="lg"
-                    isLoading={deleteLoading}
-                  >
+                {isAdmin && page.subscription_mode != null && (
+                  <Button onClick={openDeleteConfirm} variant="danger" size="lg" isLoading={deleteLoading}>
                     🗑️ {t('artist.delete')}
                   </Button>
                 )}
@@ -325,63 +269,15 @@ export default function Artist(): JSX.Element {
           </div>
         </div>
 
-        {/* Albums section */}
-        {regularAlbums.length > 0 && (
-          <section>
-            <SectionHeader>{t('artist.albums')}</SectionHeader>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {regularAlbums.map((album) => (
-                <MediaCard
-                  key={album.id}
-                  id={album.id}
-                  title={album.title}
-                  thumbnail={getImageUrl(album.image_local || album.thumbnail)}
-                  type="album"
-                  albumType={album.type}
-                  year={album.year}
-                  mediaStatus={getAlbumStatus(album)}
-                  onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+        {releaseGrid(t('artist.albums'), albums)}
+        {releaseGrid(t('artist.singles'), singles)}
 
-        {/* Singles & EPs section */}
-        {singles.length > 0 && (
-          <section>
-            <SectionHeader>{t('artist.singles')}</SectionHeader>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {singles.map((album) => (
-                <MediaCard
-                  key={album.id}
-                  id={album.id}
-                  title={album.title}
-                  thumbnail={getImageUrl(album.image_local || album.thumbnail)}
-                  type="album"
-                  albumType={album.type}
-                  year={album.year}
-                  mediaStatus={getAlbumStatus(album)}
-                  onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Empty state */}
-        {albums.length === 0 && (
-          <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-16 border border-slate-200/50 dark:border-white/10 text-center">
-            <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
-              <span className="text-5xl">💿</span>
-            </div>
-            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('artist.noAlbums')}</h3>
-            <p className="text-muted-foreground">
-              {t('artist.noAlbumsDescription')}
-            </p>
-          </div>
+        {releases.length === 0 && (
+          <EmptyState icon="💿" title={t('artist.noAlbums')}>
+            <p>{t('artist.noAlbumsDescription')}</p>
+          </EmptyState>
         )}
       </div>
-    </div>
+    </>
   );
 }

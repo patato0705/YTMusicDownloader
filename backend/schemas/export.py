@@ -163,8 +163,8 @@ class ExportedUser(BaseModel):
 
 
 class ExportedSetting(BaseModel):
+    # Its type is this build's declaration of the key (settings.py)
     key: str = Field(..., min_length=1, max_length=128)
-    type: Literal["string", "int", "bool", "json"] = "string"
     value: Any = None
 
 

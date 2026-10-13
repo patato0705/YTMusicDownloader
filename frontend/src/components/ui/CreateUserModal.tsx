@@ -1,11 +1,16 @@
 // src/components/ui/CreateUserModal.tsx
 import React, { useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
-import { Button } from '../ui/Button';
+import { Button } from './Button';
+import { FormField, inputClass } from './FormField';
+import { Modal } from './Modal';
+import { ErrorBanner } from './PageStatus';
 import { PasswordInput } from './PasswordInput';
-import { Select } from '../ui/Select';
+import { Select } from './Select';
 import * as adminApi from '../../api/admin';
-import { parseApiError, getUsernameError, getPasswordError } from '../../utils';
+import { ROLES } from '../../api/auth';
+import type { Role } from '../../api/auth';
+import { apiErrorMessage, invalidFields, passwordErrorKey, usernameErrorKey } from '../../utils';
 
 interface CreateUserModalProps {
   onClose: () => void;
@@ -15,236 +20,113 @@ interface CreateUserModalProps {
 export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'member' | 'visitor' | 'administrator'>('member');
+  const [role, setRole] = useState<Role>('member');
   const [error, setError] = useState('');
   const [usernameError, setUsernameError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
   const { t } = useI18n();
 
-  // Validate username
-  const validateUsername = (value: string) => {
-    const reason = getUsernameError(value);
-    if (reason === 'too_short') {
-      setUsernameError(t('auth.errors.usernameTooShort'));
-    } else if (reason === 'too_long') {
-      setUsernameError(t('auth.errors.usernameTooLong'));
-    } else if (reason === 'invalid_chars') {
-      setUsernameError(t('auth.errors.usernameInvalidChars'));
-    } else {
-      setUsernameError('');
-    }
-  };
-
-  // Validate password
-  const validatePassword = (value: string) => {
-    if (getPasswordError(value) === 'too_short') {
-      setPasswordError(t('auth.errors.passwordTooShort'));
-    } else {
-      setPasswordError('');
-    }
-  };
+  const keyText = (key: string | null) => (key ? t(key) : '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setUsernameError('');
-    setPasswordError('');
 
-    // Validate all fields
-    if (!username) {
-      setUsernameError(t('auth.errors.usernameRequired'));
-      return;
-    }
-    if (username.length < 3) {
-      setUsernameError(t('auth.errors.usernameTooShort'));
-      return;
-    }
-    if (username.length > 64) {
-      setUsernameError(t('auth.errors.usernameTooLong'));
-      return;
-    }
-    if (getUsernameError(username) === 'invalid_chars') {
-      setUsernameError(t('auth.errors.usernameInvalidChars'));
-      return;
-    }
-
-    if (!password) {
-      setPasswordError(t('auth.errors.passwordRequired'));
-      return;
-    }
-    if (password.length < 8) {
-      setPasswordError(t('auth.errors.passwordTooShort'));
-      return;
-    }
+    const usernameProblem = keyText(usernameErrorKey(username, 'auth.errors.usernameRequired'));
+    const passwordProblem = keyText(passwordErrorKey(password, 'auth.errors.passwordRequired'));
+    setUsernameError(usernameProblem);
+    setPasswordError(passwordProblem);
+    if (usernameProblem || passwordProblem) return;
 
     setLoading(true);
-
     try {
-      await adminApi.createUser({
-        username,
-        password,
-        role,
-      });
-
+      await adminApi.createUser({ username, password, role });
       onSuccess();
       onClose();
     } catch (err: any) {
-      const data = err.data;
-
-      // Route field-specific errors from FastAPI validation
-      if (data?.detail && Array.isArray(data.detail)) {
-        let hasFieldError = false;
-        data.detail.forEach((e: any) => {
-          const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
-
-          // Form validation mirrors the backend rules, so this is only a safety
-          // net — show a localized generic message rather than Pydantic's English msg
-          if (field === 'username') {
-            setUsernameError(t('auth.errors.usernameInvalid'));
-            hasFieldError = true;
-          } else if (field === 'password') {
-            setPasswordError(t('auth.errors.passwordInvalid'));
-            hasFieldError = true;
-          }
-        });
-        // If no field matched, show as generic error
-        if (!hasFieldError) {
-          setError(parseApiError(err));
-        }
-      } else if (err?.status === 409 && data?.detail === 'username_taken') {
+      // The checks above mirror the backend's, so a 422 is only a safety
+      // net: a translated message rather than the validator's English one
+      const fields = invalidFields(err);
+      if (fields.has('username') || fields.has('password')) {
+        if (fields.has('username')) setUsernameError(t('auth.errors.usernameInvalid'));
+        if (fields.has('password')) setPasswordError(t('auth.errors.passwordInvalid'));
+      } else if (err?.status === 409 && err.data?.detail === 'username_taken') {
         setUsernameError(t('auth.errors.usernameTaken'));
       } else {
-        setError(parseApiError(err));
+        setError(apiErrorMessage(err, t, t('common.error')));
       }
     } finally {
       setLoading(false);
     }
   };
 
+  const dirty = Boolean(username || password);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="glass rounded-3xl p-8 max-w-md w-full border-gradient shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gradient">
-            {t('admin.users.create')}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors text-xl"
-          >
-            ✕
-          </button>
+    <Modal title={t('admin.users.create')} onClose={onClose} dismissible={!loading && !dirty}>
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        {error && <ErrorBanner>{error}</ErrorBanner>}
+
+        <FormField id="new-user-username" label={t('admin.users.username')} error={usernameError}>
+          <input
+            id="new-user-username"
+            type="text"
+            autoComplete="off"
+            required
+            value={username}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setUsernameError(keyText(usernameErrorKey(e.target.value)));
+            }}
+            className={inputClass(usernameError)}
+            disabled={loading}
+          />
+        </FormField>
+
+        <FormField
+          id="new-user-password"
+          label={t('auth.register.password')}
+          error={passwordError}
+          hint={t('auth.errors.passwordTooShort')}
+        >
+          <PasswordInput
+            id="new-user-password"
+            autoComplete="new-password"
+            required
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setPasswordError(keyText(passwordErrorKey(e.target.value)));
+            }}
+            className={inputClass(passwordError)}
+            disabled={loading}
+          />
+        </FormField>
+
+        <div>
+          <label htmlFor="new-user-role" className="block text-sm font-semibold text-foreground mb-2">
+            {t('admin.users.role')}
+          </label>
+          <Select
+            id="new-user-role"
+            value={role}
+            onChange={(value) => setRole(value as Role)}
+            options={ROLES.map((r) => ({ value: r, label: t(`admin.users.roles.${r}`) }))}
+            disabled={loading}
+            className="w-full"
+          />
         </div>
 
-        <form onSubmit={handleSubmit} noValidate className="space-y-4">
-          {error && (
-            <div className="bg-red-500/10 dark:bg-red-500/5 rounded-xl p-3 border border-red-500/20">
-              <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
-                <span>⚠️</span> {error}
-              </p>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              {t('admin.users.username')}
-            </label>
-            <input
-              type="text"
-              autoComplete="off"
-              required
-              value={username}
-              onChange={(e) => {
-                setUsername(e.target.value);
-                if (e.target.value) validateUsername(e.target.value);
-                else setUsernameError('');
-              }}
-              onBlur={(e) => validateUsername(e.target.value)}
-              className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 ${
-                usernameError 
-                  ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                  : 'focus:ring-blue-500 dark:focus:ring-red-600'
-              } transition-all`}
-              disabled={loading}
-            />
-            {usernameError && (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                <span>⚠️</span> {usernameError}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              {t('auth.register.password')}
-            </label>
-            <PasswordInput
-              autoComplete="new-password"
-              required
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (e.target.value) validatePassword(e.target.value);
-                else setPasswordError('');
-              }}
-              onBlur={(e) => validatePassword(e.target.value)}
-              className={`w-full px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 ${
-                passwordError 
-                  ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50' 
-                  : 'focus:ring-blue-500 dark:focus:ring-red-600'
-              } transition-all`}
-              disabled={loading}
-            />
-            {passwordError ? (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 flex items-center gap-1">
-                <span>⚠️</span> {passwordError}
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {t('auth.errors.passwordTooShort')}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              {t('admin.users.role')}
-            </label>
-            <Select
-              value={role}
-              onChange={(value) => setRole(value as any)}
-              options={[
-                { value: 'visitor', label: 'Visitor' },
-                { value: 'member', label: 'Member' },
-                { value: 'administrator', label: 'Administrator' },
-              ]}
-              disabled={loading}
-              className="w-full"
-            />
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1"
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              isLoading={loading}
-              className="flex-1"
-            >
-              {t('admin.users.create')}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex gap-3 pt-4">
+          <Button type="button" variant="ghost" onClick={onClose} disabled={loading} className="flex-1">
+            {t('common.cancel')}
+          </Button>
+          <Button type="submit" variant="primary" isLoading={loading} className="flex-1">
+            {t('admin.users.create')}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 };

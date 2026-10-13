@@ -7,38 +7,39 @@ Endpoints:
 - GET /api/library/albums - List followed albums with download status
 - GET /api/library/tracks - List downloaded tracks (with filters)
 - GET /api/library/stats - Overall library statistics
-- GET /api/library/albums/{album_id}/progress - Detailed album download progress
+- GET /api/library/artists/{artist_id}/deletion - What deleting an artist also changes
+- GET /api/library/albums/{album_id}/deletion - What deleting an album also changes
 - DELETE /api/library/artists/{artist_id} - Delete artist from library (admin)
 - DELETE /api/library/albums/{album_id} - Delete album from library (admin)
 """
 from __future__ import annotations
 import logging
+import shutil
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_, case
+from sqlalchemy import func, case
 
-from ..deps import get_db
-from ..models import Artist, Album, Track, ArtistSubscription
-from ..services import subscriptions as subs_svc
-from ..services import playlists as playlists_svc
-from ..jobs.jobqueue import cancel_download_jobs
 from .. import config
-from ..downloader.cover import move_cover_if_exists
-
-from backend.dependencies import require_auth, require_member_or_admin, require_admin
-from backend.models import User
+from ..db import get_session
+from ..dependencies import require_auth, require_admin
+from ..downloader.core import album_dir, safe_name
+from ..downloader.cover import move_file
+from ..jobs.jobqueue import cancel_download_jobs
+from ..models import Artist, Album, Track, ArtistSubscription, User
+from ..services import playlists as playlists_svc
+from ..services import subscriptions as subs_svc
 
 logger = logging.getLogger("routers.library")
 
 router = APIRouter(prefix="/api/library", tags=["Library"])
 
-def _safe_stats(stats_obj, fields):
-    """Safely extract stats, returning 0 for missing fields."""
-    if not stats_obj:
-        return {field: 0 for field in fields}
-    return {field: int(getattr(stats_obj, field, 0) or 0) for field in fields}
+
+def _ints(row, fields: List[str]) -> Dict[str, int]:
+    """The counts of an aggregate row (SUM over no rows is NULL)."""
+    return {field: int(getattr(row, field) or 0) for field in fields}
 
 @router.get("/artists", status_code=status.HTTP_200_OK)
 def list_followed_artists(
@@ -46,15 +47,15 @@ def list_followed_artists(
     sort_by: str = Query("name", pattern="^(name|followed_at|albums_count)$"),
     order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: Optional[int] = Query(None, ge=1, description="Maximum number of artists to return"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """
     List all followed artists with statistics.
-    
+
     Query params:
     - sort_by: name, followed_at, albums_count (default: name)
     - order: asc, desc (default: asc)
-    
+
     Returns list of artists with download stats.
     """
     try:
@@ -98,7 +99,7 @@ def list_followed_artists(
             .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
             .outerjoin(albums_counts, albums_counts.c.artist_id == Artist.id)
             .outerjoin(tracks_counts, tracks_counts.c.artist_id == Artist.id)
-            .filter(ArtistSubscription.enabled == True)
+            .filter(ArtistSubscription.enabled.is_(True))
         )
 
         # Apply sorting
@@ -109,7 +110,7 @@ def list_followed_artists(
         # albums_count sorting will be done in Python after fetching
 
         rows = query.all()
-        
+
         result = []
         for artist, subscription, albums_count, total, downloaded, failed in rows:
             albums_count = int(albums_count or 0)
@@ -135,11 +136,11 @@ def list_followed_artists(
                 "download_progress": download_progress,
                 "last_synced_at": subscription.last_synced_at.isoformat() if subscription.last_synced_at else None,
             })
-        
+
         # Sort by albums_count if requested
         if sort_by == "albums_count":
             result.sort(key=lambda x: x["albums_count"], reverse=(order == "desc"))
-        
+
         total = len(result)
         if limit is not None:
             result = result[:limit]
@@ -148,7 +149,7 @@ def list_followed_artists(
             "artists": result,
             "total": total,
         }
-    
+
     except Exception as e:
         logger.exception("list_followed_artists failed")
         raise HTTPException(status_code=500, detail=f"Failed to fetch artists: {e}")
@@ -163,7 +164,7 @@ def list_followed_albums(
     order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: Optional[int] = Query(None, ge=1, description="Maximum number of albums to return"),
     offset: int = Query(0, ge=0, description="Number of albums to skip (after sorting)"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """
     List all followed albums with download status.
@@ -186,7 +187,7 @@ def list_followed_albums(
                 func.count(Track.id).label("total"),
                 func.sum(case((Track.status == "done", 1), else_=0)).label("downloaded"),
                 func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
-                func.sum(case((Track.lyrics != None, 1), else_=0)).label("with_lyrics"),  # noqa: E711
+                func.sum(case((Track.lyrics.is_not(None), 1), else_=0)).label("with_lyrics"),
             )
             .group_by(Track.album_id)
             .subquery()
@@ -255,7 +256,7 @@ def list_followed_albums(
                 "download_progress": download_progress,
                 "created_at": album.created_at.isoformat() if album.created_at else None,
             })
-        
+
         # Sort results
         if sort_by == "title":
             result.sort(key=lambda x: (x["title"] or "").lower(), reverse=(order == "desc"))
@@ -265,7 +266,7 @@ def list_followed_albums(
             result.sort(key=lambda x: x["created_at"] or "", reverse=(order == "desc"))
         elif sort_by == "download_progress":
             result.sort(key=lambda x: x["download_progress"], reverse=(order == "desc"))
-        
+
         total = len(result)
         end = offset + limit if limit is not None else None
         result = result[offset:end]
@@ -274,7 +275,7 @@ def list_followed_albums(
             "albums": result,
             "total": total,
         }
-    
+
     except Exception as e:
         logger.exception("list_followed_albums failed")
         raise HTTPException(status_code=500, detail=f"Failed to fetch albums: {e}")
@@ -290,11 +291,11 @@ def list_tracks(
     q: Optional[str] = Query(None, max_length=200, description="Case-insensitive substring match on track title"),
     limit: int = Query(100, ge=1, le=1000, description="Max results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """
     List tracks with optional filters.
-    
+
     Query params:
     - artist_id: Filter by artist (optional)
     - album_id: Filter by album (optional)
@@ -307,10 +308,12 @@ def list_tracks(
     Returns list of tracks with metadata.
     """
     try:
-        # Build query
-        query = db.query(Track).join(Album, Track.album_id == Album.id)
+        query = (
+            db.query(Track, Album, Artist)
+            .join(Album, Track.album_id == Album.id)
+            .outerjoin(Artist, Artist.id == Album.artist_id)
+        )
 
-        # Apply filters
         if album_id:
             query = query.filter(Track.album_id == album_id)
         elif artist_id:
@@ -321,7 +324,7 @@ def list_tracks(
 
         if lyrics is not None:
             if lyrics == "any":
-                query = query.filter(Track.lyrics != None)  # noqa: E711
+                query = query.filter(Track.lyrics.is_not(None))
             else:
                 query = query.filter(Track.lyrics == lyrics)
 
@@ -331,52 +334,30 @@ def list_tracks(
             # match everything
             escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             query = query.filter(Track.title.ilike(f"%{escaped}%", escape="\\"))
-        
-        # Get total count
+
         total = query.count()
-        
-        # Apply pagination and ordering
-        query = query.order_by(Album.title.asc(), Track.id.asc())
-        query = query.limit(limit).offset(offset)
-        
-        tracks = query.all()
-        
-        result = []
-        for track in tracks:
-            # Get album and artist info
-            album = db.get(Album, track.album_id) if track.album_id else None
-            artist = None
-            if album and album.artist_id:
-                artist = db.get(Artist, album.artist_id)
-            
-            result.append({
-                "id": track.id,
-                "title": track.title,
-                "artists": track.artists or [],
-                "album": {
-                    "id": album.id if album else None,
-                    "title": album.title if album else None,
-                    "thumbnail": album.image_local if album else None,
-                } if album else None,
-                "artist": {
-                    "id": artist.id if artist else None,
-                    "name": artist.name if artist else None,
-                } if artist else None,
-                "duration": track.duration,
-                "status": track.status,
-                "file_path": track.file_path,
-                "lyrics": track.lyrics,
-                "lyrics_path": track.lyrics_local,
-                "created_at": track.created_at.isoformat() if track.created_at else None,
-            })
+        rows = query.order_by(Album.title.asc(), Track.id.asc()).limit(limit).offset(offset).all()
 
         return {
-            "tracks": result,
+            "tracks": [
+                {
+                    "id": track.id,
+                    "title": track.title,
+                    "artists": track.artists or [],
+                    "album": {"id": album.id, "title": album.title, "thumbnail": album.image_local},
+                    "artist": {"id": artist.id, "name": artist.name} if artist else None,
+                    "duration": track.duration,
+                    "status": track.status,
+                    "lyrics": track.lyrics,
+                    "created_at": track.created_at.isoformat() if track.created_at else None,
+                }
+                for track, album, artist in rows
+            ],
             "total": total,
             "limit": limit,
             "offset": offset,
         }
-    
+
     except Exception as e:
         logger.exception("list_tracks failed")
         raise HTTPException(status_code=500, detail=f"Failed to fetch tracks: {e}")
@@ -385,15 +366,15 @@ def list_tracks(
 @router.get("/stats", status_code=status.HTTP_200_OK)
 def get_library_stats(
     current_user: User = Depends(require_auth),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session)
 ) -> Dict[str, Any]:
     """
     Get overall library statistics.
     """
     try:
         # Artists stats (count active subscriptions)
-        artists_total = db.query(func.count(ArtistSubscription.id)).filter(ArtistSubscription.enabled == True).scalar() or 0
-        
+        artists_total = db.query(func.count(ArtistSubscription.id)).filter(ArtistSubscription.enabled.is_(True)).scalar() or 0
+
         # Every count below is taken in a single pass over its table
         def count_where(condition):
             return func.sum(case((condition, 1), else_=0))
@@ -420,7 +401,7 @@ def get_library_stats(
             count_where(Track.status == "downloading").label("downloading"),
             count_where(Track.status == "queued").label("pending"),
             count_where(Track.status == "failed").label("failed"),
-            count_where(Track.lyrics != None).label("with_lyrics"),  # noqa: E711
+            count_where(Track.lyrics.is_not(None)).label("with_lyrics"),
             count_where(Track.lyrics == "synced").label("with_synced_lyrics"),
             count_where(Track.lyrics == "plain").label("with_plain_lyrics"),
             func.sum(case((Track.status == "done", Track.file_size), else_=0)).label("storage_bytes"),
@@ -437,126 +418,44 @@ def get_library_stats(
             "artists": {
                 "total": int(artists_total),
             },
-            "albums": _safe_stats(albums, album_fields),
-            "tracks": _safe_stats(tracks, track_fields),
+            "albums": _ints(albums, album_fields),
+            "tracks": _ints(tracks, track_fields),
             "storage": {
                 "bytes": storage_bytes,
                 "gb": round(storage_bytes / 1024 ** 3, 2),
             }
         }
-    
+
     except Exception as e:
         logger.exception("get_library_stats failed")
         raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {e}")
-
-
-@router.get("/albums/{album_id}/progress", status_code=status.HTTP_200_OK)
-def get_album_download_progress(
-    album_id: str,
-    current_user: User = Depends(require_auth),
-    db: Session = Depends(get_db)
-) -> Dict[str, Any]:
-    """
-    Get detailed download progress for a specific album.
-    
-    Returns:
-    - Album info
-    - Track-by-track status
-    - Overall progress
-    """
-    try:
-        # Get album
-        album = db.get(Album, album_id)
-        if not album:
-            raise HTTPException(status_code=404, detail="Album not found")
-        
-        # Get tracks
-        tracks = db.query(Track).filter(Track.album_id == album_id).order_by(Track.id.asc()).all()
-        
-        tracks_data = []
-        for track in tracks:
-            tracks_data.append({
-                "id": track.id,
-                "title": track.title,
-                "duration": track.duration,
-                "status": track.status,
-                "lyrics": track.lyrics,
-                "file_path": track.file_path,
-            })
-
-        # Calculate stats
-        total = len(tracks)
-        downloaded = sum(1 for t in tracks if t.status == "done")
-        downloading = sum(1 for t in tracks if t.status == "downloading")
-        failed = sum(1 for t in tracks if t.status == "failed")
-        pending = sum(1 for t in tracks if t.status == "queued")
-        with_lyrics = sum(1 for t in tracks if t.lyrics is not None)
-        
-        progress = 0.0
-        if total > 0:
-            progress = round((downloaded / total) * 100, 1)
-        
-        return {
-            "album": {
-                "id": album.id,
-                "title": album.title,
-                "thumbnail": album.image_local,
-            },
-            "subscription": {
-                "status": album.download_status or "idle",
-                "mode": album.mode,
-                "created_at": album.created_at.isoformat() if album.created_at else None,
-            },
-            "progress": {
-                "percentage": progress,
-                "tracks_total": total,
-                "tracks_downloaded": downloaded,
-                "tracks_downloading": downloading,
-                "tracks_failed": failed,
-                "tracks_pending": pending,
-                "tracks_with_lyrics": with_lyrics,
-            },
-            "tracks": tracks_data,
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"get_album_download_progress failed for {album_id}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch album progress: {e}")
 
 
 # ============================================================================
 # DELETE ENDPOINTS - Library content removal
 # ============================================================================
 
-def _delete_file_safe(path: Optional[str]) -> bool:
+def _delete_file(path: Optional[str]) -> bool:
     """Delete a file if it exists. Returns True if deleted."""
     if not path:
         return False
-    from pathlib import Path
     try:
-        p = Path(path)
-        if p.exists():
-            p.unlink()
-            return True
-    except Exception as e:
-        logger.warning(f"Failed to delete file {path}: {e}")
-    return False
+        Path(path).unlink()
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError as e:
+        logger.warning("Failed to delete file %s: %s", path, e)
+        return False
 
 
-def _delete_dir_safe(path: str) -> bool:
-    """Delete a directory if it exists and is empty. Returns True if deleted."""
-    from pathlib import Path
-    import shutil
+def _remove_album_folder(folder: Path) -> None:
+    """Remove an album folder emptied of its tracks: its album.nfo, then the folder if nothing else is left."""
+    (folder / "album.nfo").unlink(missing_ok=True)
     try:
-        p = Path(path)
-        if p.exists() and p.is_dir():
-            shutil.rmtree(str(p))
-            return True
-    except Exception as e:
-        logger.warning(f"Failed to delete directory {path}: {e}")
-    return False
+        folder.rmdir()
+    except OSError:
+        pass  # not empty (files someone else put there) or already gone
 
 
 def _playlist_refs(playlists) -> List[Dict[str, str]]:
@@ -567,7 +466,7 @@ def _playlist_refs(playlists) -> List[Dict[str, str]]:
 def artist_deletion_effects(
     artist_id: str,
     current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """What deleting this artist also changes, for the confirmation dialog."""
     album_ids = [a for (a,) in db.query(Album.id).filter(Album.artist_id == artist_id).all()]
@@ -579,7 +478,7 @@ def artist_deletion_effects(
 def album_deletion_effects(
     album_id: str,
     current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """
     What deleting this album also changes, for the confirmation dialog: its
@@ -603,7 +502,7 @@ def album_deletion_effects(
 def delete_artist_from_library(
     artist_id: str,
     current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """
     Completely remove an artist from the library.
@@ -647,20 +546,19 @@ def delete_artist_from_library(
                 tracks = db.query(Track).filter(Track.album_id == album.id).all()
                 cancel_download_jobs(db, [t.id for t in tracks], reason="artist deleted")
                 for track in tracks:
-                    if _delete_file_safe(track.file_path):
+                    if _delete_file(track.file_path):
                         files_deleted += 1
-                    _delete_file_safe(track.lyrics_local)
+                    _delete_file(track.lyrics_local)
                     db.delete(track)
                     tracks_deleted += 1
 
-                _delete_file_safe(album.image_local)
+                _delete_file(album.image_local)
                 db.delete(album)
                 albums_deleted += 1
 
-        # 2. Delete artist pictures
-        if artist:
-            _delete_file_safe(artist.image_local)
-            _delete_file_safe(artist.banner_local)
+            # 2. Delete artist pictures
+            _delete_file(artist.image_local)
+            _delete_file(artist.banner_local)
 
         # 3. Delete artist subscription
         if artist_sub:
@@ -670,13 +568,11 @@ def delete_artist_from_library(
         if artist:
             db.delete(artist)
 
-        # 5. Delete artist folder from disk
-        from pathlib import Path
-        from .. import config
-        safe_name = "".join(c for c in (artist_name or "") if c.isalnum() or c in " .-_()").strip()
-        if safe_name:
-            artist_folder = Path(str(config.MUSIC_DIR)) / safe_name
-            _delete_dir_safe(str(artist_folder))
+        # 5. Delete the artist folder from disk, unless the name points at a
+        # folder that isn't one (e.g. an artist called "Playlists")
+        artist_folder = config.MUSIC_DIR / safe_name(artist_name)
+        if artist and artist_folder.is_dir() and artist_folder != playlists_svc.m3u_dir():
+            shutil.rmtree(artist_folder, ignore_errors=True)
 
         db.commit()
 
@@ -688,9 +584,8 @@ def delete_artist_from_library(
             db.rollback()
 
         logger.info(
-            f"Deleted artist {artist_id} ({artist_name}) from library: "
-            f"{albums_deleted} albums, {tracks_deleted} tracks, "
-            f"{files_deleted} files"
+            "Deleted artist %s (%s) from library: %s albums, %s tracks, %s files",
+            artist_id, artist_name, albums_deleted, tracks_deleted, files_deleted,
         )
 
         return {
@@ -707,7 +602,7 @@ def delete_artist_from_library(
         raise
     except Exception as e:
         db.rollback()
-        logger.exception(f"delete_artist_from_library failed for {artist_id}")
+        logger.exception("delete_artist_from_library failed for %s", artist_id)
         raise HTTPException(status_code=500, detail=f"Failed to delete artist: {e}")
 
 
@@ -715,7 +610,7 @@ def delete_artist_from_library(
 def delete_album_from_library(
     album_id: str,
     current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """
     Delete an album's downloaded content from the library.
@@ -753,19 +648,19 @@ def delete_album_from_library(
         tracks = db.query(Track).filter(Track.album_id == album.id).all()
         cancel_download_jobs(db, [t.id for t in tracks], reason="album deleted")
         for track in tracks:
-            if _delete_file_safe(track.file_path):
+            if _delete_file(track.file_path):
                 files_deleted += 1
-            _delete_file_safe(track.lyrics_local)
+            _delete_file(track.lyrics_local)
             db.delete(track)
             tracks_deleted += 1
 
-        # 2. Move album cover back to the covers directory (for metadata display)
+        # 2. Move album cover back to the covers directory (for metadata
+        # display), then remove what's left of the album folder
+        moved = None
         if album.image_local:
-            cover_dest = config.COVERS_DIR / f"{album.id}.jpg"
-            moved = move_cover_if_exists(album.image_local, cover_dest)
-            album.image_local = str(moved) if moved else None
-        else:
-            album.image_local = None
+            moved = move_file(Path(album.image_local), config.COVERS_DIR / f"{album.id}.jpg")
+        album.image_local = str(moved) if moved else None
+        _remove_album_folder(album_dir(album.artist.name if album.artist else None, album.title))
 
         # 3. Downgrade album to metadata mode (keep the row)
         album.mode = "metadata"
@@ -781,7 +676,7 @@ def delete_album_from_library(
                 artist_sub.mode = "light"
                 db.add(artist_sub)
                 artist_downgraded = True
-                logger.info(f"Downgraded artist {artist_id} to light mode after album deletion")
+                logger.info("Downgraded artist %s to light mode after album deletion", artist_id)
 
         # 5. Same for the followed playlists that would bring it back
         playlists_unfollowed = playlists_svc.unfollow_for_deletion(
@@ -798,8 +693,8 @@ def delete_album_from_library(
             db.rollback()
 
         logger.info(
-            f"Deleted album {album_id} ({album_title}) from library: "
-            f"{tracks_deleted} tracks, {files_deleted} files"
+            "Deleted album %s (%s) from library: %s tracks, %s files",
+            album_id, album_title, tracks_deleted, files_deleted,
         )
 
         return {
@@ -816,5 +711,5 @@ def delete_album_from_library(
         raise
     except Exception as e:
         db.rollback()
-        logger.exception(f"delete_album_from_library failed for {album_id}")
+        logger.exception("delete_album_from_library failed for %s", album_id)
         raise HTTPException(status_code=500, detail=f"Failed to delete album: {e}")

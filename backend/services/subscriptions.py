@@ -1,7 +1,8 @@
 # backend/services/subscriptions.py
-
 """
-Subscription service - manages artist and album subscriptions.
+What the library follows: artist subscriptions ("light": album metadata
+only; "full": every release downloaded) and each album's mode
+("metadata" or "download"), with the jobs that act on them.
 """
 from __future__ import annotations
 import logging
@@ -11,10 +12,11 @@ from datetime import datetime
 from sqlalchemy import select, func, case
 from sqlalchemy.orm import Session
 
+from ..jobs.jobqueue import cancel_download_jobs, enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
-from ..models import Artist, Album, ArtistSubscription, Job, Track
+from ..models import Artist, Album, ArtistSubscription, Track
 from . import recommendations as recommendations_svc
-from ..time_utils import now_utc, ensure_timezone_aware
+from ..time_utils import now_utc
 
 logger = logging.getLogger("services.subscriptions")
 
@@ -29,116 +31,75 @@ def get_artist_subscription(session: Session, artist_id: str) -> Optional[Artist
     return session.execute(stmt).scalars().first()
 
 
-def subscribe_to_artist(
-    session: Session,
-    artist_id: str,
-    mode: str = "full",
-) -> ArtistSubscription:
+def subscribe_to_artist(session: Session, artist_id: str, mode: str = "full") -> ArtistSubscription:
     """
-    Create or update artist subscription.
-    
-    Args:
-        session: SQLAlchemy session
-        artist_id: Artist ID
-        mode: "light" (metadata only) or "full" (download everything)
-    
-    Returns:
-        ArtistSubscription instance
-    
-    Raises:
-        ValueError: If invalid mode
+    Create the artist's subscription, or change its mode. A full follow
+    overrides an earlier "not interested": otherwise, unfollowed later, the
+    artist would stay hidden from recommendations. Does not commit.
     """
     if mode not in ("light", "full"):
         raise ValueError(f"Invalid mode: {mode}. Must be 'light' or 'full'")
 
-    if mode == "full":
-        _clear_dismissal(session, artist_id)
+    if mode == "full" and recommendations_svc.restore(session, artist_id):
+        logger.info("Artist %s followed, no longer dismissed from recommendations", artist_id)
 
-    # Check if already exists
-    existing = get_artist_subscription(session, artist_id)
-    
-    if existing:
-        # Update mode if different
-        if existing.mode != mode:
-            logger.info(f"Updating artist subscription {artist_id}: {existing.mode} → {mode}")
-            existing.mode = mode
-            session.add(existing)
-        return existing
-    
-    # Create new subscription
-    subscription = ArtistSubscription(
-        artist_id=artist_id,
-        mode=mode,
-        enabled=True,
-        created_at=now_utc(),
-    )
-    
-    session.add(subscription)
-    logger.info(f"Created artist subscription: {artist_id} (mode={mode})")
-    
+    subscription = get_artist_subscription(session, artist_id)
+    if subscription is None:
+        subscription = ArtistSubscription(artist_id=artist_id, mode=mode, enabled=True, created_at=now_utc())
+        session.add(subscription)
+        logger.info("Created artist subscription: %s (mode=%s)", artist_id, mode)
+    elif subscription.mode != mode:
+        logger.info("Updating artist subscription %s: %s -> %s", artist_id, subscription.mode, mode)
+        subscription.mode = mode
     return subscription
 
 
-def _clear_dismissal(session: Session, artist_id: str) -> None:
+def queue_artist_sync(
+    session: Session,
+    artist_id: str,
+    user_id: Optional[int] = None,
+    *,
+    origin: Origin,
+) -> bool:
     """
-    Following an artist overrides an earlier "not interested": otherwise,
-    unfollowed later, it would stay hidden from recommendations.
+    Queue a sync_artist job, or move one already waiting up to `origin`'s
+    class. One already running doesn't count: it may have read the
+    subscription before the change that calls for this sync. Does not
+    commit. Returns whether a job was queued.
     """
-    if recommendations_svc.restore(session, artist_id):
-        logger.info(f"Artist {artist_id} followed, no longer dismissed from recommendations")
-
-
-def unsubscribe_from_artist(session: Session, artist_id: str) -> bool:
-    """
-    Delete artist subscription.
-    Does NOT delete files or database records - only stops syncing.
-    
-    Returns:
-        True if deleted, False if not found
-    """
-    subscription = get_artist_subscription(session, artist_id)
-    
-    if not subscription:
+    waiting = pending_jobs(session, "sync_artist", statuses=("queued",), artist_id=artist_id)
+    if waiting:
+        promote(waiting[0], origin)
         return False
-    
-    session.delete(subscription)
-    logger.info(f"Deleted artist subscription: {artist_id}")
-    
+    enqueue_job(
+        session, job_type="sync_artist", payload={"artist_id": artist_id},
+        origin=origin, user_id=user_id, commit=False,
+    )
     return True
 
 
-def update_artist_subscription_mode(
+def follow_artist(
     session: Session,
     artist_id: str,
-    mode: str,
-) -> ArtistSubscription:
+    name: Optional[str],
+    user_id: Optional[int] = None,
+    *,
+    origin: Origin,
+) -> bool:
     """
-    Update artist subscription mode.
-    
-    Args:
-        mode: "light" or "full"
-    
-    Raises:
-        ValueError: If subscription not found or invalid mode
+    Follow an artist in full: its row (named `name` if it's new), a full
+    subscription (a light one upgraded), and a sync job, which fetches the
+    artist and brings in every release. No network here. Does not commit.
+    Returns False when it was already followed in full.
     """
-    if mode not in ("light", "full"):
-        raise ValueError(f"Invalid mode: {mode}. Must be 'light' or 'full'")
-    
     subscription = get_artist_subscription(session, artist_id)
-    
-    if not subscription:
-        raise ValueError(f"No subscription found for artist {artist_id}")
-    
-    if mode == "full":
-        _clear_dismissal(session, artist_id)
-
-    old_mode = subscription.mode
-    subscription.mode = mode
-    session.add(subscription)
-    
-    logger.info(f"Updated artist subscription {artist_id}: {old_mode} → {mode}")
-    
-    return subscription
+    if subscription is not None and subscription.mode == "full":
+        return False
+    if session.get(Artist, artist_id) is None:
+        session.add(Artist(id=artist_id, name=name or ""))
+    subscribe_to_artist(session, artist_id, mode="full")
+    queue_artist_sync(session, artist_id, user_id=user_id, origin=origin)
+    return True
 
 
 def mark_artist_synced(
@@ -146,44 +107,33 @@ def mark_artist_synced(
     artist_id: str,
     error: Optional[str] = None,
 ) -> None:
-    """Update artist subscription sync timestamp."""
+    """Record a sync of the artist (and its error, if it failed). Does not commit."""
     subscription = get_artist_subscription(session, artist_id)
-    
     if subscription:
         subscription.last_synced_at = now_utc()
         subscription.last_error = error
-        session.add(subscription)
+
+
+def get_monitored_artists_needing_sync(session: Session, cutoff: datetime) -> list[Artist]:
+    """
+    Artists followed in full (enabled subscription) not synced since
+    `cutoff`, or ever. Used by the scheduler.
+    """
+    stmt = (
+        select(Artist)
+        .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
+        .where(
+            ArtistSubscription.enabled.is_(True),
+            ArtistSubscription.mode == "full",
+            ArtistSubscription.last_synced_at.is_(None) | (ArtistSubscription.last_synced_at < cutoff),
+        )
+    )
+    return list(session.execute(stmt).scalars().all())
 
 
 # ============================================================================
-# ALBUM MODE (formerly AlbumSubscription — now lives on the Album row)
+# ALBUM MODE
 # ============================================================================
-
-def set_album_mode(session: Session, album_id: str, mode: str) -> Album:
-    """
-    Set the mode on an existing Album row.
-
-    Args:
-        mode: "metadata" or "download"
-
-    Raises:
-        ValueError: If album not found or invalid mode
-    """
-    if mode not in ("metadata", "download"):
-        raise ValueError(f"Invalid mode: {mode}. Must be 'metadata' or 'download'")
-
-    album = session.get(Album, album_id)
-    if not album:
-        raise ValueError(f"Album {album_id} not found")
-
-    old_mode = album.mode
-    if old_mode != mode:
-        logger.info(f"Album {album_id} mode: {old_mode} → {mode}")
-        album.mode = mode
-        session.add(album)
-
-    return album
-
 
 def clear_album_download(session: Session, album_id: str) -> bool:
     """
@@ -199,9 +149,8 @@ def clear_album_download(session: Session, album_id: str) -> bool:
 
     album.mode = "metadata"
     album.download_status = None
-    session.add(album)
     _stop_album_downloads(session, [album_id])
-    logger.info(f"Cleared album download for {album_id}")
+    logger.info("Cleared album download for %s", album_id)
     return True
 
 
@@ -213,76 +162,31 @@ def upgrade_all_albums_to_download(
     origin: Origin,
 ) -> int:
     """
-    Upgrade all albums for an artist from metadata to download mode, and
-    queue an import_album for each so their tracks get (re)listed and
-    downloaded. Used when upgrading artist from light to full mode.
-    Does not commit.
-
-    Download-mode albums that still have no tracks (an import that never
-    landed) get one too, since the upgrade is when the user expects the
-    whole discography to start downloading.
-
-    Returns:
-        Number of albums upgraded
+    Switch the artist's metadata albums to download mode and queue an
+    import_album for each, so their tracks get (re)listed and downloaded;
+    the download-mode albums that still have no tracks get one too (just
+    created by a sync, or an earlier import that never landed: nothing
+    else would ever import them). Does not commit. Returns the imports queued.
     """
-    stmt = select(Album).where(
-        Album.artist_id == artist_id,
-        Album.mode == "metadata",
-    )
-    albums = session.execute(stmt).scalars().all()
-
+    albums = session.execute(
+        select(Album).where(Album.artist_id == artist_id, Album.mode == "metadata")
+    ).scalars().all()
     for album in albums:
         album.mode = "download"
-        session.add(album)
+    if albums:
+        logger.info("Upgraded %s albums to download mode for artist %s", len(albums), artist_id)
+        session.flush()  # autoflush=False: the trackless query below must see them
 
-    count = len(albums)
-    if count > 0:
-        logger.info(f"Upgraded {count} albums to download mode for artist {artist_id}")
-
-    queue_album_imports(
-        session,
-        {a.id for a in albums} | set(_trackless_download_album_ids(session, artist_id)),
-        artist_id=artist_id,
-        user_id=user_id,
-        origin=origin,
-    )
-    return count
-
-
-def _trackless_download_album_ids(session: Session, artist_id: str) -> list[str]:
-    """The artist's download-mode albums that have no Track rows yet."""
-    return list(session.execute(
+    trackless = session.execute(
         select(Album.id).where(
             Album.artist_id == artist_id,
             Album.mode == "download",
             ~select(Track.id).where(Track.album_id == Album.id).exists(),
         )
-    ).scalars().all())
-
-
-def queue_trackless_album_imports(
-    session: Session,
-    artist_id: str,
-    user_id: Optional[int] = None,
-    *,
-    origin: Origin,
-) -> int:
-    """
-    Queue an import_album for each of the artist's download-mode albums
-    that still has no tracks: just created by a sync, or an earlier import
-    that never landed (failed, or its worker died on the last attempt).
-    Track-based recovery (album retry, the scheduler's orphan sweep) can't
-    see those, and a sync only creates albums it hasn't seen before, so
-    without this they would stay empty for good.
-
-    Albums with an import already waiting or running are skipped (see
-    queue_album_imports), which only sees committed jobs: commit any
-    imports queued earlier in the transaction first. Does not commit.
-    Returns the number queued.
-    """
+    ).scalars().all()
     return queue_album_imports(
         session,
-        _trackless_download_album_ids(session, artist_id),
+        {a.id for a in albums} | set(trackless),
         artist_id=artist_id,
         user_id=user_id,
         origin=origin,
@@ -303,25 +207,18 @@ def queue_album_imports(
     that's higher (see jobs/priorities.py) rather than duplicated. Does not
     commit. Returns the number queued.
     """
-    from ..jobs.jobqueue import enqueue_job
-
+    if not album_ids:
+        return 0
     pending = {
-        str(job.payload.get("browse_id")): job
-        for job in session.execute(
-            select(Job).where(
-                Job.type == "import_album",
-                Job.status.in_(("queued", "reserved")),
-            )
-        ).scalars()
-        if isinstance(job.payload, dict)
+        job.payload.get("browse_id"): job
+        for job in pending_jobs(session, "import_album", browse_id=set(album_ids))
     }
-
     queued = 0
     for album_id in sorted(album_ids):
         if album_id in pending:
             promote(pending[album_id], origin)
             continue
-        pending[album_id] = enqueue_job(
+        enqueue_job(
             session,
             job_type="import_album",
             payload={"browse_id": album_id, "artist_id": artist_id},
@@ -342,23 +239,17 @@ def downgrade_all_albums_to_metadata(session: Session, artist_id: str) -> int:
     Returns:
         Number of albums downgraded
     """
-    stmt = select(Album).where(
-        Album.artist_id == artist_id,
-        Album.mode == "download",
-    )
-    albums = session.execute(stmt).scalars().all()
-
+    albums = session.execute(
+        select(Album).where(Album.artist_id == artist_id, Album.mode == "download")
+    ).scalars().all()
     for album in albums:
         album.mode = "metadata"
         album.download_status = None
-        session.add(album)
-
     _stop_album_downloads(session, [a.id for a in albums])
 
-    count = len(albums)
-    if count > 0:
-        logger.info(f"Downgraded {count} albums to metadata mode for artist {artist_id}")
-    return count
+    if albums:
+        logger.info("Downgraded %s albums to metadata mode for artist %s", len(albums), artist_id)
+    return len(albums)
 
 
 def _stop_album_downloads(session: Session, album_ids: Collection[str]) -> None:
@@ -369,8 +260,6 @@ def _stop_album_downloads(session: Session, album_ids: Collection[str]) -> None:
     """
     if not album_ids:
         return
-    from ..jobs.jobqueue import cancel_download_jobs
-
     tracks = session.execute(
         select(Track).where(Track.album_id.in_(list(album_ids)))
     ).scalars().all()
@@ -380,12 +269,7 @@ def _stop_album_downloads(session: Session, album_ids: Collection[str]) -> None:
         if track.status in ("queued", "failed"):
             track.status = "available"
             track.last_error = None
-            session.add(track)
 
-
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
 
 def start_album_download(
     session: Session,
@@ -395,75 +279,59 @@ def start_album_download(
     user_id: Optional[int] = None,
 ) -> dict:
     """
-    Download an album: set it to download mode and queue its import, which
-    fetches the current tracklist from YTMusic, writes the cover and
-    album.nfo, then queues a download for every track not on disk -- the
-    same path as the albums of a followed artist.
+    Download an album: set it to download mode, write its album.nfo and
+    queue a download for every track not on disk.
 
-    An album not in the DB yet is fetched first (raises
+    An album not in the DB yet is fetched here (raises
     ytm_adapter.YTMusicUnavailable when it can't be), so it shows up with
-    its real title, artist and tracks right away instead of as an empty row
-    until the import lands. Its artist gets a light subscription if it has
-    none (album metadata and banner, no downloads), synced right after.
+    its real title, artist and tracks right away, and its downloads are
+    queued straight from that fetch. One already in the DB gets an
+    import_album instead, which fetches the current tracklist first: the
+    same path as the albums of a followed artist. Its artist gets a light
+    subscription if it has none (album metadata and pictures, no
+    downloads), synced right after.
 
     Commits. Returns {"album": Album, "started": bool,
     "artist_subscription_created": bool}; started is False for an album
     already in download mode.
     """
     from . import albums as albums_svc
-    from ..jobs.jobqueue import enqueue_job
 
-    album_obj = session.get(Album, album_id)
-    if album_obj is None:
-        logger.info(f"Album {album_id} not in DB, fetching from YTMusic")
+    album = session.get(Album, album_id)
+    fetched = album is None
+    if fetched:
+        logger.info("Album %s not in DB, fetching from YTMusic", album_id)
         albums_svc.fetch_and_upsert_album(session, browse_id=album_id)
         session.flush()  # autoflush=False: get can't see the new row before this
-        album_obj = session.get(Album, album_id)
-        if album_obj is None:
-            raise RuntimeError(f"Album {album_id} missing after its fetch")
+        album = session.get(Album, album_id)
+    elif album.mode == "download":
+        return {"album": album, "started": False, "artist_subscription_created": False}
 
-    if album_obj.mode == "download":
-        session.commit()  # the fetch above, if any
-        return {"album": album_obj, "started": False, "artist_subscription_created": False}
-
-    album_obj.mode = "download"
-    session.add(album_obj)
-    album_artist_id = album_obj.artist_id
-
+    album.mode = "download"
     artist_sub_created = False
-    if album_artist_id and not get_artist_subscription(session, album_artist_id):
-        subscribe_to_artist(session, artist_id=album_artist_id, mode="light")
+    if album.artist_id and not get_artist_subscription(session, album.artist_id):
+        subscribe_to_artist(session, artist_id=album.artist_id, mode="light")
+        # The light subscription's sync fetches the artist's album list and pictures
+        queue_artist_sync(session, album.artist_id, user_id=user_id, origin=origin)
         artist_sub_created = True
-        logger.info(f"Auto-created light artist subscription for {album_artist_id}")
+        logger.info("Auto-created light artist subscription for %s", album.artist_id)
 
-    session.flush()  # autoflush=False: the rollup and the import check see the mode change
-    check_and_update_album_download_status(session, album_id)
-    queue_album_imports(session, [album_id], artist_id=album_artist_id, user_id=user_id, origin=origin)
-    session.commit()
+    if fetched:
+        session.commit()
+        albums_svc.complete_import(session, album_id, origin=origin)
+    else:
+        session.flush()  # autoflush=False: the rollup and the import check see the mode change
+        check_and_update_album_download_status(session, album_id)
+        queue_album_imports(session, [album_id], artist_id=album.artist_id, user_id=user_id, origin=origin)
+        session.commit()
 
-    # The light subscription's sync fetches the artist's album list and banner
-    if artist_sub_created:
-        try:
-            enqueue_job(
-                session,
-                job_type="sync_artist",
-                payload={"artist_id": album_artist_id},
-                origin=origin,
-                user_id=user_id,
-            )
-        except Exception:
-            logger.exception(f"Failed to queue sync_artist job for {album_artist_id}")
-
-    logger.info(f"Album {album_id} set to download: import queued")
-    return {"album": album_obj, "started": True, "artist_subscription_created": artist_sub_created}
+    logger.info("Album %s set to download", album_id)
+    return {"album": album, "started": True, "artist_subscription_created": artist_sub_created}
 
 
-def check_and_update_album_download_status(
-    session: Session,
-    album_id: str,
-) -> str:
+def check_and_update_album_download_status(session: Session, album_id: str) -> str:
     """
-    Check track statuses for an album and update Album.download_status.
+    Recompute Album.download_status from its tracks' statuses. Does not commit.
 
     Status logic, first match wins:
     - "completed": all tracks are "done"
@@ -484,7 +352,6 @@ def check_and_update_album_download_status(
     # it was unfollowed), which mustn't bring the status back.
     if album.mode != "download":
         album.download_status = None
-        session.add(album)
         return "idle"
 
     stats = (
@@ -496,78 +363,21 @@ def check_and_update_album_download_status(
             func.sum(case((Track.status == "queued", 1), else_=0)).label("queued"),
         )
         .filter(Track.album_id == album_id)
-        .first()
+        .one()
     )
 
-    if not stats:
-        album.download_status = "idle"
-        session.add(album)
-        return "idle"
-
-    total = int(stats.total or 0)
-    done = int(stats.done or 0)
-    downloading = int(stats.downloading or 0)
-    failed = int(stats.failed or 0)
-    queued = int(stats.queued or 0)
-
-    if total == 0:
+    if not stats.total:
         new_status = "idle"
-    elif done == total:
+    elif stats.done == stats.total:
         new_status = "completed"
-    elif downloading > 0:
+    elif stats.downloading:
         new_status = "downloading"
-    elif queued > 0:
+    elif stats.queued:
         new_status = "pending"
-    elif failed > 0:
+    elif stats.failed:
         new_status = "failed"
     else:
         new_status = "idle"
 
     album.download_status = new_status
-    session.add(album)
-
     return new_status
-
-
-def get_artist_status(session: Session, artist_id: str) -> dict:
-    """
-    Get comprehensive artist subscription status.
-    
-    Returns:
-        {
-            "has_subscription": bool,
-            "mode": None | "light" | "full",
-            "is_fully_followed": bool,
-        }
-    """
-    subscription = get_artist_subscription(session, artist_id)
-    
-    return {
-        "has_subscription": subscription is not None,
-        "mode": subscription.mode if subscription else None,
-        "is_fully_followed": subscription is not None and subscription.mode == "full",
-    }
-
-
-def get_monitored_artists_needing_sync(
-    session: Session,
-    cutoff: datetime,
-) -> list[Artist]:
-    """
-    Return Artist rows that have an enabled full subscription and haven't
-    been synced since `cutoff` (or ever).
-
-    Used by the scheduler to decide which artists to re-sync.
-    """
-
-    stmt = (
-        select(Artist)
-        .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
-        .where(
-            ArtistSubscription.enabled == True,
-            ArtistSubscription.mode == "full",
-            (ArtistSubscription.last_synced_at == None) | (ArtistSubscription.last_synced_at < cutoff),
-        )
-    )
-
-    return list(session.execute(stmt).scalars().all())

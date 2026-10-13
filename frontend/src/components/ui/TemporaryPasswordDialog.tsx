@@ -1,7 +1,8 @@
 // src/components/ui/TemporaryPasswordDialog.tsx
-import React, { useRef, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from './Button';
+import { Modal } from './Modal';
 
 interface TemporaryPasswordDialogProps {
   username: string;
@@ -16,6 +17,7 @@ interface TemporaryPasswordDialogProps {
  */
 export const TemporaryPasswordDialog: React.FC<TemporaryPasswordDialogProps> = ({ username, password, onClose }) => {
   const { t } = useI18n();
+  const titleId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -37,40 +39,38 @@ export const TemporaryPasswordDialog: React.FC<TemporaryPasswordDialogProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in duration-200">
-      <div className="glass rounded-3xl p-8 max-w-md w-full border-gradient shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-start gap-4 mb-6">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-500/20 text-blue-600 dark:text-blue-400">
-            <span className="text-2xl">🔑</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold text-foreground mb-2">
-              {t('admin.users.temporaryPasswordTitle')}
-            </h2>
-            <p className="text-muted-foreground">
-              {t('admin.users.temporaryPasswordMessage', { username })}
-            </p>
-          </div>
+    <Modal onClose={onClose} dismissible={false} labelledBy={titleId}>
+      <div className="flex items-start gap-4 mb-6">
+        <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-500/20 text-blue-600 dark:text-blue-400">
+          <span className="text-2xl" aria-hidden="true">🔑</span>
         </div>
-
-        <div className="flex gap-2 mb-6">
-          <input
-            ref={inputRef}
-            type="text"
-            readOnly
-            value={password}
-            onFocus={(e) => e.target.select()}
-            className="flex-1 min-w-0 px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
-          />
-          <Button onClick={copy} variant="outline">
-            {copied ? t('admin.users.copied') : t('admin.users.copy')}
-          </Button>
+        <div className="flex-1 min-w-0">
+          <h2 id={titleId} className="text-xl font-bold text-foreground mb-2">
+            {t('admin.users.temporaryPasswordTitle')}
+          </h2>
+          <p className="text-muted-foreground">
+            {t('admin.users.temporaryPasswordMessage', { username })}
+          </p>
         </div>
+      </div>
 
-        <Button onClick={onClose} variant="primary" className="w-full">
-          {t('admin.users.temporaryPasswordDone')}
+      <div className="flex gap-2 mb-6">
+        <input
+          ref={inputRef}
+          type="text"
+          readOnly
+          value={password}
+          onFocus={(e) => e.target.select()}
+          className="flex-1 min-w-0 px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
+        />
+        <Button onClick={copy} variant="outline">
+          {copied ? t('admin.users.copied') : t('admin.users.copy')}
         </Button>
       </div>
-    </div>
+
+      <Button onClick={onClose} variant="primary" className="w-full">
+        {t('admin.users.temporaryPasswordDone')}
+      </Button>
+    </Modal>
   );
 };

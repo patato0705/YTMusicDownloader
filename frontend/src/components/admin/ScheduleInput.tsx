@@ -15,18 +15,6 @@ import type { Schedule, Weekday } from '../../api/admin';
 export const WEEKDAYS: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/** t() with an "_one" variant of the key for a count of 1, when it exists. */
-const useCountedT = () => {
-  const { t } = useI18n();
-  return (key: string, count: number, params: Record<string, string | number> = {}): string => {
-    if (count === 1) {
-      const one = t(`${key}_one`, { count, ...params });
-      if (one !== `${key}_one`) return one;
-    }
-    return t(key, { count, ...params });
-  };
-};
-
 /** Whether a schedule can be saved (mirrors backend validation). */
 export const isValidSchedule = (value: any, min = 1): boolean => {
   if (!value || typeof value !== 'object') return false;
@@ -52,12 +40,11 @@ const useWeekdayNames = (style: 'short' | 'long' = 'short'): Record<Weekday, str
 /** "Every 6 hours" / "Mon, Fri at 07:00": the schedule in a few words. */
 export const useScheduleSummary = () => {
   const { t } = useI18n();
-  const tc = useCountedT();
   const dayNames = useWeekdayNames();
   return (value: Schedule | null | undefined, unit: 'hours' | 'days' | null | undefined): string => {
     if (!value) return '';
     if (value.mode === 'interval') {
-      return tc(`admin.settings.schedule.every_${unit === 'days' ? 'days' : 'hours'}`, value.every);
+      return t(`admin.settings.schedule.every_${unit === 'days' ? 'days' : 'hours'}`, { count: value.every });
     }
     const days = value.days.length === 7
       ? t('admin.settings.schedule.everyDay')
@@ -81,7 +68,6 @@ interface ScheduleControlsProps {
 
 export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onChange, unit, min = 1 }) => {
   const { t } = useI18n();
-  const tc = useCountedT();
   const dayNames = useWeekdayNames();
   const longDayNames = useWeekdayNames('long');
   // What each mode last held, so flipping back and forth loses nothing
@@ -129,7 +115,7 @@ export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onCha
               aria-label={t(`admin.settings.schedule.unit_${unit}`)}
               className={`w-20 text-center ${inputClass} ${borderClass(!isValidSchedule(value, min))}`}
             />
-            <span className="w-14 text-sm text-muted-foreground">{tc(`admin.settings.schedule.unit_${unit}`, value.every)}</span>
+            <span className="w-14 text-sm text-muted-foreground">{t(`admin.settings.schedule.unit_${unit}`, { count: value.every })}</span>
           </>
         ) : (
           <input
@@ -185,12 +171,11 @@ interface ScheduleHintProps {
 /** The small line under the description: how interval mode counts, or the next fixed run. */
 export const ScheduleHint: React.FC<ScheduleHintProps> = ({ settingKey, value, nextRun, dirty, timezone }) => {
   const { t, formatLocale } = useI18n();
-  const tc = useCountedT();
 
   let text: string | null = null;
   let warning = false;
   if (value.mode === 'interval') {
-    text = Number.isFinite(value.every) ? tc(`admin.settings.keys.${settingKey}.intervalHint`, value.every) : null;
+    text = Number.isFinite(value.every) ? t(`admin.settings.keys.${settingKey}.intervalHint`, { count: value.every }) : null;
   } else if (value.days.length === 0) {
     text = t('admin.settings.schedule.noDays');
     warning = true;

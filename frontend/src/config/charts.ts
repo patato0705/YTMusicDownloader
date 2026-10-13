@@ -1,78 +1,80 @@
 // src/config/charts.ts
 /**
- * Available countries for music charts
- * Covers major music markets globally
+ * Countries whose YouTube Music chart can be followed: the major music
+ * markets. Names come from the browser in the UI language (useCountryName).
  */
+import { useMemo } from 'react';
+import { useI18n } from '../contexts/I18nContext';
 
 /** Most artists a chart subscription can follow (mirrors the backend limit). */
 export const CHART_MAX_ARTISTS = 40;
 
 export interface ChartCountry {
+  /** ISO 3166-1 alpha-2 */
   code: string;
-  name: string;
   flag: string;
 }
 
 export const CHART_COUNTRIES: ChartCountry[] = [
   // North America
-  { code: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
-  { code: 'MX', name: 'Mexico', flag: '🇲🇽' },
+  { code: 'US', flag: '🇺🇸' },
+  { code: 'CA', flag: '🇨🇦' },
+  { code: 'MX', flag: '🇲🇽' },
   
   // Europe
-  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-  { code: 'FR', name: 'France', flag: '🇫🇷' },
-  { code: 'DE', name: 'Germany', flag: '🇩🇪' },
-  { code: 'ES', name: 'Spain', flag: '🇪🇸' },
-  { code: 'IT', name: 'Italy', flag: '🇮🇹' },
-  { code: 'NL', name: 'Netherlands', flag: '🇳🇱' },
-  { code: 'SE', name: 'Sweden', flag: '🇸🇪' },
-  { code: 'NO', name: 'Norway', flag: '🇳🇴' },
-  { code: 'DK', name: 'Denmark', flag: '🇩🇰' },
-  { code: 'FI', name: 'Finland', flag: '🇫🇮' },
-  { code: 'PL', name: 'Poland', flag: '🇵🇱' },
-  { code: 'PT', name: 'Portugal', flag: '🇵🇹' },
-  { code: 'BE', name: 'Belgium', flag: '🇧🇪' },
-  { code: 'CH', name: 'Switzerland', flag: '🇨🇭' },
-  { code: 'AT', name: 'Austria', flag: '🇦🇹' },
-  { code: 'IE', name: 'Ireland', flag: '🇮🇪' },
+  { code: 'GB', flag: '🇬🇧' },
+  { code: 'FR', flag: '🇫🇷' },
+  { code: 'DE', flag: '🇩🇪' },
+  { code: 'ES', flag: '🇪🇸' },
+  { code: 'IT', flag: '🇮🇹' },
+  { code: 'NL', flag: '🇳🇱' },
+  { code: 'SE', flag: '🇸🇪' },
+  { code: 'NO', flag: '🇳🇴' },
+  { code: 'DK', flag: '🇩🇰' },
+  { code: 'FI', flag: '🇫🇮' },
+  { code: 'PL', flag: '🇵🇱' },
+  { code: 'PT', flag: '🇵🇹' },
+  { code: 'BE', flag: '🇧🇪' },
+  { code: 'CH', flag: '🇨🇭' },
+  { code: 'AT', flag: '🇦🇹' },
+  { code: 'IE', flag: '🇮🇪' },
   
   // Asia-Pacific
-  { code: 'JP', name: 'Japan', flag: '🇯🇵' },
-  { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
-  { code: 'AU', name: 'Australia', flag: '🇦🇺' },
-  { code: 'NZ', name: 'New Zealand', flag: '🇳🇿' },
-  { code: 'IN', name: 'India', flag: '🇮🇳' },
-  { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
-  { code: 'HK', name: 'Hong Kong', flag: '🇭🇰' },
-  { code: 'TW', name: 'Taiwan', flag: '🇹🇼' },
-  { code: 'TH', name: 'Thailand', flag: '🇹🇭' },
-  { code: 'ID', name: 'Indonesia', flag: '🇮🇩' },
-  { code: 'MY', name: 'Malaysia', flag: '🇲🇾' },
-  { code: 'PH', name: 'Philippines', flag: '🇵🇭' },
-  { code: 'VN', name: 'Vietnam', flag: '🇻🇳' },
+  { code: 'JP', flag: '🇯🇵' },
+  { code: 'KR', flag: '🇰🇷' },
+  { code: 'AU', flag: '🇦🇺' },
+  { code: 'NZ', flag: '🇳🇿' },
+  { code: 'IN', flag: '🇮🇳' },
+  { code: 'SG', flag: '🇸🇬' },
+  { code: 'HK', flag: '🇭🇰' },
+  { code: 'TW', flag: '🇹🇼' },
+  { code: 'TH', flag: '🇹🇭' },
+  { code: 'ID', flag: '🇮🇩' },
+  { code: 'MY', flag: '🇲🇾' },
+  { code: 'PH', flag: '🇵🇭' },
+  { code: 'VN', flag: '🇻🇳' },
   
   // Latin America
-  { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
-  { code: 'AR', name: 'Argentina', flag: '🇦🇷' },
-  { code: 'CL', name: 'Chile', flag: '🇨🇱' },
-  { code: 'CO', name: 'Colombia', flag: '🇨🇴' },
-  { code: 'PE', name: 'Peru', flag: '🇵🇪' },
+  { code: 'BR', flag: '🇧🇷' },
+  { code: 'AR', flag: '🇦🇷' },
+  { code: 'CL', flag: '🇨🇱' },
+  { code: 'CO', flag: '🇨🇴' },
+  { code: 'PE', flag: '🇵🇪' },
   
-  // Middle East & Africa
-  { code: 'ZA', name: 'South Africa', flag: '🇿🇦' },
-  { code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪' },
-  { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
-  { code: 'TR', name: 'Turkey', flag: '🇹🇷' },
-  { code: 'IL', name: 'Israel', flag: '🇮🇱' },
-  { code: 'EG', name: 'Egypt', flag: '🇪🇬' },
+  // Middle East and Africa
+  { code: 'ZA', flag: '🇿🇦' },
+  { code: 'AE', flag: '🇦🇪' },
+  { code: 'SA', flag: '🇸🇦' },
+  { code: 'TR', flag: '🇹🇷' },
+  { code: 'IL', flag: '🇮🇱' },
+  { code: 'EG', flag: '🇪🇬' },
   
-  // Eastern Europe & Russia
-  { code: 'RU', name: 'Russia', flag: '🇷🇺' },
-  { code: 'UA', name: 'Ukraine', flag: '🇺🇦' },
-  { code: 'CZ', name: 'Czech Republic', flag: '🇨🇿' },
-  { code: 'RO', name: 'Romania', flag: '🇷🇴' },
-  { code: 'GR', name: 'Greece', flag: '🇬🇷' },
+  // Eastern Europe and Russia
+  { code: 'RU', flag: '🇷🇺' },
+  { code: 'UA', flag: '🇺🇦' },
+  { code: 'CZ', flag: '🇨🇿' },
+  { code: 'RO', flag: '🇷🇴' },
+  { code: 'GR', flag: '🇬🇷' },
 ];
 
 /**
@@ -82,9 +84,9 @@ export function getCountry(code: string): ChartCountry | undefined {
   return CHART_COUNTRIES.find(c => c.code === code);
 }
 
-/**
- * Check if country code is valid
- */
-export function isValidCountryCode(code: string): boolean {
-  return CHART_COUNTRIES.some(c => c.code === code);
+/** A country's name in the UI language, from its code */
+export function useCountryName(): (code: string) => string {
+  const { locale } = useI18n();
+  const names = useMemo(() => new Intl.DisplayNames([locale], { type: 'region' }), [locale]);
+  return (code: string) => names.of(code) ?? code;
 }

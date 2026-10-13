@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session
 
 from .. import config
 from ..models import User
+from ..secrets import jwt_secret
 from ..settings import get_setting
 from ..time_utils import now_utc
 from . import auth as auth_svc
@@ -92,7 +93,7 @@ def _get_json(url: str, **kwargs) -> Dict[str, Any]:
     return data
 
 
-def get_metadata(force: bool = False) -> Dict[str, Any]:
+def get_metadata() -> Dict[str, Any]:
     """
     The provider's discovery document, cached for an hour. Fetched on first
     use rather than at startup, so a provider that's down doesn't keep the
@@ -100,7 +101,7 @@ def get_metadata(force: bool = False) -> Dict[str, Any]:
     """
     global _metadata, _metadata_at, _keys
     with _lock:
-        if not force and _metadata and time.monotonic() - _metadata_at < _METADATA_TTL:
+        if _metadata and time.monotonic() - _metadata_at < _METADATA_TTL:
             return _metadata
     issuer_url = config.OIDC_ISSUER_URL.rstrip("/")
     data = _get_json(f"{issuer_url}/.well-known/openid-configuration")
@@ -176,12 +177,12 @@ def encode_flow_state(flow: Dict[str, str]) -> str:
         "verifier": flow["verifier"],
         "exp": now_utc() + _FLOW_TTL,
     }
-    return pyjwt.encode(payload, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
+    return pyjwt.encode(payload, jwt_secret(), algorithm=config.JWT_ALGORITHM)
 
 
 def decode_flow_state(token: str) -> Optional[Dict[str, str]]:
     try:
-        payload = pyjwt.decode(token, config.JWT_SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
+        payload = pyjwt.decode(token, jwt_secret(), algorithms=[config.JWT_ALGORITHM])
     except pyjwt.InvalidTokenError:
         return None
     if payload.get("typ") != "oidc_flow":
@@ -350,7 +351,7 @@ def sign_in(session: Session, claims: Dict[str, Any]) -> User:
         session.add(user)
         session.commit()
         session.refresh(user)
-        logger.info(f"Created single sign-on account {user.username} (role={user.role})")
+        logger.info("Created single sign-on account %s (role=%s)", user.username, user.role)
         return user
 
     if not user.is_active:
@@ -358,7 +359,7 @@ def sign_in(session: Session, claims: Dict[str, Any]) -> User:
     if config.OIDC_ROLES_FROM_GROUPS:
         role = mapped or get_setting(session, "auth.oidc_default_role")
         if role != user.role:
-            logger.info(f"Role of {user.username} set to {role} from provider groups (was {user.role})")
+            logger.info("Role of %s set to %s from provider groups (was %s)", user.username, role, user.role)
             user.role = role
             session.add(user)
             session.commit()

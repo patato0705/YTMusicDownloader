@@ -24,6 +24,7 @@ it to artists, like charts; AUTO for the scheduled rescans.
 from __future__ import annotations
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -32,8 +33,9 @@ from sqlalchemy.orm import Session
 
 from .. import config
 from ..downloader.core import safe_name
+from ..jobs.jobqueue import enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
-from ..models import Artist, Job, Playlist, PlaylistEntry, Track
+from ..models import Album, Job, Playlist, PlaylistEntry, Track
 from ..time_utils import now_utc
 from ..ytm_service import adapter as ytm_adapter
 from . import subscriptions as subs_svc
@@ -45,8 +47,12 @@ M3U_DIR_NAME = "Playlists"
 RETRY_DELAY_SECONDS = 120
 
 
+class PlaylistAlreadyAdded(ValueError):
+    """add_playlist() for a playlist already in the library."""
+
+
 def m3u_dir() -> Path:
-    return Path(str(config.MUSIC_DIR)) / M3U_DIR_NAME
+    return config.MUSIC_DIR / M3U_DIR_NAME
 
 
 # ============================================================================
@@ -224,9 +230,9 @@ def refresh_m3u(session: Session, playlist: Playlist) -> None:
         tmp = path.with_name(f".{path.name}.tmp")
         tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, path)  # atomic: a library scan never reads half a file
-        logger.info(f"Wrote {path} ({len(resolved)} songs)")
+        logger.info("Wrote %s (%s songs)", path, len(resolved))
     except OSError:
-        logger.exception(f"Failed writing M3U for playlist {playlist.id}")
+        logger.exception("Failed writing M3U for playlist %s", playlist.id)
 
 
 def _delete_m3u(playlist: Playlist) -> None:
@@ -234,9 +240,9 @@ def _delete_m3u(playlist: Playlist) -> None:
         return
     try:
         (m3u_dir() / playlist.m3u_name).unlink(missing_ok=True)
-        logger.info(f"Deleted M3U {playlist.m3u_name}")
+        logger.info("Deleted M3U %s", playlist.m3u_name)
     except OSError:
-        logger.exception(f"Failed deleting M3U {playlist.m3u_name}")
+        logger.exception("Failed deleting M3U %s", playlist.m3u_name)
     playlist.m3u_name = None
 
 
@@ -271,7 +277,6 @@ def refresh_all(session: Session) -> None:
 
 def _download_albums(session: Session, entries: List[Dict[str, Any]], origin: Origin, user_id: Optional[int]) -> Tuple[int, int]:
     """Start the download of each entry's album not downloaded yet. Returns (started, failed)."""
-    from ..models import Album
     started = failed = 0
     seen = set()
     for e in entries:
@@ -288,7 +293,7 @@ def _download_albums(session: Session, entries: List[Dict[str, Any]], origin: Or
         except Exception:
             # Mostly YouTube Music not answering: still not downloaded, so
             # the retry (or next scan) picks it up again
-            logger.exception(f"Failed to start the download of album {album_id}")
+            logger.exception("Failed to start the download of album %s", album_id)
             session.rollback()
             failed += 1
     return started, failed
@@ -300,8 +305,6 @@ def _follow_artists(session: Session, entries: List[Dict[str, Any]], origin: Ori
     which downloads every release -- like the Follow button. No network
     here: the sync fetches the artist. Returns how many were followed.
     """
-    from ..jobs.jobqueue import enqueue_job
-    from . import artists as artists_svc
     followed = 0
     seen = set()
     for e in entries:
@@ -309,18 +312,9 @@ def _follow_artists(session: Session, entries: List[Dict[str, Any]], origin: Ori
         if not artist_id or artist_id in seen:
             continue
         seen.add(artist_id)
-        sub = subs_svc.get_artist_subscription(session, artist_id)
-        if sub is not None and sub.mode == "full":
-            continue
-        if session.get(Artist, artist_id) is None:
-            artists_svc.upsert_artist(session, artist_id=artist_id, name=e["artist_name"] or "")
-        subs_svc.subscribe_to_artist(session, artist_id=artist_id, mode="full")
-        enqueue_job(
-            session, job_type="sync_artist", payload={"artist_id": artist_id},
-            origin=origin, user_id=user_id, commit=False,
-        )
+        if subs_svc.follow_artist(session, artist_id, e["artist_name"], user_id=user_id, origin=origin):
+            followed += 1
         session.commit()  # one short transaction per artist (single SQLite writer)
-        followed += 1
     return followed
 
 
@@ -383,19 +377,20 @@ def run_sync(session: Session, playlist_id: str, *, fetch: bool, origin: Origin)
     if albums_failed:
         # The albums done are skipped next time: the retry only does the rest
         result.update(error=playlist.last_error, retry_delay_seconds=RETRY_DELAY_SECONDS)
-    logger.info(f"Synced playlist {playlist_id} ({playlist.mode}): {result}")
+    logger.info("Synced playlist %s (%s): %s", playlist_id, playlist.mode, result)
     return result
 
 
-def pending_syncs(session: Session, playlist_id: str) -> List[Job]:
-    """The playlist's sync_playlist jobs waiting or running."""
-    return list(session.execute(
-        select(Job).where(
-            Job.type == "sync_playlist",
-            Job.status.in_(["queued", "reserved"]),
-            func.json_extract(Job.payload, "$.playlist_id") == playlist_id,
-        )
-    ).scalars())
+def pending_syncs(session: Session, playlist_id: Optional[str] = None) -> List[Job]:
+    """The sync_playlist jobs waiting or running: of one playlist, or of all of them."""
+    if playlist_id is None:
+        return pending_jobs(session, "sync_playlist")
+    return pending_jobs(session, "sync_playlist", playlist_id=playlist_id)
+
+
+def _syncing_ids(session: Session) -> set:
+    """Playlists with a scan waiting or running."""
+    return {job.payload.get("playlist_id") for job in pending_syncs(session)}
 
 
 def queue_sync(session: Session, playlist: Playlist, *, origin: Origin, fetch: bool = True) -> None:
@@ -404,7 +399,6 @@ def queue_sync(session: Session, playlist: Playlist, *, origin: Origin, fetch: b
     waiting. One already running doesn't count: what changed since it
     started (a mode switch) needs a scan of its own. No commit.
     """
-    from ..jobs.jobqueue import enqueue_job
     waiting = [j for j in pending_syncs(session, playlist.id) if j.status == "queued"]
     if waiting:
         job = waiting[0]
@@ -442,7 +436,7 @@ def add_playlist(
     if not followed and not m3u:
         raise ValueError("a playlist added once needs an M3U file (or use the one-time buttons)")
     if session.get(Playlist, playlist_id) is not None:
-        raise ValueError("playlist already added")
+        raise PlaylistAlreadyAdded(playlist_id)
 
     data = ytm_adapter.get_playlist(playlist_id)
     playlist = Playlist(
@@ -460,7 +454,7 @@ def add_playlist(
     refresh_m3u(session, playlist)
     queue_sync(session, playlist, origin=Origin.BULK, fetch=False)
     session.commit()
-    logger.info(f"Added playlist {playlist_id} ({mode}, followed={followed}, m3u={m3u})")
+    logger.info("Added playlist %s (%s, followed=%s, m3u=%s)", playlist_id, mode, followed, m3u)
     return playlist
 
 
@@ -538,7 +532,7 @@ def playlists_bringing_back(
     return list(session.execute(
         select(Playlist)
         .join(PlaylistEntry, PlaylistEntry.playlist_id == Playlist.id)
-        .where(Playlist.followed == True, or_(*matches))  # noqa: E712
+        .where(Playlist.followed.is_(True), or_(*matches))
         .distinct()
         .order_by(func.lower(Playlist.title))
     ).scalars())
@@ -553,7 +547,7 @@ def unfollow_for_deletion(session: Session, playlists: Iterable[Playlist]) -> Li
     for playlist in playlists:
         playlist.followed = False
         titles.append(playlist.title)
-        logger.info(f"Unfollowed playlist {playlist.id}: it would bring back what was deleted")
+        logger.info("Unfollowed playlist %s: it would bring back what was deleted", playlist.id)
     return titles
 
 
@@ -561,7 +555,8 @@ def unfollow_for_deletion(session: Session, playlists: Iterable[Playlist]) -> Li
 # LISTING
 # ============================================================================
 
-def summary(session: Session, playlist: Playlist) -> Dict[str, Any]:
+def summary(session: Session, playlist: Playlist, syncing: Optional[set] = None) -> Dict[str, Any]:
+    """The playlist as the API lists it. `syncing`: _syncing_ids(), when summarizing several."""
     entries = session.execute(
         select(PlaylistEntry.album_id, PlaylistEntry.artist_id).where(PlaylistEntry.playlist_id == playlist.id)
     ).all()
@@ -571,7 +566,7 @@ def summary(session: Session, playlist: Playlist) -> Dict[str, Any]:
         1 for album_id, artist_id in entries
         if not album_id or (playlist.mode == "artists" and not artist_id)
     )
-    syncing = bool(pending_syncs(session, playlist.id))
+    syncing = playlist.id in (syncing if syncing is not None else _syncing_ids(session))
     return {
         "id": playlist.id,
         "title": playlist.title,
@@ -593,18 +588,20 @@ def summary(session: Session, playlist: Playlist) -> Dict[str, Any]:
 
 def list_playlists(session: Session) -> List[Dict[str, Any]]:
     rows = session.execute(select(Playlist).order_by(func.lower(Playlist.title))).scalars().all()
-    return [summary(session, p) for p in rows]
+    syncing = _syncing_ids(session)
+    return [summary(session, p, syncing) for p in rows]
 
 
-def followed_needing_sync(session: Session, cutoff) -> List[Playlist]:
+def followed_needing_sync(session: Session, cutoff: datetime) -> List[Playlist]:
     """
     Followed playlists not scanned since `cutoff` (or never), and with no
     scan already waiting or running: the scheduler looks every minute.
     """
     due = session.execute(
         select(Playlist).where(
-            Playlist.followed == True,  # noqa: E712
+            Playlist.followed.is_(True),
             or_(Playlist.last_synced_at.is_(None), Playlist.last_synced_at < cutoff),
         )
     ).scalars().all()
-    return [p for p in due if not pending_syncs(session, p.id)]
+    syncing = _syncing_ids(session)
+    return [p for p in due if p.id not in syncing]

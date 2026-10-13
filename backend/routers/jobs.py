@@ -3,286 +3,23 @@
 Job endpoints.
 
 Endpoints:
-- GET /api/jobs - List jobs.
-- GET /api/jobs/{job_id} - Get a single job by ID.
-- POST /api/jobs/{job_id}/cancel - Cancel a job.
-- POST /api/jobs/{job_id}/requeue - Requeue a failed job.
-- GET /api/jobs/stats/summary - Get job statistics.
+- GET /api/jobs/stats/summary - The queue's activity (the navbar badge, live page refreshes)
 """
 from __future__ import annotations
-import logging
-from typing import Any, Dict, List, Optional
-from datetime import timedelta
+from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from ..db import get_session
-from ..dependencies import require_auth, require_admin
-from ..models import Job, User
-from ..jobs import jobqueue
-from ..jobs.priorities import Origin, priority_for
-from .. import time_utils
-from ..schemas.jobs import (
-    JobOut,
-    CancelRequest,
-    RequeueRequest,
-)
-from ..time_utils import now_utc
 from .. import config
+from ..db import get_session
+from ..dependencies import require_auth
+from ..jobs import gate
+from ..models import Job, User
+from ..time_utils import now_utc
 
-logger = logging.getLogger("routers.jobs")
 router = APIRouter(prefix="/api/jobs", tags=["Jobs"])
-
-
-# ============================================================================
-# HELPERS
-# ============================================================================
-
-def _job_to_dict(job: Job) -> Dict[str, Any]:
-    """Convert Job ORM to dict"""
-    return {
-        "id": job.id,
-        "type": job.type,
-        "status": job.status,
-        "attempts": job.attempts,
-        "max_attempts": job.max_attempts,
-        "priority": job.priority,
-        "scheduled_at": job.scheduled_at,
-        "reserved_by": job.reserved_by,
-        "heartbeat_at": job.heartbeat_at,
-        "started_at": job.started_at,
-        "finished_at": job.finished_at,
-        "created_at": job.created_at,
-        "last_error": job.last_error,
-        "result": job.result,
-        "payload": job.payload,
-        "user_id": getattr(job, "user_id", None),  # May be None if not yet migrated
-    }
-
-
-def _user_can_access_job(user: User, job: Job) -> bool:
-    """Check if user can access this job"""
-    # Admins can access all jobs
-    if user.role == config.ROLE_ADMINISTRATOR:
-        return True
-    
-    # Users can only access their own jobs
-    job_user_id = getattr(job, "user_id", None)
-    return job_user_id == user.id
-
-
-# ============================================================================
-# ROUTES
-# ============================================================================
-
-
-@router.get("", response_model=List[JobOut])
-def list_jobs(
-    job_status: Optional[str] = Query(
-        None,
-        alias="status",
-        description="Filter by status (queued, reserved, done, failed, cancelled)"
-    ),
-    limit: int = Query(100, ge=1, le=1000, description="Max results"),
-    current_user: User = Depends(require_auth),
-    session: Session = Depends(get_session),
-) -> List[JobOut]:
-    """
-    List jobs.
-    
-    Permissions:
-    - Admins see all jobs
-    - Users see only their own jobs
-    
-    Results ordered by created_at desc (newest first).
-    """
-    try:
-        query = session.query(Job)
-        
-        # Filter by user (non-admins see only their jobs)
-        if current_user.role != config.ROLE_ADMINISTRATOR:
-            query = query.filter(Job.user_id == current_user.id)
-        
-        # Filter by status if provided
-        if job_status:
-            query = query.filter(Job.status == job_status)
-        
-        # Order and limit
-        query = query.order_by(Job.created_at.desc()).limit(limit)
-        
-        jobs = query.all()
-        return [JobOut(**_job_to_dict(job)) for job in jobs]
-    
-    except Exception as e:
-        logger.exception("list_jobs failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.get("/{job_id}", response_model=JobOut)
-def get_job(
-    job_id: int,
-    current_user: User = Depends(require_auth),
-    session: Session = Depends(get_session),
-) -> JobOut:
-    """
-    Get a single job by ID.
-    
-    Permissions:
-    - Admins can view any job
-    - Users can only view their own jobs
-    """
-    try:
-        job = session.get(Job, job_id)
-        
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found"
-            )
-        
-        # Check permission
-        if not _user_can_access_job(current_user, job):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to view this job"
-            )
-        
-        return JobOut(**_job_to_dict(job))
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"get_job failed for id={job_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.post("/{job_id}/cancel")
-def cancel_job(
-    job_id: int,
-    body: CancelRequest,
-    current_user: User = Depends(require_auth),
-    session: Session = Depends(get_session),
-) -> Dict[str, Any]:
-    """
-    Cancel a job.
-    
-    Permissions:
-    - Admins can cancel any job
-    - Users can only cancel their own jobs
-    - Cannot cancel jobs that are already done/failed
-    """
-    try:
-        job = session.get(Job, job_id)
-        
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found"
-            )
-        
-        # Check permission
-        if not _user_can_access_job(current_user, job):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to cancel this job"
-            )
-        
-        # Check if job can be cancelled
-        if job.status in ["done", "failed", "cancelled"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot cancel job with status '{job.status}'"
-            )
-        
-        # Cancel the job. A running one is left to finish, but its worker
-        # can no longer requeue it (see jobqueue.mark_job_failed).
-        message = body.message or "Cancelled by user"
-        jobqueue.cancel_job(session, job_id, reason=message)
-        
-        logger.info(f"User {current_user.username} cancelled job {job_id}")
-        
-        return {
-            "ok": True,
-            "job_id": job_id,
-            "status": "cancelled",
-            "message": message
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"cancel_job failed for id={job_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.post("/{job_id}/requeue")
-def requeue_job(
-    job_id: int,
-    body: RequeueRequest,
-    current_user: User = Depends(require_admin),  # Admin only
-    session: Session = Depends(get_session),
-) -> Dict[str, Any]:
-    """
-    Requeue a failed job.
-    
-    Permissions: Administrators only
-    
-    Puts a job back in the queue, optionally with a delay.
-    """
-    try:
-        job = session.get(Job, job_id)
-        
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found"
-            )
-        
-        # Calculate scheduled_at if delay provided
-        scheduled_at = None
-        if body.delay_seconds is not None:
-            scheduled_at = now_utc() + timedelta(seconds=body.delay_seconds)
-        
-        # Update job. An admin asking for it again is a user request: it
-        # also undoes the priority it lost to its failed attempts.
-        job.status = "queued"
-        job.scheduled_at = scheduled_at
-        job.last_error = None
-        job.attempts = 0  # Reset attempts
-        job.priority = priority_for(job.type, Origin.USER)
-        job.payload = {**(job.payload or {}), "origin": Origin.USER.value}
-        session.add(job)
-        jobqueue.set_download_track_status(session, job, "queued")
-        session.commit()
-        session.refresh(job)
-        
-        logger.info(f"Admin {current_user.username} requeued job {job_id}")
-        
-        return {
-            "ok": True,
-            "job_id": job_id,
-            "status": "queued",
-            "scheduled_at": scheduled_at.isoformat() if scheduled_at else None
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"requeue_job failed for id={job_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
 
 
 @router.get("/stats/summary")
@@ -291,80 +28,46 @@ def get_job_stats(
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """
-    Get job statistics.
-    
-    Permissions:
-    - Admins see global stats
-    - Users see only their own stats
+    Job counts of the whole queue, the same for every user: the library is
+    shared, so everyone sees the downloads it's waiting on.
     """
-    try:
-        from sqlalchemy import and_, func, or_
+    now = now_utc()
+    stats: Dict[str, int] = dict(session.query(Job.status, func.count(Job.id)).group_by(Job.status).all())
 
-        query = session.query(Job.status, func.count(Job.id))
+    # Of the "queued" jobs, how many are actually sitting in a retry
+    # backoff (scheduled_at in the future) rather than eligible to run
+    # right now. Callers like the navbar's "active jobs" indicator need
+    # this to avoid counting a job waiting out a multi-hour backoff as
+    # "in progress".
+    stats["pending_scheduled"] = session.query(func.count(Job.id)).filter(
+        Job.status == "queued", Job.scheduled_at > now,
+    ).scalar() or 0
 
-        # Filter by user for non-admins
-        if current_user.role != config.ROLE_ADMINISTRATOR:
-            query = query.filter(Job.user_id == current_user.id)
-
-        # Execute query and build dict
-        results = query.group_by(Job.status).all()
-        stats: Dict[str, int] = {status: count for status, count in results}
-
-        # Of the "queued" jobs, how many are actually sitting in a retry
-        # backoff (scheduled_at in the future) rather than eligible to run
-        # right now. Callers like the navbar's "active jobs" indicator need
-        # this to avoid counting a job waiting out a multi-hour backoff as
-        # "in progress".
-        pending_query = session.query(func.count(Job.id)).filter(
-            Job.status == "queued",
-            Job.scheduled_at > time_utils.now_utc(),
-        )
-        if current_user.role != config.ROLE_ADMINISTRATOR:
-            pending_query = pending_query.filter(Job.user_id == current_user.id)
-        stats["pending_scheduled"] = pending_query.scalar() or 0
-
-        # Breakdown of the in-flight work by job type. The count above lumps
-        # everything together, so a finished album can still show a non-zero
-        # badge while its per-track lyrics jobs drain -- callers use this to
-        # say what those jobs actually are.
-        now = time_utils.now_utc()
-        active_query = session.query(Job.type, func.count(Job.id)).filter(
+    # Breakdown of the in-flight work by job type. The count above lumps
+    # everything together, so a finished album can still show a non-zero
+    # badge while its per-track lyrics jobs drain -- callers use this to
+    # say what those jobs actually are.
+    active_by_type = dict(
+        session.query(Job.type, func.count(Job.id))
+        .filter(
             or_(
                 Job.status == "reserved",
-                and_(
-                    Job.status == "queued",
-                    or_(Job.scheduled_at.is_(None), Job.scheduled_at <= now),
-                ),
+                and_(Job.status == "queued", or_(Job.scheduled_at.is_(None), Job.scheduled_at <= now)),
             )
         )
-        if current_user.role != config.ROLE_ADMINISTRATOR:
-            active_query = active_query.filter(Job.user_id == current_user.id)
-        active_by_type = {
-            job_type: count for job_type, count in active_query.group_by(Job.type).all()
-        }
+        .group_by(Job.type)
+        .all()
+    )
 
-        # Download throttle state (jobs.gate): how many download workers are
-        # active and whether a rate-limit pause is in force. Global, not
-        # per-user, so it's the same for everyone.
-        from ..jobs import gate
-        paused_until = gate.downloads_paused_until(session)
-        downloads = {
+    # Download throttle state (jobs.gate): how many download workers are
+    # active and whether a rate-limit pause is in force.
+    paused_until = gate.downloads_paused_until(session)
+    return {
+        "downloads": {
             "active_workers": gate.active_download_slots(session),
             "max_workers": config.DOWNLOAD_WORKERS,
             "paused_until": paused_until.isoformat() if paused_until else None,
-        }
-
-        return {
-            "ok": True,
-            "downloads": downloads,
-            "stats": stats,
-            "active_by_type": active_by_type,
-            "total": sum(v for k, v in stats.items() if k != "pending_scheduled"),
-        }
-    
-    except Exception as e:
-        logger.exception("get_job_stats failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        },
+        "stats": stats,
+        "active_by_type": active_by_type,
+    }

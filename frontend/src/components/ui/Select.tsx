@@ -7,24 +7,29 @@ interface SelectOption {
 }
 
 interface SelectProps {
+  id?: string;
+  /** Accessible name, when no <label> points at it */
+  ariaLabel?: string;
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
-  placeholder?: string;
   disabled?: boolean;
   className?: string;
 }
 
 export const Select: React.FC<SelectProps> = ({
+  id,
+  ariaLabel,
   value,
   onChange,
   options,
-  placeholder,
   disabled = false,
   className = '',
 }) => {
   return (
     <select
+      id={id}
+      aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
@@ -37,11 +42,6 @@ export const Select: React.FC<SelectProps> = ({
         paddingRight: '2.5rem',
       }}
     >
-      {placeholder && (
-        <option value="" disabled>
-          {placeholder}
-        </option>
-      )}
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}

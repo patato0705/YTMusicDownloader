@@ -16,14 +16,13 @@ drops a download_track job updates its track in the same transaction
 """
 from __future__ import annotations
 import logging
-from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..jobs.jobqueue import enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
-from ..models import Job, Track
+from ..models import Track
 
 logger = logging.getLogger("services.tracks")
 
@@ -47,97 +46,33 @@ def upsert_track(
     lyrics_local: Optional[str] = None,
 ) -> Track:
     """
-    Upsert a Track row. `artists_list` is a list of dicts {id, name}.
+    Create or update a Track row. `artists_list` is a list of dicts {id, name}.
     Fields passed as None are left untouched on an existing row (a new row
-    with status=None starts "available").
-    Returns the Track instance (not committed).
+    with status=None starts "available"). Does not commit.
     """
     if not track_id:
         raise ValueError("track_id required")
 
-    obj = session.get(Track, str(track_id))
-
-    if obj is None:
-        obj = Track(
-            id=str(track_id),
-            title=str(title) if title is not None else "",
-            duration=int(duration_seconds) if duration_seconds is not None else None,
-            artists=artists_list or None,
-            album_id=str(album_id) if album_id is not None else None,
-            track_number=int(track_number) if track_number is not None else None,
-            lyrics=lyrics,
-            lyrics_local=str(lyrics_local) if lyrics_local else None,
-            file_path=str(file_path) if file_path is not None else None,
-            status=status or "available",
-            artist_valid=bool(artist_valid),
-        )
-        session.add(obj)
-        logger.debug(f"Created new track: {track_id}")
-    else:
-        changed = False
-        if title is not None and obj.title != title:
-            obj.title = title
-            changed = True
-        if duration_seconds is not None and obj.duration != duration_seconds:
-            obj.duration = int(duration_seconds)
-            changed = True
-        if artists_list is not None and obj.artists != artists_list:
-            obj.artists = artists_list
-            changed = True
-        if album_id is not None and obj.album_id != album_id:
-            obj.album_id = album_id
-            changed = True
-        if track_number is not None and obj.track_number != track_number:
-            obj.track_number = track_number
-            changed = True
-        if file_path is not None and obj.file_path != file_path:
-            obj.file_path = file_path
-            changed = True
-        if status is not None and obj.status != status:
-            obj.status = status
-            changed = True
-        if obj.artist_valid != bool(artist_valid):
-            obj.artist_valid = bool(artist_valid)
-            changed = True
-        if lyrics is not None and obj.lyrics != lyrics:
-            obj.lyrics = lyrics
-            changed = True
-        if lyrics_local is not None and obj.lyrics_local != lyrics_local:
-            obj.lyrics_local = lyrics_local
-            changed = True
-        if changed:
-            session.add(obj)
-            logger.debug(f"Updated track: {track_id}")
-
-    return obj
-
-
-def get_track_from_db(session: Session, track_id: str) -> Optional[Track]:
-    """Get track from database by ID."""
-    return session.get(Track, track_id)
-
-
-def list_tracks_for_album_from_db(
-    session: Session,
-    album_id: str,
-) -> List[Dict[str, Any]]:
-    """
-    Query DB for tracks with album_id. Returns a list of track dicts.
-    """
-    result: List[Dict[str, Any]] = []
-    try:
-        query = (
-            session.query(Track)
-            .filter(Track.album_id == album_id)
-            .order_by(Track.track_number.asc().nulls_last(), Track.id.asc())
-        )
-        
-        for track in query.all():
-            result.append(track.to_dict())
-    except Exception as e:
-        logger.exception(f"list_tracks_for_album_from_db failed for {album_id}: {e}")
-    
-    return result
+    track = session.get(Track, track_id)
+    if track is None:
+        track = Track(id=track_id, title=title or "", status=status or "available")
+        session.add(track)
+    elif title is not None:
+        track.title = title
+    for field, value in (
+        ("duration", duration_seconds),
+        ("artists", artists_list),
+        ("album_id", album_id),
+        ("track_number", track_number),
+        ("file_path", file_path),
+        ("status", status),
+        ("lyrics", lyrics),
+        ("lyrics_local", lyrics_local),
+    ):
+        if value is not None:
+            setattr(track, field, value)
+    track.artist_valid = bool(artist_valid)
+    return track
 
 
 # yt-dlp messages can run for pages; keep enough for debugging, not the whole trace.
@@ -151,73 +86,6 @@ def truncate_error(error: Optional[Any]) -> Optional[str]:
     return text[:MAX_ERROR_LENGTH] if text else None
 
 
-def update_track_status(
-    session: Session,
-    track_id: str,
-    status: str,
-    file_path: Optional[str] = None,
-    error: Optional[str] = None,
-) -> Optional[Track]:
-    """
-    Update track status and optionally file_path.
-
-    ``error`` is stored on the track when status is "failed"; any other
-    status clears the previous error.
-    
-    Returns:
-        Track instance if found and updated, None otherwise
-    """
-    try:
-        track = session.get(Track, track_id)
-        if not track:
-            logger.warning(f"Track {track_id} not found for status update")
-            return None
-        
-        track.status = status
-        track.last_error = truncate_error(error) if status == "failed" else None
-        if file_path is not None:
-            track.file_path = file_path
-            try:
-                track.file_size = Path(file_path).stat().st_size
-            except OSError:
-                track.file_size = None
-        
-        session.add(track)
-        logger.debug(f"Updated track {track_id} status to {status}")
-        return track
-    except Exception as e:
-        logger.exception(f"Failed to update track status for {track_id}: {e}")
-        return None
-
-
-def get_tracks_by_status(
-    session: Session,
-    status: str,
-    limit: Optional[int] = None,
-) -> List[Track]:
-    """
-    Get tracks by status.
-    
-    Args:
-        session: SQLAlchemy session
-        status: Status to filter by (see the module docstring)
-        limit: Optional limit on number of results
-    
-    Returns:
-        List of Track instances
-    """
-    try:
-        query = session.query(Track).filter(Track.status == status)
-        
-        if limit is not None:
-            query = query.limit(limit)
-        
-        return list(query.all())
-    except Exception as e:
-        logger.exception(f"Failed to get tracks by status {status}: {e}")
-        return []
-
-
 # ============================================================================
 # DOWNLOAD QUEUEING
 # ============================================================================
@@ -228,34 +96,12 @@ _NOT_QUEUEABLE = ("done", "downloading")
 
 def active_download_track_ids(session: Session) -> Set[str]:
     """Tracks that already have a download_track job waiting or running."""
-    payloads = session.execute(
-        select(Job.payload).where(
-            Job.type == "download_track",
-            Job.status.in_(("queued", "reserved")),
-        )
-    ).scalars().all()
-    return {str(p["track_id"]) for p in payloads if isinstance(p, dict) and p.get("track_id")}
-
-
-def _promote_waiting_downloads(session: Session, track_ids: Set[str], origin: Origin) -> None:
-    """Move the waiting download jobs of these tracks up to `origin`'s class."""
-    if not track_ids:
-        return
-    jobs = session.execute(
-        select(Job).where(
-            Job.type == "download_track",
-            Job.status == "queued",
-            Job.payload["track_id"].as_string().in_(track_ids),
-        )
-    ).scalars().all()
-    for job in jobs:
-        promote(job, origin)
+    return {str(job.payload.get("track_id")) for job in pending_jobs(session, "download_track")}
 
 
 def queue_track_downloads(
     session: Session,
     tracks: Iterable[Track],
-    artist_id: Optional[str] = None,
     user_id: Optional[int] = None,
     *,
     origin: Origin,
@@ -273,32 +119,30 @@ def queue_track_downloads(
 
     Returns the number of jobs queued.
     """
-    from ..jobs.jobqueue import enqueue_job
     from . import subscriptions as subs_svc
 
     tracks = list(tracks)
     active = active_download_track_ids(session)
-    _promote_waiting_downloads(session, {t.id for t in tracks if t.id in active}, origin)
+    waiting = {t.id for t in tracks if t.id in active}
+    if waiting:
+        for job in pending_jobs(session, "download_track", statuses=("queued",), track_id=waiting):
+            promote(job, origin)
     albums: Set[str] = set()
     queued = 0
 
     for track in tracks:
         if track.status in _NOT_QUEUEABLE or track.id in active:
             continue
-        payload: Dict[str, Any] = {"track_id": track.id, "album_id": track.album_id}
-        if artist_id:
-            payload["artist_id"] = artist_id
         enqueue_job(
             session,
             job_type="download_track",
-            payload=payload,
+            payload={"track_id": track.id},
             origin=origin,
             user_id=user_id,
             commit=False,
         )
         track.status = "queued"
         track.last_error = None
-        session.add(track)
         active.add(track.id)
         queued += 1
         if track.album_id:
@@ -315,13 +159,10 @@ def queue_track_downloads(
 def queue_album_downloads(
     session: Session,
     album_id: str,
-    artist_id: Optional[str] = None,
     user_id: Optional[int] = None,
     *,
     origin: Origin,
 ) -> int:
     """queue_track_downloads() for every track of an album. Does not commit."""
     tracks = session.query(Track).filter(Track.album_id == album_id).all()
-    return queue_track_downloads(
-        session, tracks, artist_id=artist_id, user_id=user_id, origin=origin
-    )
+    return queue_track_downloads(session, tracks, user_id=user_id, origin=origin)

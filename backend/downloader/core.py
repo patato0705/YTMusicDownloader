@@ -1,36 +1,18 @@
 # backend/downloader/core.py
 from __future__ import annotations
 import logging
-import os
-import time
 import shutil
-from typing import Any, Dict, List, Optional, Union, cast
+import time
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from yt_dlp import YoutubeDL
 
-from ..config import DOWNLOAD_DIR, COVERS_DIR, MUSIC_DIR, YDL_FORMAT, YDL_PREFERRED_CODEC, YDL_COOKIEFILE
-
-# relative package imports (downloader.cover, downloader.embed expected)
-from . import cover as cover_mod  # type: ignore
-from . import embed as embed_mod  # type: ignore
+from ..config import DOWNLOAD_DIR, MUSIC_DIR, YDL_FORMAT, YDL_PREFERRED_CODEC
+from . import cover as cover_mod
+from . import embed as embed_mod
 
 logger = logging.getLogger("downloader.core")
-if not logging.getLogger().handlers:
-    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-
-def _job_download_dir(video_id: str) -> Path:
-    """
-    Scratch directory for one download. Each download gets its own so that
-    several download workers (deploy/supervisord.conf) can run at once
-    without clobbering each other's song.* / .part files. Wiped before use
-    so a retry never picks up a stale file from a previous attempt.
-    """
-    d = Path(str(DOWNLOAD_DIR)) / safe_name(video_id)
-    if d.exists():
-        shutil.rmtree(d, ignore_errors=True)
-    d.mkdir(parents=True, exist_ok=True)
-    return d
 
 
 def safe_name(s: Optional[str]) -> str:
@@ -39,87 +21,127 @@ def safe_name(s: Optional[str]) -> str:
     path component. Security-relevant: this is what keeps metadata-derived
     strings from injecting path traversal or special characters into
     download destination paths -- keep it in one place (also used by
-    downloader/nfo.py and services/artists.py) rather than drifting copies.
+    downloader/nfo.py, services/artists.py and the library deletions)
+    rather than drifting copies.
     """
     if not s:
         return "Unknown"
     return "".join(c for c in s if c.isalnum() or c in " .-_()").strip() or "Unknown"
 
 
-def _find_downloaded_file(download_dir: Union[str, Path], prefix: str = "song.") -> Optional[Path]:
-    try:
-        d = Path(str(download_dir))
-        for f in d.iterdir():
-            if f.name.startswith(prefix) and not f.name.endswith(".part"):
-                return f
-    except Exception:
-        logger.exception("Failed scanning download dir %s", download_dir)
+def album_dir(artist_name: Optional[str], album_name: Optional[str]) -> Path:
+    """MUSIC_DIR/<artist>/<album>: where an album's tracks, cover.jpg and album.nfo go."""
+    return MUSIC_DIR / safe_name(artist_name or "Unknown") / safe_name(album_name or "Unknown Album")
+
+
+def _job_download_dir(video_id: str) -> Path:
+    """
+    Scratch directory for one download. Each download gets its own so that
+    several download workers (deploy/supervisord.conf) can run at once
+    without clobbering each other's song.* / .part files. Wiped before use
+    so a retry never picks up a stale file from a previous attempt.
+    """
+    d = DOWNLOAD_DIR / safe_name(video_id)
+    if d.exists():
+        shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _find_downloaded_file(download_dir: Path) -> Optional[Path]:
+    for f in download_dir.iterdir():
+        if f.name.startswith("song.") and not f.name.endswith(".part"):
+            return f
     return None
 
 
-# --- main public function ---
 def download_track_by_videoid(
     video_id: str,
+    cookiefile: Union[str, Path],
     artist_name: Optional[str] = None,
     album_name: Optional[str] = None,
     track_title: Optional[str] = None,
     track_number: Optional[int] = None,
-    year: Optional[Union[str, int]] = None,
-    cover_path_override: Optional[Union[str, Path]] = None,
-    skip_metadata: bool = True,  # NEW: Skip metadata extraction
-    cookiefile: Optional[Union[str, Path]] = None,
+    year: Optional[str] = None,
+    cover_path: Optional[Union[str, Path]] = None,
     genres: Optional[List[str]] = None,
-) -> tuple[str, Optional[str]]:
+) -> Tuple[str, Optional[str]]:
     """
-    Downloads track (yt-dlp), puts final file under MUSIC_DIR/{artist}/{album}/
-    and returns (file_path, cover_path).
+    Download a track with yt-dlp to MUSIC_DIR/<artist>/<album>/, tagged.
 
     Args:
-        video_id: YouTube video ID
-        artist_name: Artist name for metadata
-        album_name: Album name for metadata
-        track_title: Track title for metadata
-        track_number: Track number for metadata
-        year: Release year for metadata
-        cover_path_override: Path to already existing cover (used if valid)
-        skip_metadata: If True, skip metadata extraction (faster, fewer requests)
-        cookiefile: yt-dlp cookie jar to read from and write back to
-            (default: config.YDL_COOKIEFILE). Concurrent download workers
-            each pass their own -- see jobs.tasks.
+        cookiefile: yt-dlp cookie jar to read from and write back to.
+            Concurrent download workers each pass their own (see jobs.tasks)
+        cover_path: the album's cover (Album.image_local). The first track
+            of an album moves it from COVERS_DIR into the album folder as
+            cover.jpg; later tracks find it there.
         genres: The album's genres, for the genre tag
 
     Returns:
-        tuple: (final_track_path, final_cover_path or None)
+        (file path, the cover's new path when this call moved it, else None)
     """
     job_dir = _job_download_dir(video_id)
     try:
-        return _download_into(
-            job_dir, video_id, artist_name, album_name, track_title, track_number,
-            year, cover_path_override, skip_metadata, cookiefile, genres,
-        )
+        with YoutubeDL(_ydl_options(job_dir, cookiefile)) as ydl:
+            logger.info("Downloading %s", video_id)
+            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+
+        downloaded = _find_downloaded_file(job_dir)
+        if not downloaded:
+            raise FileNotFoundError("Downloaded file not found in downloads directory")
+
+        dest_dir = album_dir(artist_name, album_name)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        title = safe_name(track_title or f"track_{video_id}")
+        filename = f"{track_number:02d} - {title}" if track_number and track_number > 0 else title
+        dest_path = dest_dir / f"{filename}{downloaded.suffix}"
+        if dest_path.exists():
+            dest_path = dest_dir / f"{filename}_{int(time.time())}{downloaded.suffix}"
+        dest_path = cover_mod.move_file(downloaded, dest_path)
+        if dest_path is None:
+            raise OSError(f"Failed to move the download into {dest_dir}")
     finally:
         shutil.rmtree(job_dir, ignore_errors=True)
 
+    # The album's cover goes into its folder once, with its first track
+    album_cover = dest_dir / "cover.jpg"
+    cover = Path(cover_path) if cover_path else None
+    moved_cover: Optional[str] = None
+    if cover and cover != album_cover and cover.is_file():
+        moved = cover_mod.move_file(cover, album_cover)
+        if moved:
+            moved_cover = str(moved)
+            logger.info("Moved cover to album folder: %s", moved)
+    # Another download of the album may have moved it a moment ago
+    if not album_cover.is_file():
+        album_cover = None
 
-def _download_into(
-    job_dir: Path,
-    video_id: str,
-    artist_name: Optional[str],
-    album_name: Optional[str],
-    track_title: Optional[str],
-    track_number: Optional[int],
-    year: Optional[Union[str, int]],
-    cover_path_override: Optional[Union[str, Path]],
-    skip_metadata: bool,
-    cookiefile: Optional[Union[str, Path]],
-    genres: Optional[List[str]] = None,
-) -> tuple[str, Optional[str]]:
-    url = f"https://www.youtube.com/watch?v={video_id}"
-    outtmpl = str(job_dir / "song.%(ext)s")
-    ydl_opts: Dict[str, Any] = {
-        "format": YDL_FORMAT or "bestaudio/best",
-        "cookiefile": str(cookiefile or YDL_COOKIEFILE),
-        "outtmpl": outtmpl,
+    embed_mod.embed_tags(
+        dest_path,
+        title=track_title or f"track_{video_id}",
+        album=album_name or "Unknown Album",
+        artist=artist_name or "Unknown",
+        cover_path=album_cover,
+        track_number=track_number,
+        year=year,
+        genres=genres,
+    )
+
+    try:
+        dest_path.chmod(0o644)
+        if album_cover:
+            album_cover.chmod(0o644)
+    except OSError:
+        pass
+
+    return str(dest_path), moved_cover
+
+
+def _ydl_options(job_dir: Path, cookiefile: Union[str, Path]) -> Dict[str, Any]:
+    return {
+        "format": YDL_FORMAT,
+        "cookiefile": str(cookiefile),
+        "outtmpl": str(job_dir / "song.%(ext)s"),
         # Route yt-dlp's own messages through logging so they reach the log
         # file, not just stdout. Its progress lines arrive at DEBUG (i.e.
         # dropped at INFO); its "ERROR: [youtube] ..." lines at ERROR.
@@ -128,191 +150,8 @@ def _download_into(
         "no_warnings": True,
         "noplaylist": True,
         "postprocessors": [
-            {"key": "FFmpegExtractAudio", "preferredcodec": YDL_PREFERRED_CODEC or "m4a"}
+            {"key": "FFmpegExtractAudio", "preferredcodec": YDL_PREFERRED_CODEC}
         ],
         "retries": 3,
         "continuedl": True,
     }
-
-    info_dict: Dict[str, Any] = {}
-    duration_sec: Optional[int] = None
-
-    # Download with or without metadata extraction
-    try:
-        with YoutubeDL(ydl_opts) as ydl:  # type: ignore
-            if skip_metadata:
-                # FAST MODE: Download directly without metadata extraction
-                logger.info(f"Downloading {video_id} (no metadata)")
-                ydl.download([url])
-            else:
-                # SLOW MODE: Extract metadata first (original behavior)
-                logger.info(f"Downloading {video_id} (with metadata)")
-                tmp_info = ydl.extract_info(url, download=False)
-                if isinstance(tmp_info, dict):
-                    info_dict = cast(Dict[str, Any], tmp_info)
-                    dval = info_dict.get("duration") or info_dict.get("duration_seconds") or info_dict.get("lengthSeconds")
-                    try:
-                        duration_sec = int(dval) if dval is not None else None
-                    except Exception:
-                        duration_sec = None
-                ydl.download([url])
-    except Exception:
-        logger.exception("yt-dlp failed for %s", url)
-        raise
-
-    downloaded_file = _find_downloaded_file(job_dir)
-    if not downloaded_file:
-        raise FileNotFoundError("Downloaded file not found in downloads directory")
-
-    # metadata fallback - use provided metadata since we skipped extraction
-    final_title = track_title or f"track_{video_id}"
-    final_artist = artist_name or "Unknown"
-    final_album = album_name or "Unknown Album"
-    artists_list: List[str] = [final_artist] if final_artist else []
-
-    # Cover handling - use provided cover since we skipped thumbnail extraction
-    cover_path_file: Optional[Path] = None
-    if cover_path_override:
-        try:
-            cand = Path(str(cover_path_override))
-            if cand.is_file() and os.access(str(cand), os.R_OK):
-                cover_path_file = cand
-        except Exception:
-            cover_path_file = None
-
-    # If no cover provided and we didn't skip metadata, try to get thumbnail
-    if not cover_path_file and not skip_metadata and info_dict:
-        thumb_candidates: List[Union[str, Dict[str, Any]]] = []
-        t = info_dict.get("thumbnails")
-        if isinstance(t, list):
-            thumb_candidates = [x for x in t if x is not None]
-        elif isinstance(t, dict):
-            inner = t.get("thumbnails")
-            if isinstance(inner, list):
-                thumb_candidates = [x for x in inner if x is not None]
-        else:
-            th = info_dict.get("thumbnail")
-            if isinstance(th, list):
-                thumb_candidates = [x for x in th if x is not None]
-            elif isinstance(th, (str, dict)):
-                thumb_candidates = [th]
-        
-        thumb_url: Optional[str] = None
-        try:
-            if hasattr(cover_mod, "select_best_thumbnail_url"):
-                thumb_url = cover_mod.select_best_thumbnail_url(thumb_candidates)
-            else:
-                for item in reversed(thumb_candidates):
-                    if isinstance(item, dict) and item.get("url"):
-                        thumb_url = item.get("url")
-                        break
-                    if isinstance(item, str):
-                        thumb_url = item
-                        break
-        except Exception:
-            logger.debug("Thumbnail selection failed", exc_info=True)
-
-        if thumb_url:
-            try:
-                dest_cover = Path(str(COVERS_DIR)) / f"{video_id}.jpg"
-                if hasattr(cover_mod, "save_cover_from_url"):
-                    got = cover_mod.save_cover_from_url(thumb_url, dest_cover)
-                elif hasattr(cover_mod, "save_and_convert_cover"):
-                    got = cover_mod.save_and_convert_cover(thumb_url, dest_cover)
-                else:
-                    got = None
-                if isinstance(got, Path):
-                    cover_path_file = got
-            except Exception:
-                logger.exception("Failed saving cover for %s", video_id)
-
-    # prepare destination path
-    safe_artist = safe_name(final_artist)
-    safe_album = safe_name(final_album)
-    safe_title = safe_name(final_title)
-    dest_dir = Path(str(MUSIC_DIR)) / safe_artist / safe_album
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        if track_number and int(track_number) > 0:
-            filename = f"{int(track_number):02d} - {safe_title}"
-        else:
-            filename = safe_title
-    except Exception:
-        filename = safe_title
-
-    ext = downloaded_file.suffix.lstrip(".") if downloaded_file else (YDL_PREFERRED_CODEC or "m4a")
-    dest_path = dest_dir / f"{filename}.{ext}"
-    if dest_path.exists():
-        dest_path = dest_dir / f"{filename}_{int(time.time())}.{ext}"
-
-    # move/copy downloaded file
-    try:
-        moved = shutil.move(str(downloaded_file), str(dest_path))
-        dest_path = Path(str(moved))
-    except Exception:
-        logger.exception("Move failed, trying copy fallback")
-        shutil.copyfile(str(downloaded_file), str(dest_path))
-        try:
-            downloaded_file.unlink(missing_ok=True)
-        except Exception:
-            pass
-
-    # Lyrics are fetched separately by jobs.tasks.download_lyrics (LRCLIB-based);
-    # this stays None on the initial download and gets filled in by that job.
-    lyrics_lrc_path: Optional[Path] = None
-
-    # move cover into album folder as cover.jpg if present
-    final_cover_path: Optional[str] = None
-    try:
-        if cover_path_file and cover_path_file.exists():
-            album_cover = dest_dir / "cover.jpg"
-            try:
-                moved_cover = None
-                if hasattr(cover_mod, "move_cover_if_exists"):
-                    moved_cover = cover_mod.move_cover_if_exists(cover_path_file, album_cover)
-                elif hasattr(cover_mod, "move_if_exists"):
-                    moved_cover = cover_mod.move_if_exists(cover_path_file, album_cover)
-                else:
-                    moved_cover = shutil.move(str(cover_path_file), str(album_cover))
-                    moved_cover = Path(str(moved_cover))
-                if isinstance(moved_cover, Path) and moved_cover.exists():
-                    cover_path_file = moved_cover
-                    final_cover_path = str(moved_cover)
-                    logger.info(f"Moved cover to album folder: {final_cover_path}")
-            except Exception:
-                logger.exception("Failed to move cover to album folder")
-    except Exception:
-        logger.exception("Cover placement error")
-
-    # embed tags
-    try:
-        if hasattr(embed_mod, "embed_tags"):
-            embed_mod.embed_tags(
-                str(dest_path),
-                title=str(final_title),
-                album=str(final_album),
-                artists=artists_list,
-                album_artist=(artists_list[0] if artists_list else final_artist),
-                lyrics_path=str(lyrics_lrc_path) if lyrics_lrc_path else None,
-                cover_path=str(cover_path_file) if cover_path_file else None,
-                track_number=(int(track_number) if track_number else None),
-                year=str(year) if year else None,
-                genres=genres,
-            )
-        else:
-            logger.debug("embed_mod.embed_tags not available; skipping embedding")
-    except Exception:
-        logger.exception("Failed embedding tags for %s", dest_path)
-
-    # set permissions
-    try:
-        dest_path.chmod(0o644)
-        if cover_path_file and cover_path_file.exists():
-            cover_path_file.chmod(0o644)
-        if lyrics_lrc_path and lyrics_lrc_path.exists():
-            lyrics_lrc_path.chmod(0o644)
-    except Exception:
-        pass
-
-    return str(dest_path), final_cover_path

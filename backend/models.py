@@ -1,28 +1,23 @@
 # backend/models.py
 from __future__ import annotations
 import datetime
+import json
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from backend.time_utils import now_utc, ensure_timezone_aware
+from .time_utils import now_utc, ensure_timezone_aware
 
-logger = __import__("logging").getLogger("models")
 
-# Declarative base (SQLAlchemy 2.0)
 class Base(DeclarativeBase):
     pass
 
 
-# JSON column alias (SQLite uses its dialect JSON)
-JSONCol = SQLiteJSON
-
-
 class Artist(Base):
     __tablename__ = "artists"
- 
+
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     # Square picture (folder.jpg), shown round in the app; the wide banner of
@@ -33,7 +28,7 @@ class Artist(Base):
     # Genres (see services/genres.py): the artist's own, used for albums the
     # genre sources know nothing specific about. The ids are this artist on
     # each source, matched once and reused by later lookups.
-    genres: Mapped[Optional[List[str]]] = mapped_column(JSONCol, nullable=True)
+    genres: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     musicbrainz_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     deezer_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     genres_checked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -53,20 +48,6 @@ class Artist(Base):
         cascade="all, delete-orphan",
     )
 
-    def to_dict(self) -> Dict[str, Any]:
-        image_local = getattr(self, "image_local", None)
-        created_at_val = getattr(self, "created_at", None)
-        created_at = created_at_val.isoformat() if created_at_val is not None else None
-
-        return {
-            "id": getattr(self, "id", None),
-            "name": getattr(self, "name", None),
-            "image_local": image_local,
-            "description": getattr(self, "description", None),
-            "genres": getattr(self, "genres", None) or [],
-            "created_at": created_at,
-        }
- 
     def __repr__(self) -> str:
         return f"<Artist id={self.id!r} name={self.name!r}>"
 
@@ -88,11 +69,11 @@ class Album(Base):
     image_local: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
     # Up to 3 genres and where they came from (services/genres.py): e.g.
     # "musicbrainz-album", or "musicbrainz-artist" when the album itself had none
-    genres: Mapped[Optional[List[str]]] = mapped_column(JSONCol, nullable=True)
+    genres: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     genres_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     genres_checked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # subscription / sync fields (moved from former AlbumSubscription table)
+    # What the library does with it, and its download progress (see services/subscriptions.py)
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="metadata")  # "metadata" or "download"
     download_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default=None)
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -108,22 +89,6 @@ class Album(Base):
         passive_deletes=True,
     )
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": getattr(self, "id", None),
-            "title": getattr(self, "title", None),
-            "artist_id": getattr(self, "artist_id", None),
-            "playlist_id": getattr(self, "playlist_id", None),
-            "year": getattr(self, "year", None),
-            "image_local": getattr(self, "image_local", None),
-            "genres": getattr(self, "genres", None) or [],
-            "mode": getattr(self, "mode", None),
-            "download_status": getattr(self, "download_status", None),
-            "last_synced_at": (ls.isoformat() if (ls := getattr(self, "last_synced_at", None)) else None),
-            "last_error": getattr(self, "last_error", None),
-            "created_at": (ca.isoformat() if (ca := getattr(self, "created_at", None)) else None),
-        }
-
     def __repr__(self) -> str:
         return f"<Album id={self.id!r} title={self.title!r}>"
 
@@ -134,14 +99,14 @@ class Track(Base):
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     title: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
     duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    artists: Mapped[Optional[List[Dict[str, Optional[str]]]]] = mapped_column(JSONCol, nullable=True)
+    artists: Mapped[Optional[List[Dict[str, Optional[str]]]]] = mapped_column(JSON, nullable=True)
     album_id: Mapped[Optional[str]] = mapped_column(
         String(64),
         ForeignKey("albums.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    track_number: Mapped[int] = mapped_column(Integer, nullable=True)
+    track_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     lyrics: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, default=None)
     lyrics_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     # When the scheduler last queued a lyrics recovery/upgrade for this track.
@@ -162,24 +127,17 @@ class Track(Base):
     album: Mapped[Optional[Album]] = relationship("Album", back_populates="tracks")
 
     def to_dict(self) -> Dict[str, Any]:
-        artists_val = getattr(self, "artists", None) or []
-        created_at_val = getattr(self, "created_at", None)
-        created_at_iso = created_at_val.isoformat() if isinstance(created_at_val, datetime.datetime) else None
-
         return {
-            "id": getattr(self, "id", None),
-            "title": getattr(self, "title", None),
-            "duration": getattr(self, "duration", None),
-            "artists": artists_val,
-            "album_id": getattr(self, "album_id", None),
+            "id": self.id,
+            "title": self.title,
+            "artists": self.artists or [],
+            "album_id": self.album_id,
+            "track_number": self.track_number,
+            "duration": self.duration,
+            "status": self.status,
+            "last_error": self.last_error,
             "lyrics": self.lyrics,
-            "lyrics_local": getattr(self, "lyrics_local", None),
-            "file_path": getattr(self, "file_path", None),
-            "file_size": getattr(self, "file_size", None),
-            "status": getattr(self, "status", None),
-            "last_error": getattr(self, "last_error", None),
-            "artist_valid": bool(getattr(self, "artist_valid", True)),
-            "created_at": created_at_iso,
+            "lyrics_local": self.lyrics_local,
         }
 
     def __repr__(self) -> str:
@@ -191,7 +149,7 @@ class Job(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    payload: Mapped[Optional[Any]] = mapped_column(JSONCol, nullable=True)
+    payload: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued", index=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
@@ -200,14 +158,14 @@ class Job(Base):
     started_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    result: Mapped[Optional[Any]] = mapped_column(JSONCol, nullable=True)
+    result: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     reserved_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     # Touched periodically by the worker holding the job; a "reserved" job
     # whose heartbeat has gone stale belongs to a dead worker and gets
     # requeued (see jobqueue.reclaim_orphaned_jobs).
     heartbeat_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    
+    # Who asked for it, when a user did (jobs queued by other jobs or the scheduler have none)
     user_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -215,31 +173,12 @@ class Job(Base):
         index=True,
     )
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": getattr(self, "id", None),
-            "type": getattr(self, "type", None),
-            "payload": getattr(self, "payload", None) or {},
-            "status": getattr(self, "status", None),
-            "attempts": getattr(self, "attempts", 0),
-            "max_attempts": getattr(self, "max_attempts", 0),
-            "priority": getattr(self, "priority", 0),
-            "scheduled_at": scheduled.isoformat() if (scheduled := getattr(self, "scheduled_at", None)) else None,
-            "started_at": started.isoformat() if (started := getattr(self, "started_at", None)) else None,
-            "finished_at": finished.isoformat() if (finished := getattr(self, "finished_at", None)) else None,
-            "last_error": getattr(self, "last_error", None),
-            "result": getattr(self, "result", None),
-            "created_at": created.isoformat() if (created := getattr(self, "created_at", None)) else None,
-            "reserved_by": getattr(self, "reserved_by", None),
-            "heartbeat_at": hb.isoformat() if (hb := getattr(self, "heartbeat_at", None)) else None,
-            "user_id": getattr(self, "user_id", None),  # NEW
-        }
-
 
 # Subscriptions
+
 class ArtistSubscription(Base):
     __tablename__ = "artist_subscriptions"
- 
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
     artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), nullable=False, index=True)
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="full")  # "light" or "full"
@@ -363,44 +302,8 @@ class ChartSubscription(Base):
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": getattr(self, "id", None),
-            "country_code": getattr(self, "country_code", None),
-            "enabled": bool(getattr(self, "enabled", True)),
-            "top_n_artists": getattr(self, "top_n_artists", 10),
-            "created_at": created.isoformat() if (created := getattr(self, "created_at", None)) else None,
-            "created_by": getattr(self, "created_by", None),
-            "last_synced_at": synced.isoformat() if (synced := getattr(self, "last_synced_at", None)) else None,
-            "last_error": getattr(self, "last_error", None),
-        }
-
     def __repr__(self) -> str:
         return f"<ChartSubscription country={self.country_code} top_n={self.top_n_artists} enabled={self.enabled}>"
-
-
-class ChartSnapshot(Base):
-    """
-    Historical chart data snapshots.
-    Stores chart rankings over time to track trends.
-    """
-    __tablename__ = "chart_snapshots"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    country_code: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
-    snapshot_date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False, index=True)
-    data: Mapped[Optional[Any]] = mapped_column(JSONCol, nullable=True)  # Full chart data
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": getattr(self, "id", None),
-            "country_code": getattr(self, "country_code", None),
-            "snapshot_date": snapshot.isoformat() if (snapshot := getattr(self, "snapshot_date", None)) else None,
-            "data": getattr(self, "data", None),
-        }
-
-    def __repr__(self) -> str:
-        return f"<ChartSnapshot country={self.country_code} date={self.snapshot_date}>"
 
 
 # Authentication
@@ -430,23 +333,6 @@ class User(Base):
     # like JWT "iat".
     tokens_valid_after: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Return user data (excluding password)"""
-        created = getattr(self, "created_at", None)
-        last_login = getattr(self, "last_login_at", None)
-        
-        return {
-            "id": getattr(self, "id", None),
-            "username": getattr(self, "username", None),
-            "role": getattr(self, "role", "member"),
-            "is_active": bool(getattr(self, "is_active", True)),
-            "must_change_password": bool(getattr(self, "must_change_password", False)),
-            "has_password": self.has_password,
-            "is_oidc": self.is_oidc,
-            "created_at": created.isoformat() if created else None,
-            "last_login_at": last_login.isoformat() if last_login else None,
-        }
-
     @property
     def has_password(self) -> bool:
         return bool(self.password_hash)
@@ -472,20 +358,11 @@ class RefreshToken(Base):
     expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    
+
     def is_valid(self) -> bool:
-        """Check if token is still valid"""
-        if self.revoked:
-            return False
-        
-        # Ensure expires_at is timezone-aware before comparison
-        expires = ensure_timezone_aware(self.expires_at)
-        if expires is None:
-            # Should never happen since expires_at is non-nullable
-            return False
-        
-        return now_utc() < expires
-    
+        """Not revoked and not expired"""
+        return not self.revoked and now_utc() < ensure_timezone_aware(self.expires_at)
+
     def __repr__(self) -> str:
         return f"<RefreshToken id={self.id} user_id={self.user_id} revoked={self.revoked}>"
 
@@ -501,7 +378,7 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(String(128), primary_key=True)
     value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    type: Mapped[str] = mapped_column(String(32), nullable=False, default="string")  # string, int, bool, json, schedule (JSON)
+    type: Mapped[str] = mapped_column(String(32), nullable=False, default="string")  # string, int, bool, schedule (stored as JSON)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
     updated_by: Mapped[Optional[int]] = mapped_column(
@@ -511,49 +388,38 @@ class Setting(Base):
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        updated = getattr(self, "updated_at", None)
         return {
-            "key": getattr(self, "key", None),
+            "key": self.key,
             "value": self.get_typed_value(),
-            "type": getattr(self, "type", "string"),
-            "description": getattr(self, "description", None),
-            "updated_at": updated.isoformat() if updated else None,
-            "updated_by": getattr(self, "updated_by", None),
+            "type": self.type,
+            "description": self.description,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "updated_by": self.updated_by,
         }
-    
+
     def get_typed_value(self) -> Any:
-        """Return value with proper type conversion"""
-        value = getattr(self, "value", None)
-        setting_type = getattr(self, "type", "string")
-        
-        if value is None:
+        """The stored text as its setting type (None when unparseable)"""
+        if self.value is None:
             return None
-        
-        if setting_type == "int":
+        if self.type == "int":
             try:
-                return int(value)
-            except (ValueError, TypeError):
+                return int(self.value)
+            except ValueError:
                 return None
-        
-        elif setting_type == "bool":
-            return value.lower() in ("true", "1", "yes", "on")
-        
-        elif setting_type in ("json", "schedule"):
+        if self.type == "bool":
+            return self.value.lower() in ("true", "1", "yes", "on")
+        if self.type == "schedule":
             try:
-                import json
-                return json.loads(value)
-            except Exception:
+                return json.loads(self.value)
+            except ValueError:
                 return None
-        
-        else:  # string
-            return value
-    
+        return self.value
+
     def set_value(self, value: Any) -> None:
-        """Set value with type conversion to string"""
+        """Store value as text, according to the setting type"""
         if value is None:
             self.value = None
-        elif self.type in ("json", "schedule"):
-            import json
+        elif self.type == "schedule":
             self.value = json.dumps(value)
         elif self.type == "bool":
             self.value = "true" if value else "false"

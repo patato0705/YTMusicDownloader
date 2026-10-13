@@ -1,25 +1,28 @@
 // src/utils/validation.ts
 //
-// Shared field-validation logic for the register/create-user forms. Kept
-// separate from the error *messages* (which are translated via useI18n's
-// t() in the component) so this stays a plain, framework-agnostic check --
-// components map the reason code to a translated string.
+// Field checks shared by the account forms (register, create user, change
+// password), matching the backend's rules. They return the translation key
+// of the problem, or null, so each form shows it through t().
 
-export type UsernameError = 'too_short' | 'too_long' | 'invalid_chars' | null;
-export type PasswordError = 'too_short' | null;
-
-/** Matches the backend's RegisterRequest/CreateUserRequest length bounds and charset rule. */
-export function getUsernameError(username: string): UsernameError {
-  if (!username) return null;
-  if (username.length < 3) return 'too_short';
-  if (username.length > 64) return 'too_long';
-  if (!/^[A-Za-z0-9_-]+$/.test(username)) return 'invalid_chars';
+/** `requiredKey`: the message for an empty field; without it, empty is fine (not typed yet) */
+export function usernameErrorKey(username: string, requiredKey?: string): string | null {
+  if (!username) return requiredKey ?? null;
+  if (username.length < 3) return 'auth.errors.usernameTooShort';
+  if (username.length > 64) return 'auth.errors.usernameTooLong';
+  if (!/^[A-Za-z0-9_-]+$/.test(username)) return 'auth.errors.usernameInvalidChars';
   return null;
 }
 
-/** Matches the backend's min_length=8 password requirement. */
-export function getPasswordError(password: string): PasswordError {
-  if (!password) return null;
-  if (password.length < 8) return 'too_short';
+/** A new password: at least 8 characters */
+export function passwordErrorKey(password: string, requiredKey?: string): string | null {
+  if (!password) return requiredKey ?? null;
+  if (password.length < 8) return 'auth.errors.passwordTooShort';
+  return null;
+}
+
+/** The confirmation of a new password */
+export function confirmErrorKey(confirm: string, password: string, requiredKey?: string): string | null {
+  if (!confirm) return requiredKey ?? null;
+  if (password && confirm !== password) return 'auth.errors.passwordMismatch';
   return null;
 }

@@ -1,5 +1,4 @@
 # backend/routers/recommendations.py
-
 """
 Artist recommendations (see services/recommendations.py).
 
@@ -16,10 +15,10 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_db
+from ..db import get_session
+from ..dependencies import require_auth, require_member_or_admin
+from ..models import User
 from ..services import recommendations as recommendations_svc
-from backend.dependencies import require_auth, require_member_or_admin
-from backend.models import User
 
 logger = logging.getLogger("routers.recommendations")
 
@@ -30,7 +29,7 @@ router = APIRouter(prefix="/api/recommendations", tags=["Recommendations"])
 def get_recommendations(
     limit: int = Query(recommendations_svc.DEFAULT_LIMIT, ge=1, le=100),
     current_user: User = Depends(require_auth),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     return {
         "recommendations": recommendations_svc.list_recommendations(db, limit=limit),
@@ -41,7 +40,7 @@ def get_recommendations(
 @router.get("/dismissed", status_code=status.HTTP_200_OK)
 def get_dismissed(
     current_user: User = Depends(require_member_or_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     return {"dismissed": recommendations_svc.list_dismissed(db)}
 
@@ -50,7 +49,7 @@ def get_dismissed(
 def dismiss_artist(
     artist_id: str,
     current_user: User = Depends(require_member_or_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     if not recommendations_svc.dismiss(db, artist_id, user_id=current_user.id):
         raise HTTPException(status_code=404, detail="Unknown artist")
@@ -63,7 +62,7 @@ def dismiss_artist(
 def restore_artist(
     artist_id: str,
     current_user: User = Depends(require_member_or_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     if not recommendations_svc.restore(db, artist_id):
         raise HTTPException(status_code=404, detail="Artist not dismissed")

@@ -3,19 +3,21 @@
 Simple job queue helpers for SQLite-compatible job processing.
 
 Functions:
-- enqueue_job() - Create a new job and commit
+- enqueue_job() - Create a new job (commits unless told not to)
+- pending_jobs() - Jobs of a type still waiting or running, by payload value
 - reserve_job() - Atomically reserve next job for processing
 - heartbeat_job() - Record that the worker holding a job is still alive
 - mark_job_done() - Mark job as successfully completed
 - mark_job_failed() - Mark job as failed (with optional retry)
 - reclaim_orphaned_jobs() - Requeue jobs left "reserved" by a dead worker
-- cancel_job() - Cancel a queued or reserved job
 - cancel_download_jobs() - Cancel the download jobs of a set of tracks
 - set_download_track_status() - Mirror a download job's state onto its track
 - cleanup_old_jobs() - Delete old finished jobs
 
 Notes:
-- All functions commit the session to make changes visible to worker processes
+- The job lifecycle functions commit, so worker processes see the change at
+  once; the helpers that change jobs as part of a bigger change
+  (cancel_download_jobs, set_download_track_status) leave that to the caller
 - Several worker processes poll this queue concurrently (see
   deploy/supervisord.conf), so reserve_job() must be safe against two
   workers picking the same row. It is: the claim is a conditional UPDATE
@@ -26,9 +28,9 @@ Notes:
 from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
-from typing import Collection, Optional, Sequence
+from typing import Any, Collection, List, Optional, Sequence
 
-from sqlalchemy import select, update, and_, or_
+from sqlalchemy import delete, select, update, and_, or_
 from sqlalchemy.orm import Session
 
 from ..models import Job, Track
@@ -46,6 +48,9 @@ RESERVE_MAX_RACES = 5
 # that's merely slow.
 STALE_HEARTBEAT_SECONDS = 300
 
+# A job waiting to run or running
+PENDING_STATUSES = ("queued", "reserved")
+
 
 def enqueue_job(
     session: Session,
@@ -53,14 +58,14 @@ def enqueue_job(
     payload: Optional[dict] = None,
     scheduled_at: Optional[datetime] = None,
     max_attempts: int = 5,
-    user_id: Optional[int] = None,  # NEW parameter
+    user_id: Optional[int] = None,
     commit: bool = True,
     *,
     origin: Origin,
 ) -> Job:
     """
     Create a new Job row and commit. Returns the Job instance.
-    
+
     Args:
         session: SQLAlchemy session
         job_type: Job type identifier (e.g., "download_track", "import_album")
@@ -72,7 +77,7 @@ def enqueue_job(
         origin: Where the job comes from (see jobs/priorities.py): decides
             its priority and is recorded in the payload, so the jobs this
             one queues inherit it
-    
+
     Returns:
         Job instance with ID populated
     """
@@ -92,16 +97,40 @@ def enqueue_job(
         priority=priority,
         scheduled_at=scheduled_at,
         created_at=now_utc(),
-        user_id=user_id,  # NEW: Store user_id on Job model
+        user_id=user_id,
     )
     session.add(job)
-    
+
     if commit:
         session.commit()
         session.refresh(job)
-    
-    logger.debug(f"Enqueued job (commit={commit}): type={job_type}, priority={priority}, user_id={user_id}")
+
+    logger.debug("Enqueued job (commit=%s): type=%s, priority=%s, user_id=%s", commit, job_type, priority, user_id)
     return job
+
+
+def pending_jobs(
+    session: Session,
+    job_type: str,
+    statuses: Sequence[str] = PENDING_STATUSES,
+    **payload: Any,
+) -> List[Job]:
+    """
+    Jobs of `job_type` in one of `statuses` (waiting or running by default),
+    optionally only those whose payload has the given values: a string
+    matches that value, a collection any of its values. Payload values are
+    compared as strings. Sees the jobs queued earlier in the transaction
+    (the session doesn't autoflush).
+    """
+    session.flush()
+    stmt = select(Job).where(Job.type == job_type, Job.status.in_(list(statuses)))
+    for key, value in payload.items():
+        field = Job.payload[key].as_string()
+        if isinstance(value, (set, frozenset, list, tuple)):
+            stmt = stmt.where(field.in_([str(v) for v in value]))
+        else:
+            stmt = stmt.where(field == str(value))
+    return list(session.execute(stmt.order_by(Job.id)).scalars())
 
 
 def reserve_job(
@@ -132,7 +161,7 @@ def reserve_job(
     conditions = [
         Job.status == "queued",
         Job.attempts < Job.max_attempts,
-        (Job.scheduled_at == None) | (Job.scheduled_at <= now),
+        Job.scheduled_at.is_(None) | (Job.scheduled_at <= now),
     ]
     if job_types:
         conditions.append(Job.type.in_(list(job_types)))
@@ -168,13 +197,13 @@ def reserve_job(
                 )
             ).rowcount
             session.commit()
-        except Exception as e:
-            logger.exception(f"Failed to reserve job {job_id}: {e}")
+        except Exception:
+            logger.exception("Failed to reserve job %s", job_id)
             session.rollback()
             return None
 
         if claimed != 1:
-            logger.debug(f"Lost race for job {job_id} to another worker, retrying")
+            logger.debug("Lost race for job %s to another worker, retrying", job_id)
             continue
 
         job = session.get(Job, job_id)
@@ -182,9 +211,8 @@ def reserve_job(
             continue
         session.refresh(job)
         logger.debug(
-            f"Reserved job {job.id}: type={job.type}, "
-            f"attempt={job.attempts}/{job.max_attempts}, "
-            f"worker={worker_name}"
+            "Reserved job %s: type=%s, attempt=%s/%s, worker=%s",
+            job.id, job.type, job.attempts, job.max_attempts, worker_name,
         )
         return job
 
@@ -246,7 +274,7 @@ def reclaim_orphaned_jobs(
             Job.reserved_by == worker_name,
             Job.heartbeat_at < cutoff,
             # Reserved before heartbeats existed / never heartbeated at all
-            and_(Job.heartbeat_at == None, Job.started_at < cutoff),
+            and_(Job.heartbeat_at.is_(None), Job.started_at < cutoff),
         ),
     )
     orphaned = session.execute(stmt).scalars().all()
@@ -289,8 +317,8 @@ def reclaim_orphaned_jobs(
     session.commit()
 
     logger.warning(
-        f"Reclaimed {len(orphaned)} orphaned job(s) left 'reserved' by a dead worker: "
-        f"requeued {len(orphaned) - failed}, failed {failed} out of attempts"
+        "Reclaimed %s orphaned job(s) left 'reserved' by a dead worker: requeued %s, failed %s out of attempts",
+        len(orphaned), len(orphaned) - failed, failed,
     )
     return len(orphaned)
 
@@ -302,7 +330,7 @@ def mark_job_done(
 ) -> None:
     """
     Mark job as successfully completed. Commits.
-    
+
     Args:
         session: SQLAlchemy session
         job_id: Job ID
@@ -310,17 +338,17 @@ def mark_job_done(
     """
     job = session.get(Job, job_id)
     if not job:
-        logger.warning(f"Cannot mark job {job_id} as done: not found")
+        logger.warning("Cannot mark job %s as done: not found", job_id)
         return
-    
+
     job.status = "done"
     job.finished_at = now_utc()
     job.result = result or {}
     job.last_error = None  # Clear any previous errors
     session.add(job)
     session.commit()
-    
-    logger.info(f"Job {job_id} completed: type={job.type}")
+
+    logger.info("Job %s completed: type=%s", job_id, job.type)
 
 
 def mark_job_failed(
@@ -333,18 +361,18 @@ def mark_job_failed(
 ) -> None:
     """
     Mark job as failed. Optionally retry with exponential backoff.
-    
+
     If retry_delay_seconds is provided and attempts < max_attempts:
     - Requeues job with scheduled_at = now + delay
     - Status set back to "queued"
-    
+
     Otherwise:
     - Status set to "failed"
     - No further retries
 
     A download_track job's track follows: "queued" when retried, "failed"
     once out of attempts.
-    
+
     Args:
         session: SQLAlchemy session
         job_id: Job ID
@@ -357,27 +385,27 @@ def mark_job_failed(
     """
     job = session.get(Job, job_id)
     if not job:
-        logger.warning(f"Cannot mark job {job_id} as failed: not found")
+        logger.warning("Cannot mark job %s as failed: not found", job_id)
         return
 
     # Cancelled or reclaimed while this attempt ran: its outcome no longer
     # decides anything, and requeueing here would undo a cancellation.
     if job.status != "reserved" or (worker_name and job.reserved_by != worker_name):
         logger.info(
-            f"Ignoring failure of job {job_id} reported by {worker_name or 'caller'}: "
-            f"job is now {job.status} (held by {job.reserved_by or 'nobody'})"
+            "Ignoring failure of job %s reported by %s: job is now %s (held by %s)",
+            job_id, worker_name or "caller", job.status, job.reserved_by or "nobody",
         )
         if job.status == "cancelled":
             set_download_track_status(session, job, "available", only_from=("queued", "downloading"))
             session.commit()
         return
-    
+
     now = now_utc()
     job.last_error = str(error_message) if error_message else None
 
     if refund_attempt and job.attempts:
         job.attempts -= 1
-    
+
     # Check if we should retry
     if retry_delay_seconds and (job.attempts or 0) < (job.max_attempts or 1):
         # Requeue with backoff
@@ -389,10 +417,10 @@ def mark_job_failed(
         session.add(job)
         set_download_track_status(session, job, "queued")
         session.commit()
-        
+
         logger.warning(
-            f"Job {job_id} failed (attempt {job.attempts}/{job.max_attempts}), "
-            f"retrying in {retry_delay_seconds}s: {error_message}"
+            "Job %s failed (attempt %s/%s), retrying in %ss: %s",
+            job_id, job.attempts, job.max_attempts, retry_delay_seconds, error_message,
         )
     else:
         # Permanent failure
@@ -401,45 +429,8 @@ def mark_job_failed(
         session.add(job)
         set_download_track_status(session, job, "failed", error=error_message)
         session.commit()
-        
-        logger.error(
-            f"Job {job_id} permanently failed after {job.attempts} attempts: "
-            f"{error_message}"
-        )
 
-
-def cancel_job(session: Session, job_id: int, reason: Optional[str] = None) -> bool:
-    """
-    Cancel a queued or reserved job.
-    Cannot cancel jobs that are already done or failed.
-    
-    Args:
-        session: SQLAlchemy session
-        job_id: Job ID
-        reason: Optional cancellation reason
-    
-    Returns:
-        True if cancelled, False if job not found or already finished
-    """
-    job = session.get(Job, job_id)
-    if not job:
-        return False
-    
-    if job.status in ["done", "failed"]:
-        logger.warning(f"Cannot cancel job {job_id}: already {job.status}")
-        return False
-    
-    job.status = "cancelled"
-    job.finished_at = now_utc()
-    job.last_error = f"Cancelled: {reason}" if reason else "Cancelled by user"
-    session.add(job)
-    # A download already running is left to finish: its worker then lands
-    # the file, or hands the track back via mark_job_failed's cancelled path.
-    set_download_track_status(session, job, "available", only_from=("queued",))
-    session.commit()
-    
-    logger.info(f"Cancelled job {job_id}: {reason}")
-    return True
+        logger.error("Job %s permanently failed after %s attempts: %s", job_id, job.attempts, error_message)
 
 
 def cancel_download_jobs(session: Session, track_ids: Collection[str], reason: str) -> int:
@@ -456,24 +447,16 @@ def cancel_download_jobs(session: Session, track_ids: Collection[str], reason: s
     if not wanted:
         return 0
 
-    jobs = session.execute(
-        select(Job).where(Job.type == "download_track", Job.status.in_(("queued", "reserved")))
-    ).scalars().all()
-
     now = now_utc()
-    cancelled = 0
+    jobs = pending_jobs(session, "download_track", track_id=wanted)
     for job in jobs:
-        payload = job.payload if isinstance(job.payload, dict) else {}
-        if str(payload.get("track_id")) not in wanted:
-            continue
         job.status = "cancelled"
         job.finished_at = now
         job.last_error = f"Cancelled: {reason}"
-        session.add(job)
-        cancelled += 1
+    cancelled = len(jobs)
 
     if cancelled:
-        logger.info(f"Cancelled {cancelled} download job(s): {reason}")
+        logger.info("Cancelled %s download job(s): %s", cancelled, reason)
     return cancelled
 
 
@@ -517,35 +500,14 @@ def set_download_track_status(
         subs_svc.check_and_update_album_download_status(session, track.album_id)
 
 
-def cleanup_old_jobs(
-    session: Session,
-    days_old: int = 7,
-) -> int:
-    """
-    Delete old finished jobs (done, failed, cancelled) to prevent database bloat.
-
-    Args:
-        session: SQLAlchemy session
-        days_old: Delete jobs finished more than this many days ago (default 7)
-
-    Returns:
-        Number of jobs deleted
-    """
+def cleanup_old_jobs(session: Session, days_old: int) -> int:
+    """Delete jobs that finished (done, failed, cancelled) more than `days_old` days ago. Commits."""
     cutoff = now_utc() - timedelta(days=days_old)
-
-    query = session.query(Job).filter(
-        Job.finished_at != None,
-        Job.finished_at < cutoff,
-        Job.status.in_(["done", "failed", "cancelled"]),
-    )
-
-    jobs_to_delete = query.all()
-    count = len(jobs_to_delete)
-    
-    for job in jobs_to_delete:
-        session.delete(job)
-    
+    deleted = session.execute(
+        delete(Job).where(
+            Job.finished_at < cutoff,
+            Job.status.in_(("done", "failed", "cancelled")),
+        )
+    ).rowcount
     session.commit()
-    
-    logger.info(f"Cleaned up {count} old jobs (older than {days_old} days)")
-    return count
+    return deleted

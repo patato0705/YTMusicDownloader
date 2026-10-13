@@ -8,6 +8,7 @@ import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { I18nProvider } from './contexts/I18nContext';
+import { FeaturesProvider } from './contexts/FeaturesContext';
 import { JobActivityProvider } from './contexts/JobActivityContext';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -16,9 +17,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <ThemeProvider>
         <I18nProvider>
           <AuthProvider>
-            <JobActivityProvider>
-              <App />
-            </JobActivityProvider>
+            <FeaturesProvider>
+              <JobActivityProvider>
+                <App />
+              </JobActivityProvider>
+            </FeaturesProvider>
           </AuthProvider>
         </I18nProvider>
       </ThemeProvider>

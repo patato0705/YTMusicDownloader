@@ -19,10 +19,7 @@ export function useDeletionNotes() {
     if (playlists.length) {
       const titles = new Intl.ListFormat(locale, { type: 'conjunction' })
         .format(playlists.map((p) => t('library.deletion.quoted', { title: p.title })));
-      lines.push(t(
-        playlists.length === 1 ? 'library.deletion.playlistsUnfollowed_one' : 'library.deletion.playlistsUnfollowed',
-        { titles },
-      ));
+      lines.push(t('library.deletion.playlistsUnfollowed', { titles, count: playlists.length }));
     }
     return lines.join('\n\n');
   };

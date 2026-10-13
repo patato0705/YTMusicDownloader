@@ -1,14 +1,16 @@
 // src/pages/Album.tsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useJobActivity } from '../contexts/JobActivityContext';
 import { getAlbum, downloadAlbum, retryAlbum } from '../api/albums';
+import type { AlbumPage } from '../api/albums';
 import { deleteLibraryAlbum, getAlbumDeletionEffects } from '../api/library';
 import type { DeletionEffects } from '../api/library';
-import { useDeletionNotes } from '../hooks/useDeletionNotes';
 import { getImageUrl } from '../api/media';
-import { Spinner } from '../components/ui/Spinner';
+import { useDeletionNotes } from '../hooks/useDeletionNotes';
+import { albumTypeKey } from '../components/MediaCard';
 import { Artwork } from '../components/ui/Artwork';
 import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
@@ -17,17 +19,16 @@ import { SectionHeader } from '../components/ui/SectionHeader';
 import { LyricsBadge } from '../components/ui/LyricsBadge';
 import { LyricsModal } from '../components/ui/LyricsModal';
 import { GenreChips } from '../components/ui/GenreChips';
-import { formatDuration, getPrimaryArtist, apiErrorMessage } from '../utils';
-import { useJobActivity } from '../contexts/JobActivityContext';
+import { TrackStatusBadge } from '../components/ui/TrackStatusBadge';
+import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
+import { formatDuration, primaryArtistName, apiErrorMessage } from '../utils';
 import type { Track } from '../types';
 
 export default function Album(): JSX.Element {
   const { albumId } = useParams<{ albumId: string }>();
-  const [album, setAlbum] = useState<any>(null);
-  const [tracks, setTracks] = useState<Track[]>([]);
+  const [page, setPage] = useState<AlbumPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isFollowing, setIsFollowing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [retryLoading, setRetryLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -36,89 +37,90 @@ export default function Album(): JSX.Element {
   const [deleteEffects, setDeleteEffects] = useState<DeletionEffects | null>(null);
   const deletionNotes = useDeletionNotes();
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [source, setSource] = useState<string>('');
-  // A download-mode album with no tracks in the DB and no import waiting:
-  // Retry imports it again (see routers/albums.py)
-  const [needsImport, setNeedsImport] = useState(false);
   const [lyricsTrack, setLyricsTrack] = useState<Track | null>(null);
   const navigate = useNavigate();
-  const { t, formatLocale } = useI18n();
+  const { t } = useI18n();
   const { user } = useAuth();
   const { revision, refresh: refreshJobs, downloadsPausedUntil } = useJobActivity();
+  // The queue revision the album on screen is up to date with
+  const fetchedRevision = useRef(revision);
   const isAdmin = user?.role === 'administrator';
   // Visitors are read-only: downloading and editing lyrics are member+ actions
   const canModify = isAdmin || user?.role === 'member';
-  // Lyrics and download state only exist for tracks in our DB, so those
-  // columns are pointless on albums served straight from YTMusic.
-  const showTrackState = source === 'database';
-  // Tracks a retry would queue: failed ones, and any left without a job
-  const retryableCount = tracks.filter((tr) => tr.status === 'failed' || tr.status === 'available').length;
 
-  const applyAlbum = (data: any) => {
-    setAlbum(data.album);
-    setTracks(data.tracks || []);
-    setIsFollowing(data.mode === 'download');
-    setSource(data.source || '');
-    setNeedsImport(Boolean(data.needs_import));
+  const fetchAlbum = async (id: string): Promise<AlbumPage> => {
+    fetchedRevision.current = revision;
+    return getAlbum(id);
   };
 
   useEffect(() => {
     if (!albumId) return;
-
     let cancelled = false;
 
-    (async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const data = await getAlbum(albumId);
-        if (!cancelled) applyAlbum(data);
-      } catch (err: any) {
+    setLoading(true);
+    setError(null);
+    fetchAlbum(albumId)
+      .then((data) => { if (!cancelled) setPage(data); })
+      .catch((err) => {
         console.error('Failed to load album:', err);
-        if (!cancelled) setError(apiErrorMessage(err, t, t('common.error')));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+        if (!cancelled) setError(apiErrorMessage(err, t, t('album.notFound')));
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
   }, [albumId]);
 
-  // Refresh track statuses whenever the job queue moves, so the badges follow
-  // the download live instead of requiring a manual reload.
-  // Skipped for albums served from YTMusic (see routers/albums.py): they have
-  // no download to follow, and refetching would mean an external call each time.
+  // Follow the job queue, so the track badges move with the download.
+  // Albums served from YTMusic have no download to follow, and refetching
+  // them would mean a call to YouTube Music each time.
+  const source = page?.source;
   useEffect(() => {
-    if (!albumId || revision === 0 || source !== 'database') return;
-
+    if (!albumId || source !== 'database' || revision === fetchedRevision.current) return;
     let cancelled = false;
 
-    getAlbum(albumId)
-      .then((data) => {
-        if (!cancelled) applyAlbum(data);
-      })
+    fetchAlbum(albumId)
+      .then((data) => { if (!cancelled) setPage(data); })
       .catch((err) => console.error('Failed to refresh album:', err));
 
     return () => { cancelled = true; };
   }, [albumId, revision, source]);
 
-  const handleDownload = async () => {
-    if (!albumId) return;
+  if (loading) return <LoadingState />;
 
+  if (error || !page) {
+    return (
+      <div className="space-y-6 py-8">
+        <ErrorBanner title={t('common.error')}>{error || t('album.notFound')}</ErrorBanner>
+        <Button onClick={() => navigate('/browse')} variant="primary">
+          ← {t('common.back')}
+        </Button>
+      </div>
+    );
+  }
+
+  const { album, tracks } = page;
+  const id = albumId!;
+  const isFollowing = page.mode === 'download';
+  // Lyrics and download state only exist for tracks in our DB
+  const showTrackState = page.source === 'database';
+  // Tracks a retry would queue: failed ones, and any left without a job
+  const retryableCount = tracks.filter((tr) => tr.status === 'failed' || tr.status === 'available').length;
+  const totalDuration = tracks.reduce((sum, track) => sum + (track.duration || 0), 0);
+
+  const handleDownload = async () => {
     setActionLoading(true);
     try {
-      const result = await downloadAlbum(albumId);
-      setIsFollowing(true);
+      const result = await downloadAlbum(id);
+      setToast({
+        message: t(result.artist_subscription_created ? 'album.downloadQueuedWithArtist' : 'album.downloadQueued'),
+        type: 'success',
+      });
       refreshJobs();
-      const message = result?.artist_subscription_created
-        ? t('album.downloadQueuedWithArtist')
-        : t('album.downloadQueued');
-      setToast({ message, type: 'success' });
-      // The album is in the DB now: reload it so the tracks show as queued
-      // (an album served from YTMusic isn't refreshed by job activity)
-      getAlbum(albumId)
-        .then(applyAlbum)
+      setPage((current) => current && { ...current, mode: 'download' });
+      // In the DB now: reloaded once, then followed with the job queue. The
+      // download is queued even if this reload fails.
+      fetchAlbum(id)
+        .then(setPage)
         .catch((err) => console.error('Failed to reload album:', err));
     } catch (err: any) {
       console.error('Download failed:', err);
@@ -128,33 +130,32 @@ export default function Album(): JSX.Element {
     }
   };
 
+  // The tracks it queues show up with the job queue's next move
   const handleRetry = async () => {
-    if (!albumId) return;
-
     setRetryLoading(true);
     try {
-      const { tracks_queued, import_queued } = await retryAlbum(albumId);
+      const { tracks_queued, import_queued } = await retryAlbum(id);
       refreshJobs();
-      setToast(import_queued
-        ? { message: t('album.retryImport'), type: 'success' }
-        : tracks_queued > 0
-          ? { message: t('album.retryQueued', { count: tracks_queued }), type: 'success' }
-          : { message: t('album.retryNothing'), type: 'success' });
-      const data = await getAlbum(albumId);
-      applyAlbum(data);
+      setToast({
+        message: import_queued
+          ? t('album.retryImport')
+          : tracks_queued > 0
+            ? t('album.retryQueued', { count: tracks_queued })
+            : t('album.retryNothing'),
+        type: 'success',
+      });
     } catch (err: any) {
       console.error('Retry failed:', err);
-      setToast({ message: err.message || t('album.retryFailed'), type: 'error' });
+      setToast({ message: apiErrorMessage(err, t, t('album.retryFailed')), type: 'error' });
     } finally {
       setRetryLoading(false);
     }
   };
 
   const openDeleteConfirm = async () => {
-    if (!albumId) return;
     setDeleteEffects(null);
     try {
-      setDeleteEffects(await getAlbumDeletionEffects(albumId));
+      setDeleteEffects(await getAlbumDeletionEffects(id));
     } catch (err) {
       console.error('Failed to read what the deletion changes:', err);
     }
@@ -162,141 +163,24 @@ export default function Album(): JSX.Element {
   };
 
   const handleDelete = async () => {
-    if (!albumId) return;
-
     setDeleteLoading(true);
     try {
-      await deleteLibraryAlbum(albumId);
+      await deleteLibraryAlbum(id);
       setToast({ message: t('album.deleted'), type: 'success' });
       setTimeout(() => navigate('/library'), 1500);
     } catch (err: any) {
       console.error('Delete failed:', err);
-      setToast({ message: err.message || t('common.error'), type: 'error' });
+      setToast({ message: apiErrorMessage(err, t, t('common.error')), type: 'error' });
     } finally {
       setDeleteLoading(false);
       setDeleteConfirm(false);
     }
   };
 
-  /** Badge for a track's download state; null for tracks not in the DB */
-  const getStatusConfig = (track: Track): { styles: string; label: string; title: string; icon: JSX.Element } | null => {
-    const icon = (d: string, strokeWidth = 2) => (
-      <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={strokeWidth} d={d} />
-      </svg>
-    );
-
-    switch (track.status) {
-      case 'done':
-        return {
-          styles: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 dark:border-green-500/25',
-          label: t('album.trackStatus.done'),
-          title: t('album.trackStatus.done'),
-          icon: icon('M5 13l4 4L19 7', 2.5),
-        };
-      case 'failed':
-        return {
-          styles: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 dark:border-red-500/25',
-          label: t('album.trackStatus.failed'),
-          // Failed tracks carry the download error; surface it on hover.
-          title: track.last_error ? `${t('album.downloadError')}: ${track.last_error}` : t('album.trackStatus.failed'),
-          icon: icon('M6 18L18 6M6 6l12 12', 2.5),
-        };
-      case 'downloading':
-        return {
-          styles: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 dark:border-blue-500/25',
-          label: t('album.trackStatus.downloading'),
-          title: t('album.trackStatus.downloading'),
-          icon: icon('M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4'),
-        };
-      case 'queued': {
-        // Rate-limited: no worker takes downloads until the pause lifts
-        if (downloadsPausedUntil) {
-          const time = new Date(downloadsPausedUntil).toLocaleTimeString(formatLocale, { hour: '2-digit', minute: '2-digit' });
-          return {
-            styles: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 dark:border-amber-500/25',
-            label: t('album.trackStatus.paused'),
-            title: t('album.pausedUntil', { time }),
-            icon: icon('M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z'),
-          };
-        }
-        // A queued track with an error is waiting out a retry backoff
-        return {
-          styles: 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-400/30 dark:border-slate-500/30',
-          label: t('album.trackStatus.queued'),
-          title: track.last_error
-            ? t('album.retryingAfter', { error: track.last_error })
-            : t('album.trackStatus.queued'),
-          icon: icon('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'),
-        };
-      }
-      case 'available':
-        return {
-          styles: 'bg-slate-500/5 text-slate-400 dark:text-slate-500 border-slate-400/15 dark:border-slate-500/15',
-          label: t('album.trackStatus.available'),
-          title: t('album.trackStatus.available'),
-          icon: icon('M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z'),
-        };
-      default:
-        return null;
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="relative min-h-screen">
-        {/* Background effects */}
-        <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-        
-        <div className="relative z-10 flex items-center justify-center py-20">
-          <div className="text-center">
-            <Spinner size="lg" className="mx-auto mb-4 text-blue-600 dark:text-red-500" />
-            <p className="text-muted-foreground">{t('common.loading')}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !album) {
-    return (
-      <div className="relative min-h-screen">
-        {/* Background effects */}
-        <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-        
-        <div className="relative z-10 space-y-6 py-8">
-          <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-6 border border-red-500/20">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">⚠️</span>
-              <div>
-                <h3 className="font-semibold text-red-600 dark:text-red-400 mb-1">
-                  {t('common.error')}
-                </h3>
-                <p className="text-sm text-red-600/80 dark:text-red-400/80">
-                  {error || t('album.notFound')}
-                </p>
-              </div>
-            </div>
-          </div>
-          <Button onClick={() => navigate('/browse')} variant="primary">
-            ← {t('common.back')}
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  const thumbnailUrl = getImageUrl(album.image_local || album.thumbnail);
-  const totalDuration = tracks.reduce((sum, track) => sum + (track.duration_seconds || track.duration || 0), 0);
+  const thClass = 'px-3 md:px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider';
 
   return (
-    <div className="relative min-h-screen">
-      {/* Background effects */}
-      <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-      <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-
+    <>
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
@@ -304,12 +188,12 @@ export default function Album(): JSX.Element {
       <ConfirmDialog
         isOpen={deleteConfirm}
         title={t('album.deleteTitle')}
-        message={[t('album.deleteMessage', { title: album.title }), deletionNotes(deleteEffects)].filter(Boolean).join('\n\n')}
+        message={[t('album.deleteMessage'), deletionNotes(deleteEffects)].filter(Boolean).join('\n\n')}
         confirmText={t('common.delete')}
-        cancelText={t('common.cancel')}
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm(false)}
         variant="danger"
+        isLoading={deleteLoading}
       />
 
       {lyricsTrack && (
@@ -318,23 +202,24 @@ export default function Album(): JSX.Element {
           canEdit={canModify}
           onClose={() => setLyricsTrack(null)}
           onSaved={(updated) => {
-            setTracks((prev) => prev.map((tr) => (tr.id === updated.id ? { ...tr, ...updated } : tr)));
+            setPage((current) => current && {
+              ...current,
+              tracks: current.tracks.map((tr) => (tr.id === updated.id ? updated : tr)),
+            });
             setToast({ message: t('lyrics.saved'), type: 'success' });
           }}
         />
       )}
 
-      {/* Main content */}
-      <div className="relative z-10 space-y-12 pb-12">
+      <div className="space-y-12 pb-12">
         {/* Album header */}
         <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
           <div className="flex flex-col md:flex-row gap-8 items-start">
-            {/* Album cover */}
             <div className="relative group">
               <Artwork
-                src={thumbnailUrl}
+                src={getImageUrl(album.thumbnail)}
                 name={album.title}
-                seed={album.id || albumId}
+                seed={album.id}
                 loading="eager"
                 className="w-64 h-64 md:w-80 md:h-80 rounded-2xl bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
@@ -342,62 +227,59 @@ export default function Album(): JSX.Element {
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 dark:from-red-500/20 dark:to-red-700/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />
             </div>
 
-            {/* Album info */}
             <div className="flex-1">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-4">
                 <span className="text-sm text-blue-600 dark:text-red-400 font-medium">
-                  💿 {album.type || t('album.album')}
+                  💿 {t(albumTypeKey(album.type))}
                 </span>
               </div>
-              
+
               <h1 className="text-4xl md:text-5xl font-bold mb-4">
                 <span className="text-gradient">{album.title}</span>
               </h1>
 
-              {/* Artist link */}
-              {album.artist && (
-                <button
-                  onClick={() => {
-                    const artistId = album.artist.id || album.artist_id;
-                    if (artistId) {
-                      navigate(`/artists/${encodeURIComponent(artistId)}`);
-                    }
-                  }}
-                  className="text-xl text-blue-600 dark:text-red-400 hover:underline mb-4 transition-colors"
-                >
-                  {album.artist.name || album.artist_name || t('album.unknownArtist')}
-                </button>
+              {album.artist?.name && (
+                album.artist.id ? (
+                  <button
+                    onClick={() => navigate(`/artists/${encodeURIComponent(album.artist!.id!)}`)}
+                    className="block text-xl text-blue-600 dark:text-red-400 hover:underline mb-4 transition-colors"
+                  >
+                    {album.artist.name}
+                  </button>
+                ) : (
+                  <p className="text-xl text-blue-600 dark:text-red-400 mb-4">{album.artist.name}</p>
+                )
               )}
 
               <GenreChips genres={album.genres} className="mb-4" />
 
-              {/* Album metadata */}
               <div className="flex flex-wrap items-center gap-3 text-muted-foreground mb-8">
                 {album.year && (
-                  <span className="flex items-center gap-2">
-                    <span className="text-lg">📅</span>
-                    {album.year}
-                  </span>
+                  <>
+                    <span className="flex items-center gap-2">
+                      <span className="text-lg" aria-hidden="true">📅</span>
+                      {album.year}
+                    </span>
+                    <span aria-hidden="true">•</span>
+                  </>
                 )}
-                <span>•</span>
                 <span className="flex items-center gap-2">
-                  <span className="text-lg">🎵</span>
-                  {tracks.length} {tracks.length === 1 ? t('album.track') : t('album.tracks')}
+                  <span className="text-lg" aria-hidden="true">🎵</span>
+                  {t('album.trackCount', { count: tracks.length })}
                 </span>
                 {totalDuration > 0 && (
                   <>
-                    <span>•</span>
+                    <span aria-hidden="true">•</span>
                     <span className="flex items-center gap-2">
-                      <span className="text-lg">⏱️</span>
+                      <span className="text-lg" aria-hidden="true">⏱️</span>
                       {formatDuration(totalDuration)}
                     </span>
                   </>
                 )}
               </div>
 
-              {/* Action buttons */}
               <div className="flex flex-wrap gap-3">
-                {/* Visitors only get the (inert) "following" indicator */}
+                {/* Visitors only get the (inert) "in library" indicator */}
                 {(canModify || isFollowing) && (
                   <Button
                     onClick={handleDownload}
@@ -406,47 +288,24 @@ export default function Album(): JSX.Element {
                     size="lg"
                     disabled={isFollowing}
                   >
-                    {isFollowing ? (
-                      <>
-                        <span className="mr-2">✓</span>
-                        {t('album.following')}
-                      </>
-                    ) : (
-                      <>
-                        <span className="mr-2">⬇️</span>
-                        {t('album.download')}
-                      </>
-                    )}
+                    <span className="mr-2" aria-hidden="true">{isFollowing ? '✓' : '⬇️'}</span>
+                    {isFollowing ? t('album.following') : t('album.download')}
                   </Button>
                 )}
-                
-                <Button
-                  onClick={() => navigate(-1)}
-                  variant="ghost"
-                  size="lg"
-                >
+
+                <Button onClick={() => navigate(-1)} variant="ghost" size="lg">
                   ← {t('common.back')}
                 </Button>
 
-                {canModify && isFollowing && showTrackState && (retryableCount > 0 || needsImport) && (
-                  <Button
-                    onClick={handleRetry}
-                    variant="secondary"
-                    size="lg"
-                    isLoading={retryLoading}
-                  >
-                    <span className="mr-2">↻</span>
+                {canModify && isFollowing && showTrackState && (retryableCount > 0 || page.needs_import) && (
+                  <Button onClick={handleRetry} variant="secondary" size="lg" isLoading={retryLoading}>
+                    <span className="mr-2" aria-hidden="true">↻</span>
                     {t('album.retry')}
                   </Button>
                 )}
 
-                {isAdmin && source === 'database' && isFollowing && (
-                  <Button
-                    onClick={openDeleteConfirm}
-                    variant="danger"
-                    size="lg"
-                    isLoading={deleteLoading}
-                  >
+                {isAdmin && isFollowing && (
+                  <Button onClick={openDeleteConfirm} variant="danger" size="lg" isLoading={deleteLoading}>
                     🗑️ {t('album.deleteAlbum')}
                   </Button>
                 )}
@@ -455,46 +314,26 @@ export default function Album(): JSX.Element {
           </div>
         </div>
 
-        {/* Tracks list */}
         {tracks.length > 0 ? (
           <section>
             <SectionHeader>{t('album.trackList')}</SectionHeader>
-            
+
             <div className="glass rounded-2xl overflow-hidden border-gradient">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
                     <tr>
-                      <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-10 md:w-12">
-                        #
-                      </th>
-                      <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        {t('album.title')}
-                      </th>
-                      <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">
-                        {t('album.artist')}
-                      </th>
-                      <th className="px-3 md:px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell sm:w-24">
-                        {t('album.duration')}
-                      </th>
-                      {showTrackState && (
-                        <th className="px-3 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider sm:w-28">
-                          {t('album.lyrics')}
-                        </th>
-                      )}
-                      {showTrackState && (
-                        <th className="px-3 md:px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider sm:w-28">
-                          {t('album.status')}
-                        </th>
-                      )}
+                      <th className={`${thClass} text-left w-10 md:w-12`}>#</th>
+                      <th className={`${thClass} text-left`}>{t('album.title')}</th>
+                      <th className={`${thClass} text-left hidden lg:table-cell`}>{t('album.artist')}</th>
+                      <th className={`${thClass} text-right hidden sm:table-cell sm:w-24`}>{t('album.duration')}</th>
+                      {showTrackState && <th className={`${thClass} text-center sm:w-28`}>{t('album.lyrics')}</th>}
+                      {showTrackState && <th className={`${thClass} text-center sm:w-28`}>{t('album.status')}</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-white/10">
                     {tracks.map((track, index) => (
-                      <tr
-                        key={track.id}
-                        className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group"
-                      >
+                      <tr key={track.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group">
                         <td className="px-3 md:px-6 py-4 text-sm text-muted-foreground font-medium">
                           {track.track_number || index + 1}
                         </td>
@@ -503,14 +342,14 @@ export default function Album(): JSX.Element {
                             {track.title}
                           </div>
                           <div className="sm:hidden text-xs text-muted-foreground font-mono mt-0.5">
-                            {formatDuration(track.duration_seconds || track.duration)}
+                            {formatDuration(track.duration)}
                           </div>
                         </td>
                         <td className="px-3 md:px-6 py-4 text-sm text-muted-foreground hidden lg:table-cell">
-                          {getPrimaryArtist(track)}
+                          {primaryArtistName(track) || t('album.unknownArtist')}
                         </td>
                         <td className="px-3 md:px-6 py-4 text-sm text-muted-foreground text-right font-mono hidden sm:table-cell">
-                          {formatDuration(track.duration_seconds || track.duration)}
+                          {formatDuration(track.duration)}
                         </td>
                         {/* A download-mode album whose import hasn't landed yet
                             lists YTMusic's tracks, which have no row (and no status) */}
@@ -527,20 +366,7 @@ export default function Album(): JSX.Element {
                         )}
                         {showTrackState && (
                           <td className="px-3 md:px-6 py-4 text-center">
-                            {(() => {
-                              const config = getStatusConfig(track);
-                              if (!config) return null;
-                              const { styles, label, title, icon } = config;
-                              return (
-                                <span
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium whitespace-nowrap rounded-full border backdrop-blur-sm ${title !== label ? 'cursor-help' : ''} ${styles}`}
-                                  title={title}
-                                >
-                                  {icon}
-                                  <span className="hidden sm:inline">{label}</span>
-                                </span>
-                              );
-                            })()}
+                            <TrackStatusBadge track={track} downloadsPausedUntil={downloadsPausedUntil} />
                           </td>
                         )}
                       </tr>
@@ -551,17 +377,11 @@ export default function Album(): JSX.Element {
             </div>
           </section>
         ) : (
-          <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-16 border border-slate-200/50 dark:border-white/10 text-center">
-            <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
-              <span className="text-5xl">🎵</span>
-            </div>
-            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('album.noTracks')}</h3>
-            <p className="text-muted-foreground">
-              {t('album.noTracksDescription')}
-            </p>
-          </div>
+          <EmptyState icon="🎵" title={t('album.noTracks')}>
+            <p>{t('album.noTracksDescription')}</p>
+          </EmptyState>
         )}
       </div>
-    </div>
+    </>
   );
 }

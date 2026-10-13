@@ -1,7 +1,7 @@
 // src/components/MediaList.tsx
 import React from 'react';
 import { useI18n } from '../contexts/I18nContext';
-import { STATUS_BADGES, SubtitleLink, albumTypeKey } from './MediaCard';
+import { StatusPip, SubtitleLink, albumTypeKey, statusLabelKey } from './MediaCard';
 import { Artwork } from './ui/Artwork';
 import type { MediaStatus } from '../types';
 
@@ -63,7 +63,7 @@ export const MediaList: React.FC<MediaListProps> = ({ kind, children, className 
 interface MediaRowProps {
   id: string;
   title: string;
-  /** Artist name - albums only */
+  /** Artist name, albums only */
   subtitle?: string;
   /** Makes the artist name a link of its own */
   onSubtitleClick?: () => void;
@@ -82,10 +82,13 @@ interface MediaRowProps {
   onClick?: () => void;
 }
 
+/** Shown in a column with nothing to show */
+const NONE = '-';
+
 function formatDate(iso: string | null | undefined, locale: string): string {
-  if (!iso) return '—';
+  if (!iso) return NONE;
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return NONE;
   return new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
 }
 
@@ -108,7 +111,6 @@ export const MediaRow: React.FC<MediaRowProps> = ({
 }) => {
   const { t, formatLocale } = useI18n();
   const isArtist = type === 'artist';
-  const status = mediaStatus ? STATUS_BADGES[mediaStatus] : undefined;
   const typeLabel = isArtist ? null : t(albumTypeKey(albumType));
 
   const total = tracksTotal ?? 0;
@@ -116,7 +118,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   const hasTracks = total > 0;
   const complete = hasTracks && downloaded >= total;
   const progress = hasTracks ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
-  const tracksText = hasTracks ? `${downloaded}/${total}` : '—';
+  const tracksText = hasTracks ? `${downloaded}/${total}` : NONE;
 
   // Everything that has no column at the current width gets folded into the
   // line under the title, so no info is lost on small screens.
@@ -124,7 +126,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
     ? <SubtitleLink onClick={onSubtitleClick}>{subtitle}</SubtitleLink>
     : subtitle;
   const compactMeta = isArtist
-    ? t(albumsCount === 1 ? 'library.meta.albumCountOne' : 'library.meta.albumCount', { count: albumsCount ?? 0 })
+    ? t('library.meta.albumCount', { count: albumsCount ?? 0 })
     : [year, typeLabel].filter(Boolean).join(' · ');
 
   return (
@@ -158,7 +160,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
           {compactMeta}
           <span className="sm:hidden">
             {(compactMeta || (!isArtist && subtitle)) && ' · '}
-            {t('library.meta.trackCount', { count: tracksText })}
+            {t('library.meta.trackCount', { tracks: tracksText })}
           </span>
         </p>
         {matchHint && (
@@ -173,13 +175,13 @@ export const MediaRow: React.FC<MediaRowProps> = ({
         <div className={`${COLUMNS.albums} text-sm tabular-nums text-muted-foreground`}>{albumsCount ?? 0}</div>
       ) : (
         <>
-          <div className={`${COLUMNS.artist} text-sm text-muted-foreground truncate`}>{subtitleNode || '—'}</div>
+          <div className={`${COLUMNS.artist} text-sm text-muted-foreground truncate`}>{subtitleNode || NONE}</div>
           <div className={COLUMNS.type}>
             <span className="inline-block rounded-full bg-slate-200/70 dark:bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               {typeLabel}
             </span>
           </div>
-          <div className={`${COLUMNS.year} text-sm tabular-nums text-muted-foreground`}>{year || '—'}</div>
+          <div className={`${COLUMNS.year} text-sm tabular-nums text-muted-foreground`}>{year || NONE}</div>
         </>
       )}
 
@@ -205,25 +207,13 @@ export const MediaRow: React.FC<MediaRowProps> = ({
       {/* Date */}
       <div className={`${COLUMNS.date} text-sm text-muted-foreground truncate`}>{formatDate(date, formatLocale)}</div>
 
-      {/* Status - a pip on small screens, pip + label from lg up */}
+      {/* Status: a pip on small screens, pip and label from lg up */}
       <div className={`${COLUMNS.status} flex items-center gap-2`}>
-        {status && (
+        {mediaStatus && (
           <>
-            <span
-              className={`flex w-6 h-6 shrink-0 items-center justify-center rounded-full ${status.className} shadow-sm ring-2 ring-white dark:ring-zinc-900`}
-              title={t(status.labelKey)}
-            >
-              <svg
-                className={`w-3.5 h-3.5 text-white ${status.iconClassName || ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={status.path} />
-              </svg>
-            </span>
+            <StatusPip status={mediaStatus} className="shadow-sm ring-2 ring-white dark:ring-zinc-900" />
             <span className="hidden lg:inline text-xs font-medium text-muted-foreground truncate">
-              {t(status.labelKey)}
+              {t(statusLabelKey(mediaStatus))}
             </span>
           </>
         )}

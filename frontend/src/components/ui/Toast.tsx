@@ -1,5 +1,6 @@
 // src/components/ui/Toast.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useI18n } from '../../contexts/I18nContext';
 
 export interface ToastProps {
   message: string;
@@ -17,10 +18,16 @@ export const Toast: React.FC<ToastProps> = ({
   action,
   onClose 
 }) => {
+  const { t } = useI18n();
+  // The timer starts once: a parent passing a new onClose on each render
+  // (an inline arrow) mustn't push the dismissal back
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
-    const timer = setTimeout(onClose, duration);
+    const timer = setTimeout(() => onCloseRef.current(), duration);
     return () => clearTimeout(timer);
-  }, [duration, onClose]);
+  }, [duration, message]);
 
   const icons = {
     success: '✓',
@@ -35,7 +42,7 @@ export const Toast: React.FC<ToastProps> = ({
   };
 
   return (
-    <div className="fixed top-24 right-4 z-[100] animate-in slide-in-from-top-2 fade-in duration-300">
+    <div role="status" className="fixed top-24 right-4 z-[100]">
       <div className={`glass rounded-2xl p-4 border shadow-2xl ${colors[type]} min-w-[300px] max-w-md`}>
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${
@@ -56,6 +63,7 @@ export const Toast: React.FC<ToastProps> = ({
           )}
           <button
             onClick={onClose}
+            aria-label={t('common.close')}
             className="text-current hover:opacity-70 transition-opacity"
           >
             ✕

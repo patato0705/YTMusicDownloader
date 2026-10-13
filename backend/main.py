@@ -1,116 +1,58 @@
 # backend/main.py
 from __future__ import annotations
-import os
 import logging
-import importlib
-from typing import List, Optional
+import os
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from . import config
 from .logging_config import configure_logging
-from .db import init_db, get_engine
+from .db import init_db
+from .routers import (
+    admin, albums, artists, auth, charts, export, features, health,
+    jobs, library, media, playlists, recommendations, search, tracks,
+)
+from .secrets import jwt_secret
+from .services.login_throttle import TooManyAttempts
 
 logger = logging.getLogger("backend.main")
 
 
-def _include_router_safe(app: FastAPI, router_module_name: str) -> None:
-    """
-    Try to import backend.routers.<router_module_name> and include its `router` if present.
-    Non-fatal: logs warnings/errors and continues.
-    """
-    pkg = __package__ or "backend"
-    full_name = f"{pkg}.routers.{router_module_name}"
-    try:
-        mod = importlib.import_module(full_name)
-    except Exception as e:
-        logger.warning("Router module %s could not be imported: %s", full_name, e)
-        return
-
-    router = getattr(mod, "router", None)
-    if router is None:
-        logger.warning("Router module %s has no attribute 'router'; skipping", full_name)
-        return
-
-    try:
-        app.include_router(router)
-        logger.info("Included router %s", full_name)
-    except Exception as e:
-        logger.exception("Failed including router %s: %s", full_name, e)
-
-
 def create_app() -> FastAPI:
-    """
-    Create and configure the FastAPI app (factory).
-    """
-    # configure logging early
-    log_local = os.environ.get("LOG_LOCAL_TIME", "1") not in ("0", "false", "False")
-    configure_logging(level=logging.INFO, use_local_time=log_local, process_name="web")
+    """Create and configure the FastAPI app (factory)."""
+    configure_logging(
+        level=logging.INFO,
+        use_local_time=os.environ.get("LOG_LOCAL_TIME", "1") not in ("0", "false", "False"),
+        process_name="web",
+    )
 
-    # Outside the lifespan's catch-all on purpose: a broken sign-in setup
-    # must stop the web process with a clear message, not start half-working
+    # A broken sign-in setup must stop the web process with a clear message,
+    # not start half-working
     config.validate_auth_config()
 
-    version = "0.1"
-    try:
-        # try to read ytm_service version if available
-        from .ytm_service import __version__ as ytm_version  # type: ignore
-        version = str(ytm_version)
-    except Exception:
-        # ignore if module missing
-        pass
-
-    # lifespan must be defined BEFORE creating the FastAPI app instance
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        """
-        Lifespan manager: runs once at startup, yields control to FastAPI, then runs shutdown.
-        Replaces deprecated @app.on_event handlers.
-        """
-        # STARTUP
-        logger.info("Application startup: ensuring config dirs and initializing DB")
-        try:
-            # ensure all configured directories exist (CONFIG_DIR, TEMP_DIR, COVERS_DIR, etc.)
-            try:
-                config.ensure_dirs()
-                logger.info(
-                    "Config directories ensured (CONFIG_DIR=%s, DOWNLOAD_DIR=%s, MUSIC_DIR=%s)",
-                    config.CONFIG_DIR,
-                    config.DOWNLOAD_DIR,
-                    config.MUSIC_DIR,
-                )
-            except Exception:
-                logger.exception("Failed to ensure config directories")
+        logger.info(
+            "Starting (CONFIG_DIR=%s, DOWNLOAD_DIR=%s, MUSIC_DIR=%s)",
+            config.CONFIG_DIR, config.DOWNLOAD_DIR, config.MUSIC_DIR,
+        )
+        config.ensure_dirs()
+        # Both raise: the app can't work without its database or a saved
+        # signing key, so the process stops with the reason in the log
+        init_db()
+        jwt_secret()
+        yield
+        logger.info("Application shutdown")
 
-            # initialize DB (create tables if missing)
-            try:
-                init_db()
-                logger.info("Database initialized (engine=%s)", get_engine())
-            except Exception:
-                logger.exception("init_db failed")
-
-            # Note: the scheduler runs as its own supervisord process
-            # (see deploy/supervisord.conf), not inside the web process.
-
-        except Exception:
-            logger.exception("Unhandled error during startup")
-
-        # give control to FastAPI (application runs)
-        try:
-            yield
-        finally:
-            # SHUTDOWN
-            logger.info("Application shutdown")
-
-    # create app with lifespan handler and move docs under /api
+    # Docs under /api, so the SPA owns every other path
     app = FastAPI(
         title="YTMusicDownloader",
-        version=version,
+        version=config.APP_VERSION,
         lifespan=lifespan,
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
@@ -127,11 +69,9 @@ def create_app() -> FastAPI:
     # on cookies, so a wildcard here would mean any origin could make
     # credentialed requests -- deliberately not offered as an option.
     cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "")
-    origins = [o.strip() for o in cors_env.split(",") if o.strip()]
-
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
+        allow_origins=[o.strip() for o in cors_env.split(",") if o.strip()],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -139,8 +79,6 @@ def create_app() -> FastAPI:
 
     # Failed password throttling (services/login_throttle.py). retry_after is
     # repeated in the body because the frontend's ApiError doesn't keep headers.
-    from .services.login_throttle import TooManyAttempts
-
     @app.exception_handler(TooManyAttempts)
     async def too_many_attempts_handler(request: Request, exc: TooManyAttempts) -> JSONResponse:
         return JSONResponse(
@@ -149,99 +87,46 @@ def create_app() -> FastAPI:
             headers={"Retry-After": str(exc.retry_after)},
         )
 
-    # Include API routers FIRST (these take precedence)
-    routers_to_try: List[str] = [
-        "admin",
-        "albums",
-        "artists",
-        "auth",
-        "charts",
-        "export",
-        "features",
-        "health",
-        "jobs",
-        "library",
-        "media",
-        "playlists",
-        "recommendations",
-        "search",
-        "tracks",
-    ]
-    for r in routers_to_try:
-        _include_router_safe(app, r)
+    # API routers first: they take precedence over the SPA catch-all below
+    for module in (admin, albums, artists, auth, charts, export, features, health,
+                   jobs, library, media, playlists, recommendations, search, tracks):
+        app.include_router(module.router)
 
-    # Provide a lightweight API root at /api returning version/service info
     @app.get("/api", tags=["root"])
     def api_root() -> dict:
         return {"ok": True, "service": "music-backend", "version": app.version}
 
-    # API 404 handler - catches any /api/* routes that don't match
+    # Unmatched /api/* paths get a JSON 404 instead of the SPA
     @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
     async def api_404_handler(path: str):
-        """Catch-all for unmatched API routes."""
-        return JSONResponse(
-            status_code=404,
-            content={
-                "detail": f"API endpoint not found: /api/{path}",
-                "ok": False
-            }
-        )
+        return JSONResponse(status_code=404, content={"detail": f"API endpoint not found: /api/{path}"})
 
-    # Frontend static files setup
+    # Frontend build (copied in by the Dockerfile; absent in a dev checkout,
+    # where the Vite dev server serves it)
     static_dir = Path(__file__).resolve().parent / "static"
     index_file = static_dir / "index.html"
-    
-    if static_dir.exists() and index_file.exists():
-        try:
-            # Mount the entire static directory to serve all assets
-            # The 'name' parameter is required for StaticFiles
-            app.mount("/static", StaticFiles(directory=str(static_dir), html=True), name="static")
-            logger.info("Mounted frontend static files from %s at /static", static_dir)
-        except Exception as e:
-            logger.exception("Failed mounting static directory: %s", e)
 
-        # SPA root - serves index.html for frontend routes
-        @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-        def spa_root() -> FileResponse:
-            return FileResponse(index_file)
+    if index_file.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-        # SPA catch-all - only catches non-API, non-static routes
+        # Every other path is a frontend route: React Router handles it (404s included)
         @app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
-        async def spa_catchall(full_path: str, request: Request):
-            """
-            Catch-all for SPA routes.
-            Returns index.html to let the frontend handle routing and 404s.
-            This only runs for paths that don't match:
-            - /api/* (handled by API routers above)
-            - /static/* (handled by StaticFiles mount)
-            """
-            # Return index.html for all other routes - let React Router handle it
+        def spa(full_path: str) -> FileResponse:
             return FileResponse(index_file)
 
-        logger.info("Mounted SPA from %s - frontend will handle routing and 404s", static_dir)
-
+        logger.info("Serving the frontend from %s", static_dir)
     else:
-        logger.info("No frontend static files found at %s; only API will be available", static_dir)
-        
-        # Basic root for API-only mode
-        @app.get("/", tags=["root"])
-        def root() -> dict:
-            return {"ok": True, "service": "music-backend", "version": app.version}
+        logger.info("No frontend build at %s; only the API is served", static_dir)
 
     return app
 
 
-# create module-level app for ASGI servers (uvicorn, etc.)
+# Module-level app for ASGI servers (uvicorn, etc.)
 app = create_app()
 
 
 if __name__ == "__main__":
-    # allow running this module directly for local debugging
+    # Local debugging: python -m backend.main
     import uvicorn
 
-    # ensure logging configured for direct run
-    configure_logging(level=logging.INFO, use_local_time=(os.environ.get("LOG_LOCAL_TIME", "1") not in ("0", "false", "False")), process_name="web")
-    host = os.environ.get("HOST", config.HOST)
-    port = int(os.environ.get("PORT", config.PORT))
-    logger.info("Starting uvicorn on %s:%s", host, port)
-    uvicorn.run("backend.main:app", host=host, port=port, reload=False, log_level="info")
+    uvicorn.run("backend.main:app", host=config.HOST, port=config.PORT, log_level="info")

@@ -3,12 +3,16 @@
  * Authentication API endpoints
  */
 
-import { api, apiFetch, setAccessToken, clearAccessToken, API_BASE } from './client';
+import { api, setAccessToken, clearAccessToken, API_BASE } from './client';
+
+/** Lowest to highest privilege */
+export const ROLES = ['visitor', 'member', 'administrator'] as const;
+export type Role = typeof ROLES[number];
 
 export interface User {
   id: number;
   username: string;
-  role: 'administrator' | 'member' | 'visitor';
+  role: Role;
   is_active: boolean;
   /** Temporary password (first admin, admin reset): must be changed before using the app */
   must_change_password: boolean;
@@ -51,14 +55,9 @@ export interface ChangePasswordRequest {
  * Login with username and password
  */
 export async function login(username: string, password: string): Promise<LoginResponse> {
-  // Don't use api.post here to avoid auth loop
-  const response = await apiFetch<LoginResponse>('/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
+  const response = await api.post<LoginResponse>('/auth/login', { username, password });
 
-  // The refresh token is set as an httpOnly cookie by the server -- only
+  // The refresh token is set as an httpOnly cookie by the server: only
   // the access token needs to be kept on the JS side, in memory.
   setAccessToken(response.access_token);
 
@@ -66,7 +65,7 @@ export async function login(username: string, password: string): Promise<LoginRe
 }
 
 /**
- * Register new user (admin only)
+ * Create an account from the registration page (when public registration is on)
  */
 export async function register(data: RegisterRequest): Promise<User> {
   return api.post<User>('/auth/register', data);
@@ -77,9 +76,9 @@ export async function register(data: RegisterRequest): Promise<User> {
  */
 export async function logout(): Promise<void> {
   try {
-    // No body needed -- the server reads the refresh_token cookie and
+    // No body needed: the server reads the refresh_token cookie and
     // clears both auth cookies in the response.
-    await apiFetch('/auth/logout', { method: 'POST' });
+    await api.post('/auth/logout');
   } catch (error) {
     console.error('Logout request failed:', error);
   }
@@ -108,8 +107,7 @@ export async function changePassword(data: ChangePasswordRequest): Promise<void>
  * Which sign-in methods are offered (public endpoint, no auth required)
  */
 export async function getAuthConfig(): Promise<AuthConfig> {
-  // Use apiFetch directly to bypass auth headers for this public endpoint
-  return apiFetch<AuthConfig>('/auth/config', { method: 'GET' });
+  return api.get<AuthConfig>('/auth/config');
 }
 
 /**

@@ -83,7 +83,9 @@ def get_playlist(
     # What's already in the library, so the page shows Followed / Downloaded
     followed_artists = session.scalars(
         select(ArtistSubscription.artist_id).where(
-            ArtistSubscription.artist_id.in_(artist_ids), ArtistSubscription.mode == "full"
+            ArtistSubscription.artist_id.in_(artist_ids),
+            ArtistSubscription.enabled.is_(True),
+            ArtistSubscription.mode == "full",
         )
     ).all() if artist_ids else []
     downloaded_albums = session.scalars(
@@ -104,20 +106,20 @@ def add_playlist(
     current_user: User = Depends(require_member_or_admin),
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    if session.get(Playlist, playlist_id) is not None:
-        raise HTTPException(status_code=409, detail="Playlist already added")
     try:
         playlist = playlists_svc.add_playlist(
             session, playlist_id,
             mode=body.mode, followed=body.followed, m3u=body.m3u, user_id=current_user.id,
         )
+    except playlists_svc.PlaylistAlreadyAdded:
+        raise HTTPException(status_code=409, detail="Playlist already added")
     except YTMusicUnavailable:
         session.rollback()
         raise _unreadable()
     except ValueError as e:
         session.rollback()
         raise HTTPException(status_code=400, detail=str(e))
-    logger.info(f"User {current_user.username} added playlist {playlist_id}")
+    logger.info("User %s added playlist %s", current_user.username, playlist_id)
     return playlists_svc.summary(session, playlist)
 
 
@@ -134,7 +136,7 @@ def update_playlist(
     except ValueError as e:
         session.rollback()
         raise HTTPException(status_code=400, detail=str(e))
-    logger.info(f"User {current_user.username} changed playlist {playlist_id}: {body.model_dump(exclude_none=True)}")
+    logger.info("User %s changed playlist %s: %s", current_user.username, playlist_id, body.model_dump(exclude_none=True))
     return playlists_svc.summary(session, playlist)
 
 
@@ -161,5 +163,5 @@ def remove_playlist(
 ) -> Dict[str, Any]:
     playlist = _saved(session, playlist_id)
     playlists_svc.remove_playlist(session, playlist)
-    logger.info(f"User {current_user.username} removed playlist {playlist_id}")
+    logger.info("User %s removed playlist %s", current_user.username, playlist_id)
     return {"ok": True, "playlist_id": playlist_id}

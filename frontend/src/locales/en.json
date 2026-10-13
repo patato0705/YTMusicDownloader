@@ -1,22 +1,17 @@
 {
   "common": {
-    "search": "Search",
     "loading": "Loading...",
     "error": "Error",
-    "success": "Success",
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "save": "Save",
     "delete": "Delete",
-    "edit": "Edit",
     "close": "Close",
+    "clear": "Clear",
     "back": "Back",
-    "next": "Next",
-    "submit": "Submit",
-    "yes": "Yes",
-    "no": "No",
     "or": "or",
     "all": "All",
-    "searchMusic": "Search music...",
+    "searchPlaceholder": "Search...",
     "ytmusicUnavailable": "YouTube Music isn't answering right now. Try again in a moment."
   },
   "mediaCard": {
@@ -47,7 +42,6 @@
       "noAccount": "Don't have an account?",
       "register": "Register here",
       "sso": "Sign in with {name}",
-      "or": "or",
       "ssoErrors": {
         "denied": "Sign-in was cancelled at the provider.",
         "not_allowed": "You don't have an account here yet. Ask an administrator for access.",
@@ -81,7 +75,6 @@
       "new": "New Password",
       "confirm": "Confirm New Password",
       "button": "Change Password",
-      "success": "Password changed successfully",
       "required": "A password change is required",
       "temporaryWarning": "You are signed in with a temporary password (the initial admin password, or one set by an administrator). Choose your own to continue.",
       "tips": {
@@ -100,7 +93,6 @@
       "invalidCredentials": "Invalid username or password",
       "passwordMismatch": "Passwords do not match",
       "passwordTooShort": "Password must be at least 8 characters",
-      "sessionExpired": "Session expired. Please login again.",
       "usernameTooShort": "Username must be at least 3 characters",
       "usernameTooLong": "Username must be at most 64 characters",
       "usernameInvalidChars": "Username may only contain letters, numbers, hyphens, and underscores",
@@ -118,10 +110,9 @@
     "home": "Home",
     "browse": "Browse",
     "library": "Library",
-    "settings": "Settings",
     "charts": "Charts",
-    "import": "Import",
     "admin": "Admin Panel",
+    "toggleMenu": "Toggle menu",
     "activeJobs": "{count} active",
     "rateLimited": "Rate-limited by YouTube: downloads paused until {time}",
     "jobTypes": {
@@ -133,22 +124,11 @@
     }
   },
   "settings": {
-    "title": "Settings",
-    "profile": "Profile",
-    "appearance": "Appearance",
-    "language": "Language",
     "theme": {
-      "title": "Theme",
       "light": "Light",
       "dark": "Dark",
-      "system": "System",
       "switchToLight": "Switch to light mode",
       "switchToDark": "Switch to dark mode"
-    },
-    "account": {
-      "username": "Username",
-      "role": "Role",
-      "changePassword": "Change Password"
     },
     "changeLanguage": "Change language"
   },
@@ -164,27 +144,25 @@
     "noActivity": "No activity yet",
     "noActivityDescription": "Start by browsing and following your favorite artists",
     "browseMusic": "Browse Music",
-    "complete": "Complete"
+    "getStarted": "Get started",
+    "complete": "Complete",
+    "tracksDownloaded": "{done}/{total} tracks"
   },
   "browse": {
-    "title": "Browse",
     "heroDiscover": "Discover",
     "heroNewMusic": "New Music",
     "heroSubtitle": "Search YouTube Music for artists, albums, and tracks to add to your library",
-    "searchPlaceholder": "Search artists, albums, tracks...",
     "searchInputPlaceholder": "Search for artists, albums, or tracks...",
-    "searching": "Searching...",
-    "noQuery": "Type something to search",
     "noResults": "No results found",
     "searchError": "Search Error",
     "startSearch": "Start Your Search",
     "startSearchDescription": "Enter an artist name, album title, or song to discover new music from YouTube Music",
-    "noResultsFor": "We couldn't find anything matching",
+    "noResultsFor": "We couldn't find anything matching \"{query}\"",
     "tryDifferentKeywords": "Try different keywords or check your spelling",
     "sections": {
       "artists": "Artists",
       "albums": "Albums",
-      "tracks": "Tracks"
+      "songs": "Tracks"
     },
     "recommendations": {
       "title": "Recommended for you",
@@ -205,13 +183,12 @@
   },
   "artist": {
     "title": "Artist",
-    "release": "release",
-    "releases": "releases",
+    "releaseCount": "{count} releases",
+    "releaseCount_one": "{count} release",
     "follow": "Follow",
     "unfollow": "Unfollow",
     "unfollowTitle": "Unfollow Artist",
     "unfollowMessage": "New albums will no longer be automatically followed. All already downloaded content will not be affected.",
-    "following": "Following",
     "albums": "Albums",
     "singles": "Singles & EPs",
     "noAlbums": "No Albums Yet",
@@ -225,10 +202,9 @@
   "album": {
     "album": "Album",
     "downloadError": "Download error",
-    "type": "Type",
     "unknownArtist": "Unknown Artist",
-    "track": "track",
-    "tracks": "tracks",
+    "trackCount": "{count} tracks",
+    "trackCount_one": "{count} track",
     "download": "Download Album",
     "downloadQueued": "Album download queued successfully",
     "downloadQueuedWithArtist": "Album download queued. Artist also added to your library.",
@@ -254,7 +230,8 @@
     "retryingAfter": "Waiting to retry after: {error}",
     "pausedUntil": "Downloads paused until {time} (YouTube rate limit)",
     "retry": "Retry missing tracks",
-    "retryQueued": "{count} track(s) queued for download",
+    "retryQueued": "{count} tracks queued for download",
+    "retryQueued_one": "{count} track queued for download",
     "retryNothing": "Nothing to retry: every track is on disk or already queued",
     "retryImport": "The album's tracklist will be fetched again, then its tracks downloaded",
     "retryFailed": "Could not queue the tracks",
@@ -283,13 +260,11 @@
     }
   },
   "library": {
-    "title": "Library",
     "heroYour": "Your",
     "heroLibrary": "Music Library",
     "heroSubtitle": "Manage your followed artists and albums. Track downloads and organize your collection.",
     "artists": "Followed Artists",
     "albums": "Followed Albums",
-    "tracks": "Downloaded Tracks",
     "searchPlaceholder": "Search your library...",
     "view": {
       "grid": "Grid view",
@@ -308,35 +283,32 @@
     },
     "meta": {
       "albumCount": "{count} albums",
-      "albumCountOne": "1 album",
-      "trackCount": "{count} tracks"
+      "albumCount_one": "{count} album",
+      "trackCount": "{tracks} tracks"
     },
     "emptyTitle": "Your library is empty",
     "emptyDescription": "Start building your collection by browsing and following your favorite artists!",
     "noMatches": "No matches found",
-    "noMatchesDescription": "No items in your library match",
+    "noMatchesDescription": "No items in your library match \"{query}\"",
     "trackMatch": {
       "one": "Contains \"{title}\"",
       "many": "Contains \"{title}\" and {count} more matching tracks",
+      "many_one": "Contains \"{title}\" and 1 more matching track",
       "artistOne": "Has \"{title}\" on {album}",
-      "artistMany": "Has \"{title}\" and {count} more matching tracks"
+      "artistMany": "Has \"{title}\" and {count} more matching tracks",
+      "artistMany_one": "Has \"{title}\" and 1 more matching track"
     },
     "stats": {
-      "title": "Statistics",
       "artists": "Artists",
       "albums": "Albums",
       "tracks": "Tracks",
       "diskUsage": "Disk Usage",
       "diskUsageInfo": "Total size of the downloaded audio files. Lyrics and covers are not counted."
     },
-    "empty": {
-      "artists": "No followed artists yet",
-      "albums": "No followed albums yet",
-      "tracks": "No downloaded tracks yet"
-    },
     "export": {
       "button": "Export library",
-      "description": "Download the list of followed artists, standalone albums and charts as a JSON file. An admin can import it on another instance."
+      "description": "Download the list of followed artists, standalone albums and charts as a JSON file. An admin can import it on another instance.",
+      "failed": "Failed to export the library"
     },
     "playlists": "Playlists",
     "noPlaylists": "No playlist matches.",
@@ -359,23 +331,9 @@
     "followChart": "Follow Chart",
     "musicChart": "Music Chart",
     "numberOfArtists": "Number of Artists to Track",
-    "trackTopArtists": "Track top artists",
+    "top": "Top",
     "storageWarning": "Higher numbers track more artists but require more storage and sync time",
-    "artistCountError": "Number of artists must be between 1 and {max}",
     "disabled": "The charts feature is currently disabled. An administrator can turn it on in the admin panel."
-  },
-  "jobs": {
-    "title": "Jobs",
-    "status": {
-      "queued": "Queued",
-      "reserved": "Reserved",
-      "done": "Done",
-      "failed": "Failed",
-      "cancelled": "Cancelled"
-    },
-    "cancel": "Cancel Job",
-    "retry": "Retry",
-    "view": "View Details"
   },
   "admin": {
     "title": "Admin",
@@ -388,7 +346,6 @@
       "backup": "Backup"
     },
     "settings": {
-      "title": "Settings",
       "save": "Save settings",
       "saved": "Settings saved successfully",
       "saveFailed": "Failed to save settings",
@@ -508,7 +465,7 @@
       "cookies": {
         "label": "YouTube account cookies",
         "description": "A cookies.txt exported from a browser signed in to a YouTube account (use a throwaway account, not your main one). Used only to fetch age-restricted tracks; never for ordinary downloads and never to get around a rate limit, so the account sees just a handful of requests.",
-        "none": "No account cookies uploaded — age-restricted tracks will fail.",
+        "none": "No account cookies uploaded: age-restricted tracks will fail.",
         "present": "Uploaded: {count} cookies, {date}",
         "upload": "Upload cookies.txt",
         "replace": "Replace",
@@ -542,9 +499,8 @@
     },
     "users": {
       "search": "Search for users",
-      "showing": "Showing",
-      "of": "of",
-      "users": "users",
+      "showing": "Showing {shown} of {count} users",
+      "showing_one": "Showing {shown} of {count} user",
       "allStatuses": "All statuses",
       "allRoles": "All roles",
       "create": "Create user",
@@ -670,7 +626,7 @@
         "description": "Restore a backup or import someone's library export. Nothing already on this instance is changed: missing artists, albums and charts are followed and their downloads queued; existing users are never overwritten.",
         "choose": "Choose file",
         "previewing": "Analysing…",
-        "previewTitle": "Preview — nothing has been applied yet",
+        "previewTitle": "Preview: nothing has been applied yet",
         "resultTitle": "Import applied",
         "confirm": "Confirm import",
         "done": "Import complete. Downloads are running in the background.",
@@ -711,13 +667,25 @@
   },
   "playlist": {
     "title": "Import Playlist",
+    "heroImport": "Import",
+    "heroPlaylist": "Playlist",
     "subtitle": "Paste a YouTube Music playlist URL to discover and follow artists and albums",
     "urlPlaceholder": "Paste a YouTube Music playlist URL...",
+    "untitled": "Playlist",
     "loadPlaylist": "Load Playlist",
     "invalidUrl": "Could not extract a playlist ID from this URL",
     "artists": "Artists",
     "albums": "Albums",
-    "tracksInPlaylist": "tracks in playlist",
+    "trackCount": "{count} tracks",
+    "trackCount_one": "{count} track",
+    "summary": {
+      "tracks": "{count} tracks in playlist",
+      "tracks_one": "{count} track in playlist",
+      "artists": "{count} artists",
+      "artists_one": "{count} artist",
+      "albums": "{count} albums",
+      "albums_one": "{count} album"
+    },
     "followMainArtists": "Follow Main Artists",
     "followAll": "Follow All Artists",
     "mainArtist": "Main",
@@ -777,5 +745,12 @@
       "syncNow": "Sync now",
       "syncQueued": "Scan queued"
     }
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "description": "The page ran into an unexpected error. Reloading usually fixes it; the details below help when reporting it.",
+    "details": "Error details",
+    "reload": "Reload page",
+    "home": "Go to Home"
   }
 }

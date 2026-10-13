@@ -1,3 +1,4 @@
+# backend/jobs/worker.py
 from __future__ import annotations
 import logging
 import os
@@ -5,13 +6,11 @@ import re
 import signal
 import threading
 import time
-import traceback
 from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 
-from ..db import SessionLocal
-from ..deps import wait_for_db
+from ..db import SessionLocal, wait_for_db
 from .jobqueue import reserve_job, heartbeat_job, mark_job_done, mark_job_failed, reclaim_orphaned_jobs
 from .tasks import run_job_task, ALL_JOB_TYPES
 from . import gate
@@ -86,16 +85,11 @@ class Worker:
         self._heartbeat_stop = threading.Event()
         self._heartbeat_thread: Optional[threading.Thread] = None
 
-        # install signal handlers
         signal.signal(signal.SIGINT, self._handle_signal)
-        try:
-            signal.signal(signal.SIGTERM, self._handle_signal)
-        except Exception:
-            # some platforms may not allow SIGTERM (Windows) — ignore
-            pass
+        signal.signal(signal.SIGTERM, self._handle_signal)
 
     def _handle_signal(self, signum, frame) -> None:
-        logger.info("Worker %s received signal %s — shutting down gracefully", self.worker_name, signum)
+        logger.info("Worker %s received signal %s, shutting down gracefully", self.worker_name, signum)
         self._stopped = True
 
     # -- heartbeat -----------------------------------------------------------
@@ -180,11 +174,8 @@ class Worker:
         )
 
         try:
-            session = SessionLocal()
-            try:
+            with SessionLocal() as session:
                 reclaim_orphaned_jobs(session, self.worker_name)
-            finally:
-                session.close()
         except Exception:
             logger.exception("Failed to reclaim orphaned jobs on startup")
 
@@ -198,94 +189,58 @@ class Worker:
 
     def _loop(self) -> None:
         while not self._stopped:
-            # stop if max_jobs reached
             if self.max_jobs is not None and self._processed >= self.max_jobs:
-                logger.info("Worker %s reached max_jobs=%s — exiting", self.worker_name, self.max_jobs)
+                logger.info("Worker %s reached max_jobs=%s, exiting", self.worker_name, self.max_jobs)
                 break
-
-            session: Optional[Session] = None
             try:
-                session = SessionLocal()
-                types = self._reservable_types(session)
-                job = reserve_job(session, self.worker_name, job_types=types) if types != [] else None
-                if not job:
-                    # no job available
-                    session.close()
-                    time.sleep(self.poll_interval)
-                    continue
-
-                # Read once: after a task fails mid-transaction the job's
-                # attributes can't be loaded again until a rollback.
-                job_id = job.id
-                logger.info("Worker %s reserved job id=%s type=%s attempts=%s",
-                            self.worker_name, job_id, getattr(job, "type", None), getattr(job, "attempts", None))
-
-                # execute task
-                self._set_current_job(job_id)
-                try:
-                    result = run_job_task(session, job)
-                    _discard_failed_transaction(session)
-                    # result expected to be a dict with ok: bool
-                    if isinstance(result, dict) and result.get("ok", False):
-                        # mark done
-                        try:
-                            mark_job_done(session, job_id)
-                            logger.info("Job id=%s marked done", job_id)
-                        except Exception:
-                            # if marking done fails, log and continue
-                            logger.exception("Failed to mark job done id=%s", job_id)
+                with SessionLocal() as session:
+                    types = self._reservable_types(session)
+                    job = reserve_job(session, self.worker_name, job_types=types) if types != [] else None
+                    if job is None:
+                        processed = False
                     else:
-                        # mark failed — allow task to suggest retry_delay_seconds
-                        err = None
-                        retry_delay = None
-                        refund = False
-                        if isinstance(result, dict):
-                            err = result.get("error") or result.get("message")
-                            retry_delay = result.get("retry_delay_seconds") or result.get("retry_after")
-                            refund = bool(result.get("refund_attempt"))
-                        err_msg = str(err) if err is not None else "task returned ok=False"
-                        try:
-                            mark_job_failed(
-                                session,
-                                job_id,
-                                error_message=err_msg,
-                                retry_delay_seconds=retry_delay,
-                                refund_attempt=refund,
-                                worker_name=self.worker_name,
-                            )
-                            logger.warning("Job id=%s marked failed (retry_delay=%s) error=%s", job_id, retry_delay, err_msg)
-                        except Exception:
-                            logger.exception("Failed to mark job failed id=%s", job_id)
-                except Exception as e:
-                    # Unhandled exception while running task -> mark failed with no retry_delay by default
-                    trace = traceback.format_exc()
-                    logger.exception("Unhandled exception executing job id=%s: %s", job_id, e)
-                    _discard_failed_transaction(session)
-                    try:
-                        mark_job_failed(session, job_id, error_message=str(e), worker_name=self.worker_name)
-                        logger.info("Marked job id=%s failed after exception", job_id)
-                    except Exception:
-                        logger.exception("Failed to mark job failed after exception id=%s", job_id)
-                finally:
-                    self._set_current_job(None)
-                    # close session for this iteration (jobqueue functions commit)
-                    try:
-                        session.close()
-                    except Exception:
-                        pass
-
-                self._processed += 1
-
-            except Exception as outer_ex:
-                # catch any unexpected errors in the loop
-                logger.exception("Worker loop error: %s", outer_ex)
-                # ensure session closed
-                try:
-                    if session:
-                        session.close()
-                except Exception:
-                    pass
+                        self._run(session, job)
+                        processed = True
+            except Exception:
+                logger.exception("Worker loop error")
                 time.sleep(self.idle_sleep)
+                continue
+            if processed:
+                self._processed += 1
+            else:
+                time.sleep(self.poll_interval)
+
+    def _run(self, session: Session, job) -> None:
+        """Run one reserved job and record its outcome."""
+        # Read once: after a task fails mid-transaction the job's
+        # attributes can't be loaded again until a rollback.
+        job_id = job.id
+        logger.info("Worker %s reserved job id=%s type=%s attempts=%s",
+                    self.worker_name, job_id, job.type, job.attempts)
+        self._set_current_job(job_id)
+        try:
+            # Never raises: task errors come back as {"ok": False, ...}
+            result = run_job_task(session, job)
+            _discard_failed_transaction(session)
+            if result.get("ok"):
+                mark_job_done(session, job_id)
+            else:
+                # The task may ask for a retry later and for the attempt not
+                # to count (a rate limit says nothing about the job)
+                mark_job_failed(
+                    session,
+                    job_id,
+                    error_message=str(result.get("error") or "task returned ok=False"),
+                    retry_delay_seconds=result.get("retry_delay_seconds"),
+                    refund_attempt=bool(result.get("refund_attempt")),
+                    worker_name=self.worker_name,
+                )
+        except Exception:
+            # The bookkeeping itself failed: the job stays "reserved" and,
+            # no longer heartbeated, is reclaimed by the stale-job sweep
+            logger.exception("Failed to record the outcome of job id=%s", job_id)
+        finally:
+            self._set_current_job(None)
 
 
 def _discard_failed_transaction(session: Session) -> None:
@@ -303,33 +258,20 @@ def _discard_failed_transaction(session: Session) -> None:
             logger.exception("Rollback of a failed task transaction failed")
 
 
-def _env_get(name: str, default: Optional[str] = None) -> Optional[str]:
-    v = os.environ.get(name)
-    return v if v is not None else default
-
-
 def main() -> None:
-    worker_name = _env_get("WORKER_NAME") or f"worker-{os.getpid()}"
+    worker_name = os.environ.get("WORKER_NAME") or f"worker-{os.getpid()}"
     configure_logging(process_name=worker_name)
-
-    # Wait for database to be ready
     wait_for_db()
 
-    poll_interval = float(_env_get("WORKER_POLL_INTERVAL") or 2.0)
-    idle_sleep = float(_env_get("WORKER_IDLE_SLEEP_SEC") or 3.0)
-    max_jobs_env = _env_get("WORKER_MAX_JOBS")
-    max_jobs = int(max_jobs_env) if max_jobs_env is not None else None
-    job_types_env = _env_get("WORKER_JOB_TYPES") or ""
-    job_types = [t.strip() for t in job_types_env.split(",") if t.strip()] or None
-
-    w = Worker(
+    max_jobs = os.environ.get("WORKER_MAX_JOBS")
+    job_types = [t.strip() for t in os.environ.get("WORKER_JOB_TYPES", "").split(",") if t.strip()]
+    Worker(
         worker_name=worker_name,
-        poll_interval=poll_interval,
-        idle_sleep=idle_sleep,
-        max_jobs=max_jobs,
-        job_types=job_types,
-    )
-    w.run()
+        poll_interval=float(os.environ.get("WORKER_POLL_INTERVAL") or 2.0),
+        idle_sleep=float(os.environ.get("WORKER_IDLE_SLEEP_SEC") or 3.0),
+        max_jobs=int(max_jobs) if max_jobs else None,
+        job_types=job_types or None,
+    ).run()
 
 
 if __name__ == "__main__":

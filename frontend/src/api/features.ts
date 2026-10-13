@@ -7,7 +7,6 @@ import { api } from './client';
 
 export interface Features {
   charts_enabled: boolean;
-  lyrics_enabled: boolean;
 }
 
 /**

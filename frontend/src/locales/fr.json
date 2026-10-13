@@ -1,22 +1,17 @@
 {
   "common": {
-    "search": "Rechercher",
     "loading": "Chargement...",
     "error": "Erreur",
-    "success": "Succès",
     "cancel": "Annuler",
+    "confirm": "Confirmer",
     "save": "Enregistrer",
     "delete": "Supprimer",
-    "edit": "Modifier",
     "close": "Fermer",
+    "clear": "Effacer",
     "back": "Retour",
-    "next": "Suivant",
-    "submit": "Soumettre",
-    "yes": "Oui",
-    "no": "Non",
     "or": "ou",
     "all": "Tout",
-    "searchMusic": "Rechercher de la musique...",
+    "searchPlaceholder": "Rechercher...",
     "ytmusicUnavailable": "YouTube Music ne répond pas pour le moment. Réessayez dans un instant."
   },
   "mediaCard": {
@@ -47,7 +42,6 @@
       "noAccount": "Pas de compte ?",
       "register": "S'inscrire ici",
       "sso": "Se connecter avec {name}",
-      "or": "ou",
       "ssoErrors": {
         "denied": "La connexion a été annulée chez le fournisseur.",
         "not_allowed": "Vous n'avez pas encore de compte ici. Demandez l'accès à un administrateur.",
@@ -81,7 +75,6 @@
       "new": "Nouveau mot de passe",
       "confirm": "Confirmer le nouveau mot de passe",
       "button": "Changer le mot de passe",
-      "success": "Mot de passe modifié avec succès",
       "required": "Un changement de mot de passe est requis",
       "temporaryWarning": "Vous êtes connecté avec un mot de passe temporaire (le mot de passe administrateur initial, ou un mot de passe défini par un administrateur). Choisissez le vôtre pour continuer.",
       "tips": {
@@ -100,7 +93,6 @@
       "invalidCredentials": "Nom d'utilisateur ou mot de passe invalide",
       "passwordMismatch": "Les mots de passe ne correspondent pas",
       "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
-      "sessionExpired": "Session expirée. Veuillez vous reconnecter.",
       "usernameTooShort": "Le nom d'utilisateur doit contenir au moins 3 caractères",
       "usernameTooLong": "Le nom d'utilisateur doit contenir au plus 64 caractères",
       "usernameInvalidChars": "Le nom d'utilisateur ne peut contenir que des lettres, chiffres, tirets et underscores",
@@ -118,10 +110,9 @@
     "home": "Accueil",
     "browse": "Explorer",
     "library": "Bibliothèque",
-    "settings": "Paramètres",
     "admin": "Administration",
+    "toggleMenu": "Afficher le menu",
     "charts": "Charts",
-    "import": "Importer",
     "activeJobs": "{count} en cours",
     "rateLimited": "Limité par YouTube : téléchargements en pause jusqu'à {time}",
     "jobTypes": {
@@ -133,22 +124,11 @@
     }
   },
   "settings": {
-    "title": "Paramètres",
-    "profile": "Profil",
-    "appearance": "Apparence",
-    "language": "Langue",
     "theme": {
-      "title": "Thème",
       "light": "Clair",
       "dark": "Sombre",
-      "system": "Système",
       "switchToLight": "Passer en mode clair",
       "switchToDark": "Passer en mode sombre"
-    },
-    "account": {
-      "username": "Nom d'utilisateur",
-      "role": "Rôle",
-      "changePassword": "Changer le mot de passe"
     },
     "changeLanguage": "Changer de langue"
   },
@@ -164,27 +144,25 @@
     "noActivity": "Aucune activité",
     "noActivityDescription": "Commencez par explorer et suivre vos artistes favoris",
     "browseMusic": "Explorer la musique",
-    "complete": "Terminé"
+    "getStarted": "Commencer",
+    "complete": "Terminé",
+    "tracksDownloaded": "{done}/{total} titres"
   },
   "browse": {
-    "title": "Explorer",
     "heroDiscover": "Découvrir",
     "heroNewMusic": "Nouvelle Musique",
     "heroSubtitle": "Rechercher des artistes, albums et titres sur YouTube Music à ajouter à votre bibliothèque",
-    "searchPlaceholder": "Rechercher artistes, albums, titres...",
     "searchInputPlaceholder": "Rechercher des artistes, albums ou titres...",
-    "searching": "Recherche...",
-    "noQuery": "Tapez quelque chose pour rechercher",
     "noResults": "Aucun résultat trouvé",
     "searchError": "Erreur de recherche",
     "startSearch": "Commencez votre recherche",
     "startSearchDescription": "Entrez un nom d'artiste, un titre d'album ou une chanson pour découvrir de la nouvelle musique sur YouTube Music",
-    "noResultsFor": "Aucun résultat pour",
+    "noResultsFor": "Aucun résultat pour « {query} »",
     "tryDifferentKeywords": "Essayez d'autres mots-clés ou vérifiez l'orthographe",
     "sections": {
       "artists": "Artistes",
       "albums": "Albums",
-      "tracks": "Titres"
+      "songs": "Titres"
     },
     "recommendations": {
       "title": "Recommandés pour vous",
@@ -205,13 +183,12 @@
   },
   "artist": {
     "title": "Artiste",
-    "release": "sortie",
-    "releases": "sorties",
+    "releaseCount": "{count} sorties",
+    "releaseCount_one": "{count} sortie",
     "follow": "Suivre",
     "unfollow": "Ne plus suivre",
     "unfollowTitle": "Ne plus suivre l'artiste",
     "unfollowMessage": "Les nouveaux albums ne seront plus automatiquement suivis. Le contenu déjà téléchargé ne sera pas affecté.",
-    "following": "Suivi",
     "albums": "Albums",
     "singles": "Singles & EPs",
     "noAlbums": "Aucun album pour le moment",
@@ -225,10 +202,9 @@
   "album": {
     "album": "Album",
     "downloadError": "Erreur de téléchargement",
-    "type": "Type",
     "unknownArtist": "Artiste inconnu",
-    "track": "titre",
-    "tracks": "titres",
+    "trackCount": "{count} titres",
+    "trackCount_one": "{count} titre",
     "download": "Télécharger l'album",
     "downloadQueued": "Téléchargement de l'album en file d'attente",
     "downloadQueuedWithArtist": "Téléchargement en file d'attente. L'artiste a aussi été ajouté à votre bibliothèque.",
@@ -254,7 +230,8 @@
     "retryingAfter": "Nouvelle tentative prévue après : {error}",
     "pausedUntil": "Téléchargements en pause jusqu'à {time} (limite de YouTube)",
     "retry": "Réessayer les titres manquants",
-    "retryQueued": "{count} titre(s) mis en file de téléchargement",
+    "retryQueued": "{count} titres mis en file de téléchargement",
+    "retryQueued_one": "{count} titre mis en file de téléchargement",
     "retryNothing": "Rien à réessayer : tous les titres sont sur le disque ou déjà en attente",
     "retryImport": "La liste des titres de l'album va être récupérée à nouveau, puis ses titres téléchargés",
     "retryFailed": "Impossible de mettre les titres en file d'attente",
@@ -283,13 +260,11 @@
     }
   },
   "library": {
-    "title": "Bibliothèque",
     "heroYour": "Votre",
     "heroLibrary": "Bibliothèque Musicale",
     "heroSubtitle": "Gérez vos artistes et albums suivis. Suivez les téléchargements et organisez votre collection.",
     "artists": "Artistes suivis",
     "albums": "Albums suivis",
-    "tracks": "Titres téléchargés",
     "searchPlaceholder": "Rechercher dans votre bibliothèque...",
     "view": {
       "grid": "Vue grille",
@@ -308,35 +283,32 @@
     },
     "meta": {
       "albumCount": "{count} albums",
-      "albumCountOne": "1 album",
-      "trackCount": "{count} titres"
+      "albumCount_one": "{count} album",
+      "trackCount": "{tracks} titres"
     },
     "emptyTitle": "Votre bibliothèque est vide",
     "emptyDescription": "Commencez à construire votre collection en explorant et en suivant vos artistes favoris !",
     "noMatches": "Aucun résultat",
-    "noMatchesDescription": "Aucun élément dans votre bibliothèque ne correspond à",
+    "noMatchesDescription": "Aucun élément dans votre bibliothèque ne correspond à « {query} »",
     "trackMatch": {
       "one": "Contient \"{title}\"",
       "many": "Contient \"{title}\" et {count} autres titres correspondants",
+      "many_one": "Contient \"{title}\" et 1 autre titre correspondant",
       "artistOne": "A \"{title}\" sur {album}",
-      "artistMany": "A \"{title}\" et {count} autres titres correspondants"
+      "artistMany": "A \"{title}\" et {count} autres titres correspondants",
+      "artistMany_one": "A \"{title}\" et 1 autre titre correspondant"
     },
     "stats": {
-      "title": "Statistiques",
       "artists": "Artistes",
       "albums": "Albums",
       "tracks": "Titres",
       "diskUsage": "Espace disque",
       "diskUsageInfo": "Taille totale des fichiers audio téléchargés. Les paroles et pochettes ne sont pas comptées."
     },
-    "empty": {
-      "artists": "Aucun artiste suivi",
-      "albums": "Aucun album suivi",
-      "tracks": "Aucun titre téléchargé"
-    },
     "export": {
       "button": "Exporter la bibliothèque",
-      "description": "Télécharge la liste des artistes, albums isolés et charts suivis en JSON. Un administrateur peut l'importer sur une autre instance."
+      "description": "Télécharge la liste des artistes, albums isolés et charts suivis en JSON. Un administrateur peut l'importer sur une autre instance.",
+      "failed": "Échec de l'export de la bibliothèque"
     },
     "playlists": "Playlists",
     "noPlaylists": "Aucune playlist ne correspond.",
@@ -359,23 +331,9 @@
     "followChart": "Suivre le chart",
     "musicChart": "Chart Musical",
     "numberOfArtists": "Nombre d'artistes à suivre",
-    "trackTopArtists": "Suivre les meilleurs artistes",
+    "top": "Top",
     "storageWarning": "Des nombres plus élevés suivent plus d'artistes mais nécessitent plus de stockage et de temps de synchronisation",
-    "artistCountError": "Le nombre d'artistes doit être compris entre 1 et {max}",
     "disabled": "La fonctionnalité Charts est actuellement désactivée. Un administrateur peut l'activer depuis le panneau d'administration."
-  },
-  "jobs": {
-    "title": "Tâches",
-    "status": {
-      "queued": "En attente",
-      "reserved": "Réservé",
-      "done": "Terminé",
-      "failed": "Échoué",
-      "cancelled": "Annulé"
-    },
-    "cancel": "Annuler la tâche",
-    "retry": "Réessayer",
-    "view": "Voir les détails"
   },
   "admin": {
     "title": "Admin",
@@ -388,7 +346,6 @@
       "backup": "Sauvegarde"
     },
     "settings": {
-      "title": "Paramètres",
       "save": "Enregistrer les paramètres",
       "saved": "Paramètres enregistrés avec succès",
       "saveFailed": "Échec de l'enregistrement des paramètres",
@@ -508,7 +465,7 @@
       "cookies": {
         "label": "Cookies de compte YouTube",
         "description": "Un fichier cookies.txt exporté depuis un navigateur connecté à un compte YouTube (utilisez un compte jetable, pas votre compte principal). Servi uniquement pour récupérer les pistes soumises à une limite d'âge ; jamais pour les téléchargements ordinaires ni pour contourner une limitation, le compte ne voit donc qu'une poignée de requêtes.",
-        "none": "Aucun cookie de compte importé — les pistes soumises à une limite d'âge échoueront.",
+        "none": "Aucun cookie de compte importé : les pistes soumises à une limite d'âge échoueront.",
         "present": "Importé : {count} cookies, {date}",
         "upload": "Importer cookies.txt",
         "replace": "Remplacer",
@@ -542,9 +499,8 @@
     },
     "users": {
       "search": "Rechercher des utilisateurs",
-      "showing": "Affichage de",
-      "of": "sur",
-      "users": "utilisateurs",
+      "showing": "Affichage de {shown} sur {count} utilisateurs",
+      "showing_one": "Affichage de {shown} sur {count} utilisateur",
       "allStatuses": "Tous les statuts",
       "allRoles": "Tous les rôles",
       "create": "Créer un utilisateur",
@@ -670,7 +626,7 @@
         "description": "Restaure une sauvegarde ou importe l'export de bibliothèque de quelqu'un. Rien de déjà présent n'est modifié : les artistes, albums et charts manquants sont suivis et leurs téléchargements lancés ; les utilisateurs existants ne sont jamais écrasés.",
         "choose": "Choisir un fichier",
         "previewing": "Analyse…",
-        "previewTitle": "Aperçu — rien n'a encore été appliqué",
+        "previewTitle": "Aperçu : rien n'a encore été appliqué",
         "resultTitle": "Import appliqué",
         "confirm": "Confirmer l'import",
         "done": "Import terminé. Les téléchargements tournent en arrière-plan.",
@@ -711,13 +667,25 @@
   },
   "playlist": {
     "title": "Importer une playlist",
+    "heroImport": "Importer",
+    "heroPlaylist": "une playlist",
     "subtitle": "Collez une URL de playlist YouTube Music pour découvrir et suivre des artistes et albums",
     "urlPlaceholder": "Collez une URL de playlist YouTube Music...",
+    "untitled": "Playlist",
     "loadPlaylist": "Charger la playlist",
     "invalidUrl": "Impossible d'extraire un identifiant de playlist de cette URL",
     "artists": "Artistes",
     "albums": "Albums",
-    "tracksInPlaylist": "titres dans la playlist",
+    "trackCount": "{count} titres",
+    "trackCount_one": "{count} titre",
+    "summary": {
+      "tracks": "{count} titres dans la playlist",
+      "tracks_one": "{count} titre dans la playlist",
+      "artists": "{count} artistes",
+      "artists_one": "{count} artiste",
+      "albums": "{count} albums",
+      "albums_one": "{count} album"
+    },
     "followMainArtists": "Suivre les artistes principaux",
     "followAll": "Suivre tous les artistes",
     "mainArtist": "Principal",
@@ -777,5 +745,12 @@
       "syncNow": "Synchroniser",
       "syncQueued": "Analyse programmée"
     }
+  },
+  "errorBoundary": {
+    "title": "Une erreur s'est produite",
+    "description": "La page a rencontré une erreur inattendue. Recharger suffit en général ; les détails ci-dessous aident à la signaler.",
+    "details": "Détails de l'erreur",
+    "reload": "Recharger la page",
+    "home": "Retour à l'accueil"
   }
 }

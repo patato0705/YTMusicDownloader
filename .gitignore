@@ -70,7 +70,6 @@ docker-compose.override.yml
 *.temp
 *.orig
 *.rej
-*.log
 *.sqlite
 *.sqlite3
 *.db

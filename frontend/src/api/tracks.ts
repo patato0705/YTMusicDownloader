@@ -1,27 +1,14 @@
 // src/api/tracks.ts
 /**
- * Track API endpoints
+ * Track lyrics (.lrc files next to the audio)
  */
 
 import { api } from './client';
-
-export interface Track {
-  id: string;
-  title: string;
-  duration?: number;
-  artists?: any[];
-  album_id?: string;
-  lyrics?: 'synced' | 'plain' | null;
-  file_path?: string;
-  status?: string;
-  created_at?: string;
-  [key: string]: any;
-}
+import type { LyricsKind, Track } from '../types';
 
 export interface TrackLyrics {
-  ok: boolean;
   track_id: string;
-  lyrics: 'synced' | 'plain' | null;
+  lyrics: LyricsKind;
   lyrics_local: string | null;
   /** Raw .lrc text, null when no file exists on disk */
   content: string | null;
@@ -30,42 +17,8 @@ export interface TrackLyrics {
 }
 
 export interface UpdateTrackLyricsResponse {
-  ok: boolean;
   track: Track;
   content: string | null;
-}
-
-export interface MarkDoneRequest {
-  file_path?: string;
-  [key: string]: any;
-}
-
-export interface MarkFailedRequest {
-  error?: string;
-  [key: string]: any;
-}
-
-/**
- * Get track info from DB
- */
-export async function getTrack(trackId: string): Promise<Track> {
-  return api.get<Track>(`/tracks/${encodeURIComponent(trackId)}`);
-}
-
-/**
- * List tracks for a specific album
- */
-export async function getAlbumTracks(albumId: string): Promise<Track[]> {
-  return api.get<Track[]>(`/tracks/album/${encodeURIComponent(albumId)}`);
-}
-
-/**
- * Fetch lyrics from LRCLIB for the track now. Bumps an already-queued
- * retry forward instead of duplicating it.
- * Returns { ok: true, job_id: <int>, queued: boolean }
- */
-export async function ensureLyrics(trackId: string): Promise<{ ok: boolean; job_id: number; queued: boolean }> {
-  return api.post(`/tracks/${encodeURIComponent(trackId)}/ensure_lyrics`);
 }
 
 /**
@@ -84,24 +37,4 @@ export async function updateTrackLyrics(
   content: string
 ): Promise<UpdateTrackLyricsResponse> {
   return api.put<UpdateTrackLyricsResponse>(`/tracks/${encodeURIComponent(trackId)}/lyrics`, { content });
-}
-
-/**
- * Mark a track as done and optionally provide file_path
- */
-export async function markTrackDone(
-  trackId: string,
-  data?: MarkDoneRequest
-): Promise<any> {
-  return api.post(`/tracks/${encodeURIComponent(trackId)}/mark_done`, data);
-}
-
-/**
- * Mark a track as failed with optional error message
- */
-export async function markTrackFailed(
-  trackId: string,
-  data?: MarkFailedRequest
-): Promise<any> {
-  return api.post(`/tracks/${encodeURIComponent(trackId)}/mark_failed`, data);
 }

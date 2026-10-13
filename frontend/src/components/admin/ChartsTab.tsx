@@ -16,8 +16,8 @@ import { ChartArtistGrid } from '../ui/ChartArtistGrid';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import * as chartsApi from '../../api/charts';
 import type { ChartSubscription, Chart } from '../../api/charts';
-import { CHART_COUNTRIES, CHART_MAX_ARTISTS, getCountry } from '../../config/charts';
-import { parseApiError } from '../../utils';
+import { CHART_COUNTRIES, CHART_MAX_ARTISTS, getCountry, useCountryName } from '../../config/charts';
+import { apiErrorMessage } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
 import type { AdminTabProps } from './AdminTabShell';
 
@@ -29,6 +29,8 @@ type ChartAction =
 
 export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
   const { t, formatLocale } = useI18n();
+  const countryName = useCountryName();
+  const errorMessage = (err: unknown) => apiErrorMessage(err, t, t('common.error'));
 
   const [chartSubscriptions, setChartSubscriptions] = useState<ChartSubscription[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +61,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
         await loadChartSubscriptions();
       } catch (err: any) {
         console.error('Failed to load chart subscriptions:', err);
-        if (!cancelled) setError(parseApiError(err, 'Failed to load data'));
+        if (!cancelled) setError(errorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -80,7 +82,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
       setSelectedChartData(chart);
     } catch (err: any) {
       console.error('Failed to load chart:', err);
-      onToast(parseApiError(err), 'error');
+      onToast(errorMessage(err), 'error');
       setSelectedChartData(null);
     } finally {
       setLoadingChart(false);
@@ -99,13 +101,10 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
       const chart = await chartsApi.getChart(code);
       setExpandedChart(prev => (prev?.code === code ? { code, chart, loading: false } : prev));
     } catch (err: any) {
-      onToast(parseApiError(err), 'error');
+      onToast(errorMessage(err), 'error');
       setExpandedChart(prev => (prev?.code === code ? null : prev));
     }
   };
-
-  const countryName = (sub: ChartSubscription): string =>
-    getCountry(sub.country_code)?.name ?? sub.country_code;
 
   const topNDraft = (sub: ChartSubscription): string =>
     topNDrafts[sub.country_code] ?? String(sub.top_n_artists);
@@ -170,7 +169,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
       onToast(message, 'success');
       setChartAction(null);
     } catch (err: any) {
-      onToast(parseApiError(err), 'error');
+      onToast(errorMessage(err), 'error');
     } finally {
       setChartActionLoading(false);
     }
@@ -178,7 +177,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
 
   // Copy for the confirmation dialog of the pending chart action
   const chartActionDialog = (action: ChartAction) => {
-    const country = countryName(action.sub);
+    const country = countryName(action.sub.country_code);
     switch (action.kind) {
       case 'unfollow':
         return {
@@ -237,7 +236,6 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
             title={dialog.title}
             message={dialog.message}
             confirmText={dialog.confirmText}
-            cancelText={t('common.cancel')}
             variant={dialog.variant}
             isLoading={chartActionLoading}
             onConfirm={runChartAction}
@@ -264,7 +262,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
         <section>
           <SectionHeader>{t('admin.charts.followChart')}</SectionHeader>
 
-          <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10">
+          <div className="glass rounded-2xl p-6">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <Select
@@ -274,10 +272,11 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                     { value: '', label: t('admin.charts.selectCountry') },
                     ...availableCountries.map(c => ({
                       value: c.code,
-                      label: `${c.flag} ${c.name}`
+                      label: `${c.flag} ${countryName(c.code)}`
                     }))
                   ]}
                   className="w-full"
+                  ariaLabel={t('admin.charts.selectCountry')}
                 />
               </div>
 
@@ -298,11 +297,11 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
             )}
 
             {selectedChartData && !loadingChart && (
-              <div className="mt-4 glass rounded-xl p-4 border border-slate-200/50 dark:border-white/10">
+              <div className="mt-4 glass rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <span className="text-3xl">{getCountry(selectedCountry)?.flag}</span>
                   <div>
-                    <h4 className="font-semibold text-foreground">{getCountry(selectedCountry)?.name}</h4>
+                    <h4 className="font-semibold text-foreground">{countryName(selectedCountry)}</h4>
                     <p className="text-sm text-muted-foreground">
                       {t('admin.charts.previewTop', { n: CHART_MAX_ARTISTS })}
                     </p>
@@ -322,7 +321,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
         <section>
           <SectionHeader>{t('admin.charts.currentSubscriptions')}</SectionHeader>
 
-          <div className="glass rounded-2xl overflow-hidden border border-slate-200/50 dark:border-white/10">
+          <div className="glass rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
@@ -359,7 +358,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <span className="text-2xl">{country?.flag ?? '🌐'}</span>
-                              <span className="font-semibold text-foreground">{country?.name ?? sub.country_code}</span>
+                              <span className="font-semibold text-foreground">{countryName(sub.country_code)}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -372,6 +371,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                                 value={draft}
                                 disabled={busy}
                                 onChange={(e) => setTopNDraft(sub.country_code, e.target.value)}
+                                aria-label={t('admin.charts.topArtists')}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') requestTopNChange(sub);
                                   if (e.key === 'Escape') clearTopNDraft(sub.country_code);

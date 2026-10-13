@@ -17,7 +17,8 @@ import {
   readExportFile,
 } from '../../api/export';
 import type { BackupOptions, ExportDocument, ImportResult } from '../../api/export';
-import { parseApiError } from '../../utils';
+import { apiErrorMessage } from '../../utils';
+import { ErrorBanner } from '../ui/PageStatus';
 import type { AdminTabProps } from './AdminTabShell';
 
 export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
@@ -43,7 +44,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       downloadJson(await exportBackup(options), exportFilename('backup'));
     } catch (err: any) {
       console.error('Failed to export backup:', err);
-      onToast(parseApiError(err, t('admin.backup.export.failed')), 'error');
+      onToast(apiErrorMessage(err, t, t('admin.backup.export.failed')), 'error');
     } finally {
       setExporting(false);
     }
@@ -79,7 +80,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       setImportError(
         code === 'invalid_json' || code === 'not_export_file'
           ? t(`admin.backup.import.errors.${code}`)
-          : parseApiError(err, t('admin.backup.import.failed'))
+          : apiErrorMessage(err, t, t('admin.backup.import.failed'))
       );
     } finally {
       setPreviewLoading(false);
@@ -95,7 +96,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       onToast(t('admin.backup.import.done'), 'success');
     } catch (err: any) {
       console.error('Failed to apply import:', err);
-      setImportError(parseApiError(err, t('admin.backup.import.failed')));
+      setImportError(apiErrorMessage(err, t, t('admin.backup.import.failed')));
     } finally {
       setApplying(false);
     }
@@ -170,7 +171,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
               <p key={i} className="text-sm text-amber-700 dark:text-amber-400">
                 ⚠️ {t(`admin.backup.warnings.${w.code}`)}
                 {w.detail && (
-                  <span className="text-muted-foreground"> — {w.detail}</span>
+                  <span className="text-muted-foreground"> ({w.detail})</span>
                 )}
               </p>
             ))}
@@ -185,7 +186,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       {/* Export */}
       <section>
         <SectionHeader>{t('admin.backup.export.title')}</SectionHeader>
-        <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
+        <div className="glass rounded-2xl p-6 space-y-4">
           <p className="text-sm text-muted-foreground">{t('admin.backup.export.description')}</p>
 
           {(['library', 'charts', 'catalog', 'users', 'settings'] as const).map(key => (
@@ -227,7 +228,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       {/* Import */}
       <section>
         <SectionHeader>{t('admin.backup.import.title')}</SectionHeader>
-        <div className="glass rounded-2xl p-6 border border-slate-200/50 dark:border-white/10 space-y-4">
+        <div className="glass rounded-2xl p-6 space-y-4">
           <p className="text-sm text-muted-foreground">{t('admin.backup.import.description')}</p>
 
           <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -249,7 +250,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
             {fileName && (
               <span className="text-sm text-muted-foreground truncate">
                 {fileName}
-                {doc && ` — ${sectionsOf(doc).join(', ')}`}
+                {doc && ` (${sectionsOf(doc).join(', ')})`}
               </span>
             )}
             {previewLoading && (
@@ -257,11 +258,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
             )}
           </div>
 
-          {importError && (
-            <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
-              <p className="text-sm text-red-600 dark:text-red-400 font-medium">{importError}</p>
-            </div>
-          )}
+          {importError && <ErrorBanner>{importError}</ErrorBanner>}
 
           {summary && (
             <div className="space-y-4">

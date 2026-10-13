@@ -1,10 +1,7 @@
 // src/config/i18n.ts
 /**
- * Centralized i18n configuration
- * To add a new language:
- * 1. Add it to SUPPORTED_LOCALES array
- * 2. Create the translation file in src/locales/{code}.json
- * That's it!
+ * Supported languages. To add one: add it to SUPPORTED_LOCALES and create
+ * its translation file, src/locales/{code}.json.
  */
 
 export interface Language {
@@ -16,10 +13,6 @@ export interface Language {
 export const SUPPORTED_LOCALES = [
   { code: 'en', name: 'English', flag: '🇬🇧' },
   { code: 'fr', name: 'Français', flag: '🇫🇷' },
-  // Easy to add more:
-  // { code: 'es', name: 'Español', flag: '🇪🇸' },
-  // { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  // { code: 'ja', name: '日本語', flag: '🇯🇵' },
 ] as const;
 
 // Extract locale codes for type safety

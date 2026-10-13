@@ -7,7 +7,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 ## Features
 
 - **Search YouTube Music** for artists, albums and tracks from a web UI.
-- **Follow artists** — all existing releases are downloaded, and new ones are picked up automatically.
+- **Follow artists**: all existing releases are downloaded, and new ones are picked up automatically.
 - **Download single albums** without following the artist.
 - **Playlists**: paste a YouTube Music playlist URL, then follow every artist in it or download every album it contains in bulk, or add the playlist to the library: followed (new songs bring in their albums or artists), and/or written as an M3U file that Jellyfin picks up as a playlist.
 - **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly).
@@ -27,10 +27,10 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 
 | | |
 |:---:|:---:|
-| **Browse** — search YouTube Music, or import a playlist<br>![Browse](docs/screenshots/browse.png) | **Artist** — follow once, every release is tracked<br>![Artist page](docs/screenshots/artist.png) |
-| **Album** — per-track download and lyrics status<br>![Album page](docs/screenshots/album.png) | **Lyrics editor** — view, paste or fix lyrics by hand<br>![Lyrics editor](docs/screenshots/lyrics-editor.png) |
-| **Library** — progress for every followed artist and album<br>![Library](docs/screenshots/library-list.png) | **Charts** — auto-follow the top artists of a country<br>![Charts](docs/screenshots/charts.png) |
-| **Admin panel** — backup and restore, users, charts, settings<br>![Admin panel](docs/screenshots/admin-backup.png) | **Light theme**<br>![Home page, light theme](docs/screenshots/home-light.png) |
+| **Browse**: search YouTube Music, or import a playlist<br>![Browse](docs/screenshots/browse.png) | **Artist**: follow once, every release is tracked<br>![Artist page](docs/screenshots/artist.png) |
+| **Album**: per-track download and lyrics status<br>![Album page](docs/screenshots/album.png) | **Lyrics editor**: view, paste or fix lyrics by hand<br>![Lyrics editor](docs/screenshots/lyrics-editor.png) |
+| **Library**: progress for every followed artist and album<br>![Library](docs/screenshots/library-list.png) | **Charts**: auto-follow the top artists of a country<br>![Charts](docs/screenshots/charts.png) |
+| **Admin panel**: backup and restore, users, charts, settings<br>![Admin panel](docs/screenshots/admin-backup.png) | **Light theme**<br>![Home page, light theme](docs/screenshots/home-light.png) |
 
 <details>
 <summary>Mobile</summary>
@@ -217,9 +217,9 @@ The two sources are never mixed, and MusicBrainz's *Hip Hop* is renamed to Deeze
 
 ### Age-restricted tracks
 
-Age-restricted videos need a signed-in, age-verified YouTube account. Export a `cookies.txt` (Netscape format — browser extensions such as *Get cookies.txt LOCALLY* do this) while on youtube.com, and upload it under **Admin Panel → Settings → YouTube account cookies**.
+Age-restricted videos need a signed-in, age-verified YouTube account. Export a `cookies.txt` (Netscape format; browser extensions such as *Get cookies.txt LOCALLY* do this) while on youtube.com, and upload it under **Admin Panel → Settings → YouTube account cookies**.
 
-The jar is used **only** as a fallback for tracks that fail with an age-gate error — never for ordinary downloads and never to get around a rate limit — so the account sees a handful of requests at most. Still, use a throwaway account, not your main one.
+The jar is used **only** as a fallback for tracks that fail with an age-gate error (never for ordinary downloads, and never to get around a rate limit), so the account sees a handful of requests at most. Still, use a throwaway account, not your main one.
 
 ### Rate limiting
 
@@ -233,11 +233,11 @@ Keeping *Max concurrent downloads* at 1 is the best way to avoid this in the fir
 
 **Admin Panel → Backup** exports a JSON document with any of:
 
-- **Library** — followed artists, standalone albums, playlists (with their songs), artists dismissed from recommendations. On import, the new instance follows them again and downloads their music.
-- **Charts** — chart subscriptions.
-- **Catalog** — every artist/album/track row with relative file paths. Only useful if you also copy the `data/` folder: the import then recognises files already on disk instead of re-downloading.
-- **Users** — accounts, roles and password hashes (keep this file private).
-- **Settings** — application settings.
+- **Library**: followed artists, standalone albums, playlists (with their songs), artists dismissed from recommendations. On import, the new instance follows them again and downloads their music.
+- **Charts**: chart subscriptions.
+- **Catalog**: every artist/album/track row with relative file paths. Only useful if you also copy the `data/` folder: the import then recognises files already on disk instead of re-downloading.
+- **Users**: accounts, roles and password hashes (keep this file private).
+- **Settings**: application settings.
 
 Any user can export the *library* part alone from the Library page (nothing personal in it), which is a handy way to share "here's who I follow" between instances.
 
@@ -245,7 +245,7 @@ Importing first shows a dry-run preview (what would be followed, queued, skipped
 
 ## Running behind a reverse proxy
 
-Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS (the app doesn't infer it from the proxy). The frontend and API share one origin, so no CORS configuration is required. The `/api/health` endpoint (no auth) can be used for uptime checks; it returns 503 if the database, ffmpeg/yt-dlp or the data directories are unhealthy.
+Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS (the app doesn't infer it from the proxy). The frontend and API share one origin, so no CORS configuration is required. The `/api/health` endpoint (no auth) can be used for uptime checks; it returns 503 if the database, ffmpeg/ffprobe or the data directories are unhealthy.
 
 **Set `FORWARDED_ALLOW_IPS` to your proxy's address.** Without it the app sees every request as coming from the proxy, so the per-IP sign-in limit is shared by all your users: one person guessing passwords blocks sign-in for everyone. With it, the app takes the real client address from the proxy's `X-Forwarded-For` header (and the scheme from `X-Forwarded-Proto`). `X-Real-IP` and `Forwarded` are not read: Traefik, Caddy and Nginx Proxy Manager send `X-Forwarded-For` by default, plain nginx needs `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`. With several proxies in a row (e.g. Cloudflare → Traefik), every hop must be trusted.
 
@@ -338,7 +338,7 @@ docker compose exec ytmusicdownloader python -m backend.cli set-role admin admin
 
 Then reactivate the legitimate accounts from **Admin Panel → Users**, and check settings and other admins.
 
-**Locked out while someone keeps guessing your password** ("Too many failed attempts" for your account): browsers you're already signed in to aren't affected, but a new browser (or yours after a password reset) is. Turn the per-account limit off for a moment — the per-IP limit still applies — sign in, then turn it back on. Once signed in, your browser has its own allowance again.
+**Locked out while someone keeps guessing your password** ("Too many failed attempts" for your account): browsers you're already signed in to aren't affected, but a new browser (or yours after a password reset) is. Turn the per-account limit off for a moment (the per-IP limit still applies), sign in, then turn it back on. Once signed in, your browser has its own allowance again.
 
 ```bash
 docker compose exec ytmusicdownloader python -m backend.cli set-setting auth.login_max_failures_per_account 0
@@ -371,26 +371,26 @@ Jobs run in order of where they came from, and every job inherits that from the 
 
 ## Logs
 
-- `docker compose logs -f` — everything, interleaved.
-- `./config/logs/` — one rotating file per process (`web.log`, `worker-download-0.log`, `worker-metadata-0.log`, `worker-lyrics.log`, `worker-genres.log`, `scheduler.log`), 5 MB × 3 each.
+- `docker compose logs -f`: everything, interleaved.
+- `./config/logs/`: one rotating file per process (`web.log`, `worker-download-0.log`, `worker-metadata-0.log`, `worker-lyrics.log`, `worker-genres.log`, `scheduler.log`), 5 MB × 3 each.
 
 ## Troubleshooting
 
-**Downloads fail across the board right after an update to YouTube** — restart the container. yt-dlp is updated from PyPI at every start; wait a day or two for a yt-dlp release if the restart doesn't help.
+**Downloads fail across the board right after an update to YouTube**: restart the container. yt-dlp is updated from PyPI at every start; wait a day or two for a yt-dlp release if the restart doesn't help.
 
-**A track fails with an age-restriction error** — upload account cookies (see above). Such tracks are retried once a day, up to 5 attempts; after that they're marked failed, and *Retry missing tracks* on the album page queues them again.
+**A track fails with an age-restriction error**: upload account cookies (see above). Such tracks are retried once a day, up to 5 attempts; after that they're marked failed, and *Retry missing tracks* on the album page queues them again.
 
-**Everything is paused with a rate-limit banner** — wait it out; it resolves on its own. If it keeps happening, lower *Max concurrent downloads*.
+**Everything is paused with a rate-limit banner**: wait it out; it resolves on its own. If it keeps happening, lower *Max concurrent downloads*.
 
-**Permission errors on `./config` or `./data`** — make sure `PUID`/`PGID` match your host user. Files that already existed before a `PUID` change need a one-time `chown`.
+**Permission errors on `./config` or `./data`**: make sure `PUID`/`PGID` match your host user. Files that already existed before a `PUID` change need a one-time `chown`.
 
-**"Too many failed attempts" for everyone** — you're behind a reverse proxy without `FORWARDED_ALLOW_IPS`, so all users share the proxy's IP. See [Running behind a reverse proxy](#running-behind-a-reverse-proxy). To get back in right away, restart the container (the counters live in memory).
+**"Too many failed attempts" for everyone**: you're behind a reverse proxy without `FORWARDED_ALLOW_IPS`, so all users share the proxy's IP. See [Running behind a reverse proxy](#running-behind-a-reverse-proxy). To get back in right away, restart the container (the counters live in memory).
 
-**Single sign-on fails** — the login page shows a short reason; the detail is in `config/logs/web.log`. The usual suspects: the redirect URI registered at the provider doesn't exactly match `<PUBLIC_URL>/api/auth/oidc/callback`, `OIDC_ISSUER_URL` differs from the issuer the provider announces, or the container can't reach the provider (use an address reachable from inside the container). Also open the app at `PUBLIC_URL` itself to sign in: starting from another address (a LAN IP, say) loses the sign-in cookie on the way back.
+**Single sign-on fails**: the login page shows a short reason; the detail is in `config/logs/web.log`. The usual suspects: the redirect URI registered at the provider doesn't exactly match `<PUBLIC_URL>/api/auth/oidc/callback`, `OIDC_ISSUER_URL` differs from the issuer the provider announces, or the container can't reach the provider (use an address reachable from inside the container). Also open the app at `PUBLIC_URL` itself to sign in: starting from another address (a LAN IP, say) loses the sign-in cookie on the way back.
 
-**Login doesn't stick** — if you're on plain HTTP, `COOKIE_SECURE` must be unset or `false`. If you're on HTTPS, set it to `true`.
+**Login doesn't stick**: if you're on plain HTTP, `COOKIE_SECURE` must be unset or `false`. If you're on HTTPS, set it to `true`.
 
-**I lost `config/secrets.json`** — a new one is generated on start; every user just has to log in again.
+**I lost `config/secrets.json`**: a new one is generated on start; every user just has to log in again.
 
 ## Development
 
@@ -426,4 +426,4 @@ This tool is intended for personal use with content you have the right to downlo
 
 This project is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
 
-In short: you're free to use, modify, self-host and redistribute it, including commercially — but any modified version you distribute *or run as a service for others* must be released under the same license, with its source code available. See the [LICENSE](LICENSE) file for the full terms.
+In short: you're free to use, modify, self-host and redistribute it, including commercially, but any modified version you distribute *or run as a service for others* must be released under the same license, with its source code available. See the [LICENSE](LICENSE) file for the full terms.

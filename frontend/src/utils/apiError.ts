@@ -1,44 +1,6 @@
 // src/utils/apiError.ts
 import type { ApiError } from '../api/client';
 
-/**
- * Parse an ApiError thrown by the API client (see src/api/client.ts) into a
- * user-facing message.
- *
- * FastAPI validation errors (422) return `detail` as an array of field-level
- * errors on `err.data.detail` — this flattens them into a single readable
- * string (e.g. "username: field required, password: field required").
- * A plain string `detail` is returned as-is, and anything else falls back to
- * `err.message`, or the caller-supplied `fallback` if that's also missing.
- */
-export function parseApiError(err: any, fallback: string = 'An error occurred'): string {
-  const data = (err as ApiError)?.data;
-
-  if (data?.detail && Array.isArray(data.detail)) {
-    return data.detail.map((e: any) => {
-      const field = e.loc && e.loc.length > 1 ? e.loc[e.loc.length - 1] : null;
-      const msg = e.msg || 'Invalid value';
-      return field ? `${field}: ${msg}` : msg;
-    }).join(', ');
-  }
-
-  if (data?.detail && typeof data.detail === 'string') {
-    return data.detail;
-  }
-
-  return err?.message || fallback;
-}
-
-/**
- * Minutes to wait before retrying, for a 429 from the failed password
- * throttling (login, change password). The backend puts the wait in seconds
- * in the body's `retry_after`, since ApiError doesn't keep response headers.
- */
-export function retryAfterMinutes(err: any): number {
-  const seconds = Number((err as ApiError)?.data?.retry_after);
-  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 1;
-}
-
 /** Error codes the backend sends as `detail`, with their translation keys */
 const CODED_ERRORS: Record<string, string> = {
   // YouTube Music couldn't be read (502): usually passes in a moment
@@ -48,11 +10,43 @@ const CODED_ERRORS: Record<string, string> = {
 };
 
 /**
- * A failed request's message for the user: a coded error translated,
- * otherwise the backend's message, otherwise `fallback`.
+ * A failed request's message for the user: a coded error translated, the
+ * backend's message (FastAPI's 422 field errors flattened into one line),
+ * otherwise `fallback` (network errors, bare HTTP statuses).
  */
-export function apiErrorMessage(err: any, t: (key: string) => string, fallback: string): string {
-  const code = (err as ApiError)?.data?.detail;
-  if (typeof code === 'string' && CODED_ERRORS[code]) return t(CODED_ERRORS[code]);
-  return err?.message || fallback;
+export function apiErrorMessage(err: unknown, t: (key: string) => string, fallback: string): string {
+  const data = (err as ApiError)?.data;
+  const detail = data?.detail;
+
+  if (typeof detail === 'string') {
+    return CODED_ERRORS[detail] ? t(CODED_ERRORS[detail]) : detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail.map((e: any) => {
+      const field = e.loc?.length > 1 ? e.loc[e.loc.length - 1] : null;
+      return field ? `${field}: ${e.msg}` : e.msg;
+    }).join(', ');
+  }
+  if (typeof data?.message === 'string') return data.message;
+  return fallback;
+}
+
+/**
+ * The fields a 422 points at (FastAPI's validation details), for forms to
+ * flag them; empty for any other error.
+ */
+export function invalidFields(err: unknown): Set<string> {
+  const detail = (err as ApiError)?.data?.detail;
+  if ((err as ApiError)?.status !== 422 || !Array.isArray(detail)) return new Set();
+  return new Set(detail.map((e: any) => e.loc?.[e.loc.length - 1]).filter(Boolean));
+}
+
+/**
+ * Minutes to wait before retrying, for a 429 from the failed password
+ * throttling (login, change password). The backend puts the wait in seconds
+ * in the body's `retry_after`, since ApiError doesn't keep response headers.
+ */
+export function retryAfterMinutes(err: unknown): number {
+  const seconds = Number((err as ApiError)?.data?.retry_after);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 1;
 }

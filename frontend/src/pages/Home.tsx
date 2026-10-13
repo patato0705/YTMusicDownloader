@@ -1,34 +1,29 @@
 // src/pages/Home.tsx
-import React, { useEffect, useState, memo, useMemo } from 'react';
+import { useEffect, useState, memo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/I18nContext';
-import { StatCard } from '../components/ui/StatCard';
 import { ActionCard } from '../components/ui/ActionCard';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
 import { getLibraryStats, getLibraryAlbums } from '../api/library';
+import type { LibraryAlbum, LibraryStats } from '../api/library';
 import { getImageUrl } from '../api/media';
-import { Spinner } from '../components/ui/Spinner';
 import { Artwork } from '../components/ui/Artwork';
-import { formatNumber } from '../utils';
+import { EmptyState, LoadingState } from '../components/ui/PageStatus';
+import { LibraryStatCards } from '../components/LibraryStatCards';
 
-// Icon components — defined outside render so they're never recreated
-const ArtistsIcon = () => <span className="text-2xl">🎤</span>;
-const AlbumsIcon = () => <span className="text-2xl">💿</span>;
-const TracksIcon = () => <span className="text-2xl">🎵</span>;
-const ActivityIcon = () => <span className="text-2xl">⚡</span>;
-const SearchIcon = () => <span className="text-2xl">🔍</span>;
-const LibraryIcon = () => <span className="text-2xl">📚</span>;
+const SearchIcon = () => <span className="text-2xl" aria-hidden="true">🔍</span>;
+const LibraryIcon = () => <span className="text-2xl" aria-hidden="true">📚</span>;
 
 /**
- * Isolated album card — memoized (and Artwork keeps its own image-error
+ * Isolated album card: memoized (and Artwork keeps its own image-error
  * state) so one broken thumbnail never re-renders the rest of the grid.
  */
-const AlbumCard = memo(function AlbumCard({ album }: { album: any }) {
+const AlbumCard = memo(function AlbumCard({ album }: { album: LibraryAlbum }) {
   const { t } = useI18n();
 
-  const thumbnailUrl = getImageUrl(album.image_local || album.thumbnail);
+  const thumbnailUrl = getImageUrl(album.thumbnail);
   const progress = album.tracks_total > 0
     ? (album.tracks_downloaded / album.tracks_total) * 100
     : 0;
@@ -68,7 +63,7 @@ const AlbumCard = memo(function AlbumCard({ album }: { album: any }) {
         {/* Download progress bar */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{album.tracks_downloaded}/{album.tracks_total} {t('album.tracks')}</span>
+            <span>{t('home.tracksDownloaded', { done: album.tracks_downloaded, total: album.tracks_total })}</span>
             {progress === 100 && (
               <span className="text-blue-600 dark:text-red-400">✓ {t('home.complete')}</span>
             )}
@@ -88,8 +83,8 @@ const AlbumCard = memo(function AlbumCard({ album }: { album: any }) {
 export default function Home(): JSX.Element {
   const { user } = useAuth();
   const { t } = useI18n();
-  const [stats, setStats] = useState<any>(null);
-  const [recentAlbums, setRecentAlbums] = useState<any[]>([]);
+  const [stats, setStats] = useState<LibraryStats | null>(null);
+  const [recentAlbums, setRecentAlbums] = useState<LibraryAlbum[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -103,7 +98,7 @@ export default function Home(): JSX.Element {
         ]);
         if (!cancelled) {
           setStats(statsData);
-          setRecentAlbums(albumsData?.albums || []);
+          setRecentAlbums(albumsData);
         }
       } catch (err) {
         console.error('Failed to load home data:', err);
@@ -115,117 +110,69 @@ export default function Home(): JSX.Element {
     return () => { cancelled = true; };
   }, []);
 
-  const heroTitle = useMemo(() => (
-    <>
-      <span className="text-foreground">{t('home.welcomeBack')} </span>
-      <span className="text-gradient">{user?.username}</span>
-    </>
-  ), [user?.username, t]);
-
   return (
-    <div className="relative min-h-screen">
-      {/* Background effects */}
-      <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-      <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
+    <div className="space-y-12 pb-12">
+      <PageHero
+        badge={{ text: t('home.badge'), online: true }}
+        title={
+          <>
+            <span className="text-foreground">{t('home.welcomeBack')} </span>
+            <span className="text-gradient">{user?.username}</span>
+          </>
+        }
+        subtitle={t('home.heroSubtitle')}
+      />
 
-      {/* Main content */}
-      <div className="relative z-10 space-y-12 pb-12">
-        {/* Hero section */}
-        <PageHero
-          badge={{ text: t('home.badge'), online: true }}
-          title={heroTitle}
-          subtitle={t('home.heroSubtitle')}
-        />
+      <LibraryStatCards stats={stats} loading={loading} />
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard
-            icon={<ArtistsIcon />}
-            label={t('library.stats.artists')}
-            value={loading ? <Spinner size="sm" /> : formatNumber(stats?.artists?.total || 0)}
-            loading={loading}
+      {/* Quick Actions */}
+      <div>
+        <SectionHeader>{t('home.quickActions')}</SectionHeader>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <ActionCard
+            to="/browse"
+            icon={<SearchIcon />}
+            title={t('nav.browse')}
+            description={t('home.browseDescription')}
+            gradient="from-blue-500/10 to-indigo-500/10 dark:from-red-900/20 dark:to-red-800/20"
           />
-          <StatCard
-            icon={<AlbumsIcon />}
-            label={t('library.stats.albums')}
-            value={loading ? <Spinner size="sm" /> : formatNumber(stats?.albums?.downloaded || 0)}
-            loading={loading}
-          />
-          <StatCard
-            icon={<TracksIcon />}
-            label={t('library.stats.tracks')}
-            value={loading ? <Spinner size="sm" /> : formatNumber(stats?.tracks?.total || 0)}
-            loading={loading}
-          />
-          <StatCard
-            icon={<ActivityIcon />}
-            label={t('library.stats.diskUsage')}
-            value={loading ? <Spinner size="sm" /> : `${stats?.storage?.gb?.toFixed(1) || 0} GB`}
-            loading={loading}
-            info={t('library.stats.diskUsageInfo')}
+
+          <ActionCard
+            to="/library"
+            icon={<LibraryIcon />}
+            title={t('nav.library')}
+            description={t('home.libraryDescription')}
+            gradient="from-indigo-500/10 to-violet-500/10 dark:from-red-900/20 dark:via-purple-900/15 dark:to-red-800/20"
           />
         </div>
+      </div>
 
-        {/* Quick Actions */}
-        <div>
-          <SectionHeader>{t('home.quickActions')}</SectionHeader>
+      {/* Recent Activity */}
+      <div>
+        <SectionHeader>{t('home.recentActivity')}</SectionHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <ActionCard
-              to="/browse"
-              icon={<SearchIcon />}
-              title={t('nav.browse')}
-              description={t('home.browseDescription')}
-              gradient="from-blue-500/10 to-indigo-500/10 dark:from-red-900/20 dark:to-red-800/20"
-            />
-
-            <ActionCard
-              to="/library"
-              icon={<LibraryIcon />}
-              title={t('nav.library')}
-              description={t('home.libraryDescription')}
-              gradient="from-indigo-500/10 to-violet-500/10 dark:from-red-900/20 dark:via-purple-900/15 dark:to-red-800/20"
-            />
-          </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div>
-          <SectionHeader>{t('home.recentActivity')}</SectionHeader>
-
-          <div className="rounded-2xl p-6 bg-white/90 dark:bg-zinc-900/90 border border-slate-200/60 dark:border-white/10 shadow-sm">
-            {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <div className="text-center">
-                  <Spinner className="text-blue-600 dark:text-red-500 mb-4" />
-                  <p className="text-muted-foreground">{t('home.loadingActivity')}</p>
-                </div>
-              </div>
-            ) : recentAlbums.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {recentAlbums.map((album) => (
-                  <AlbumCard key={album.id} album={album} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-16">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4">
-                  <TracksIcon />
-                </div>
-                <h3 className="text-xl font-semibold mb-2 text-foreground">{t('home.noActivity')}</h3>
-                <p className="text-muted-foreground mb-6 text-foreground">
-                  {t('home.noActivityDescription')}
-                </p>
-                <Link
-                  to="/browse"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-red-700 dark:to-red-600 text-white font-medium hover:shadow-lg hover:shadow-blue-600/50 dark:hover:shadow-red-700/50 transition-shadow duration-300"
-                >
-                  <SearchIcon />
-                  {t('home.browseMusic')}
-                </Link>
-              </div>
-            )}
-          </div>
+        <div className="rounded-2xl p-6 bg-white/90 dark:bg-zinc-900/90 border border-slate-200/60 dark:border-white/10 shadow-sm">
+          {loading ? (
+            <LoadingState message={t('home.loadingActivity')} className="py-16" />
+          ) : recentAlbums.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recentAlbums.map((album) => (
+                <AlbumCard key={album.id} album={album} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon="🎵" title={t('home.noActivity')} bare>
+              <p>{t('home.noActivityDescription')}</p>
+              <Link
+                to="/browse"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-red-700 dark:to-red-600 text-white font-medium hover:shadow-lg hover:shadow-blue-600/50 dark:hover:shadow-red-700/50 transition-shadow duration-300"
+              >
+                <SearchIcon />
+                {t('home.browseMusic')}
+              </Link>
+            </EmptyState>
+          )}
         </div>
       </div>
     </div>

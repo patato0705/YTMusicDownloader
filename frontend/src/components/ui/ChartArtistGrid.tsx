@@ -1,4 +1,4 @@
-// src/components/charts/ChartArtistGrid.tsx
+// src/components/ui/ChartArtistGrid.tsx
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../contexts/I18nContext';

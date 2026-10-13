@@ -1,76 +1,55 @@
 // src/contexts/ThemeContext.tsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 
 type Theme = 'light' | 'dark';
 
 interface ThemeContextType {
   theme: Theme;
-  setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const STORAGE_KEY = 'theme';
+const systemQuery = () => window.matchMedia('(prefers-color-scheme: dark)');
+
+/** The theme picked with the toggle; none means following the system */
+function storedTheme(): Theme | null {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  return stored === 'light' || stored === 'dark' ? stored : null;
+}
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    // Check localStorage first
-    const stored = localStorage.getItem('theme') as Theme | null;
-    if (stored) return stored;
-
-    // Check system preference
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-
-    return 'light';
-  });
+  const [theme, setTheme] = useState<Theme>(() => storedTheme() ?? (systemQuery().matches ? 'dark' : 'light'));
 
   useEffect(() => {
-    // Update document class and localStorage
-    const root = document.documentElement;
-    
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-
+    document.documentElement.classList.toggle('dark', theme === 'dark');
     // Tint the mobile browser chrome to match (values mirror --color-background)
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', theme === 'dark' ? '#09090b' : '#f8fafc');
-
-    localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Listen for system theme changes
+  // Follow the system setting until a theme is picked with the toggle
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    
+    const query = systemQuery();
     const handleChange = (e: MediaQueryListEvent) => {
-      // Only auto-switch if user hasn't set a preference
-      if (!localStorage.getItem('theme')) {
-        setThemeState(e.matches ? 'dark' : 'light');
-      }
+      if (!storedTheme()) setTheme(e.matches ? 'dark' : 'light');
     };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    query.addEventListener('change', handleChange);
+    return () => query.removeEventListener('change', handleChange);
   }, []);
 
-  const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme);
-  };
+  const value = useMemo(() => ({
+    theme,
+    toggleTheme: () => {
+      const next = theme === 'light' ? 'dark' : 'light';
+      localStorage.setItem(STORAGE_KEY, next);
+      setTheme(next);
+    },
+  }), [theme]);
 
-  const toggleTheme = () => {
-    setThemeState(prev => prev === 'light' ? 'dark' : 'light');
-  };
-
-  return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };
 
 export const useTheme = () => {

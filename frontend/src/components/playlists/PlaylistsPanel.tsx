@@ -153,4 +153,3 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
   );
 };
 
-export default PlaylistsPanel;

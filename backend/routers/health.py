@@ -3,7 +3,7 @@
 Health endpoints.
 
 Endpoints:
-- GET /api/health - Get app state
+- GET /api/health - Get app state (the Docker healthcheck, so no auth)
 """
 from __future__ import annotations
 import logging
@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from .. import config
-from ..db import get_engine
+from ..db import engine
 from ..ytm_service.client import get_client, call
 
 logger = logging.getLogger("routers.health")
@@ -25,7 +25,6 @@ router = APIRouter(prefix="/api/health", tags=["Health"])
 
 
 def _check_db() -> Dict[str, Any]:
-    engine = get_engine()
     try:
         with engine.connect() as conn:
             # simple lightweight query
@@ -38,51 +37,27 @@ def _check_db() -> Dict[str, Any]:
 
 
 def _check_binaries() -> Dict[str, Any]:
-    """
-    Check presence of some required binaries in PATH.
-    """
+    """The binaries yt-dlp's audio extraction needs (yt-dlp itself is a Python package)."""
     bins = {}
-    for b in ("yt-dlp", "yt-dlp.exe", "ffmpeg", "ffprobe"):
-        # prefer first match
+    for b in ("ffmpeg", "ffprobe"):
         p = shutil.which(b)
-        if p:
-            bins[b] = {"ok": True, "path": p}
-        else:
-            bins[b] = {"ok": False, "path": None}
+        bins[b] = {"ok": p is not None, "path": p}
     return bins
 
 
 def _check_fs() -> Dict[str, Any]:
-    """
-    Check that key directories exist and are writable.
-    """
-    checks = {}
-    for name, path in (
-        ("CONFIG_DIR", config.CONFIG_DIR),
-        ("TEMP_DIR", config.TEMP_DIR),
-        ("DOWNLOAD_DIR", config.DOWNLOAD_DIR),
-        ("COVERS_DIR", config.COVERS_DIR),
-        ("MUSIC_DIR", config.MUSIC_DIR),
-        ("LOG_DIR", config.LOG_DIR),
-    ):
-        try:
-            p = str(path)
-            exists = os.path.exists(p)
-            writable = False
-            # if exists, try to test write (create+remove temp file) cheaply
-            if exists and os.access(p, os.W_OK):
-                try:
-                    testfile = os.path.join(p, f".health_tmp_{int(time.time()*1000)}")
-                    with open(testfile, "w") as fh:
-                        fh.write("x")
-                    os.remove(testfile)
-                    writable = True
-                except Exception:
-                    writable = False
-            checks[name] = {"path": p, "exists": exists, "writable": writable}
-        except Exception as e:
-            checks[name] = {"path": str(path), "exists": False, "writable": False, "error": str(e)}
-    return checks
+    """Whether the app's directories exist and are writable (permissions only: nothing is written)."""
+    return {
+        name: {"path": str(path), "exists": path.is_dir(), "writable": os.access(path, os.W_OK)}
+        for name, path in (
+            ("CONFIG_DIR", config.CONFIG_DIR),
+            ("TEMP_DIR", config.TEMP_DIR),
+            ("DOWNLOAD_DIR", config.DOWNLOAD_DIR),
+            ("COVERS_DIR", config.COVERS_DIR),
+            ("MUSIC_DIR", config.MUSIC_DIR),
+            ("LOG_DIR", config.LOG_DIR),
+        )
+    }
 
 
 def _check_ytmusic(deep: bool = False) -> Dict[str, Any]:
@@ -92,8 +67,7 @@ def _check_ytmusic(deep: bool = False) -> Dict[str, Any]:
     """
     out: Dict[str, Any] = {"ok": False, "detail": None}
     try:
-        # init client (may raise)
-        client = get_client()
+        get_client()
         out["ok"] = True
         out["detail"] = "client_initialized"
     except Exception as e:
@@ -104,10 +78,7 @@ def _check_ytmusic(deep: bool = False) -> Dict[str, Any]:
 
     if deep:
         try:
-            # attempt a light call; adapt the method if you prefer another one
-            country = getattr(config, "CHARTS_COUNTRY", "US")
-            # call may raise or return unexpected structure
-            res = call("get_charts", country=country, max_retries=2)
+            res = call("get_charts", country="US", max_retries=2)
             # simple heuristics for success: expect dict with 'artists' or 'songs'
             if isinstance(res, dict) and ("artists" in res or "songs" in res):
                 out["ok"] = True
@@ -139,18 +110,15 @@ def health_check(deep: bool = Query(False, description="If true, perform deeper 
     if not db_chk.get("ok"):
         overall_ok = False
 
-    # binaries (yt-dlp, ffmpeg, ffprobe)
     bins = _check_binaries()
     result["checks"]["binaries"] = bins
-    # mark overall as not ok if neither yt-dlp nor ffmpeg present
-    if not any(v["ok"] for k, v in bins.items() if k in ("yt-dlp", "ffmpeg")):
+    if not all(v["ok"] for v in bins.values()):
         overall_ok = False
 
     # filesystem
     fs = _check_fs()
     result["checks"]["fs"] = fs
-    if not all(v.get("exists") and v.get("writable") for v in fs.values()):
-        # if some critical dirs missing or unwritable, fail
+    if not all(v["exists"] and v["writable"] for v in fs.values()):
         overall_ok = False
 
     # ytmusic

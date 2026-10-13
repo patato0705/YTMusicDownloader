@@ -4,46 +4,55 @@
  */
 
 import { api } from './client';
+import type { AlbumDownloadStatus, AlbumMode, SubscriptionMode } from '../types';
 
-export interface Artist {
+export interface ArtistRelease {
   id: string;
-  name: string;
-  thumbnails?: any[];
-  image_local?: string;
-  followed?: boolean;
-  created_at?: string;
-  albums?: any[];
-  [key: string]: any;
+  title: string;
+  /** "Album", "Single", "EP" */
+  type: string;
+  year: string | null;
+  thumbnail: string | null;
+  /** Whether the album has a row in the DB, and what it knows of it */
+  in_database: boolean;
+  mode: AlbumMode | null;
+  download_status: AlbumDownloadStatus;
+}
+
+export interface ArtistPage {
+  /** "database" for an artist followed in full (refreshed with the job queue), "ytmusic" otherwise */
+  source: 'database' | 'ytmusic';
+  subscription_mode: SubscriptionMode | null;
+  artist: {
+    id: string;
+    name: string;
+    thumbnail: string | null;
+    genres: string[];
+  };
+  albums: ArtistRelease[];
 }
 
 /**
- * Get artist info
- * Tries DB first, then fetches from YTMusic if not found
+ * An artist and its releases: from the DB for an artist followed in full,
+ * otherwise from YouTube Music
  */
-export async function getArtist(artistId: string): Promise<Artist> {
-  return api.get<Artist>(`/artists/${encodeURIComponent(artistId)}`);
+export async function getArtist(artistId: string): Promise<ArtistPage> {
+  return api.get<ArtistPage>(`/artists/${encodeURIComponent(artistId)}`);
 }
 
 /**
- * Follow an artist
- * 1. Fetch artist data from YTMusic (includes albums/singles list)
- * 2. Fetch and upsert ALL albums/singles with their tracks
- * 3. Mark artist as followed
- * 4. Create artist subscription
- * 5. Create album subscriptions for all albums
- * 6. Queue download jobs for all tracks
- * 
- * This can take 15-35 seconds depending on number of albums
+ * Follow an artist in full: every release is downloaded. Returns at once; a
+ * sync job fetches the artist and its releases. `name` is shown for it in
+ * the library until then.
  */
-export async function followArtist(artistId: string): Promise<any> {
-  return api.post(`/artists/${encodeURIComponent(artistId)}/follow`);
+export async function followArtist(artistId: string, name: string): Promise<void> {
+  await api.post(`/artists/${encodeURIComponent(artistId)}/follow`, { name });
 }
 
 /**
- * Unfollow an artist
- * Marks artist as not followed and removes subscriptions
- * Does NOT delete data or cancel jobs
+ * Unfollow an artist: back to a light subscription, its albums to metadata
+ * and their pending downloads cancelled. Files stay.
  */
-export async function unfollowArtist(artistId: string): Promise<any> {
-  return api.delete(`/artists/${encodeURIComponent(artistId)}/follow`);
+export async function unfollowArtist(artistId: string): Promise<void> {
+  await api.delete(`/artists/${encodeURIComponent(artistId)}/follow`);
 }

@@ -109,4 +109,3 @@ export const Artwork: React.FC<ArtworkProps> = ({
   );
 };
 
-export default Artwork;

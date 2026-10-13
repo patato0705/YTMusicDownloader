@@ -12,24 +12,25 @@ Endpoints:
 """
 from __future__ import annotations
 import logging
-from typing import Dict, Any, List
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Body
 from sqlalchemy.orm import Session
 
-from backend.db import get_session
-from backend.dependencies import require_auth, require_admin
-from backend.routers.features import require_charts_enabled
-from backend.services import charts as charts_svc
-from backend.schemas.charts import (
+from ..db import get_session
+from ..dependencies import require_auth, require_admin, require_charts_enabled
+from ..models import User
+from ..schemas import MessageResponse
+from ..schemas.charts import (
     FollowChartRequest,
     UpdateChartRequest,
     ChartResponse,
     ChartArtist,
     ChartSubscriptionResponse,
 )
-from backend.schemas import MessageResponse
-from backend.models import User, Artist
+from ..services import charts as charts_svc
+from ..ytm_service import adapter as ytm_adapter
+from .albums import ytmusic_unavailable
 
 logger = logging.getLogger("routers.charts")
 
@@ -43,7 +44,7 @@ router = APIRouter(
 
 
 # ============================================================================
-# PUBLIC ENDPOINTS (require auth)
+# ENDPOINTS FOR EVERY SIGNED-IN USER
 # ============================================================================
 
 @router.get("/{country_code}", response_model=ChartResponse)
@@ -53,51 +54,23 @@ def get_chart(
     session: Session = Depends(get_session),
 ) -> ChartResponse:
     """
-    Get music chart for a country.
-    
-    Returns top artists with their current rankings.
-    Also returns whether this chart is currently being followed.
+    A country's top artists chart, each marked when followed in full, and
+    whether the chart itself is followed.
     """
     country_code = country_code.upper()
-    
     try:
-        # Fetch chart data
-        chart_data = charts_svc.fetch_chart(session, country_code)
-        artists_data = chart_data.get("artists", [])
-        
-        # Get followed artist IDs
-        followed_ids = charts_svc.get_followed_artist_ids(session)
-        
-        # Build artist list with follow status
-        artists = []
-        for artist_data in artists_data:
-            artist_id = artist_data.get("id")
-            artists.append(ChartArtist(
-                id=artist_id,
-                name=artist_data.get("name"),
-                thumbnail=artist_data.get("thumbnail"),
-                rank=artist_data.get("rank"),
-                trend=artist_data.get("trend"),
-                followed=artist_id in followed_ids if artist_id else False,
-            ))
-        
-        # Check if chart is followed
-        subscription = charts_svc.get_chart_subscription(session, country_code)
-        
-        return ChartResponse(
-            country_code=country_code,
-            artists=artists,
-            followed=subscription is not None,
-            subscription=ChartSubscriptionResponse.model_validate(subscription) if subscription else None,
-            cached=False,
-        )
-        
-    except Exception as e:
-        logger.exception(f"Failed to get chart for {country_code}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Failed to fetch chart: {str(e)}",
-        )
+        chart = ytm_adapter.get_charts(country_code)
+    except ytm_adapter.YTMusicUnavailable:
+        raise ytmusic_unavailable()
+
+    followed_ids = charts_svc.get_followed_artist_ids(session)
+    subscription = charts_svc.get_chart_subscription(session, country_code)
+    return ChartResponse(
+        country_code=country_code,
+        artists=[ChartArtist(**artist, followed=artist["id"] in followed_ids) for artist in chart["artists"]],
+        followed=subscription is not None,
+        subscription=ChartSubscriptionResponse.model_validate(subscription) if subscription else None,
+    )
 
 
 @router.get("", response_model=List[ChartSubscriptionResponse])
@@ -108,7 +81,7 @@ def list_chart_subscriptions(
 ) -> List[ChartSubscriptionResponse]:
     """
     List all chart subscriptions.
-    
+
     Args:
         include_disabled: Include disabled subscriptions
     """
@@ -116,7 +89,7 @@ def list_chart_subscriptions(
         session=session,
         include_disabled=include_disabled,
     )
-    
+
     return [ChartSubscriptionResponse.model_validate(sub) for sub in subscriptions]
 
 
@@ -134,12 +107,12 @@ def follow_chart(
 ) -> ChartSubscriptionResponse:
     """
     Follow a chart (admin only).
-    
+
     Creates a subscription and immediately queues a sync_chart job
     to follow the top N artists.
     """
     country_code = country_code.upper()
-    
+
     try:
         # Create subscription
         subscription = charts_svc.create_chart_subscription(
@@ -148,11 +121,11 @@ def follow_chart(
             top_n_artists=data.top_n_artists,
             created_by=current_user.id,
         )
-        
+
         session.commit()
-        
-        logger.info(f"Chart {country_code} followed by user {current_user.username}")
-        
+
+        logger.info("Chart %s followed by user %s", country_code, current_user.username)
+
         # Queue sync job; the subscription is already saved, so a queueing
         # failure must not fail the request.
         try:
@@ -160,10 +133,10 @@ def follow_chart(
             session.commit()
         except Exception:
             session.rollback()
-            logger.exception(f"Failed to queue sync_chart job for {country_code}")
-        
+            logger.exception("Failed to queue sync_chart job for %s", country_code)
+
         return ChartSubscriptionResponse.model_validate(subscription)
-        
+
     except ValueError as e:
         session.rollback()
         raise HTTPException(
@@ -172,7 +145,7 @@ def follow_chart(
         )
     except Exception as e:
         session.rollback()
-        logger.exception(f"Failed to follow chart {country_code}")
+        logger.exception("Failed to follow chart %s", country_code)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to follow chart: {str(e)}",
@@ -187,34 +160,34 @@ def unfollow_chart(
 ) -> MessageResponse:
     """
     Unfollow a chart (admin only).
-    
+
     Removes the chart subscription but keeps followed artists.
     """
     country_code = country_code.upper()
-    
+
     try:
         success = charts_svc.delete_chart_subscription(session, country_code)
-        
+
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Chart subscription for {country_code} not found",
             )
-        
+
         session.commit()
-        
-        logger.info(f"Chart {country_code} unfollowed by user {current_user.username}")
-        
+
+        logger.info("Chart %s unfollowed by user %s", country_code, current_user.username)
+
         return MessageResponse(
             message=f"Chart {country_code} unfollowed successfully. Artists remain followed."
         )
-        
+
     except HTTPException:
         session.rollback()
         raise
     except Exception as e:
         session.rollback()
-        logger.exception(f"Failed to unfollow chart {country_code}")
+        logger.exception("Failed to unfollow chart %s", country_code)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to unfollow chart: {str(e)}",
@@ -224,23 +197,23 @@ def unfollow_chart(
 @router.patch("/{country_code}", response_model=ChartSubscriptionResponse)
 def update_chart(
     country_code: str = Path(..., min_length=2, max_length=2, description="2-letter country code"),
-    data: UpdateChartRequest = Body(...),  # This tells FastAPI "required body parameter"
+    data: UpdateChartRequest = Body(...),
     current_user: User = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> ChartSubscriptionResponse:
     """
     Update chart subscription settings (admin only).
-    
+
     If top_n_artists is increased, a sync job is queued to follow additional artists.
     """
     country_code = country_code.upper()
-    
+
     if data.top_n_artists is None and data.enabled is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one field must be provided",
         )
-    
+
     try:
         # Get current subscription to check if top_n is increasing
         old_subscription = charts_svc.get_chart_subscription(session, country_code)
@@ -249,9 +222,9 @@ def update_chart(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Chart subscription for {country_code} not found",
             )
-        
+
         old_top_n = old_subscription.top_n_artists
-        
+
         # Update subscription
         subscription = charts_svc.update_chart_subscription(
             session=session,
@@ -259,24 +232,24 @@ def update_chart(
             top_n_artists=data.top_n_artists,
             enabled=data.enabled,
         )
-        
+
         session.commit()
-        
+
         # If top_n increased, queue a sync job so the extra artists get followed
         new_top_n = subscription.top_n_artists
         if subscription.enabled and new_top_n > old_top_n:
-            logger.info(f"Chart {country_code} top_n increased from {old_top_n} to {new_top_n}, queueing sync")
+            logger.info("Chart %s top_n increased from %s to %s, queueing sync", country_code, old_top_n, new_top_n)
             try:
                 charts_svc.enqueue_chart_sync(session, country_code, user_id=current_user.id)
                 session.commit()
             except Exception:
                 session.rollback()
-                logger.exception(f"Failed to queue sync_chart job for {country_code}")
-        
-        logger.info(f"Chart {country_code} updated by user {current_user.username}")
-        
+                logger.exception("Failed to queue sync_chart job for %s", country_code)
+
+        logger.info("Chart %s updated by user %s", country_code, current_user.username)
+
         return ChartSubscriptionResponse.model_validate(subscription)
-        
+
     except HTTPException:
         session.rollback()
         raise
@@ -288,7 +261,7 @@ def update_chart(
         )
     except Exception as e:
         session.rollback()
-        logger.exception(f"Failed to update chart {country_code}")
+        logger.exception("Failed to update chart %s", country_code)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update chart: {str(e)}",
@@ -303,12 +276,12 @@ def sync_chart_now(
 ) -> MessageResponse:
     """
     Queue a sync of a followed chart right away (admin only).
-    
+
     The sync fetches the current chart and follows any of the top N artists
     that are not followed yet. A sync already waiting in the queue is reused.
     """
     country_code = country_code.upper()
-    
+
     subscription = charts_svc.get_chart_subscription(session, country_code)
     if not subscription:
         raise HTTPException(
@@ -320,17 +293,17 @@ def sync_chart_now(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Chart {country_code} is disabled; enable it before syncing",
         )
-    
+
     try:
-        job = charts_svc.enqueue_chart_sync(session, country_code, user_id=current_user.id)
+        job, _ = charts_svc.enqueue_chart_sync(session, country_code, user_id=current_user.id)
         session.commit()
     except Exception as e:
         session.rollback()
-        logger.exception(f"Failed to queue sync_chart job for {country_code}")
+        logger.exception("Failed to queue sync_chart job for %s", country_code)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to queue chart sync: {str(e)}",
         )
-    
-    logger.info(f"Chart {country_code} sync requested by user {current_user.username} (job {job.id})")
+
+    logger.info("Chart %s sync requested by user %s (job %s)", country_code, current_user.username, job.id)
     return MessageResponse(message=f"Chart {country_code} sync queued (job {job.id})")

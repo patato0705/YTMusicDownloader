@@ -1,32 +1,30 @@
 // src/pages/Browse.tsx
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
-import { search } from '../api/index';
+import { search } from '../api/search';
+import type { SearchResults } from '../api/search';
 import { getImageUrl } from '../api/media';
-import MediaCard from '../components/MediaCard';
-import RecommendedArtists from '../components/RecommendedArtists';
+import { MediaCard } from '../components/MediaCard';
+import { RecommendedArtists } from '../components/RecommendedArtists';
 import { SearchInput } from '../components/ui/SearchInput';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
-import {
-  formatArtist,
-  formatAlbum,
-  formatTrack,
-  normalizeSearchResults,
-  filterAlbums,
-  createMemoryCache,
-} from '../utils';
+import { FilterTabs } from '../components/ui/FilterTabs';
+import type { FilterTab } from '../components/ui/FilterTabs';
+import { EmptyState, ErrorBanner } from '../components/ui/PageStatus';
+import { apiErrorMessage, createMemoryCache } from '../utils';
 import { useDebounce } from '../hooks/useDebounce';
-import type { SearchResults } from '../types';
 
-const VALID_FILTERS = ['all', 'artists', 'albums', 'tracks'] as const;
+const VALID_FILTERS = ['all', 'artists', 'albums', 'songs'] as const;
 type FilterType = typeof VALID_FILTERS[number];
 
-const EMPTY_RESULTS: SearchResults = { artists: [], albums: [], tracks: [] };
+const EMPTY_RESULTS: SearchResults = { artists: [], albums: [], songs: [] };
 
 /** Results by query: coming back to a search shows them right away */
 const resultsCache = createMemoryCache<SearchResults>(20);
+
+const GRID = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4';
 
 export default function Browse(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -41,7 +39,7 @@ export default function Browse(): JSX.Element {
   const setActiveFilter = useCallback((newFilter: FilterType) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      if (newFilter && newFilter !== 'all') {
+      if (newFilter !== 'all') {
         next.set('filter', newFilter);
       } else {
         next.delete('filter');
@@ -58,7 +56,6 @@ export default function Browse(): JSX.Element {
   const navigate = useNavigate();
   const { t } = useI18n();
 
-  // Debounce search query
   const debouncedQuery = useDebounce(query, 500);
 
   // Sync debounced query to URL params (single history replace, not per-keystroke)
@@ -74,298 +71,185 @@ export default function Browse(): JSX.Element {
     }, { replace: true });
   }, [debouncedQuery, setSearchParams]);
 
-  // Trigger search when debounced query changes
+  // Search when the debounced query changes
   useEffect(() => {
     const trimmed = debouncedQuery.trim();
+    setError(null);
 
-    if (!trimmed) {
-      setResults(EMPTY_RESULTS);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-
-    const cached = resultsCache.get(trimmed);
+    const cached = trimmed ? resultsCache.get(trimmed) : EMPTY_RESULTS;
     if (cached) {
       setResults(cached);
-      setError(null);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
+    setLoading(true);
 
-    (async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await search(trimmed, 20);
-        const normalized = normalizeSearchResults(response);
-        resultsCache.set(trimmed, normalized);
-        if (!cancelled) setResults(normalized);
-      } catch (err: any) {
+    search(trimmed, 20)
+      .then((response) => {
+        resultsCache.set(trimmed, response);
+        if (!cancelled) setResults(response);
+      })
+      .catch((err) => {
         console.error('Search error:', err);
         if (!cancelled) {
-          setError(err.message || t('common.error'));
+          setError(apiErrorMessage(err, t, t('common.error')));
           setResults(EMPTY_RESULTS);
         }
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    })();
+      });
 
     return () => { cancelled = true; };
   }, [debouncedQuery]);
 
-  // The artist named under an album / track opens that artist, when YTM gave its id
-  const openArtist = (artistId?: string): (() => void) | undefined =>
+  // The artist named under an album / song opens that artist, when YTM gave its id
+  const openArtist = (artistId?: string | null): (() => void) | undefined =>
     artistId ? () => navigate(`/artists/${encodeURIComponent(artistId)}`) : undefined;
 
-  const hasResults =
-    (results.artists?.length || 0) +
-    (results.albums?.length || 0) +
-    (results.tracks?.length || 0) > 0;
+  const hasResults = results.artists.length + results.albums.length + results.songs.length > 0;
+  const shows = (filter: FilterType) => activeFilter === 'all' || activeFilter === filter;
 
-  // Filter results based on active filter
-  const filteredResults = {
-    artists: activeFilter === 'all' || activeFilter === 'artists' ? results.artists : [],
-    albums: activeFilter === 'all' || activeFilter === 'albums' ? results.albums : [],
-    tracks: activeFilter === 'all' || activeFilter === 'tracks' ? results.tracks : [],
-  };
+  const tabs: FilterTab<FilterType>[] = [
+    { id: 'all', label: t('common.all') },
+    ...(['artists', 'albums', 'songs'] as const)
+      .filter((type) => results[type].length > 0)
+      .map((type) => ({ id: type, label: `${t(`browse.sections.${type}`)} (${results[type].length})` })),
+  ];
 
   return (
-    <div className="relative min-h-screen">
-      {/* Background effects */}
-      <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
-      <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-      
-      {/* Main content */}
-      <div className="relative z-10 space-y-8 pb-12">
-        {/* Hero section */}
-        <PageHero
-          title={
-            <>
-              <span className="text-foreground">{t('browse.heroDiscover')} </span>
-              <span className="text-gradient">{t('browse.heroNewMusic')}</span>
-            </>
-          }
-          subtitle={t('browse.heroSubtitle')}
+    <div className="space-y-8 pb-12">
+      <PageHero
+        title={
+          <>
+            <span className="text-foreground">{t('browse.heroDiscover')} </span>
+            <span className="text-gradient">{t('browse.heroNewMusic')}</span>
+          </>
+        }
+        subtitle={t('browse.heroSubtitle')}
+      />
+
+      {/* Search bar, or import a playlist */}
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder={t('browse.searchInputPlaceholder')}
+          size="lg"
+          autoFocus
+          loading={loading}
+          className="flex-1"
         />
 
-        {/* Search bar + Import playlist */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
-          <SearchInput
-            value={query}
-            onChange={setQuery}
-            placeholder={t('browse.searchInputPlaceholder')}
-            size="lg"
-            autoFocus
-            loading={loading}
-            className="flex-1"
-          />
-
-          {/* "or" separator — vertical on lg, horizontal on mobile */}
-          <div className="flex lg:flex-col items-center gap-3 lg:gap-1.5 lg:self-stretch">
-            <div className="flex-1 lg:flex-1 h-px lg:h-auto lg:w-px bg-slate-300 dark:bg-white/10" />
-            <span className="text-xs text-muted-foreground font-medium">{t('common.or')}</span>
-            <div className="flex-1 lg:flex-1 h-px lg:h-auto lg:w-px bg-slate-300 dark:bg-white/10" />
-          </div>
-
-          <Link
-            to="/playlist-import"
-            className="flex items-center justify-center gap-2 px-5 py-4 rounded-xl glass border border-slate-200 dark:border-white/10 text-foreground font-medium hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-300 whitespace-nowrap"
-          >
-            <svg className="w-5 h-5 text-blue-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-            </svg>
-            {t('playlist.importFromPlaylist')}
-          </Link>
+        {/* "or" separator: vertical on lg, horizontal on phones */}
+        <div className="flex lg:flex-col items-center gap-3 lg:gap-1.5 lg:self-stretch">
+          <div className="flex-1 lg:flex-1 h-px lg:h-auto lg:w-px bg-slate-300 dark:bg-white/10" />
+          <span className="text-xs text-muted-foreground font-medium">{t('common.or')}</span>
+          <div className="flex-1 lg:flex-1 h-px lg:h-auto lg:w-px bg-slate-300 dark:bg-white/10" />
         </div>
 
-        {/* Error message */}
-        {error && (
-          <div className="bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl p-6 border border-red-500/20">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">⚠️</span>
-              <div>
-                <h3 className="font-semibold text-red-600 dark:text-red-400 mb-1">
-                  {t('browse.searchError')}
-                </h3>
-                <p className="text-sm text-red-600/80 dark:text-red-400/80">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* No query: recommendations, or the "start your search" box when there are none */}
-        {!query.trim() && !loading && (
-          <RecommendedArtists
-            fallback={
-              <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-16 border border-slate-200/50 dark:border-white/10 text-center">
-                <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
-                  <span className="text-5xl">🔍</span>
-                </div>
-                <h3 className="text-2xl font-bold mb-3 text-foreground">{t('browse.startSearch')}</h3>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  {t('browse.startSearchDescription')}
-                </p>
-              </div>
-            }
-          />
-        )}
-
-        {/* Empty state - No results */}
-        {query.trim() && !hasResults && !loading && !error && (
-          <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-16 border border-slate-200/50 dark:border-white/10 text-center">
-            <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-6">
-              <span className="text-5xl">😔</span>
-            </div>
-            <h3 className="text-2xl font-bold mb-3 text-foreground">{t('browse.noResults')}</h3>
-            <p className="text-muted-foreground max-w-md mx-auto mb-6">
-              {t('browse.noResultsFor')} <span className="font-semibold text-foreground">"{query}"</span>
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {t('browse.tryDifferentKeywords')}
-            </p>
-          </div>
-        )}
-
-        {/* Results - Show filter tabs when there are results */}
-        {hasResults && (
-          <>
-            {/* Filter tabs */}
-            <div className="flex items-center gap-2 glass rounded-2xl p-2 w-fit">
-              <button
-                onClick={() => setActiveFilter('all')}
-                className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
-                  activeFilter === 'all'
-                    ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-                }`}
-              >
-                {t('common.all')}
-              </button>
-              {results.artists && results.artists.length > 0 && (
-                <button
-                  onClick={() => setActiveFilter('artists')}
-                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
-                    activeFilter === 'artists'
-                      ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-                  }`}
-                >
-                  {t('browse.sections.artists')} ({results.artists.length})
-                </button>
-              )}
-              {results.albums && results.albums.length > 0 && (
-                <button
-                  onClick={() => setActiveFilter('albums')}
-                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
-                    activeFilter === 'albums'
-                      ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-                  }`}
-                >
-                  {t('browse.sections.albums')} ({results.albums.length})
-                </button>
-              )}
-              {results.tracks && results.tracks.length > 0 && (
-                <button
-                  onClick={() => setActiveFilter('tracks')}
-                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
-                    activeFilter === 'tracks'
-                      ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-                  }`}
-                >
-                  {t('browse.sections.tracks')} ({results.tracks.length})
-                </button>
-              )}
-            </div>
-
-            {/* Results sections */}
-            <div className="space-y-8">
-              {/* Artists */}
-              {filteredResults.artists && filteredResults.artists.length > 0 && (
-                <section>
-                  <SectionHeader>{t('browse.sections.artists')}</SectionHeader>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                    {filteredResults.artists.map((artist) => {
-                      const formatted = formatArtist(artist);
-                      return (
-                        <MediaCard
-                          key={formatted.id}
-                          id={formatted.id}
-                          title={formatted.title}
-                          subtitle={formatted.subtitle}
-                          thumbnail={getImageUrl(formatted.thumbnail)}
-                          type="artist"
-                          onClick={() => navigate(`/artists/${encodeURIComponent(formatted.id)}`)}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {/* Albums */}
-              {filteredResults.albums && filteredResults.albums.length > 0 && (
-                <section>
-                  <SectionHeader>{t('browse.sections.albums')}</SectionHeader>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                    {filterAlbums(filteredResults.albums).map((album) => {
-                      const formatted = formatAlbum(album);
-                      return (
-                        <MediaCard
-                          key={formatted.id}
-                          id={formatted.id}
-                          title={formatted.title}
-                          subtitle={formatted.subtitle}
-                          thumbnail={getImageUrl(formatted.thumbnail)}
-                          type="album"
-                          albumType={formatted.albumType}
-                          year={formatted.year}
-                          onSubtitleClick={openArtist(formatted.artistId)}
-                          onClick={() => navigate(`/albums/${encodeURIComponent(formatted.id)}`)}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {/* Tracks */}
-              {filteredResults.tracks && filteredResults.tracks.length > 0 && (
-                <section>
-                  <SectionHeader>{t('browse.sections.tracks')}</SectionHeader>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                    {filteredResults.tracks.map((track) => {
-                      const formatted = formatTrack(track);
-                      return (
-                        <MediaCard
-                          key={formatted.id}
-                          id={formatted.id}
-                          title={formatted.title}
-                          subtitle={formatted.subtitle}
-                          thumbnail={getImageUrl(formatted.thumbnail)}
-                          type="track"
-                          onSubtitleClick={openArtist(formatted.artistId)}
-                          onClick={() => {
-                            if (formatted.albumId) {
-                              navigate(`/albums/${encodeURIComponent(formatted.albumId)}`);
-                            }
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-            </div>
-          </>
-        )}
+        <Link
+          to="/playlist-import"
+          className="flex items-center justify-center gap-2 px-5 py-4 rounded-xl glass text-foreground font-medium hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-300 whitespace-nowrap"
+        >
+          <svg className="w-5 h-5 text-blue-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+          {t('playlist.importFromPlaylist')}
+        </Link>
       </div>
+
+      {error && <ErrorBanner title={t('browse.searchError')}>{error}</ErrorBanner>}
+
+      {/* No query: recommendations, or the "start your search" box when there are none */}
+      {!query.trim() && !loading && (
+        <RecommendedArtists
+          fallback={
+            <EmptyState icon="🔍" title={t('browse.startSearch')}>
+              <p>{t('browse.startSearchDescription')}</p>
+            </EmptyState>
+          }
+        />
+      )}
+
+      {query.trim() && !hasResults && !loading && !error && (
+        <EmptyState icon="😔" title={t('browse.noResults')}>
+          <p>{t('browse.noResultsFor', { query: query.trim() })}</p>
+          <p className="text-sm">{t('browse.tryDifferentKeywords')}</p>
+        </EmptyState>
+      )}
+
+      {hasResults && (
+        <>
+          <FilterTabs tabs={tabs} active={activeFilter} onChange={setActiveFilter} />
+
+          <div className="space-y-8">
+            {shows('artists') && results.artists.length > 0 && (
+              <section>
+                <SectionHeader>{t('browse.sections.artists')}</SectionHeader>
+                <div className={GRID}>
+                  {results.artists.map((artist) => (
+                    <MediaCard
+                      key={artist.id}
+                      id={artist.id}
+                      title={artist.name}
+                      thumbnail={getImageUrl(artist.thumbnail)}
+                      type="artist"
+                      onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {shows('albums') && results.albums.length > 0 && (
+              <section>
+                <SectionHeader>{t('browse.sections.albums')}</SectionHeader>
+                <div className={GRID}>
+                  {results.albums.map((album) => (
+                    <MediaCard
+                      key={album.id}
+                      id={album.id}
+                      title={album.title}
+                      subtitle={album.artist}
+                      thumbnail={getImageUrl(album.thumbnail)}
+                      type="album"
+                      albumType={album.type}
+                      year={album.year ?? undefined}
+                      onSubtitleClick={openArtist(album.artist_id)}
+                      onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {shows('songs') && results.songs.length > 0 && (
+              <section>
+                <SectionHeader>{t('browse.sections.songs')}</SectionHeader>
+                <div className={GRID}>
+                  {results.songs.map((song) => (
+                    <MediaCard
+                      key={song.id}
+                      id={song.id}
+                      title={song.title}
+                      subtitle={song.artists[0]?.name ?? undefined}
+                      thumbnail={getImageUrl(song.thumbnail)}
+                      type="track"
+                      onSubtitleClick={openArtist(song.artists[0]?.id)}
+                      onClick={() => {
+                        if (song.album.id) navigate(`/albums/${encodeURIComponent(song.album.id)}`);
+                      }}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

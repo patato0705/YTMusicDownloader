@@ -18,24 +18,21 @@ YouTube account cookies (fallback for age-restricted videos only):
 
 Settings Management:
 - GET /api/admin/settings - Get all settings
-- GET /api/admin/settings/{key} - Get specific setting
-- PUT /api/admin/settings/{key} - Update or create setting
-- DELETE /api/admin/settings/{key} - Delete setting (reset to default)
+- PUT /api/admin/settings/{key} - Update a setting
 """
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.db import get_session
-from backend.dependencies import require_admin
-from backend.services import admin as admin_svc
-from backend.services import auth as auth_svc  # For create_user
-from backend.services import login_throttle
-from backend import settings as settings_module
-from backend.schemas import (
+from .. import config, schedules
+from .. import settings as settings_module
+from ..db import get_session
+from ..dependencies import require_admin
+from ..models import User
+from ..schemas import (
     UserResponse,
     CreateUserRequest,
     SettingResponse,
@@ -45,8 +42,11 @@ from backend.schemas import (
     YoutubeCookiesStatus,
     YoutubeCookiesUpload,
 )
-from backend import config
-from backend.models import User, Setting
+from ..services import admin as admin_svc
+from ..services import auth as auth_svc
+from ..services import login_throttle
+from ..time_utils import now_utc
+from ..ytm_service.client import reset_client
 
 logger = logging.getLogger("routers.admin")
 
@@ -67,7 +67,7 @@ def list_users(
 ):
     """
     List all users (admin only).
-    
+
     Args:
         include_inactive: Include deactivated users
         limit: Maximum number of users to return
@@ -79,7 +79,7 @@ def list_users(
         limit=limit,
         offset=offset,
     )
-    
+
     return [UserResponse.model_validate(u) for u in users]
 
 
@@ -91,7 +91,7 @@ def create_user(
 ):
     """
     Create a new user (admin only).
-    
+
     Allows admins to create users with any role.
     This is separate from the public registration endpoint. Creates password
     accounts, so unavailable when password sign-in is off (single sign-on
@@ -106,9 +106,9 @@ def create_user(
             password=data.password,
             role=data.role,
         )
-        
+
         return UserResponse.model_validate(user)
-    
+
     except auth_svc.UsernameTakenError:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username_taken")
     except ValueError as e:
@@ -149,7 +149,7 @@ def update_user_role(
     try:
         user = admin_svc.update_user_role(session, user_id, role)
         return UserResponse.model_validate(user)
-    
+
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -165,7 +165,7 @@ def deactivate_user(
 ):
     """
     Deactivate a user (admin only).
-    
+
     Prevents login and revokes all refresh tokens.
     Cannot deactivate yourself.
     """
@@ -174,11 +174,11 @@ def deactivate_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot deactivate your own account",
         )
-    
+
     try:
         user = admin_svc.deactivate_user(session, user_id)
         return UserResponse.model_validate(user)
-    
+
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -198,7 +198,7 @@ def activate_user(
     try:
         user = admin_svc.activate_user(session, user_id)
         return UserResponse.model_validate(user)
-    
+
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -248,8 +248,8 @@ def reset_user_password(
     login_throttle.clear(login_throttle.login_account_key(user.username))
 
     logger.info(
-        f"Admin {current_user.username} reset the password of {user.username} "
-        f"({revoked} session(s) signed out)"
+        "Admin %s reset the password of %s (%s session(s) signed out)",
+        current_user.username, user.username, revoked,
     )
     return TemporaryPasswordResponse(temporary_password=temporary_password)
 
@@ -262,10 +262,10 @@ def delete_user(
 ):
     """
     Permanently delete a user (admin only).
-    
+
     WARNING: This is a hard delete that removes the user and all associated data.
     This action cannot be undone.
-    
+
     Cannot delete yourself.
     """
     if user_id == current_user.id:
@@ -273,29 +273,16 @@ def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete your own account",
         )
-    
+
     try:
         admin_svc.delete_user(session, user_id)
         return MessageResponse(message=f"User {user_id} permanently deleted")
-    
+
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
-
-
-@router.get("/users/stats")
-def get_user_stats(
-    current_user: User = Depends(require_admin),
-    session: Session = Depends(get_session),
-):
-    """
-    Get user statistics (admin only).
-    
-    Returns counts of users by role and status.
-    """
-    return admin_svc.get_user_stats(session)
 
 
 # ============================================================================
@@ -316,8 +303,6 @@ def _setting_meta(key: str, value=None) -> dict:
         "unit": settings_module.get_unit(key),
     }
     if settings_module.DEFAULT_SETTINGS.get(key, {}).get("type") == "schedule":
-        from .. import schedules
-        from ..time_utils import now_utc
         upcoming = schedules.next_run(schedules.parse(value, meta["default"]), now_utc())
         meta["next_run"] = upcoming.isoformat() if upcoming else None
         meta["timezone"] = str(schedules.timezone())
@@ -331,7 +316,7 @@ def get_all_settings(
 ):
     """
     Get all application settings (admin only).
-    
+
     Returns all settings with their current values, types, and descriptions.
     """
     settings_list = settings_module.get_all_settings(session)
@@ -339,45 +324,6 @@ def get_all_settings(
         SettingResponse(**setting, **_setting_meta(setting["key"], setting["value"]))
         for setting in settings_list
     ]
-
-
-@router.get("/settings/{key}", response_model=SettingResponse)
-def get_setting(
-    key: str,
-    current_user: User = Depends(require_admin),
-    session: Session = Depends(get_session),
-):
-    """
-    Get a specific setting by key (admin only).
-    
-    If the setting doesn't exist in the database but is a default setting,
-    returns the default value.
-    """
-    setting = session.get(Setting, key)
-    
-    if not setting:
-        # Check if it's a default setting
-        if key in settings_module.DEFAULT_SETTINGS:
-            default_config = settings_module.DEFAULT_SETTINGS[key]
-            return SettingResponse(
-                key=key,
-                value=default_config["value"],
-                type=default_config["type"],
-                description=default_config["description"],
-                **_setting_meta(key, default_config["value"]),
-                updated_at=None,
-                updated_by=None,
-            )
-
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Setting '{key}' not found",
-        )
-
-    return SettingResponse(
-        **setting.to_dict(),
-        **_setting_meta(key, setting.get_typed_value()),
-    )
 
 
 @router.put("/settings/{key}", response_model=SettingResponse)
@@ -388,70 +334,27 @@ def update_setting(
     session: Session = Depends(get_session),
 ):
     """
-    Update or create a setting (admin only).
-    
-    The value will be type-converted based on the setting's type.
-    If the setting doesn't exist, it will be created with type 'string'
-    unless it's a default setting.
+    Update a setting (admin only), validated against its declaration
+    (settings.py). Internal bookkeeping keys and settings moot under the
+    current sign-in configuration can't be set.
     """
+    if not settings_module.is_user_setting(key):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown setting '{key}'")
     if not settings_module.is_applicable(key):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Setting '{key}' doesn't apply to the current sign-in configuration",
         )
     try:
-        setting = settings_module.set_setting(
-            session=session,
-            key=key,
-            value=data.value,
-            user_id=current_user.id,
-        )
+        setting = settings_module.set_setting(session, key, data.value, user_id=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-        if key == "ytmusic.language":
-            from ..ytm_service.client import reset_client
-            reset_client()
+    if key == "ytmusic.language":
+        reset_client()
 
-        return SettingResponse(
-            **setting.to_dict(),
-            **_setting_meta(key, setting.get_typed_value()),
-        )
-    
-    except Exception as e:
-        logger.error(f"Error updating setting {key}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to update setting: {str(e)}",
-        )
+    return SettingResponse(**setting.to_dict(), **_setting_meta(key, setting.get_typed_value()))
 
-
-@router.delete("/settings/{key}", response_model=MessageResponse)
-def delete_setting(
-    key: str,
-    current_user: User = Depends(require_admin),
-    session: Session = Depends(get_session),
-):
-    """
-    Delete a setting (admin only).
-    
-    If the setting is a default setting, this will reset it to its default value
-    on next access. If it's a custom setting, it will be permanently deleted.
-    """
-    success = settings_module.delete_setting(session, key)
-    
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Setting '{key}' not found",
-        )
-    
-    is_default = key in settings_module.DEFAULT_SETTINGS
-    message = (
-        f"Setting '{key}' deleted. It will reset to default value on next access."
-        if is_default
-        else f"Setting '{key}' permanently deleted."
-    )
-    
-    return MessageResponse(message=message)
 
 # ============================================================================
 # YOUTUBE ACCOUNT COOKIES
@@ -488,7 +391,6 @@ def _youtube_cookies_status() -> YoutubeCookiesStatus:
         st = path.stat()
     except FileNotFoundError:
         return YoutubeCookiesStatus(present=False)
-    from datetime import datetime, timezone
     try:
         count = _count_netscape_cookies(path.read_text(encoding="utf-8", errors="replace"))
     except ValueError:

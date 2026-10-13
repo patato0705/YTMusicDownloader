@@ -4,10 +4,8 @@
  */
 
 import { api } from './client';
-import type { User } from './auth';
-
-// Re-export User type for convenience
-export type { User } from './auth';
+import type { MessageResponse } from './client';
+import type { Role, User } from './auth';
 
 // ============================================================================
 // TYPES
@@ -16,7 +14,7 @@ export type { User } from './auth';
 export interface CreateUserRequest {
   username: string;
   password: string;
-  role: 'administrator' | 'member' | 'visitor';
+  role: Role;
 }
 
 export interface SettingOption {
@@ -26,8 +24,8 @@ export interface SettingOption {
 
 export interface Setting {
   key: string;
-  value: any; // Can be number, boolean, string, or object
-  type: 'int' | 'bool' | 'string' | 'json' | 'schedule';
+  value: any; // number, boolean, string, or a Schedule, depending on the type
+  type: 'int' | 'bool' | 'string' | 'schedule';
   description: string | null;
   allowed_values: SettingOption[] | null;
   min: number | null; // lower bound for int settings (and schedule intervals)
@@ -45,25 +43,6 @@ export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 export type Schedule =
   | { mode: 'interval'; every: number }
   | { mode: 'fixed'; time: string; days: Weekday[] };
-
-export interface SettingUpdateRequest {
-  value: any;
-}
-
-export interface MessageResponse {
-  message: string;
-}
-
-export interface UserStats {
-  total: number;
-  active: number;
-  inactive: number;
-  by_role: {
-    administrator: number;
-    member: number;
-    visitor: number;
-  };
-}
 
 // ============================================================================
 // USER MANAGEMENT
@@ -86,7 +65,7 @@ export async function createUser(data: CreateUserRequest): Promise<User> {
 /**
  * Update user role (admin only)
  */
-export async function updateUserRole(userId: number, role: string): Promise<User> {
+export async function updateUserRole(userId: number, role: Role): Promise<User> {
   return api.patch<User>(`/admin/users/${userId}/role?role=${encodeURIComponent(role)}`);
 }
 
@@ -120,13 +99,6 @@ export async function deleteUser(userId: number): Promise<MessageResponse> {
   return api.delete<MessageResponse>(`/admin/users/${userId}`);
 }
 
-/**
- * Get user statistics (admin only)
- */
-export async function getUserStats(): Promise<UserStats> {
-  return api.get<UserStats>('/admin/users/stats');
-}
-
 // ============================================================================
 // SETTINGS MANAGEMENT
 // ============================================================================
@@ -139,23 +111,16 @@ export async function getAllSettings(): Promise<Setting[]> {
 }
 
 /**
- * Get specific setting by key (admin only)
- */
-export async function getSetting(key: string): Promise<Setting> {
-  return api.get<Setting>(`/admin/settings/${key}`);
-}
-
-/**
- * Update or create a setting (admin only)
+ * Change a setting (admin only); validated against its declaration
  */
 export async function updateSetting(key: string, value: any): Promise<Setting> {
   return api.put<Setting>(`/admin/settings/${key}`, { value });
 }
 
-/**
- * Delete a setting (admin only)
- * Resets to default if it's a default setting
- */
+// ============================================================================
+// YOUTUBE ACCOUNT COOKIES
+// ============================================================================
+
 export interface YoutubeCookiesStatus {
   present: boolean;
   cookie_count: number;
@@ -179,68 +144,3 @@ export async function uploadYoutubeCookies(content: string): Promise<YoutubeCook
 export async function deleteYoutubeCookies(): Promise<MessageResponse> {
   return api.delete<MessageResponse>('/admin/youtube-cookies');
 }
-
-export async function deleteSetting(key: string): Promise<MessageResponse> {
-  return api.delete<MessageResponse>(`/admin/settings/${key}`);
-}
-
-// ============================================================================
-// CONVENIENCE FUNCTIONS FOR TYPED SETTINGS
-// ============================================================================
-
-/**
- * Type-safe setting getters for common settings
- */
-export const Settings = {
-  // Scheduler
-  getJobCleanupDays: async (): Promise<number> => {
-    const setting = await getSetting('scheduler.job_cleanup_days');
-    return setting.value as number;
-  },
-  setJobCleanupDays: async (days: number): Promise<void> => {
-    await updateSetting('scheduler.job_cleanup_days', days);
-  },
-
-  // Auth
-  isRegistrationEnabled: async (): Promise<boolean> => {
-    const setting = await getSetting('auth.registration_enabled');
-    return setting.value as boolean;
-  },
-  setRegistrationEnabled: async (enabled: boolean): Promise<void> => {
-    await updateSetting('auth.registration_enabled', enabled);
-  },
-
-  // Download
-  getMaxConcurrent: async (): Promise<number> => {
-    const setting = await getSetting('download.max_concurrent');
-    return setting.value as number;
-  },
-  setMaxConcurrent: async (count: number): Promise<void> => {
-    await updateSetting('download.max_concurrent', count);
-  },
-
-  // Features
-  areLyricsEnabled: async (): Promise<boolean> => {
-    const setting = await getSetting('features.lyrics_enabled');
-    return setting.value as boolean;
-  },
-  setLyricsEnabled: async (enabled: boolean): Promise<void> => {
-    await updateSetting('features.lyrics_enabled', enabled);
-  },
-
-  isSyncedLyricsOnly: async (): Promise<boolean> => {
-    const setting = await getSetting('features.synced_lyrics_only');
-    return setting.value as boolean;
-  },
-  setSyncedLyricsOnly: async (enabled: boolean): Promise<void> => {
-    await updateSetting('features.synced_lyrics_only', enabled);
-  },
-
-  areChartsEnabled: async (): Promise<boolean> => {
-    const setting = await getSetting('features.charts_enabled');
-    return setting.value as boolean;
-  },
-  setChartsEnabled: async (enabled: boolean): Promise<void> => {
-    await updateSetting('features.charts_enabled', enabled);
-  },
-};

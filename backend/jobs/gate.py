@@ -19,41 +19,42 @@ Other job types (metadata, lyrics) are never gated.
 """
 from __future__ import annotations
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from .. import config
 from ..settings import get_setting, set_setting
-from ..time_utils import now_utc
+from ..time_utils import now_utc, ensure_timezone_aware
 
 logger = logging.getLogger("jobs.gate")
 
 DOWNLOAD_JOB_TYPE = "download_track"
 
 
+def _int_setting(session: Session, key: str, default: int) -> int:
+    try:
+        return int(get_setting(session, key) or default)
+    except (TypeError, ValueError):
+        return default
+
+
 def active_download_slots(session: Session) -> int:
     """How many download workers may take jobs right now (>= 1)."""
-    try:
-        wanted = int(get_setting(session, "download.max_concurrent", 1) or 1)
-    except (TypeError, ValueError):
-        wanted = 1
-    return max(1, min(wanted, config.DOWNLOAD_WORKERS))
+    return max(1, min(_int_setting(session, "download.max_concurrent", 1), config.DOWNLOAD_WORKERS))
 
 
 def downloads_paused_until(session: Session) -> Optional[datetime]:
     """The end of the current rate-limit pause, or None if downloads run."""
-    raw = get_setting(session, "download.paused_until", "") or ""
+    raw = get_setting(session, "download.paused_until")
     if not raw:
         return None
     try:
-        until = datetime.fromisoformat(str(raw))
+        until = ensure_timezone_aware(datetime.fromisoformat(str(raw)))
     except ValueError:
         logger.warning("Ignoring unparseable download.paused_until=%r", raw)
         return None
-    if until.tzinfo is None:
-        until = until.replace(tzinfo=timezone.utc)
     return until if until > now_utc() else None
 
 
@@ -62,13 +63,6 @@ def downloads_paused_until(session: Session) -> Optional[datetime]:
 # 160 at the default. A bot check can last hours, and probing it every ten
 # minutes with several workers is what keeps it going.
 MAX_PAUSE_DOUBLINGS = 4
-
-
-def _int_setting(session: Session, key: str, default: int) -> int:
-    try:
-        return int(get_setting(session, key, default) or default)
-    except (TypeError, ValueError):
-        return default
 
 
 def pause_downloads(session: Session, reason: str) -> datetime:

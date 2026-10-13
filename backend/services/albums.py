@@ -1,28 +1,24 @@
 # backend/services/albums.py
 """
-Album entity CRUD operations and album-specific business logic.
+Album rows: storing what YTMusic says about an album (its tracklist
+included), its cover, and what follows an import.
 """
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-import requests
 from sqlalchemy.orm import Session
 
+from .. import config
+from ..downloader import cover as cover_mod, nfo as nfo_mod
+from ..jobs.priorities import Origin
+from ..models import Album, Track
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
-from .. import config
-
-if TYPE_CHECKING:
-    from ..models import Album, Track
 
 logger = logging.getLogger("services.albums")
 
-
-# ============================================================================
-# ALBUM CRUD
-# ============================================================================
 
 def upsert_album(
     session: Session,
@@ -35,288 +31,112 @@ def upsert_album(
     playlist_id: Optional[str] = None,
 ) -> Album:
     """
-    Upsert an Album row.
-    album_type: "Album", "Single", "EP", etc.
-    Returns the Album instance (not committed).
+    Create or update an Album row. Fields passed as None are left as they
+    are on an existing row. album_type: "Album", "Single", "EP"... Does not commit.
     """
-    from ..models import Album  # Import here to avoid circular dependency
-
     if not album_id:
         raise ValueError("album_id required")
 
-    obj = session.get(Album, str(album_id))
-
-    if obj is None:
-        obj = Album(
-            id=str(album_id),
-            title=str(title) if title is not None else "",
-            artist_id=str(artist_id) if artist_id is not None else None,
-            image_local=str(image_local) if image_local else None,
-            year=str(year) if year is not None else None,
-            type=str(album_type) if album_type is not None else "Album",
-            playlist_id=str(playlist_id) if playlist_id is not None else None,
-        )
-        session.add(obj)
-        logger.debug(f"Created new album: {album_id}")
-    else:
-        changed = False
-        if title is not None and obj.title != title:
-            obj.title = title
-            changed = True
-        if artist_id is not None and obj.artist_id != artist_id:
-            obj.artist_id = artist_id
-            changed = True
-        if image_local and obj.image_local != image_local:
-            obj.image_local = image_local
-            changed = True
-        if year is not None and obj.year != year:
-            obj.year = str(year)
-            changed = True
-        if album_type is not None and obj.type != album_type:
-            obj.type = album_type
-            changed = True
-        if playlist_id is not None and obj.playlist_id != playlist_id:
-            obj.playlist_id = playlist_id
-            changed = True
-        if changed:
-            session.add(obj)
-            logger.debug(f"Updated album: {album_id}")
-
-    return obj
+    album = session.get(Album, album_id)
+    if album is None:
+        album = Album(id=album_id, title=title or "", type=album_type or "Album")
+        session.add(album)
+    elif title is not None:
+        album.title = title
+    for field, value in (
+        ("artist_id", artist_id),
+        ("image_local", image_local),
+        ("year", str(year) if year is not None else None),
+        ("type", album_type),
+        ("playlist_id", playlist_id),
+    ):
+        if value is not None:
+            setattr(album, field, value)
+    return album
 
 
-def get_album_from_db(
-    session: Session,
-    album_id: str,
-    include_tracks: bool = True,
-) -> Optional[Dict[str, Any]]:
-    """
-    Get a single album from DB by ID.
-    
-    Args:
-        session: SQLAlchemy session
-        album_id: Album ID
-        include_tracks: If True, include full track list
-    
-    Returns:
-        Dict with album data, or None if not found
-    """
-    from ..models import Album, Track
-    
-    try:
-        album = session.get(Album, album_id)
-        if not album:
-            return None
-        
-        result = {
+def get_album_from_db(session: Session, album_id: str) -> Optional[Dict[str, Any]]:
+    """An album as the album endpoint returns it, with its tracks in order; None if not in the DB."""
+    album = session.get(Album, album_id)
+    if not album:
+        return None
+    tracks = (
+        session.query(Track)
+        .filter(Track.album_id == album_id)
+        .order_by(Track.track_number.asc().nulls_last(), Track.id.asc())
+        .all()
+    )
+    return {
+        "id": album.id,
+        "title": album.title,
+        "artist": {"id": album.artist.id, "name": album.artist.name} if album.artist else None,
+        "year": album.year,
+        "type": album.type or "Album",
+        "thumbnail": album.image_local,
+        "genres": album.genres or [],
+        "mode": album.mode,
+        "tracks": [t.to_dict() for t in tracks],
+    }
+
+
+def list_albums_for_artist_from_db(session: Session, artist_id: str) -> List[Dict[str, Any]]:
+    """The artist's albums in the DB, newest first, as the artist endpoint lists them."""
+    albums = (
+        session.query(Album)
+        .filter(Album.artist_id == artist_id)
+        .order_by(Album.year.desc().nullslast(), Album.title.asc())
+        .all()
+    )
+    return [
+        {
             "id": album.id,
             "title": album.title,
-            "artist_id": album.artist_id,
+            "thumbnail": album.image_local,
             "year": album.year,
             "type": album.type or "Album",
-            "image_local": album.image_local,
-            "playlist_id": album.playlist_id,
-            "genres": album.genres or [],
             "mode": album.mode,
             "download_status": album.download_status,
         }
-        
-        if include_tracks:
-            tracks = (
-                session.query(Track)
-                .filter(Track.album_id == album_id)
-                .order_by(Track.track_number.asc(), Track.id.asc())
-                .all()
-            )
-            result["tracks"] = [track.to_dict() for track in tracks]
-        
-        return result
-    except Exception as e:
-        logger.exception(f"get_album_from_db failed for {album_id}: {e}")
+        for album in albums
+    ]
+
+
+def ensure_album_cover(session: Session, album: Album, thumbnails: Optional[List[Any]]) -> Optional[str]:
+    """
+    Make sure the album has a cover on disk: the one it has, or the best of
+    `thumbnails` (raw, from the API) saved as COVERS_DIR/<album id>.jpg.
+    Returns its path, or None when there's none. Does not commit.
+    """
+    if album.image_local and Path(album.image_local).exists():
+        return album.image_local
+
+    url = N.best_thumbnail(thumbnails)
+    if not url:
+        logger.warning("No thumbnail URL found for album %s", album.id)
         return None
-
-
-def list_albums_for_artist_from_db(
-    session: Session,
-    artist_id: str,
-) -> List[Dict[str, Any]]:
-    """
-    Query DB for albums with artist_id. Returns a list of lightweight dicts.
-    Includes type field to distinguish albums from singles/EPs.
-    
-    Returns:
-        List of dicts with: id, title, thumbnail, image_local, year, type
-    """
-    from ..models import Album
-    
-    result: List[Dict[str, Any]] = []
-    try:
-        query = (
-            session.query(Album)
-            .filter(Album.artist_id == artist_id)
-            .order_by(Album.year.desc().nullslast(), Album.title.asc())
-        )
-        
-        for album in query.all():
-            album_type = album.type or "Album"
-            
-            result.append({
-                "id": album.id,
-                "title": album.title,
-                "image_local": album.image_local,
-                "year": album.year,
-                "type": album_type,
-                "mode": album.mode,
-                "download_status": album.download_status,
-            })
-    except Exception as e:
-        logger.exception(f"list_albums_for_artist_from_db failed for {artist_id}: {e}")
-    
-    return result
-
-
-# ============================================================================
-# ALBUM COVER MANAGEMENT
-# ============================================================================
-
-def ensure_album_cover(
-    session: Session,
-    album_obj: Album,
-    thumbnails: Optional[List[Any]] = None,
-    dest_dir: Optional[str] = None,
-    final_cover_path: Optional[str] = None,
-) -> Optional[str]:
-    """
-    Ensure the album has a local cover image. Downloads the best thumbnail if needed.
-
-    Args:
-        album_obj: Album model instance (should be attached to session)
-        thumbnails: raw thumbnails (list[dict]) from the API
-        dest_dir: override directory to save the cover. If None, uses COVERS_DIR from config
-        final_cover_path: If provided from downloader, use this path directly
-
-    Returns:
-        Path to the saved cover (string) or None if failed
-    """
-    from ..models import Album
-
-    if not album_obj:
+    dest = config.COVERS_DIR / f"{album.id}.jpg"
+    if not cover_mod.download_image(url, dest, timeout=15):
         return None
-
-    # If final path provided from downloader, use it directly
-    if final_cover_path:
-        p = Path(final_cover_path)
-        if p.exists():
-            album_obj.image_local = final_cover_path
-            session.add(album_obj)
-            logger.info(f"Updated album {album_obj.id} cover to {final_cover_path}")
-            return final_cover_path
-
-    # If album already has image_local and file exists -> return it
-    cur_path = album_obj.image_local
-    if cur_path:
-        p = Path(str(cur_path))
-        if p.exists():
-            return str(p)
-
-    thumbs_src = thumbnails or []
-
-    # Normalize and pick best thumbnail
-    norm_thumbs = N.normalize_thumbnails(thumbs_src)
-    best_url = N.pick_best_thumbnail_url(norm_thumbs) if norm_thumbs else None
-    if not best_url:
-        logger.warning(f"No thumbnail URL found for album {album_obj.id}")
-        return None
-
-    # Determine destination directory
-    out_dir = Path(dest_dir) if dest_dir else (Path(str(config.COVERS_DIR)) if config.COVERS_DIR else None)
-    if out_dir is None:
-        logger.warning("No covers dest_dir configured; skipping cover save")
-        return None
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # Filename: album.id.jpg
-    fname = f"{album_obj.id}.jpg"
-    out_path = out_dir / fname
-
-    # Download and save
-    try:
-        resp = requests.get(best_url, timeout=15)
-        resp.raise_for_status()
-        with open(out_path, "wb") as fh:
-            fh.write(resp.content)
-        
-        # Update album_obj.image_local
-        album_obj.image_local = str(out_path)
-        session.add(album_obj)
-        logger.info(f"Saved cover for album {album_obj.id}: {out_path}")
-        
-        return str(out_path)
-    except Exception as e:
-        logger.exception(f"Failed to download/save cover from {best_url} to {out_path}: {e}")
-        return None
+    album.image_local = str(dest)
+    logger.info("Saved cover for album %s: %s", album.id, dest)
+    return str(dest)
 
 
-# ============================================================================
-# FETCH ALBUMS LIST FOR ARTIST (lightweight, no upsert)
-# ============================================================================
-
-def fetch_albums_for_artist(
-    session: Session,
-    artist_id: str,
-    albums_from_api: List[Dict[str, Any]],
-    singles_from_api: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    """
-    Return a normalized list of album items from API data.
-    Used by sync_artist to identify new albums without upserting.
-
-    Each item has at minimum: id (or browseId), title, type.
-
-    Args:
-        session: SQLAlchemy session (unused, kept for consistency)
-        artist_id: Artist ID
-        albums_from_api: Album items from ytm_adapter.get_artist()
-        singles_from_api: Single items from ytm_adapter.get_artist()
-
-    Returns:
-        Combined list of album dicts with normalized keys
-    """
-    result: List[Dict[str, Any]] = []
-
-    for item in (albums_from_api or []):
-        album_id = item.get("id") or item.get("browseId")
-        if not album_id:
-            continue
-        result.append({
-            "id": album_id,
-            "browseId": album_id,
-            "title": item.get("title", ""),
-            "type": item.get("type", "Album"),
+def list_artist_releases(artist_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The albums then the singles of artists.fetch_and_upsert_artist's result, as {id, title, type, year, thumbnails}."""
+    return [
+        {
+            "id": item["id"],
+            "title": item.get("title") or "",
+            "type": item.get("type") or default_type,
             "year": item.get("year"),
-            "thumbnails": item.get("thumbnails", []),
-        })
+            "thumbnails": item.get("thumbnails") or [],
+        }
+        for key, default_type in (("albums", "Album"), ("singles", "Single"))
+        for item in artist_data.get(key) or []
+        if item.get("id")
+    ]
 
-    for item in (singles_from_api or []):
-        album_id = item.get("id") or item.get("browseId")
-        if not album_id:
-            continue
-        result.append({
-            "id": album_id,
-            "browseId": album_id,
-            "title": item.get("title", ""),
-            "type": item.get("type", "Single"),
-            "year": item.get("year"),
-            "thumbnails": item.get("thumbnails", []),
-        })
-
-    logger.debug(f"fetch_albums_for_artist {artist_id}: {len(result)} albums/singles")
-    return result
-
-
-# ============================================================================
-# FETCH & UPSERT ALBUM FROM YTMUSIC
-# ============================================================================
 
 def fetch_and_upsert_album(
     session: Session,
@@ -324,253 +144,124 @@ def fetch_and_upsert_album(
     artist_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Fetches an album via ytm_adapter.get_album(),
-    upserts the album and its tracks to the database.
-    
-    IMPORTANT: Gets playlist data first to use audio IDs instead of video IDs.
-    
-    Args:
-        session: SQLAlchemy session
-        browse_id: YTMusic album browseId (e.g., "MPREb_sjcfEKGhGc6")
-        artist_id: Optional artist ID to link the album to
-    
-    Returns:
-        Dict with: {album_id, inserted_tracks, updated_tracks, cover_path}
-    
-    Note: Does NOT commit the session - caller controls transaction.
+    Fetch an album from YTMusic and store it with its tracks (and its cover,
+    if it has none yet). Raises ytm_adapter.YTMusicUnavailable when it can't
+    be read. Does not commit.
+
+    The album's audio playlist is fetched too: its video ids are the audio
+    versions of the tracks, which the album page itself sometimes lists as
+    music videos.
+
+    Returns {album_id, inserted_tracks, updated_tracks, replaced_ids}.
     """
-    from ..models import Track
-    
-    if not browse_id:
-        raise ValueError("browse_id required")
-
-    # Raises ytm_adapter.YTMusicUnavailable when YouTube Music can't be read
-    album_data = ytm_adapter.get_album(browse_id=browse_id)
-
-    # Extract metadata
-    album_id = album_data.get("id") or browse_id
-    album_title = album_data["title"]
-    thumbnails = album_data.get("thumbnails") or []
-    year = album_data.get("year")
-    album_type = album_data.get("type") or "Album"
-    playlist_id = album_data.get("playlistId")
-    tracks = album_data.get("tracks") or []
-    
-    # Extract artist from album data if not provided, and make sure its row
-    # exists: an album pointing at an artist the DB doesn't know shows up
-    # with no artist anywhere in the library
-    if not artist_id:
-        artists = album_data.get("artists", [])
-        if artists and isinstance(artists, list) and len(artists) > 0:
-            first_artist = artists[0]
-            if isinstance(first_artist, dict):
-                artist_id = first_artist.get("id")
-                if artist_id:
-                    from .artists import upsert_artist
-                    upsert_artist(session, artist_id=artist_id, name=first_artist.get("name"))
-
-    logger.info(f"Fetched album {album_id}: {album_title} ({len(tracks)} tracks)")
-
-    # Upsert album
-    album_obj = upsert_album(
-        session=session,
-        album_id=str(album_id),
-        title=album_title,
-        artist_id=artist_id,
-        year=year,
-        album_type=album_type,
-        playlist_id=playlist_id,
-    )
-
-    # Ensure cover
-    cover_path = None
-    try:
-        dest_dir = str(config.COVERS_DIR) if config.COVERS_DIR else None
-        cover_path = ensure_album_cover(
-            session=session,
-            album_obj=album_obj,
-            thumbnails=thumbnails,
-            dest_dir=dest_dir,
-        )
-    except Exception as e:
-        logger.exception(f"ensure_album_cover failed for {album_id}: {e}")
-
-    # Get playlist data for audio IDs
-    playlist_tracks = []
-    if playlist_id:
-        try:
-            playlist_data = ytm_adapter.get_playlist(playlist_id)
-            playlist_tracks = playlist_data.get("tracks", [])
-            logger.info(f"Fetched playlist {playlist_id}: {len(playlist_tracks)} tracks")
-        except Exception as e:
-            logger.warning(f"Failed to fetch playlist {playlist_id}: {e}")
-
-    # Build audio ID map
-    audio_id_map = {}
-    if playlist_tracks:
-        for idx, pl_track in enumerate(playlist_tracks):
-            audio_id = pl_track.get("videoId") or pl_track.get("id")
-            if audio_id:
-                audio_id_map[idx] = {
-                    "audio_id": audio_id,
-                    "title": (pl_track.get("title") or "").lower().strip(),
-                    "duration": pl_track.get("duration_seconds"),
-                }
-    
-    # Upsert tracks
+    from .artists import upsert_artist
     from .tracks import upsert_track
-    
-    inserted = 0
-    updated = 0
-    replaced = 0
-    
-    for idx, track_data in enumerate(tracks):
-        try:
-            video_id = track_data.get("id") or track_data.get("videoId")
-            if not video_id:
-                continue
 
-            title = track_data.get("title") or "Unknown Track"
-            duration = track_data.get("duration_seconds") or track_data.get("duration")
-            
-            # Normalize artists
-            artists_raw = track_data.get("artists", [])
-            artists_for_db = []
-            if isinstance(artists_raw, list):
-                for a in artists_raw:
-                    if isinstance(a, dict):
-                        artists_for_db.append({
-                            "id": a.get("id"),
-                            "name": a.get("name"),
-                        })
-            
-            track_number = track_data.get("track_number") or idx + 1
-            
-            # Use audio ID from playlist if available
-            final_track_id = video_id
-            if idx in audio_id_map:
-                audio_info = audio_id_map[idx]
-                audio_id = audio_info["audio_id"]
-                
-                if audio_id != video_id:
-                    album_title_lower = title.lower().strip()
-                    playlist_title_lower = audio_info["title"]
-                    
-                    title_match = (
-                        album_title_lower == playlist_title_lower or
-                        album_title_lower in playlist_title_lower or
-                        playlist_title_lower in album_title_lower or
-                        album_title_lower.split("(")[0].strip() == playlist_title_lower.split("(")[0].strip()
-                    )
-                    
-                    if title_match:
-                        logger.info(f"Using audio ID for '{title}': {video_id} → {audio_id}")
-                        final_track_id = audio_id
-                        replaced += 1
+    album_data = ytm_adapter.get_album(browse_id=browse_id)
+    album_id = album_data["id"]
+    tracks = album_data["tracks"]
 
-            # Check if track exists
-            pre_existing = session.get(Track, str(final_track_id))
+    # The artist from the album itself when not given, with its row: an album
+    # pointing at an artist the DB doesn't know shows up with no artist
+    # anywhere in the library
+    if not artist_id and album_data["artists"]:
+        first = album_data["artists"][0]
+        artist_id = first.get("id")
+        if artist_id:
+            upsert_artist(session, artist_id=artist_id, name=first.get("name"))
 
-            # Upsert track. A known track keeps its status and file: a
-            # re-import mustn't reset one that's queued or mid-download.
-            upsert_track(
-                session=session,
-                track_id=str(final_track_id),
-                track_number=int(track_number),
-                title=title,
-                duration_seconds=int(duration) if duration is not None else None,
-                artists_list=artists_for_db,
-                album_id=str(album_id),
-                status=None if pre_existing else "available",
-                file_path=None,
-                artist_valid=True,
-            )
-
-            if pre_existing is None:
-                inserted += 1
-            else:
-                updated += 1
-
-        except Exception as e:
-            logger.exception(f"Error processing track for album {album_id}: {e}")
-            continue
-
-    logger.info(
-        f"Album {album_id} upserted: {inserted} new, {updated} updated, {replaced} IDs replaced"
+    logger.info("Fetched album %s: %s (%s tracks)", album_id, album_data["title"], len(tracks))
+    album = upsert_album(
+        session,
+        album_id=album_id,
+        title=album_data["title"],
+        artist_id=artist_id,
+        year=album_data["year"],
+        album_type=album_data["type"],
+        playlist_id=album_data["playlistId"],
     )
+    try:
+        ensure_album_cover(session, album, album_data["thumbnails"])
+    except Exception:
+        logger.exception("ensure_album_cover failed for %s", album_id)
+
+    # Audio ids from the album's playlist, by position
+    audio_ids: Dict[int, Dict[str, Any]] = {}
+    if album_data["playlistId"]:
+        try:
+            playlist_tracks = ytm_adapter.get_playlist(album_data["playlistId"])["tracks"]
+            for idx, pl_track in enumerate(playlist_tracks):
+                if pl_track.get("id"):
+                    audio_ids[idx] = {"id": pl_track["id"], "title": (pl_track.get("title") or "").lower().strip()}
+        except Exception as e:
+            logger.warning("Failed to fetch playlist %s: %s", album_data["playlistId"], e)
+
+    inserted = updated = replaced = 0
+    for idx, track_data in enumerate(tracks):
+        video_id = track_data.get("id")
+        if not video_id:
+            continue
+        title = track_data.get("title") or "Unknown Track"
+
+        # The playlist's audio id when its title matches the album's track
+        track_id = video_id
+        audio = audio_ids.get(idx)
+        if audio and audio["id"] != video_id:
+            album_title = title.lower().strip()
+            playlist_title = audio["title"]
+            if (
+                album_title == playlist_title
+                or album_title in playlist_title
+                or playlist_title in album_title
+                or album_title.split("(")[0].strip() == playlist_title.split("(")[0].strip()
+            ):
+                logger.info("Using audio ID for '%s': %s -> %s", title, video_id, audio["id"])
+                track_id = audio["id"]
+                replaced += 1
+
+        # A known track keeps its status and file: a re-import mustn't reset
+        # one that's queued or mid-download
+        is_new = session.get(Track, track_id) is None
+        upsert_track(
+            session,
+            track_id=track_id,
+            track_number=track_data.get("track_number") or idx + 1,
+            title=title,
+            duration_seconds=track_data.get("duration_seconds"),
+            artists_list=[{"id": a.get("id"), "name": a.get("name")} for a in track_data.get("artists") or []],
+            album_id=album_id,
+            status="available" if is_new else None,
+        )
+        if is_new:
+            inserted += 1
+        else:
+            updated += 1
 
     session.flush()
-
+    logger.info("Album %s upserted: %s new, %s updated, %s IDs replaced", album_id, inserted, updated, replaced)
     return {
-        "album_id": str(album_id),
+        "album_id": album_id,
         "inserted_tracks": inserted,
         "updated_tracks": updated,
         "replaced_ids": replaced,
-        "cover_path": cover_path,
     }
 
 
-# ============================================================================
-# FETCH & UPSERT MULTIPLE ALBUMS FOR ARTIST
-# ============================================================================
-
-def fetch_and_upsert_albums_for_artist(
-    session: Session,
-    artist_id: str,
-    albums: List[Dict[str, Any]],
-    singles: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+def complete_import(session: Session, album_id: str, *, origin: Origin) -> int:
     """
-    Given a list of album/single items (from ytm_adapter.get_artist response),
-    fetches and upserts each album to the database.
-    
-    Args:
-        session: SQLAlchemy session
-        artist_id: Artist channel ID
-        albums: List of album items (normalized dicts with id, title, etc.)
-        singles: List of single items (normalized dicts with id, title, etc.)
-    
-    Returns:
-        Dict with: {artist_id, albums_processed, tracks_inserted, tracks_updated, details: [...]}
-    
-    Note: Does NOT commit the session - caller controls transaction.
+    What follows storing an album's tracklist: its album.nfo, the download
+    of every track not on disk (download-mode albums), and a genre lookup
+    for its artist if one is due. Commits. Returns the downloads queued.
     """
-    all_items = albums + singles
-    processed = 0
-    total_inserted = 0
-    total_updated = 0
-    details: List[Dict[str, Any]] = []
+    from . import genres as genres_svc
+    from . import tracks as tracks_svc
 
-    for item in all_items:
-        try:
-            browse_id = item.get("id") or item.get("browseId")
-            
-            if not browse_id:
-                continue
-
-            logger.info(f"Processing album {browse_id} for artist {artist_id}")
-
-            result = fetch_and_upsert_album(
-                session=session,
-                browse_id=browse_id,
-                artist_id=artist_id,
-            )
-            
-            processed += 1
-            total_inserted += result.get("inserted_tracks", 0)
-            total_updated += result.get("updated_tracks", 0)
-            details.append(result)
-
-        except Exception as e:
-            logger.exception(f"Failed to process album for artist {artist_id}: {e}")
-            continue
-
-    session.flush()
-
-    return {
-        "artist_id": artist_id,
-        "albums_processed": processed,
-        "tracks_inserted": total_inserted,
-        "tracks_updated": total_updated,
-        "details": details,
-    }
+    album = session.get(Album, album_id)
+    nfo_mod.write_album_nfo(album, album.artist)
+    queued = 0
+    if album.mode == "download":
+        queued = tracks_svc.queue_album_downloads(session, album_id, origin=origin)
+    if album.artist_id:
+        genres_svc.queue_lookup(session, album.artist_id, origin=origin)
+    session.commit()
+    return queued

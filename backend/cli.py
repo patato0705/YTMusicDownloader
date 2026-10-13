@@ -26,11 +26,11 @@ import getpass
 import json
 import os
 import sys
-from pathlib import Path
 
-# Same as config.CONFIG_DIR. Can't import config to get it yet: importing
-# it (or backend.db) may create files, which must not happen as root.
-_CONFIG_DIR = Path("/config")
+# Importing config has no side effects; the rest (backend.db, the services)
+# is imported inside the commands, once _drop_root() has run: nothing may
+# create files as root.
+from . import config
 
 
 def _drop_root() -> None:
@@ -44,7 +44,7 @@ def _drop_root() -> None:
     if os.geteuid() != 0:
         return
     try:
-        st = _CONFIG_DIR.stat()
+        st = config.CONFIG_DIR.stat()
     except FileNotFoundError:
         return
     if st.st_uid == 0:
@@ -63,8 +63,8 @@ class CliError(Exception):
 # ============================================================================
 
 def _session():
-    from .db import get_session
-    return next(get_session())
+    from .db import SessionLocal
+    return SessionLocal()
 
 
 def _get_user(session, username: str):
@@ -103,7 +103,6 @@ def _new_password(generate: bool) -> str:
 def _warn_if_no_admin(session) -> None:
     from sqlalchemy import func, select
     from .models import User
-    from . import config
     count = session.execute(
         select(func.count()).select_from(User).where(
             User.role == config.ROLE_ADMINISTRATOR, User.is_active.is_(True)
@@ -142,7 +141,6 @@ def cmd_create_user(args) -> None:
     from pydantic import ValidationError
     from .schemas import CreateUserRequest
     from .services import auth as auth_svc
-    from . import config
     if not config.PASSWORD_LOGIN_ENABLED:
         raise CliError(
             "password sign-in is disabled (PASSWORD_LOGIN_ENABLED=false), a password account couldn't sign in. "
@@ -184,7 +182,6 @@ def cmd_reset_password(args) -> None:
     if args.generate:
         print(f"Temporary password: {password}")
         print("It will have to be changed at next sign-in.")
-    from . import config
     if user.is_oidc:
         print("Note: this is a single sign-on account; it can now also sign in with this password.")
     if not config.PASSWORD_LOGIN_ENABLED:
@@ -204,7 +201,6 @@ def cmd_set_role(args) -> None:
     except ValueError as e:
         raise CliError(str(e))
     print(f"'{user.username}' is now {args.role}.")
-    from . import config
     if user.is_oidc and config.OIDC_ROLES_FROM_GROUPS:
         print(
             "warning: roles of single sign-on accounts come from provider groups "
@@ -278,7 +274,8 @@ def _parse_setting_value(setting_type: str, raw: str):
         if lowered in ("0", "false", "no", "off"):
             return False
         raise CliError(f"'{raw}' is not true/false")
-    if setting_type == "json":
+    if setting_type in ("json", "schedule"):
+        # e.g. '{"mode": "fixed", "time": "02:00", "days": ["tue", "sat"]}'
         try:
             return json.loads(raw)
         except json.JSONDecodeError as e:
@@ -288,7 +285,7 @@ def _parse_setting_value(setting_type: str, raw: str):
 
 def _check_setting_key(key: str) -> None:
     from . import settings as settings_module
-    if key not in settings_module.DEFAULT_SETTINGS or settings_module.is_internal(key):
+    if not settings_module.is_user_setting(key):
         raise CliError(f"unknown setting '{key}' (run get-setting to list them)")
     if not settings_module.is_applicable(key):
         raise CliError(f"'{key}' doesn't apply to the current sign-in configuration (see PASSWORD_LOGIN_ENABLED / OIDC_*)")
@@ -310,9 +307,6 @@ def cmd_set_setting(args) -> None:
 # ENTRY POINT
 # ============================================================================
 
-ROLES = ("administrator", "member", "visitor")
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m backend.cli",
@@ -325,7 +319,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("create-user", help="create an account")
     p.add_argument("username")
-    p.add_argument("--role", required=True, choices=ROLES)
+    p.add_argument("--role", required=True, choices=config.VALID_ROLES)
     p.add_argument("--generate", action="store_true",
                    help="generate a temporary password (to be changed at first sign-in) instead of prompting")
     p.set_defaults(func=cmd_create_user)
@@ -338,7 +332,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("set-role", help="change an account's role")
     p.add_argument("username")
-    p.add_argument("role", choices=ROLES)
+    p.add_argument("role", choices=config.VALID_ROLES)
     p.set_defaults(func=cmd_set_role)
 
     p = sub.add_parser("activate", help="reactivate an account")
@@ -360,7 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("set-setting", help="change a setting (same validation as the admin panel)")
     p.add_argument("key")
-    p.add_argument("value")
+    p.add_argument("value", help="a schedule is JSON, as get-setting prints it")
     p.set_defaults(func=cmd_set_setting)
 
     return parser
@@ -369,7 +363,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     _drop_root()
-    from . import config
     if not config.DB_PATH.exists():
         print(f"error: no database at {config.DB_PATH}, start the app once first", file=sys.stderr)
         return 1

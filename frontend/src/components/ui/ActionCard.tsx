@@ -1,6 +1,7 @@
 // src/components/ui/ActionCard.tsx
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useI18n } from '../../contexts/I18nContext';
 
 interface ActionCardProps {
   to: string;
@@ -19,6 +20,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({
   gradient = 'from-blue-500/10 to-indigo-500/10 dark:from-red-900/20 dark:to-red-800/20',
   className = ''
 }) => {
+  const { t } = useI18n();
   return (
     <Link to={to} className="block h-full">
       <div className={`relative group h-full overflow-hidden rounded-xl glass p-6 border-slate-200 dark:border-white/10 hover:border-blue-400/50 dark:hover:border-red-600/50 transition-all duration-300 hover-lift ${className}`}>
@@ -41,8 +43,8 @@ export const ActionCard: React.FC<ActionCardProps> = ({
           
           {/* Arrow indicator */}
           <div className="mt-auto pt-4 flex items-center gap-2 text-blue-600 dark:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="text-sm font-medium">Get started</span>
-            <span className="group-hover:translate-x-1 transition-transform">→</span>
+            <span className="text-sm font-medium">{t('home.getStarted')}</span>
+            <span className="group-hover:translate-x-1 transition-transform" aria-hidden="true">→</span>
           </div>
         </div>
       </div>

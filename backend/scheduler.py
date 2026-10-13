@@ -1,43 +1,47 @@
 # backend/scheduler.py
 """
-Scheduler for periodic sync tasks.
+Scheduler for periodic tasks, run as its own process (deploy/supervisord.conf).
 
 Responsibilities:
-1. Sync followed artists for new releases (`scheduler.artist_sync`)
+1. Sync followed artists for new releases (`scheduler.artist_sync`), and
+   queue the genre lookups that are due (services/genres.py) along with them
 2. Re-sync followed charts (`scheduler.chart_sync`) and rescan followed
    playlists (`scheduler.playlist_sync`)
-3. Clean up old finished jobs, failed ones included (daily, keeping
-   `scheduler.job_cleanup_days`)
-4. Clean up expired refresh tokens (daily)
-5. Retry/upgrade missing lyrics (`scheduler.lyrics_retry`)
-6. Requeue jobs abandoned by a dead worker, fix up "queued"/"downloading"
+3. Retry/upgrade missing lyrics (`scheduler.lyrics_retry`)
+4. Clean up old finished jobs, failed ones included (daily, keeping
+   `scheduler.job_cleanup_days`), and expired refresh tokens (daily)
+5. Requeue jobs abandoned by a dead worker, fix up "queued"/"downloading"
    tracks that lost their job, and drop stale download scratch dirs
    (every 5 minutes)
-7. Delete thumbnail proxy cache files older than THUMBNAIL_CACHE_TTL (daily)
-8. Queue genre lookups that are due (services/genres.py), along with the
-   artist syncs
+6. Delete thumbnail proxy cache files older than THUMBNAIL_CACHE_TTL (daily)
 
-1, 2 and 5 follow schedules set in the admin panel (backend/schedules.py):
+1, 2 and 3 follow schedules set in the admin panel (backend/schedules.py):
 every N hours/days, or at a fixed time on chosen days of the week.
-
-Note: Album subscriptions are handled on-demand (follow album → immediate import)
 """
 from __future__ import annotations
 import logging
+import shutil
+import signal
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Callable, Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import SessionLocal
-from .jobs.jobqueue import enqueue_job, cleanup_old_jobs, reclaim_orphaned_jobs
-from .jobs.priorities import Origin
-from .services import subscriptions as subs_svc, auth as auth_svc, charts as charts_svc
-from .routers import features
+from . import config, schedules
 from . import settings as settings_module
-from . import schedules
+from .db import SessionLocal, wait_for_db
+from .jobs.jobqueue import PENDING_STATUSES, cleanup_old_jobs, enqueue_job, pending_jobs, reclaim_orphaned_jobs
+from .jobs.priorities import Origin
+from .models import Job, Track
+from .services import auth as auth_svc
+from .services import charts as charts_svc
+from .services import genres as genres_svc
+from .services import playlists as playlists_svc
+from .services import subscriptions as subs_svc
+from .services import tracks as tracks_svc
 from .time_utils import now_utc
 
 logger = logging.getLogger("scheduler")
@@ -48,489 +52,280 @@ CHART_LAST_RUN = "scheduler.chart_sync_last_run"
 PLAYLIST_LAST_RUN = "scheduler.playlist_sync_last_run"
 LYRICS_LAST_RUN = "scheduler.lyrics_retry_last_run"
 
+# How often the loop wakes up. Every minute: a fixed-time run starts on
+# time, and in interval mode -- a cutoff on each artist's last_synced_at --
+# an artist is picked up within a minute of becoming due (polling exactly
+# every N hours would find it synced a few seconds *after* the cutoff and
+# skip it until 2N). Schedule changes made in the admin panel are read at
+# every tick too.
+TICK_SECONDS = 60
+DAILY = 86400
+STALE_SWEEP_SECONDS = 300
+
+# How many artists one sweep queues for a genre lookup: at ~4 s each on
+# worker-genres, a few minutes of lookups, and enough to refresh 1500
+# artists a month with the default schedule
+GENRE_SWEEP_LIMIT = 50
+
 
 class Scheduler:
-    """
-    Simple threaded scheduler for periodic tasks.
-    
-    Tasks:
-    - sync_monitored_artists: Check followed artists for new releases
-    - sync_charts: Re-sync followed charts to follow new top-N entrants
-    - cleanup_jobs: Remove old finished jobs (daily)
-    """
-
-    def __init__(
-        self,
-        sync_check_interval_seconds: Optional[int] = None,
-        cleanup_interval_seconds: Optional[int] = None,
-        token_cleanup_interval_seconds: Optional[int] = None,
-        thread_name: str = "scheduler-thread",
-        settings_refresh_interval: int = 60  # a schedule change applies within a minute
-    ) -> None:
-        # How often we *look* for due artists and charts. Every minute: a
-        # fixed-time run starts on time, and in interval mode -- a cutoff on
-        # each one's last_synced_at -- an artist is picked up within a minute
-        # of becoming due (polling exactly every N hours would find it synced
-        # a few seconds *after* the cutoff and skip it until 2N).
-        self.sync_check_interval_seconds: int = sync_check_interval_seconds or 60
-        # backend/schedules.py; the defaults until refreshed from the DB
-        def default(key: str) -> schedules.Schedule:
-            value = settings_module.get_default_value(key)
-            return schedules.parse(value, value)
-        self.artist_schedule = default("scheduler.artist_sync")
-        self.chart_schedule = default("scheduler.chart_sync")
-        self.playlist_schedule = default("scheduler.playlist_sync")
-        self.lyrics_schedule = default("scheduler.lyrics_retry")
-        # Fixed cadences (the settings only control retention / age):
-        self.cleanup_interval_seconds: int = cleanup_interval_seconds or 86400  # 24 hours
-        self.token_cleanup_interval_seconds: int = token_cleanup_interval_seconds or 86400  # 24 hours
-        self.stale_sweep_interval_seconds: int = 300
-        self.thumbnail_cleanup_interval_seconds: int = 86400
-        self.settings_refresh_interval: int = settings_refresh_interval
-
-        self._thread_name = thread_name
-        self._thread: Optional[threading.Thread] = None
+    def __init__(self) -> None:
         self._stopped = threading.Event()
-        self._running_lock = threading.Lock()
-        self._last_sync = 0.0
-        self._last_cleanup = 0.0
-        self._last_token_cleanup = 0.0
-        self._last_lyrics_retry = 0.0
-        self._last_stale_sweep = 0.0
-        self._last_thumbnail_cleanup = 0.0
-        self._last_genre_sweep = 0.0
-        self._last_settings_refresh = 0.0
+        # time.time() of each periodic task's last run (0: not yet, so all
+        # run on the first tick)
+        self._last_run: dict[str, float] = {}
         # Tracks the previous sweep found "queued" with no job (see
         # _requeue_orphaned_track_downloads)
         self._orphaned_track_ids: set[str] = set()
-        
-        # Don't load settings here - database might not be ready yet
-        # Settings will be loaded in _run_loop after wait_for_db()
 
-    def start(self) -> None:
-        """Start the scheduler thread. Safe to call multiple times (idempotent)."""
-        with self._running_lock:
-            if self._thread is not None and self._thread.is_alive():
-                logger.debug("Scheduler already running")
-                return
-            self._stopped.clear()
-            self._thread = threading.Thread(target=self._run_loop, name=self._thread_name, daemon=True)
-            self._thread.start()
-            logger.info(
-                "Scheduler started (sync_check_interval=%ss, cleanup_interval=%ss)",
-                self.sync_check_interval_seconds,
-                self.cleanup_interval_seconds
-            )
-
-    def _refresh_settings_from_db(self) -> None:
-        """
-        Load scheduler settings from database.
-        Called periodically to allow runtime configuration changes.
-        """
-        session: Optional[Session] = None
-        try:
-            session = SessionLocal()
-            
-            def load(key: str) -> schedules.Schedule:
-                default = settings_module.get_default_value(key)
-                return schedules.parse(settings_module.get_setting(session, key, default), default)
-
-            self.artist_schedule = load("scheduler.artist_sync")
-            self.chart_schedule = load("scheduler.chart_sync")
-            self.playlist_schedule = load("scheduler.playlist_sync")
-            self.lyrics_schedule = load("scheduler.lyrics_retry")
-
-            logger.debug(
-                f"Schedules refreshed: artists={self.artist_schedule}, "
-                f"charts={self.chart_schedule}, lyrics={self.lyrics_schedule}"
-            )
-            
-        except Exception as e:
-            # Check if this is a "table doesn't exist" error
-            error_msg = str(e).lower()
-            if "no such table" in error_msg or "doesn't exist" in error_msg:
-                logger.debug("Settings table not yet created, using default values")
-            else:
-                logger.warning(f"Failed to refresh settings from database: {e}")
-                logger.debug("Using current/default values")
-        finally:
-            if session:
-                try:
-                    session.close()
-                except Exception:
-                    pass
-
-    def stop(self, join_timeout: float = 5.0) -> None:
-        """Signal the scheduler to stop and wait for thread to end."""
+    def stop(self, *_args) -> None:
         self._stopped.set()
-        th = self._thread
-        if th is not None and th.is_alive():
-            logger.info("Stopping scheduler...")
-            th.join(timeout=join_timeout)
-            if th.is_alive():
-                logger.warning("Scheduler thread did not exit within timeout")
-            else:
-                logger.info("Scheduler stopped")
-        else:
-            logger.debug("Scheduler not running")
-        self._thread = None
 
-    def _run_loop(self) -> None:
-        """Internal loop running until _stopped is set."""
-        from .deps import wait_for_db
-        try:
-            wait_for_db()
-        except Exception:
-            logger.exception("Database failed to become ready, scheduler exiting")
-            return
-        
-        # Load settings from database now that it's ready
-        try:
-            self._refresh_settings_from_db()
-            self._last_settings_refresh = time.time()
-            logger.info(
-                "Scheduler settings loaded (artists=%s, charts=%s, playlists=%s, lyrics=%s, TZ=%s)",
-                self.artist_schedule, self.chart_schedule, self.playlist_schedule,
-                self.lyrics_schedule, schedules.timezone(),
-            )
-        except Exception:
-            logger.exception("Failed to load initial settings from database, using defaults")
-        
-        try:
-            time.sleep(0.1)
-        except Exception:
-            pass
-
+    def run(self) -> None:
+        """Run until stopped (SIGTERM/SIGINT)."""
+        wait_for_db()
+        logger.info("Scheduler started (TZ=%s)", schedules.timezone())
         while not self._stopped.is_set():
-            now = time.time()
-            
-            # Check if settings refresh is due
-            if now - self._last_settings_refresh >= self.settings_refresh_interval:
-                try:
-                    self._refresh_settings_from_db()
-                    self._last_settings_refresh = now
-                except Exception:
-                    logger.exception("Unexpected error in _refresh_settings_from_db")
-            
-            # Check if any artist or chart sync is due
-            if now - self._last_sync >= self.sync_check_interval_seconds:
-                try:
-                    self._run_artist_syncs(now)
-                except Exception:
-                    logger.exception("Unexpected error in artist syncs")
-                try:
-                    self._run_chart_syncs()
-                except Exception:
-                    logger.exception("Unexpected error in chart syncs")
-                try:
-                    self._run_playlist_syncs()
-                except Exception:
-                    logger.exception("Unexpected error in playlist syncs")
-                self._last_sync = now
-            
-            # Check if job cleanup is due
-            if now - self._last_cleanup >= self.cleanup_interval_seconds:
-                try:
-                    self.cleanup_old_jobs()
-                    self._last_cleanup = now
-                except Exception:
-                    logger.exception("Unexpected error in cleanup_old_jobs")
-            
-            # Check if token cleanup is due
-            if now - self._last_token_cleanup >= self.token_cleanup_interval_seconds:
-                try:
-                    self.cleanup_expired_tokens()
-                    self._last_token_cleanup = now
-                except Exception:
-                    logger.exception("Unexpected error in cleanup_expired_tokens")
+            self._safely("scheduler tick", self._tick, time.time())
+            self._stopped.wait(TICK_SECONDS)
+        logger.info("Scheduler stopped")
 
-            # Check if lyrics retry is due
-            try:
-                if self.lyrics_schedule.fixed:
-                    if self._fixed_run_due(self.lyrics_schedule, LYRICS_LAST_RUN):
-                        self.retry_missing_lyrics()
-                        self._mark_fixed_run(LYRICS_LAST_RUN)
-                elif now - self._last_lyrics_retry >= self.lyrics_schedule.every * 3600:
-                    self.retry_missing_lyrics()
-                    self._last_lyrics_retry = now
-            except Exception:
-                logger.exception("Unexpected error in retry_missing_lyrics")
+    def _tick(self, now: float) -> None:
+        with SessionLocal() as session:
+            artist_schedule = self._schedule(session, "scheduler.artist_sync")
+            chart_schedule = self._schedule(session, "scheduler.chart_sync")
+            playlist_schedule = self._schedule(session, "scheduler.playlist_sync")
+            lyrics_schedule = self._schedule(session, "scheduler.lyrics_retry")
 
-            if now - self._last_stale_sweep >= self.stale_sweep_interval_seconds:
-                try:
-                    self.sweep_stale_work()
-                    self._last_stale_sweep = now
-                except Exception:
-                    logger.exception("Unexpected error in sweep_stale_work")
+        self._safely("artist syncs", self._run_artist_syncs, artist_schedule, now)
+        self._safely("chart syncs", self._run_scheduled, chart_schedule, CHART_LAST_RUN, "days", self.sync_charts)
+        self._safely("playlist syncs", self._run_scheduled, playlist_schedule, PLAYLIST_LAST_RUN, "hours", self.sync_playlists)
+        self._safely("lyrics retry", self._run_lyrics_retry, lyrics_schedule, now)
+        self._every("cleanup_old_jobs", DAILY, now, self.cleanup_old_jobs)
+        self._every("cleanup_expired_tokens", DAILY, now, self.cleanup_expired_tokens)
+        self._every("sweep_stale_work", STALE_SWEEP_SECONDS, now, self.sweep_stale_work)
+        self._every("cleanup_thumbnail_cache", DAILY, now, self.cleanup_thumbnail_cache)
 
-            if now - self._last_thumbnail_cleanup >= self.thumbnail_cleanup_interval_seconds:
-                try:
-                    self.cleanup_thumbnail_cache()
-                    self._last_thumbnail_cleanup = now
-                except Exception:
-                    logger.exception("Unexpected error in cleanup_thumbnail_cache")
+    # -- plumbing --------------------------------------------------------------
 
-            # Sleep for a short interval (check every minute)
-            self._stopped.wait(timeout=60.0)
+    @staticmethod
+    def _schedule(session: Session, key: str) -> schedules.Schedule:
+        default = settings_module.get_default_value(key)
+        return schedules.parse(settings_module.get_setting(session, key), default)
 
-    # -- schedules -------------------------------------------------------------
-
-    def _fixed_run_due(self, schedule: "schedules.Schedule", last_run_key: str) -> Optional[datetime]:
-        """The fixed run of `schedule` to do now, given the last one done (stored under last_run_key)."""
-        session = SessionLocal()
+    @staticmethod
+    def _safely(what: str, task: Callable, *args) -> None:
         try:
-            raw = str(settings_module.get_setting(session, last_run_key, "") or "")
-        finally:
-            session.close()
+            task(*args)
+        except Exception:
+            logger.exception("Unexpected error in %s", what)
+
+    def _every(self, name: str, interval: float, now: float, task: Callable[[], None]) -> None:
+        """Run `task` when `interval` seconds have passed since its last run (a failed one included)."""
+        if now - self._last_run.get(name, 0) < interval:
+            return
+        self._last_run[name] = now
+        self._safely(name, task)
+
+    @staticmethod
+    def _fixed_run_due(schedule: schedules.Schedule, last_run_key: str) -> Optional[datetime]:
+        """The fixed run of `schedule` to do now, given the last one done (stored under last_run_key)."""
+        with SessionLocal() as session:
+            raw = settings_module.get_setting(session, last_run_key)
         last_done = None
         if raw:
             try:
                 last_done = datetime.fromisoformat(raw)
             except ValueError:
-                logger.warning(f"Ignoring unparseable {last_run_key}={raw!r}")
+                logger.warning("Ignoring unparseable %s=%r", last_run_key, raw)
         return schedules.due_run(schedule, last_done, now_utc())
 
-    def _mark_fixed_run(self, last_run_key: str) -> None:
-        session = SessionLocal()
-        try:
+    @staticmethod
+    def _mark_fixed_run(last_run_key: str) -> None:
+        with SessionLocal() as session:
             settings_module.set_setting(session, last_run_key, now_utc().isoformat())
-        finally:
-            session.close()
 
-    def _run_artist_syncs(self, now: float) -> None:
+    def _run_scheduled(
+        self,
+        schedule: schedules.Schedule,
+        last_run_key: str,
+        unit: str,
+        sync: Callable[[datetime], None],
+    ) -> None:
         """
-        Interval mode: every artist last synced more than N hours ago, each on
-        its own cadence. Fixed mode: at the run time, every artist not synced
-        since. The genre sweep goes along, so all network work keeps to the
-        same schedule.
+        Interval mode: sync whatever was last synced more than N hours (or
+        days) ago, each on its own cadence. Fixed mode: at the run time,
+        whatever wasn't synced since.
         """
-        schedule = self.artist_schedule
         if schedule.fixed:
-            run = self._fixed_run_due(schedule, ARTIST_LAST_RUN)
-            if run is None:
-                return
-            logger.info(f"Fixed-time artist sync ({schedule.time})")
-            self.sync_monitored_artists(cutoff=run)
-            self.queue_due_genre_lookups()
-            self._mark_fixed_run(ARTIST_LAST_RUN)
+            run = self._fixed_run_due(schedule, last_run_key)
+            if run is not None:
+                logger.info("Fixed-time run of %s (%s)", last_run_key, schedule.time)
+                sync(run)
+                self._mark_fixed_run(last_run_key)
             return
-        self.sync_monitored_artists(cutoff=now_utc() - timedelta(hours=schedule.every))
-        if now - self._last_genre_sweep >= schedule.every * 3600:
-            self.queue_due_genre_lookups()
-            self._last_genre_sweep = now
+        sync(now_utc() - timedelta(**{unit: schedule.every}))
 
-    def _run_chart_syncs(self) -> None:
-        """Same as _run_artist_syncs for charts, in days."""
-        schedule = self.chart_schedule
+    def _run_artist_syncs(self, schedule: schedules.Schedule, now: float) -> None:
+        """Artist syncs, with the genre sweep going along so all network work keeps to the same schedule."""
         if schedule.fixed:
-            run = self._fixed_run_due(schedule, CHART_LAST_RUN)
-            if run is None:
-                return
-            logger.info(f"Fixed-time chart sync ({schedule.time})")
-            self.sync_charts(cutoff=run)
-            self._mark_fixed_run(CHART_LAST_RUN)
+            def sync_with_genres(cutoff: datetime) -> None:
+                self.sync_monitored_artists(cutoff)
+                self.queue_due_genre_lookups()
+            self._run_scheduled(schedule, ARTIST_LAST_RUN, "hours", sync_with_genres)
             return
-        self.sync_charts(cutoff=now_utc() - timedelta(days=schedule.every))
+        self._run_scheduled(schedule, ARTIST_LAST_RUN, "hours", self.sync_monitored_artists)
+        self._every("queue_due_genre_lookups", schedule.every * 3600, now, self.queue_due_genre_lookups)
 
-    def _run_playlist_syncs(self) -> None:
-        """Same as _run_artist_syncs for followed playlists."""
-        schedule = self.playlist_schedule
+    def _run_lyrics_retry(self, schedule: schedules.Schedule, now: float) -> None:
         if schedule.fixed:
-            run = self._fixed_run_due(schedule, PLAYLIST_LAST_RUN)
-            if run is None:
-                return
-            logger.info(f"Fixed-time playlist sync ({schedule.time})")
-            self.sync_playlists(cutoff=run)
-            self._mark_fixed_run(PLAYLIST_LAST_RUN)
+            if self._fixed_run_due(schedule, LYRICS_LAST_RUN):
+                self.retry_missing_lyrics()
+                self._mark_fixed_run(LYRICS_LAST_RUN)
             return
-        self.sync_playlists(cutoff=now_utc() - timedelta(hours=schedule.every))
+        self._every("retry_missing_lyrics", schedule.every * 3600, now, self.retry_missing_lyrics)
+
+    # -- tasks -----------------------------------------------------------------
+
+    def sync_monitored_artists(self, cutoff: datetime) -> None:
+        """
+        Queue a sync_artist job (AUTO) for every artist followed in full and
+        last synced before `cutoff`. We look for due artists far more often
+        than they are synced, so artists whose sync is still waiting or
+        running are skipped.
+        """
+        with SessionLocal() as session:
+            artists = subs_svc.get_monitored_artists_needing_sync(session, cutoff)
+            if not artists:
+                return
+            busy = {job.payload.get("artist_id") for job in pending_jobs(session, "sync_artist")}
+            due = [a for a in artists if a.id not in busy]
+            for artist in due:
+                enqueue_job(session, job_type="sync_artist", payload={"artist_id": artist.id},
+                            origin=Origin.AUTO, commit=False)
+            session.commit()
+        if due:
+            logger.info("Queued a sync of %s artist(s) (%s due, %s already queued)",
+                        len(due), len(artists), len(artists) - len(due))
+
+    def sync_charts(self, cutoff: datetime) -> None:
+        """
+        Queue a sync_chart job for every enabled chart last synced before
+        `cutoff` (one already waiting is reused). Skipped entirely while the
+        charts feature is off.
+        """
+        with SessionLocal() as session:
+            if not settings_module.feature_enabled(session, "charts"):
+                return
+            queued = 0
+            for subscription in charts_svc.get_chart_subscriptions_needing_sync(session, cutoff):
+                _, created = charts_svc.enqueue_chart_sync(session, subscription.country_code)
+                queued += created
+            session.commit()
+        if queued:
+            logger.info("Queued a sync of %s chart(s)", queued)
 
     def sync_playlists(self, cutoff: datetime) -> None:
         """Queue a rescan (AUTO) of every followed playlist last scanned before `cutoff`."""
-        from .services import playlists as playlists_svc
-        session = SessionLocal()
-        try:
+        with SessionLocal() as session:
             due = playlists_svc.followed_needing_sync(session, cutoff)
             for playlist in due:
                 playlists_svc.queue_sync(session, playlist, origin=Origin.AUTO, fetch=True)
             session.commit()
-            if due:
-                logger.info(f"Queued a scan of {len(due)} followed playlist(s)")
-        except Exception:
-            session.rollback()
-            logger.exception("Failed queueing playlist syncs")
-        finally:
-            session.close()
+        if due:
+            logger.info("Queued a scan of %s followed playlist(s)", len(due))
 
-    def sync_monitored_artists(self, cutoff: datetime) -> None:
+    def queue_due_genre_lookups(self) -> None:
         """
-        Enqueue a sync_artist job for every followed artist last synced
-        before `cutoff` (see _run_artist_syncs).
+        Queue a fetch_genres for subscribed artists whose genres are due
+        (services/genres.py): the monthly refresh, and artists a sync never
+        visits again -- light ones, whose albums were downloaded on their own
+        -- after lookups were switched off and on again. Syncs and imports
+        queue lookups for new albums themselves; this is the catch-all.
         """
-        session: Optional[Session] = None
-        try:
-            session = SessionLocal()
+        with SessionLocal() as session:
+            if not settings_module.feature_enabled(session, "genres"):
+                return
+            queued = sum(
+                genres_svc.queue_lookup(session, artist_id, origin=Origin.AUTO)
+                for artist_id in genres_svc.due_artist_ids(session, GENRE_SWEEP_LIMIT)
+            )
+            session.commit()
+        if queued:
+            logger.info("Queued %s genre lookup(s)", queued)
 
-            # Get artists that need syncing (followed=True and last_synced_at is old)
-            try:
-                artists = subs_svc.get_monitored_artists_needing_sync(
-                    session=session,
-                    cutoff=cutoff,
-                ) or []
-            except Exception:
-                logger.exception("Failed fetching monitored artists")
+    def retry_missing_lyrics(self) -> None:
+        """
+        Queue download_lyrics jobs for tracks that need lyrics recovery or a
+        plain-to-synced upgrade:
+        1. Recovery: on disk, with no lyrics -> normal download
+        2. Upgrade: plain lyrics -> look for synced ones
+
+        Each sweep takes a capped batch per category, least recently retried
+        first (Track.lyrics_retried_at), so the whole library rotates through.
+        """
+        with SessionLocal() as session:
+            if not settings_module.feature_enabled(session, "lyrics"):
                 return
 
-            if not artists:
-                logger.debug("No monitored artists need syncing")
-                return
+            # Tracks with a lyrics job already waiting or running. The NULL
+            # filter matters: one NULL in a NOT IN list matches nothing at all.
+            pending_track_id = Job.payload["track_id"].as_string()
+            pending = select(pending_track_id).where(
+                Job.type == "download_lyrics",
+                Job.status.in_(PENDING_STATUSES),
+                pending_track_id.is_not(None),
+            )
 
-            # We look for due artists far more often than they are synced, so
-            # skip any artist whose sync job is still waiting in the queue.
-            from .models import Job
-            from sqlalchemy import select, and_
-            pending_payloads = session.execute(
-                select(Job.payload).where(
-                    and_(
-                        Job.type == "sync_artist",
-                        Job.status.in_(["queued", "reserved"]),
+            def due_tracks(*conditions, limit: int) -> list[Track]:
+                # Least recently retried first, never-retried before all:
+                # tracks LRCLIB never has lyrics for would otherwise come back
+                # in the same batch every sweep and starve all the others.
+                return list(session.execute(
+                    select(Track)
+                    .where(*conditions, Track.id.notin_(pending))
+                    .order_by(Track.lyrics_retried_at.asc().nulls_first(), Track.id)
+                    .limit(limit)
+                ).scalars().all())
+
+            recovery = due_tracks(Track.status == "done", Track.file_path.is_not(None), Track.lyrics.is_(None), limit=50)
+            upgrade = due_tracks(Track.lyrics == "plain", limit=25)
+
+            # Same priority for both: recoveries still run first, being queued
+            # first (ties go to the oldest job)
+            now = now_utc()
+            for tracks, payload_extra, attempts in ((recovery, {}, 3), (upgrade, {"mode": "upgrade"}, 2)):
+                for track in tracks:
+                    enqueue_job(
+                        session,
+                        job_type="download_lyrics",
+                        payload={"track_id": track.id, **payload_extra},
+                        origin=Origin.AUTO,
+                        max_attempts=attempts,
+                        commit=False,
                     )
-                )
-            ).scalars().all()
-            already_queued = {
-                p.get("artist_id") for p in pending_payloads if isinstance(p, dict)
-            }
+                    track.lyrics_retried_at = now
+            # Jobs and timestamps together, so a track is never marked as
+            # retried without its job
+            session.commit()
 
-            skipped = sum(1 for a in artists if str(getattr(a, "id", "")) in already_queued)
-            if skipped == len(artists):
-                logger.debug(f"{skipped} artist(s) due for sync already have a job queued")
-                return
-            logger.info(f"Found {len(artists)} monitored artist(s) needing sync ({skipped} already queued)")
-
-            enqueued_count = 0
-            for artist in artists:
-                try:
-                    artist_id = getattr(artist, "id", None)
-                    if not artist_id:
-                        continue
-                    if str(artist_id) in already_queued:
-                        logger.debug(f"Sync already queued for artist {artist_id}, skipping")
-                        continue
-
-                    # Enqueue sync_artist job
-                    payload = {"artist_id": str(artist_id)}  # ← Fixed: was "channel_id"
-                    
-                    try:
-                        job = enqueue_job(
-                            session=session,
-                            job_type="sync_artist",
-                            payload=payload,
-                            origin=Origin.AUTO,
-                        )
-                        logger.info(f"Enqueued sync_artist job {job.id} for artist {artist_id}")
-                        enqueued_count += 1
-                    except Exception:
-                        logger.exception(f"Failed to enqueue sync job for artist {artist_id}")
-                        continue
-
-                except Exception:
-                    logger.exception(f"Error processing monitored artist {artist}")
-
-            logger.info(f"Processed {len(artists)} monitored artists (enqueued {enqueued_count} jobs)")
-
-        finally:
-            if session:
-                try:
-                    session.close()
-                except Exception:
-                    pass
-
-    def sync_charts(self, cutoff: datetime) -> None:
-        """
-        Enqueue sync_chart jobs for enabled charts last synced before `cutoff`
-        (see _run_chart_syncs). Skipped entirely while the charts feature is off.
-        """
-        session: Optional[Session] = None
-        try:
-            session = SessionLocal()
-
-            if not features.charts_enabled(session):
-                logger.debug("Charts feature disabled, skipping chart sync")
-                return
-
-            try:
-                subscriptions = charts_svc.get_chart_subscriptions_needing_sync(
-                    session=session,
-                    cutoff=cutoff,
-                )
-            except Exception:
-                logger.exception("Failed fetching chart subscriptions needing sync")
-                return
-
-            if not subscriptions:
-                logger.debug("No charts need syncing")
-                return
-
-            enqueued_count = 0
-            for sub in subscriptions:
-                try:
-                    # enqueue_chart_sync reuses a job that is already waiting
-                    if charts_svc.pending_sync_job(session, sub.country_code):
-                        logger.debug(f"Sync already queued for chart {sub.country_code}, skipping")
-                        continue
-                    charts_svc.enqueue_chart_sync(session, sub.country_code)
-                    session.commit()
-                    enqueued_count += 1
-                except Exception:
-                    session.rollback()
-                    logger.exception(f"Failed to enqueue sync job for chart {sub.country_code}")
-
-            logger.info(f"Processed {len(subscriptions)} chart(s) due for sync (enqueued {enqueued_count} jobs)")
-
-        finally:
-            if session:
-                try:
-                    session.close()
-                except Exception:
-                    pass
+        if recovery or upgrade:
+            logger.info("Lyrics retry: queued %s recovery + %s upgrade jobs", len(recovery), len(upgrade))
 
     def cleanup_old_jobs(self) -> None:
-        """
-        Clean up old finished jobs (done, failed, cancelled) to prevent
-        database bloat.
-        """
-        session: Optional[Session] = None
-        try:
-            session = SessionLocal()
-            
-            # Get cleanup days from settings
-            days_old = settings_module.get_setting(
-                session,
-                "scheduler.job_cleanup_days",
-                default=3
-            )
-            
-            # Delete jobs older than specified days
-            deleted = cleanup_old_jobs(
-                session=session,
-                days_old=int(days_old),
-            )
-            
-            if deleted > 0:
-                logger.info(f"Cleaned up {deleted} old finished jobs")
-            else:
-                logger.debug("No old jobs to clean up")
-        
-        except Exception:
-            logger.exception("Failed to clean up old jobs")
-        
-        finally:
-            if session:
-                try:
-                    session.close()
-                except Exception:
-                    pass
-        
+        """Delete finished jobs (done, failed, cancelled) older than scheduler.job_cleanup_days."""
+        with SessionLocal() as session:
+            days = int(settings_module.get_setting(session, "scheduler.job_cleanup_days"))
+            deleted = cleanup_old_jobs(session, days_old=days)
+        if deleted:
+            logger.info("Cleaned up %s old finished jobs (older than %s days)", deleted, days)
+
+    def cleanup_expired_tokens(self) -> None:
+        with SessionLocal() as session:
+            deleted = auth_svc.cleanup_expired_tokens(session)
+        if deleted:
+            logger.info("Cleaned up %s expired refresh tokens", deleted)
+
     def sweep_stale_work(self) -> None:
         """
         Requeue jobs whose worker stopped heartbeating, and delete download
@@ -542,45 +337,27 @@ class Scheduler:
         forever. Its heartbeat goes stale within minutes, and this sweep
         catches that from a process that always runs.
         """
-        session: Optional[Session] = None
-        try:
-            session = SessionLocal()
+        with SessionLocal() as session:
             # "scheduler" never reserves anything, so this only reclaims by
             # stale heartbeat, never by owner name.
-            reclaimed = reclaim_orphaned_jobs(session, "scheduler")
-            if reclaimed:
-                logger.warning(f"Reclaimed {reclaimed} job(s) abandoned by a dead worker")
+            reclaim_orphaned_jobs(session, "scheduler")
             self._requeue_orphaned_track_downloads(session)
-        except Exception:
-            logger.exception("Failed to reclaim stale jobs")
-            if session:
-                session.rollback()
-        finally:
-            if session:
-                try:
-                    session.close()
-                except Exception:
-                    pass
 
         # A worker killed mid-download leaves DOWNLOAD_DIR/<video_id>/ behind
         # until that job retries (which wipes it); if the job was cancelled
         # instead, nothing ever would. A live download touches its dir
         # constantly, so an hour without writes means abandoned.
+        cutoff = time.time() - 3600
+        removed = 0
         try:
-            import shutil
-            from . import config
-            cutoff = time.time() - 3600
-            removed = 0
             for d in config.DOWNLOAD_DIR.iterdir():
                 if d.is_dir() and d.stat().st_mtime < cutoff:
                     shutil.rmtree(d, ignore_errors=True)
                     removed += 1
-            if removed:
-                logger.info(f"Removed {removed} stale download scratch dir(s)")
         except FileNotFoundError:
             pass
-        except Exception:
-            logger.exception("Failed to sweep download scratch dirs")
+        if removed:
+            logger.info("Removed %s stale download scratch dir(s)", removed)
 
     def _requeue_orphaned_track_downloads(self, session: Session) -> None:
         """
@@ -602,9 +379,6 @@ class Scheduler:
         the jobs and tracks are read in two statements, not one snapshot, so a
         single sighting can just be a download queued between the two reads.
         """
-        from .models import Track
-        from .services import tracks as tracks_svc
-
         active = tracks_svc.active_download_track_ids(session)  # read first; see above
         candidates = session.query(Track).filter(Track.status.in_(("queued", "downloading"))).all()
         orphans = {t.id: t for t in candidates if t.id not in active}
@@ -622,7 +396,6 @@ class Scheduler:
         for track in released:
             track.status = "available"
             track.last_error = None
-            session.add(track)
         requeued = tracks_svc.queue_track_downloads(session, wanted, origin=Origin.AUTO)
 
         # queue_track_downloads rolls up its own albums; the released ones
@@ -635,8 +408,8 @@ class Scheduler:
 
         session.commit()
         logger.warning(
-            f"Found {len(confirmed)} queued/downloading track(s) with no download job: "
-            f"requeued {requeued}, released {len(released)}"
+            "Found %s queued/downloading track(s) with no download job: requeued %s, released %s",
+            len(confirmed), requeued, len(released),
         )
 
     def cleanup_thumbnail_cache(self) -> None:
@@ -645,217 +418,24 @@ class Scheduler:
         THUMBNAIL_CACHE_TTL. The proxy already refuses to serve them, so
         running this daily only bounds how long dead files sit on disk.
         """
-        from . import config
         cutoff = time.time() - config.THUMBNAIL_CACHE_TTL
         removed = 0
-        try:
-            for f in config.THUMBNAIL_CACHE_DIR.glob("*.jpg"):
-                try:
-                    if f.stat().st_mtime < cutoff:
-                        f.unlink()
-                        removed += 1
-                except FileNotFoundError:
-                    pass  # cleared from the admin endpoint meanwhile
-        except FileNotFoundError:
-            return
+        for f in config.THUMBNAIL_CACHE_DIR.glob("*.jpg"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    removed += 1
+            except FileNotFoundError:
+                pass  # trimmed by the proxy meanwhile
         if removed:
-            logger.info(f"Removed {removed} expired thumbnail cache file(s)")
-        else:
-            logger.debug("No expired thumbnail cache files")
-
-    def cleanup_expired_tokens(self) -> None:
-        """
-        Clean up expired refresh tokens.
-        Runs daily to prevent database bloat.
-        """
-        session: Optional[Session] = None
-        try:
-            session = SessionLocal()
-
-            deleted = auth_svc.cleanup_expired_tokens(session)
-
-            if deleted > 0:
-                logger.info(f"Cleaned up {deleted} expired refresh tokens")
-            else:
-                logger.debug("No expired tokens to clean up")
-
-        except Exception:
-            logger.exception("Failed to clean up expired tokens")
-
-        finally:
-            if session:
-                try:
-                    session.close()
-                except Exception:
-                    pass
-
-    # How many artists one daily sweep queues: at ~4 s each on worker-genres,
-    # a few minutes of lookups, and enough to refresh 1500 artists a month
-    GENRE_SWEEP_LIMIT = 50
-
-    def queue_due_genre_lookups(self) -> None:
-        """
-        Queue a fetch_genres for subscribed artists whose genres are due
-        (services/genres.py): the monthly refresh, and artists a sync never
-        visits again -- light ones, whose albums were downloaded on their own
-        -- after lookups were switched off and on again. Syncs and imports
-        queue lookups for new albums themselves; this is the catch-all.
-        """
-        from .services import genres as genres_svc
-
-        session: Optional[Session] = None
-        try:
-            session = SessionLocal()
-            if not genres_svc.genres_enabled(session):
-                return
-            queued = 0
-            for artist_id in genres_svc.due_artist_ids(session, self.GENRE_SWEEP_LIMIT):
-                if genres_svc.queue_lookup(session, artist_id, origin=Origin.AUTO):
-                    queued += 1
-            session.commit()
-            if queued:
-                logger.info(f"Queued {queued} genre lookup(s)")
-        except Exception:
-            if session:
-                session.rollback()
-            logger.exception("Failed to queue genre lookups")
-        finally:
-            if session:
-                session.close()
-
-    def retry_missing_lyrics(self) -> None:
-        """
-        Find tracks that need lyrics recovery or plain-to-synced upgrade
-        and enqueue deduplicated download_lyrics jobs.
-
-        Two categories:
-        1. Recovery: status="done", has audio, lyrics=None → normal download
-        2. Upgrade: lyrics="plain" → attempt synced upgrade
-
-        Each sweep takes a capped batch per category, least recently retried
-        first (Track.lyrics_retried_at), so the whole library rotates through.
-        """
-        session: Optional[Session] = None
-        try:
-            session = SessionLocal()
-
-            # Check if lyrics feature is enabled
-            lyrics_enabled = settings_module.get_setting(
-                session, "features.lyrics_enabled", True
-            )
-            if not lyrics_enabled:
-                logger.debug("Lyrics feature disabled, skipping retry")
-                return
-
-            from .models import Track, Job
-            from .time_utils import now_utc
-            from sqlalchemy import select
-
-            # Tracks with a lyrics job already waiting or running. The NULL
-            # filter matters: one NULL in a NOT IN list matches nothing at all.
-            pending_track_id = Job.payload["track_id"].as_string()
-            pending = select(pending_track_id).where(
-                Job.type == "download_lyrics",
-                Job.status.in_(["queued", "reserved"]),
-                pending_track_id != None,  # noqa: E711
-            )
-
-            def due_tracks(*conditions, limit: int) -> list[Track]:
-                # Least recently retried first, never-retried before all:
-                # tracks LRCLIB never has lyrics for would otherwise come back
-                # in the same batch every sweep and starve all the others.
-                return list(session.execute(
-                    select(Track)
-                    .where(*conditions, Track.id.notin_(pending))
-                    .order_by(Track.lyrics_retried_at.asc().nulls_first(), Track.id)
-                    .limit(limit)
-                ).scalars().all())
-
-            # === Category 1: Recovery (missing lyrics) ===
-            recovery_tracks = due_tracks(
-                Track.status == "done",
-                Track.file_path != None,  # noqa: E711
-                Track.lyrics == None,  # noqa: E711
-                limit=50,
-            )
-            # === Category 2: Upgrade (plain → synced) ===
-            upgrade_tracks = due_tracks(Track.lyrics == "plain", limit=25)
-
-            # Same priority for both: recoveries still run first, being queued
-            # first (ties go to the oldest job)
-            now = now_utc()
-            for track in recovery_tracks:
-                enqueue_job(
-                    session,
-                    job_type="download_lyrics",
-                    payload={"track_id": track.id},
-                    origin=Origin.AUTO,
-                    max_attempts=3,
-                    commit=False,
-                )
-                track.lyrics_retried_at = now
-            for track in upgrade_tracks:
-                enqueue_job(
-                    session,
-                    job_type="download_lyrics",
-                    payload={"track_id": track.id, "mode": "upgrade"},
-                    origin=Origin.AUTO,
-                    max_attempts=2,
-                    commit=False,
-                )
-                track.lyrics_retried_at = now
-            # Jobs and timestamps together, so a track is never marked as
-            # retried without its job
-            session.commit()
-
-            recovery_count, upgrade_count = len(recovery_tracks), len(upgrade_tracks)
-            if recovery_count or upgrade_count:
-                logger.info(
-                    f"Lyrics retry: enqueued {recovery_count} recovery + "
-                    f"{upgrade_count} upgrade jobs"
-                )
-            else:
-                logger.debug("Lyrics retry: no tracks need recovery or upgrade")
-
-        except Exception:
-            logger.exception("Failed in retry_missing_lyrics")
-        finally:
-            if session:
-                try:
-                    session.close()
-                except Exception:
-                    pass
-
-
-# Module-level default scheduler instance
-_default_scheduler: Optional[Scheduler] = None
-
-
-def get_default_scheduler() -> Scheduler:
-    global _default_scheduler
-    if _default_scheduler is None:
-        _default_scheduler = Scheduler()
-    return _default_scheduler
-
-
-def start_default_scheduler() -> None:
-    get_default_scheduler().start()
-
-
-def stop_default_scheduler() -> None:
-    global _default_scheduler
-    if _default_scheduler is not None:
-        _default_scheduler.stop()
-        _default_scheduler = None
+            logger.info("Removed %s expired thumbnail cache file(s)", removed)
 
 
 if __name__ == "__main__":
     from .logging_config import configure_logging
+
     configure_logging(process_name="scheduler")
-    sched = Scheduler()
-    try:
-        sched.start()
-        while True:
-            time.sleep(1.0)
-    except KeyboardInterrupt:
-        sched.stop()
+    scheduler = Scheduler()
+    signal.signal(signal.SIGTERM, scheduler.stop)
+    signal.signal(signal.SIGINT, scheduler.stop)
+    scheduler.run()

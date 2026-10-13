@@ -1,84 +1,32 @@
 // src/api/media.ts
 /**
- * Media/thumbnail API endpoints
+ * Image URLs. Both endpoints require auth, carried by the access_token cookie
+ * the browser attaches to the <img> request.
  */
 
-import { api } from './client';
+import { API_BASE } from './client';
+
+// Hosts the backend's thumbnail proxy fetches from (routers/media.py)
+const PROXIED_HOSTS = ['googleusercontent.com', 'ytimg.com', 'ggpht.com'];
 
 /**
- * Get local image URL. Requires auth -- carried automatically via the
- * access_token cookie the browser attaches to the <img> request, so no
- * client-side change is needed here to send it.
- * For images stored in /data directory (cover.jpg files)
- *
- * @param imagePath - Path like "/data/kroh/BUTTERFLY/cover.jpg" or "/config/covers/albumid.jpg"
- * @returns URL that can be used in <img src="">, or '' when there's no image
- */
-export function getLocalImageUrl(imagePath: string | null | undefined): string {
-  if (!imagePath) {
-    return '';
-  }
-  
-  const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
-  
-  // Clean the path - remove leading slash if present
-  let cleanPath = imagePath;
-  if (cleanPath.startsWith('/')) {
-    cleanPath = cleanPath.substring(1);
-  }
-  
-  // Path is already clean, just prepend API endpoint
-  return `${API_BASE}/api/media/images/${cleanPath}`;
-}
-
-/**
- * Get thumbnail URL for external images (YouTube, Google, etc.)
- * Goes through the proxy/cache. Requires auth, carried by the access_token
- * cookie exactly as for getLocalImageUrl.
- */
-export function getThumbnailUrl(url: string): string {
-  const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
-  return `${API_BASE}/api/media/thumbnail?url=${encodeURIComponent(url)}`;
-}
-
-/**
- * Smart image URL getter - automatically handles both local and external images
- * Use this for all image sources
- * 
- * @param imagePath - Can be local path ("/data/...") or external URL ("https://...")
- * @returns Appropriate URL for the image, or '' when there's none (Artwork then draws its fallback)
+ * URL for an <img> showing an image: a file saved on disk ("/data/...",
+ * "/config/covers/..."), or a YouTube Music thumbnail, served through the
+ * backend's caching proxy. '' when there's none (Artwork then draws its fallback).
  */
 export function getImageUrl(imagePath: string | null | undefined): string {
-  if (!imagePath) {
-    return '';
-  }
-  
-  // Check if it's an external URL (YouTube, Google, etc.)
-  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-    // Only proxy if it's actually an external domain
-    if (imagePath.includes('googleusercontent.com') || 
-        imagePath.includes('ytimg.com') ||
-        imagePath.includes('ggpht.com')) {
-      return getThumbnailUrl(imagePath);
+  if (!imagePath) return '';
+
+  if (/^https?:\/\//.test(imagePath)) {
+    let host = '';
+    try {
+      host = new URL(imagePath).hostname;
+    } catch {
+      // Not a URL after all: shown as is, and Artwork falls back if it fails
     }
-    // If it's already pointing to our API, use it directly
-    return imagePath;
+    const proxied = PROXIED_HOSTS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+    return proxied ? `${API_BASE}/media/thumbnail?url=${encodeURIComponent(imagePath)}` : imagePath;
   }
-  
-  // It's a local path like "/data/artist/album/cover.jpg"
-  return getLocalImageUrl(imagePath);
-}
 
-/**
- * Get cache debug info (admin only)
- */
-export async function getThumbnailDebugInfo(): Promise<any> {
-  return api.get('/media/thumbnail/debug');
-}
-
-/**
- * Clear thumbnail cache (admin only)
- */
-export async function clearThumbnailCache(): Promise<any> {
-  return api.delete('/media/cache/clear');
+  return `${API_BASE}/media/images/${imagePath.replace(/^\/+/, '')}`;
 }
