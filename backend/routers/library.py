@@ -25,10 +25,10 @@ from sqlalchemy import func, case
 from .. import config
 from ..db import get_session
 from ..dependencies import require_auth, require_admin
-from ..downloader.core import album_dir, safe_name
 from ..downloader.cover import move_file
 from ..jobs.jobqueue import cancel_download_jobs
 from ..models import Artist, Album, Track, ArtistSubscription, User
+from ..services import folders as folders_svc
 from ..services import playlists as playlists_svc
 from ..services import subscriptions as subs_svc
 
@@ -528,6 +528,7 @@ def delete_artist_from_library(
             raise HTTPException(status_code=404, detail="Artist not found in library")
 
         artist_name = artist.name if artist else "Unknown"
+        artist_folder = folders_svc.existing_artist_dir(artist) if artist else None
         files_deleted = 0
         tracks_deleted = 0
         albums_deleted = 0
@@ -568,10 +569,9 @@ def delete_artist_from_library(
         if artist:
             db.delete(artist)
 
-        # 5. Delete the artist folder from disk, unless the name points at a
-        # folder that isn't one (e.g. an artist called "Playlists")
-        artist_folder = config.MUSIC_DIR / safe_name(artist_name)
-        if artist and artist_folder.is_dir() and artist_folder != playlists_svc.m3u_dir():
+        # 5. Delete the artist folder from disk, unless it's one that isn't
+        # the artist's (e.g. an artist called "Playlists")
+        if artist_folder and artist_folder.is_dir() and artist_folder != playlists_svc.m3u_dir():
             shutil.rmtree(artist_folder, ignore_errors=True)
 
         db.commit()
@@ -660,7 +660,9 @@ def delete_album_from_library(
         if album.image_local:
             moved = move_file(Path(album.image_local), config.COVERS_DIR / f"{album.id}.jpg")
         album.image_local = str(moved) if moved else None
-        _remove_album_folder(album_dir(album.artist.name if album.artist else None, album.title))
+        album_folder = folders_svc.existing_album_dir(album)
+        if album_folder:
+            _remove_album_folder(album_folder)
 
         # 3. Downgrade album to metadata mode (keep the row)
         album.mode = "metadata"

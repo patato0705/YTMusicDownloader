@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from yt_dlp import YoutubeDL
 
-from ..config import DOWNLOAD_DIR, MUSIC_DIR, YDL_FORMAT, YDL_PREFERRED_CODEC
+from ..config import DOWNLOAD_DIR, YDL_FORMAT, YDL_PREFERRED_CODEC
 from . import cover as cover_mod
 from . import embed as embed_mod
 
@@ -20,18 +20,13 @@ def safe_name(s: Optional[str]) -> str:
     Sanitize a string (artist/album/track name) for use as a filesystem
     path component. Security-relevant: this is what keeps metadata-derived
     strings from injecting path traversal or special characters into
-    download destination paths -- keep it in one place (also used by
-    downloader/nfo.py, services/artists.py and the library deletions)
-    rather than drifting copies.
+    download destination paths. Keep it in one place (also used by
+    services/folders.py and services/playlists.py) rather than drifting copies.
     """
-    if not s:
-        return "Unknown"
-    return "".join(c for c in s if c.isalnum() or c in " .-_()").strip() or "Unknown"
-
-
-def album_dir(artist_name: Optional[str], album_name: Optional[str]) -> Path:
-    """MUSIC_DIR/<artist>/<album>: where an album's tracks, cover.jpg and album.nfo go."""
-    return MUSIC_DIR / safe_name(artist_name or "Unknown") / safe_name(album_name or "Unknown Album")
+    name = "".join(c for c in s or "" if c.isalnum() or c in " .-_()").strip()
+    # Nothing left, or only dots: "." and ".." would point at the folder
+    # itself or its parent
+    return name if name.strip(".") else "Unknown"
 
 
 def _job_download_dir(video_id: str) -> Path:
@@ -58,6 +53,7 @@ def _find_downloaded_file(download_dir: Path) -> Optional[Path]:
 def download_track_by_videoid(
     video_id: str,
     cookiefile: Union[str, Path],
+    dest_dir: Path,
     artist_name: Optional[str] = None,
     album_name: Optional[str] = None,
     track_title: Optional[str] = None,
@@ -67,11 +63,12 @@ def download_track_by_videoid(
     genres: Optional[List[str]] = None,
 ) -> Tuple[str, Optional[str]]:
     """
-    Download a track with yt-dlp to MUSIC_DIR/<artist>/<album>/, tagged.
+    Download a track with yt-dlp into dest_dir, tagged.
 
     Args:
         cookiefile: yt-dlp cookie jar to read from and write back to.
             Concurrent download workers each pass their own (see jobs.tasks)
+        dest_dir: the album's folder (services/folders.py)
         cover_path: the album's cover (Album.image_local). The first track
             of an album moves it from COVERS_DIR into the album folder as
             cover.jpg; later tracks find it there.
@@ -90,7 +87,6 @@ def download_track_by_videoid(
         if not downloaded:
             raise FileNotFoundError("Downloaded file not found in downloads directory")
 
-        dest_dir = album_dir(artist_name, album_name)
         dest_dir.mkdir(parents=True, exist_ok=True)
         title = safe_name(track_title or f"track_{video_id}")
         filename = f"{track_number:02d} - {title}" if track_number and track_number > 0 else title

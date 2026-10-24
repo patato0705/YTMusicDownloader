@@ -6,12 +6,11 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from .. import config
 from ..downloader import cover as cover_mod
-from ..downloader.core import safe_name
 from ..models import Artist
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
+from . import folders
 from . import recommendations as recommendations_svc
 
 logger = logging.getLogger("services.artists")
@@ -69,7 +68,7 @@ def ensure_artist_images(session: Session, artist: Artist, thumbnails: Optional[
         logger.warning("No thumbnail URL found for artist %s", artist.id)
         return None
     picture_url = N.resize_thumbnail_url(banner_url, ARTIST_PICTURE_SIZE, crop=True)
-    artist_folder = config.MUSIC_DIR / safe_name(artist.name or "Unknown Artist")
+    artist_folder = folders.artist_dir(session, artist)
 
     picture_path = artist_folder / "folder.jpg"
     picture_saved = cover_mod.download_image(picture_url, picture_path)

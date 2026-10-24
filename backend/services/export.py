@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from .. import config
 from .. import settings as settings_module
+from ..downloader.core import safe_name
 from ..models import (
     Artist, Album, Track, ArtistSubscription, User, Setting,
     DismissedRecommendation, Playlist, PlaylistEntry,
@@ -206,6 +207,7 @@ def build_catalog_section(session: Session) -> Dict[str, Any]:
             {
                 "id": a.id,
                 "name": a.name,
+                "folder": a.folder,
                 "image_local": relativize_path(a.image_local),
                 "banner_local": relativize_path(a.banner_local),
                 "description": a.description,
@@ -216,6 +218,7 @@ def build_catalog_section(session: Session) -> Dict[str, Any]:
             {
                 "id": al.id,
                 "title": al.title,
+                "folder": al.folder,
                 "type": al.type,
                 "artist_id": al.artist_id,
                 "playlist_id": al.playlist_id,
@@ -369,7 +372,7 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
     for a in catalog.artists:
         image = resolve_music_path(a.image_local)
         banner = resolve_music_path(a.banner_local)
-        artists_svc.upsert_artist(
+        obj = artists_svc.upsert_artist(
             session,
             artist_id=a.id,
             name=a.name,
@@ -377,6 +380,10 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             banner_local=str(banner) if banner and banner.exists() else None,
             description=a.description,
         )
+        # The folder its files had there, so copied files and new ones stay
+        # together; one this instance already named is kept
+        if a.folder and not obj.folder:
+            obj.folder = safe_name(a.folder)
         result.artists += 1
     session.flush()
 
@@ -401,6 +408,8 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             playlist_id=al.playlist_id,
         )
         obj.mode = "download"
+        if al.folder and not obj.folder:
+            obj.folder = safe_name(al.folder)
         download_albums[al.id] = al.artist_id
         result.albums += 1
         if not cover_on_disk and not (obj.image_local and Path(obj.image_local).exists()):

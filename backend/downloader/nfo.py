@@ -6,14 +6,7 @@ from pathlib import Path
 from typing import Optional
 from xml.etree import ElementTree as ET
 
-from ..config import MUSIC_DIR
-from .core import album_dir, safe_name
-
 logger = logging.getLogger("downloader.nfo")
-
-
-def _artist_dir(artist_name: Optional[str]) -> Path:
-    return MUSIC_DIR / safe_name(artist_name)
 
 
 def _set_text(parent: ET.Element, tag: str, value: Optional[str]) -> None:
@@ -29,14 +22,6 @@ def _set_genres(parent: ET.Element, genres) -> None:
         _set_text(parent, "genre", genre)
 
 
-def artist_dir_exists(artist_name: Optional[str]) -> bool:
-    return bool(artist_name) and _artist_dir(artist_name).is_dir()
-
-
-def album_dir_exists(artist_name: Optional[str], album_title: Optional[str]) -> bool:
-    return bool(artist_name and album_title) and album_dir(artist_name, album_title).is_dir()
-
-
 def _write_xml(root: ET.Element, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     ET.indent(root, space="  ")
@@ -44,8 +29,8 @@ def _write_xml(root: ET.Element, dest: Path) -> None:
     tree.write(str(dest), encoding="utf-8", xml_declaration=True)
 
 
-def write_artist_nfo(artist) -> Optional[Path]:
-    """Write {music_dir}/{artist}/artist.nfo. Returns the path or None on failure."""
+def write_artist_nfo(artist, folder: Path) -> Optional[Path]:
+    """Write the artist's artist.nfo into its folder. Returns the path or None on failure."""
     try:
         name = artist.name
         if not name:
@@ -59,7 +44,7 @@ def write_artist_nfo(artist) -> Optional[Path]:
         if artist.banner_local:
             _set_text(ET.SubElement(root, "fanart"), "thumb", artist.banner_local)
 
-        dest = _artist_dir(name) / "artist.nfo"
+        dest = folder / "artist.nfo"
         _write_xml(root, dest)
         logger.info("Wrote artist.nfo: %s", dest)
         return dest
@@ -68,8 +53,8 @@ def write_artist_nfo(artist) -> Optional[Path]:
         return None
 
 
-def write_album_nfo(album, artist) -> Optional[Path]:
-    """Write {music_dir}/{artist}/{album}/album.nfo. Returns the path or None on failure."""
+def write_album_nfo(album, artist, folder: Path) -> Optional[Path]:
+    """Write the album's album.nfo into its folder. Returns the path or None on failure."""
     try:
         title = album.title
         artist_name = artist.name if artist else None
@@ -83,7 +68,7 @@ def write_album_nfo(album, artist) -> Optional[Path]:
         _set_genres(root, album.genres)
         _set_text(root, "thumb", album.image_local)
 
-        dest = album_dir(artist_name, title) / "album.nfo"
+        dest = folder / "album.nfo"
         _write_xml(root, dest)
         logger.info("Wrote album.nfo: %s", dest)
         return dest

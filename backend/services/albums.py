@@ -13,9 +13,10 @@ from sqlalchemy.orm import Session
 from .. import config
 from ..downloader import cover as cover_mod, nfo as nfo_mod
 from ..jobs.priorities import Origin
-from ..models import Album, Track
+from ..models import Album, Artist, Track
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
+from . import folders
 
 logger = logging.getLogger("services.albums")
 
@@ -163,11 +164,12 @@ def fetch_and_upsert_album(
 
     # The artist from the album itself when not given, with its row: an album
     # pointing at an artist the DB doesn't know shows up with no artist
-    # anywhere in the library
+    # anywhere in the library. The album page only names a new artist: the
+    # artist page can spell it differently ("CG5" / "Cg5") and its name wins.
     if not artist_id and album_data["artists"]:
         first = album_data["artists"][0]
         artist_id = first.get("id")
-        if artist_id:
+        if artist_id and session.get(Artist, artist_id) is None:
             upsert_artist(session, artist_id=artist_id, name=first.get("name"))
 
     logger.info("Fetched album %s: %s (%s tracks)", album_id, album_data["title"], len(tracks))
@@ -257,7 +259,7 @@ def complete_import(session: Session, album_id: str, *, origin: Origin) -> int:
     from . import tracks as tracks_svc
 
     album = session.get(Album, album_id)
-    nfo_mod.write_album_nfo(album, album.artist)
+    nfo_mod.write_album_nfo(album, album.artist, folders.album_dir(session, album))
     queued = 0
     if album.mode == "download":
         queued = tracks_svc.queue_album_downloads(session, album_id, origin=origin)

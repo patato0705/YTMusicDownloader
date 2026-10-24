@@ -99,6 +99,7 @@ class LibrarySection(BaseModel):
 class CatalogArtist(BaseModel):
     id: str = Field(..., min_length=1, max_length=64)
     name: Optional[str] = Field(None, max_length=255)
+    folder: Optional[str] = Field(None, max_length=255)
     image_local: Optional[str] = Field(None, max_length=1024)
     banner_local: Optional[str] = Field(None, max_length=1024)
     description: Optional[str] = None
@@ -107,6 +108,7 @@ class CatalogArtist(BaseModel):
 class CatalogAlbum(BaseModel):
     id: str = Field(..., min_length=1, max_length=64)
     title: Optional[str] = Field(None, max_length=255)
+    folder: Optional[str] = Field(None, max_length=255)
     type: Optional[str] = Field(None, max_length=32)
     artist_id: Optional[str] = Field(None, max_length=64)
     playlist_id: Optional[str] = Field(None, max_length=255)

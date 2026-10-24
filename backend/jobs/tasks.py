@@ -41,6 +41,7 @@ from ..models import Job, Track, Album, Artist
 from ..services import albums as albums_svc
 from ..services import artists as artists_svc
 from ..services import charts as charts_svc
+from ..services import folders as folders_svc
 from ..services import genres as genres_svc
 from ..services import playlists as playlists_svc
 from ..services import subscriptions as subs_svc
@@ -224,7 +225,7 @@ def _download_with_fallbacks(track_id: str, **metadata: Any) -> Tuple[str, Optio
 
 def download_track(session: Session, track_id: str, *, origin: str) -> Dict[str, Any]:
     """
-    Download a track with yt-dlp into MUSIC_DIR/<artist>/<album>/, tagged
+    Download a track with yt-dlp into its album's folder, tagged
     (see _download_track). Any error, not only the download's own, ends as
     a failed attempt with a retry later rather than a job failed for good.
     """
@@ -236,11 +237,13 @@ def download_track(session: Session, track_id: str, *, origin: str) -> Dict[str,
 
 def _download_track(session: Session, track_id: str, *, origin: str) -> Dict[str, Any]:
     """
-    Download a track with yt-dlp into MUSIC_DIR/<artist>/<album>/, tagged.
+    Download a track with yt-dlp into its album's folder, tagged.
 
     Flow:
     1. Skip a track already on disk (an admin requeue, a duplicate job)
-    2. Mark it "downloading" and roll that up to its album, COMMIT
+    2. Mark it "downloading" and roll that up to its album, naming the
+       album's folder if none of its files was written yet
+       (services/folders.py), COMMIT
     3. Download, outside any transaction (see _download_with_fallbacks)
     4. Mark it "done" with its file, COMMIT; the first track of an album
        also moves the cover into the album folder
@@ -263,7 +266,10 @@ def _download_track(session: Session, track_id: str, *, origin: str) -> Dict[str
     artist = album.artist if album else None
     album_id = album.id if album else None
     genres = list(album.genres or []) if album else []
+    # The album's first file names its folder, committed below with the status
+    dest_dir = folders_svc.album_dir(session, album) if album else config.MUSIC_DIR / "Unknown" / "Unknown Album"
     metadata = {
+        "dest_dir": dest_dir,
         "artist_name": artist.name if artist else None,
         "album_name": album.title if album else None,
         "track_title": track.title,
@@ -313,7 +319,7 @@ def _download_track(session: Session, track_id: str, *, origin: str) -> Dict[str
 
     if album and moved_cover:
         # album.nfo was written while the cover was still in COVERS_DIR
-        nfo_mod.write_album_nfo(album, album.artist)
+        nfo_mod.write_album_nfo(album, album.artist, dest_dir)
 
     # Genres found while this track was downloading: the genre lookup only
     # re-tags tracks that were already done, so this one catches up. Read
@@ -710,7 +716,8 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
     except Exception:
         logger.exception("Failed to download artist pictures for %s", artist_id)
         session.rollback()
-    nfo_mod.write_artist_nfo(artist)
+    nfo_mod.write_artist_nfo(artist, folders_svc.artist_dir(session, artist))
+    session.commit()  # its folder, when no picture named it
 
     # One commit per album: another sync running in parallel can create the
     # same album (one that is in both artists' discographies) between our
@@ -879,13 +886,15 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
     session.commit()
 
     # ===== Files (no transaction) =====
-    if artist_changed and nfo_mod.artist_dir_exists(artist.name):
-        nfo_mod.write_artist_nfo(artist)
+    artist_folder = folders_svc.existing_artist_dir(artist)
+    if artist_changed and artist_folder and artist_folder.is_dir():
+        nfo_mod.write_artist_nfo(artist, artist_folder)
     retagged = 0
     if changed:
         for album in session.query(Album).filter(Album.id.in_(list(changed))).all():
-            if nfo_mod.album_dir_exists(artist.name, album.title):
-                nfo_mod.write_album_nfo(album, artist)
+            album_folder = folders_svc.existing_album_dir(album)
+            if album_folder and album_folder.is_dir():
+                nfo_mod.write_album_nfo(album, artist, album_folder)
         done_tracks = session.query(Track).filter(
             Track.album_id.in_(list(changed)),
             Track.status == "done",
