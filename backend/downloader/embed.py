@@ -4,7 +4,7 @@ from __future__ import annotations
 import fcntl
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Callable, List, Optional
 
 from mutagen import File as MutagenFile
 from mutagen.id3 import ID3, ID3NoHeaderError, TIT2, TALB, TPE1, TPE2, TRCK, TDRC, TCON, APIC
@@ -74,15 +74,15 @@ def embed_tags(
         logger.exception("Embedding metadata failed for %s", path)
 
 
-def set_genres(file_path: str, genres: List[str]) -> bool:
+def _edit(file_path: str, what: str, edit: Callable[[Any], None]) -> bool:
     """
-    Replace the genre tag of a file already in the library (an empty list
-    removes it), leaving every other tag alone. Returns whether it was written.
+    Change some tags of a file already in the library with `edit(tags)`,
+    leaving every other tag alone. Returns whether it was written.
 
-    Holds an exclusive lock on the file meanwhile: the genre lookup and a
-    download finishing (jobs.tasks.download_track re-tags when genres
-    arrived mid-download) can both get here for the same file, from
-    different processes.
+    Holds an exclusive lock on the file meanwhile: a download finishing
+    (jobs.tasks.download_track catches up on genres and on an artist renamed
+    mid-download), the genre lookup and an artist's rename can all get here
+    for the same file, from different processes.
     """
     path = Path(file_path)
     if not path.is_file():
@@ -92,20 +92,43 @@ def set_genres(file_path: str, genres: List[str]) -> bool:
             fcntl.flock(lock, fcntl.LOCK_EX)
             try:
                 tags = _open(path)
+                edit(tags)
                 if isinstance(tags, MP4):
-                    if genres:
-                        tags["\xa9gen"] = list(genres)
-                    else:
-                        tags.pop("\xa9gen", None)
                     tags.save()
                 else:
-                    tags.delall("TCON")
-                    if genres:
-                        tags.add(TCON(encoding=3, text=list(genres)))
                     tags.save(str(path))
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
         return True
     except Exception:
-        logger.exception("Setting genres failed for %s", path)
+        logger.exception("Setting %s failed for %s", what, path)
         return False
+
+
+def set_genres(file_path: str, genres: List[str]) -> bool:
+    """Replace a library file's genre tag (an empty list removes it). Returns whether it was written."""
+    def edit(tags) -> None:
+        if isinstance(tags, MP4):
+            if genres:
+                tags["\xa9gen"] = list(genres)
+            else:
+                tags.pop("\xa9gen", None)
+        else:
+            tags.delall("TCON")
+            if genres:
+                tags.add(TCON(encoding=3, text=list(genres)))
+
+    return _edit(file_path, "genres", edit)
+
+
+def set_artist(file_path: str, artist: str) -> bool:
+    """Replace a library file's artist and album artist tags (one name, as embed_tags writes them). Returns whether it was written."""
+    def edit(tags) -> None:
+        if isinstance(tags, MP4):
+            tags["\xa9ART"] = [artist]
+            tags["aART"] = [artist]
+        else:
+            tags.setall("TPE1", [TPE1(encoding=3, text=[artist])])
+            tags.setall("TPE2", [TPE2(encoding=3, text=[artist])])
+
+    return _edit(file_path, "the artist", edit)

@@ -332,6 +332,18 @@ def _download_track(session: Session, track_id: str, *, origin: str) -> Dict[str
         except Exception:
             logger.exception("Failed to re-tag genres of track %s", track_id)
 
+    # Same for its artist renamed meanwhile (sync_artist re-tags the tracks
+    # that were already done)
+    if album_id and metadata["artist_name"]:
+        try:
+            current_name = session.execute(
+                select(Artist.name).join(Album, Album.artist_id == Artist.id).where(Album.id == album_id)
+            ).scalar()
+            if current_name and current_name != metadata["artist_name"]:
+                embed_mod.set_artist(file_path, current_name)
+        except Exception:
+            logger.exception("Failed to re-tag the artist of track %s", track_id)
+
     # Playlists listing this song: their M3U gains it
     try:
         playlists_svc.refresh_for_track(session, track)
@@ -696,6 +708,9 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
         return {"ok": True, "skipped": "artist not followed"}
     sync_mode = subscription.mode
     logger.info("Syncing artist %s in %s mode", artist_id, sync_mode)
+    # Its name before this sync, to notice a rename
+    known = session.get(Artist, artist_id)
+    old_name = known.name if known else None
 
     try:
         artist_data = artists_svc.fetch_and_upsert_artist(session, artist_id)
@@ -718,6 +733,8 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
         session.rollback()
     nfo_mod.write_artist_nfo(artist, folders_svc.artist_dir(session, artist))
     session.commit()  # its folder, when no picture named it
+    if old_name is not None and artist.name != old_name:
+        _follow_artist_rename(session, artist, old_name)
 
     # One commit per album: another sync running in parallel can create the
     # same album (one that is in both artists' discographies) between our
@@ -782,6 +799,35 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
         "albums_created": albums_created,
         "jobs_queued": imports_queued,
     }
+
+
+def _follow_artist_rename(session: Session, artist: Artist, old_name: str) -> None:
+    """
+    The artist has a new name: renamed on YouTube Music, or first named from
+    an album page that spells it differently (services/albums.py). Its files
+    catch up: the album.nfo of each album on disk and the artist tags of its
+    downloaded tracks. Its folders keep their names (services/folders.py), and
+    every sync rewrites artist.nfo anyway. Tracks still downloading tag
+    themselves when they finish (download_track). Errors are logged, not raised.
+    """
+    try:
+        nfos = 0
+        for album in session.query(Album).filter(Album.artist_id == artist.id).all():
+            folder = folders_svc.existing_album_dir(album)
+            if folder and folder.is_dir() and nfo_mod.write_album_nfo(album, artist, folder):
+                nfos += 1
+        paths = session.execute(
+            select(Track.file_path)
+            .join(Album, Album.id == Track.album_id)
+            .where(Album.artist_id == artist.id, Track.status == "done", Track.file_path.is_not(None))
+        ).scalars().all()
+        retagged = sum(embed_mod.set_artist(path, artist.name) for path in paths)
+        logger.info(
+            "Artist %s renamed from %r to %r: %s album.nfo rewritten, %s of %s tracks re-tagged",
+            artist.id, old_name, artist.name, nfos, retagged, len(paths),
+        )
+    except Exception:
+        logger.exception("Failed to bring the files of artist %s up to its new name", artist.id)
 
 
 # ============================================================================
