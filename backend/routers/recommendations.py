@@ -3,10 +3,10 @@
 Artist recommendations (see services/recommendations.py).
 
 Endpoints :
-- GET /api/recommendations - Recommended artists, and how many are dismissed
-- GET /api/recommendations/dismissed - Dismissed artists
-- PUT /api/recommendations/dismissed/{artist_id} - Dismiss an artist ("not interested")
-- DELETE /api/recommendations/dismissed/{artist_id} - Restore a dismissed artist
+- GET /api/recommendations - Your recommended artists, how many artists you like and how many you dismissed
+- GET /api/recommendations/dismissed - Your dismissed artists
+- PUT /api/recommendations/dismissed/{artist_id} - Dismiss an artist ("not interested"), for you only
+- DELETE /api/recommendations/dismissed/{artist_id} - Restore an artist you dismissed
 """
 from __future__ import annotations
 import logging
@@ -32,8 +32,9 @@ def get_recommendations(
     db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     return {
-        "recommendations": recommendations_svc.list_recommendations(db, limit=limit),
-        "dismissed_count": recommendations_svc.count_dismissed(db),
+        "recommendations": recommendations_svc.list_recommendations(db, current_user.id, limit=limit),
+        "liked_count": recommendations_svc.count_liked(db, current_user.id),
+        "dismissed_count": recommendations_svc.count_dismissed(db, current_user.id),
     }
 
 
@@ -42,7 +43,7 @@ def get_dismissed(
     current_user: User = Depends(require_member_or_admin),
     db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    return {"dismissed": recommendations_svc.list_dismissed(db)}
+    return {"dismissed": recommendations_svc.list_dismissed(db, current_user.id)}
 
 
 @router.put("/dismissed/{artist_id}", status_code=status.HTTP_200_OK)
@@ -51,7 +52,7 @@ def dismiss_artist(
     current_user: User = Depends(require_member_or_admin),
     db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    if not recommendations_svc.dismiss(db, artist_id, user_id=current_user.id):
+    if not recommendations_svc.dismiss(db, current_user.id, artist_id):
         raise HTTPException(status_code=404, detail="Unknown artist")
     db.commit()
     logger.info("User %s dismissed recommended artist %s", current_user.username, artist_id)
@@ -64,7 +65,7 @@ def restore_artist(
     current_user: User = Depends(require_member_or_admin),
     db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    if not recommendations_svc.restore(db, artist_id):
+    if not recommendations_svc.restore(db, current_user.id, artist_id):
         raise HTTPException(status_code=404, detail="Artist not dismissed")
     db.commit()
     logger.info("User %s restored recommended artist %s", current_user.username, artist_id)

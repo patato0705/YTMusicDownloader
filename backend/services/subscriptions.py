@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from ..jobs.jobqueue import cancel_download_jobs, enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
 from ..models import Artist, Album, ArtistSubscription, Track
-from . import recommendations as recommendations_svc
 from ..time_utils import now_utc
 
 logger = logging.getLogger("services.subscriptions")
@@ -32,16 +31,9 @@ def get_artist_subscription(session: Session, artist_id: str) -> Optional[Artist
 
 
 def subscribe_to_artist(session: Session, artist_id: str, mode: str = "full") -> ArtistSubscription:
-    """
-    Create the artist's subscription, or change its mode. A full follow
-    overrides an earlier "not interested": otherwise, unfollowed later, the
-    artist would stay hidden from recommendations. Does not commit.
-    """
+    """Create the artist's subscription, or change its mode. Does not commit."""
     if mode not in ("light", "full"):
         raise ValueError(f"Invalid mode: {mode}. Must be 'light' or 'full'")
-
-    if mode == "full" and recommendations_svc.restore(session, artist_id):
-        logger.info("Artist %s followed, no longer dismissed from recommendations", artist_id)
 
     subscription = get_artist_subscription(session, artist_id)
     if subscription is None:

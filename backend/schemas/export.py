@@ -54,13 +54,6 @@ class LibraryChart(BaseModel):
     enabled: bool = True
 
 
-class LibraryDismissedArtist(BaseModel):
-    """An artist marked "not interested" in recommendations."""
-    id: str = Field(..., min_length=1, max_length=64)
-    name: str = Field(..., min_length=1, max_length=255)
-    thumbnail: Optional[str] = Field(None, max_length=1024)
-
-
 class LibraryPlaylistEntry(BaseModel):
     video_id: Optional[str] = Field(None, max_length=64)
     title: str = Field(..., min_length=1, max_length=1024)
@@ -88,7 +81,6 @@ class LibrarySection(BaseModel):
     artists: List[LibraryArtist] = Field(default_factory=list, max_length=MAX_ARTISTS)
     albums: List[LibraryAlbum] = Field(default_factory=list, max_length=MAX_ALBUMS)
     charts: List[LibraryChart] = Field(default_factory=list, max_length=MAX_CHARTS)
-    dismissed_recommendations: List[LibraryDismissedArtist] = Field(default_factory=list, max_length=MAX_ARTISTS)
     playlists: List[LibraryPlaylist] = Field(default_factory=list, max_length=MAX_PLAYLISTS)
 
 
@@ -142,6 +134,13 @@ class CatalogSection(BaseModel):
 # USERS / SETTINGS SECTIONS (admin backup)
 # ============================================================================
 
+class DismissedArtist(BaseModel):
+    """An artist a user marked "not interested" in recommendations."""
+    id: str = Field(..., min_length=1, max_length=64)
+    name: str = Field(..., min_length=1, max_length=255)
+    thumbnail: Optional[str] = Field(None, max_length=1024)
+
+
 class ExportedUser(BaseModel):
     username: str = Field(..., min_length=1, max_length=64)
     # bcrypt hashes are self-contained (salt embedded), so they move between
@@ -154,6 +153,9 @@ class ExportedUser(BaseModel):
     is_active: bool = True
     must_change_password: bool = False
     created_at: Optional[str] = None
+    # What their recommendations come from, and leave out
+    liked_artists: List[str] = Field(default_factory=list, max_length=MAX_ARTISTS)
+    dismissed_recommendations: List[DismissedArtist] = Field(default_factory=list, max_length=MAX_ARTISTS)
 
     @model_validator(mode="after")
     def _can_sign_in(self) -> "ExportedUser":
@@ -204,7 +206,6 @@ class LibraryImportResult(BaseModel):
     charts_created: int = 0
     charts_existing: int = 0
     charts_skipped: int = 0
-    artists_dismissed: int = 0
     playlists_added: int = 0
     playlists_existing: int = 0
 
@@ -222,6 +223,11 @@ class CatalogImportResult(BaseModel):
 class UsersImportResult(BaseModel):
     created: int = 0
     skipped: List[str] = Field(default_factory=list)
+    # Added to the accounts, created or already there
+    likes: int = 0
+    # Liked artists not in the library once the import is done
+    likes_skipped: int = 0
+    dismissed: int = 0
 
 
 class SettingsImportResult(BaseModel):

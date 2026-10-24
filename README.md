@@ -15,7 +15,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
 - **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year, genres and embedded cover art.
 - **Genres** from [MusicBrainz](https://musicbrainz.org) (specific, community-voted) with [Deezer](https://www.deezer.com) as a fallback, written to the tags and NFO files so Jellyfin can browse and mix by genre. No account or API key needed.
-- **Recommendations**: artists similar to the ones you follow, from YouTube Music's own "Fans might also like", ranked by how many of your artists point to them.
+- **Recommendations**: artists similar to the ones you like, from YouTube Music's own "Fans might also like", ranked by how many of your artists point to them. Personal to each user.
 - **Jellyfin-friendly layout** with `artist.nfo`, `album.nfo`, `folder.jpg`, `backdrop.jpg` and `cover.jpg`.
 - **Multi-user** with three roles (visitor / member / administrator), optional public registration, optional [single sign-on](#single-sign-on-oidc) through your identity provider (Authelia, Authentik, Pocket ID, Keycloak…), and httpOnly-cookie sessions.
 - **Rate-limit aware**: detects YouTube throttling and bot checks, resets its session, and pauses all downloads with exponential backoff instead of hammering YouTube.
@@ -146,7 +146,7 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Role | Can do |
 |---|---|
 | **Visitor** | Read-only: browse the library, artists, albums, charts and lyrics. Default for new accounts. |
-| **Member** | Everything a visitor can, plus follow/unfollow artists, download albums, edit lyrics, dismiss recommendations. |
+| **Member** | Everything a visitor can, plus follow/unfollow artists, download albums, edit lyrics, like artists and get recommendations. |
 | **Administrator** | Everything a member can, plus delete artists/albums (including files), and manage users, charts, settings and backups. |
 
 Admins create users from **Admin Panel → Users**, or enable public registration in Settings.
@@ -183,9 +183,11 @@ The options can be changed later. Switching from albums to artists follows the m
 
 ### Recommendations
 
-With the search box empty, the **Browse** page shows *Recommended for you*: artists similar to the ones you follow, with how many of yours each one is similar to ("Similar to 5 artists in your library", their names on hover). They're YouTube Music's own similar artists ("Fans might also like" on an artist's page), which every artist sync already receives: no extra request, no third party, and they refresh with the syncs. The more of your artists list one, the higher it comes; ties go to the one YouTube Music lists earlier. Only artists you follow count, not those of a single downloaded album, and artists you already follow are left out.
+With the search box empty, the **Browse** page shows *Recommended for you*: artists similar to the ones you like, with how many of yours each one is similar to ("Similar to 5 artists you like", their names on hover). They're YouTube Music's own similar artists ("Fans might also like" on an artist's page), which every artist sync already receives: no extra request, no third party, and they refresh with the syncs. The more of your artists list one, the higher it comes; ties go to the one YouTube Music lists earlier.
 
-Members and admins can dismiss a recommendation (*✕* on its card, undoable from the notice that follows). Dismissed artists are hidden for everyone, as follows are shared, and listed under *Dismissed (n)*, where they can be restored. Following a dismissed artist restores it too, so it can come back if you unfollow it later.
+Recommendations are personal. They come from the artists *you* like, not from everything the library follows, as charts and playlists bring in artists nobody picked. Like an artist of the library with the *♥* on its card in the **Library**, or next to its name in list view (on hover; liked ones always show it), or at the top right of its page. Following an artist likes it too. Artists you like and artists followed in full are left out of the recommendations. A like changes nothing in the library: it's only yours. Visitors can't like artists, so they get no recommendations.
+
+Dismiss a recommendation with the *✕* on its card (undoable from the notice that follows). Like likes, it's only yours: the artist is hidden from your recommendations, not anyone else's, and listed under your *Dismissed (n)*, where you can restore it. Following a dismissed artist restores it too.
 
 ### Schedules
 
@@ -233,15 +235,15 @@ Keeping *Max concurrent downloads* at 1 is the best way to avoid this in the fir
 
 **Admin Panel → Backup** exports a JSON document with any of:
 
-- **Library**: followed artists, standalone albums, playlists (with their songs), artists dismissed from recommendations. On import, the new instance follows them again and downloads their music.
+- **Library**: followed artists, standalone albums, playlists (with their songs). On import, the new instance follows them again and downloads their music.
 - **Charts**: chart subscriptions.
 - **Catalog**: every artist/album/track row with relative file paths. Only useful if you also copy the `data/` folder: the import then recognises files already on disk instead of re-downloading.
-- **Users**: accounts, roles and password hashes (keep this file private).
+- **Users**: accounts, roles and password hashes (keep this file private), with each one's liked artists and dismissed recommendations.
 - **Settings**: application settings.
 
 Any user can export the *library* part alone from the Library page (nothing personal in it), which is a handy way to share "here's who I follow" between instances.
 
-Importing first shows a dry-run preview (what would be followed, queued, skipped) and only applies on confirmation. Existing data is never overwritten: missing artists/albums/charts are added and their downloads queued; existing users are left untouched.
+Importing first shows a dry-run preview (what would be followed, queued, skipped) and only applies on confirmation. Existing data is never overwritten: missing artists/albums/charts are added and their downloads queued; existing users are left untouched, except that the backup's likes and dismissed recommendations are added to them. Likes of artists that end up outside the library are skipped.
 
 ## Running behind a reverse proxy
 

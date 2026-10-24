@@ -14,6 +14,8 @@ export interface LibraryArtist {
   name: string;
   thumbnail: string | null;
   mode: SubscriptionMode;
+  /** Whether you like it */
+  liked: boolean;
   followed_at: string | null;
   albums_count: number;
   tracks_total: number;

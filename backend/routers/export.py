@@ -29,7 +29,7 @@ def export_library(
     current_user: User = Depends(require_auth),
     db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    """What this instance follows: artists, albums, charts, playlists, dismissed recommendations. Nothing personal."""
+    """What this instance follows: artists, albums, charts, playlists. Nothing personal."""
     try:
         return export_svc.build_library_export(db)
     except Exception as e:

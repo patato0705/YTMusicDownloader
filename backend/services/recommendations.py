@@ -7,21 +7,25 @@ Every artist fetch already gets them, so they're stored as they come
 (store_related) -- no extra request, no third party. They refresh with the
 artist syncs.
 
-An artist is recommended for how many followed artists list it: the more,
-the higher. Ties go to the one listed earlier on average, as YouTube Music
-puts the most similar first. "Followed" means a full follow: the artists of
-a single downloaded album aren't synced again, and one album says little
-about taste. Followed artists and dismissed ones ("not interested", shared
-by everyone like follows are) are left out.
+Recommendations are personal: they come from the artists each user likes
+(a heart on artists of the library; following one likes it too), not from
+the library's follows, which charts and playlists bring in by the dozen
+whatever anyone's taste.
+
+An artist is recommended for how many of your liked artists list it: the
+more, the higher. Ties go to the one listed earlier on average, as YouTube
+Music puts the most similar first. Artists you like, those followed in full
+(already downloading everything) and those you dismissed ("not
+interested", also personal) are left out.
 """
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from ..models import Artist, ArtistSubscription, DismissedRecommendation, RelatedArtist
+from ..models import Artist, ArtistLike, ArtistSubscription, DismissedRecommendation, RelatedArtist
 
 logger = logging.getLogger("services.recommendations")
 
@@ -55,19 +59,28 @@ def _followed_ids():
     )
 
 
-def list_recommendations(session: Session, limit: int = DEFAULT_LIMIT) -> List[Dict[str, Any]]:
+def _liked_ids(user_id: int):
+    return select(ArtistLike.artist_id).where(ArtistLike.user_id == user_id)
+
+
+def _dismissed_ids(user_id: int):
+    return select(DismissedRecommendation.artist_id).where(DismissedRecommendation.user_id == user_id)
+
+
+def list_recommendations(session: Session, user_id: int, limit: int = DEFAULT_LIMIT) -> List[Dict[str, Any]]:
     """
-    The best recommendations, each with the followed artists it's similar
-    to (most similar first).
+    The best recommendations for a user, each with the liked artists it's
+    similar to (most similar first).
     """
-    followed = _followed_ids()
+    liked = _liked_ids(user_id)
     rows = session.execute(
         select(RelatedArtist, Artist.name)
         .join(Artist, Artist.id == RelatedArtist.artist_id)
         .where(
-            RelatedArtist.artist_id.in_(followed),
-            RelatedArtist.related_id.not_in(followed),
-            RelatedArtist.related_id.not_in(select(DismissedRecommendation.artist_id)),
+            RelatedArtist.artist_id.in_(liked),
+            RelatedArtist.related_id.not_in(liked),
+            RelatedArtist.related_id.not_in(_followed_ids()),
+            RelatedArtist.related_id.not_in(_dismissed_ids(user_id)),
         )
         .order_by(RelatedArtist.position, Artist.name)
     ).all()
@@ -100,14 +113,69 @@ def list_recommendations(session: Session, limit: int = DEFAULT_LIMIT) -> List[D
     ]
 
 
-def count_dismissed(session: Session) -> int:
-    return session.execute(select(func.count()).select_from(DismissedRecommendation)).scalar_one()
+def count_liked(session: Session, user_id: int) -> int:
+    return session.execute(
+        select(func.count()).select_from(ArtistLike).where(ArtistLike.user_id == user_id)
+    ).scalar_one()
 
 
-def list_dismissed(session: Session) -> List[Dict[str, Any]]:
-    """Dismissed artists, last dismissed first."""
+def liked_artist_ids(session: Session, user_id: int) -> set[str]:
+    return set(session.execute(_liked_ids(user_id)).scalars())
+
+
+def is_liked(session: Session, user_id: int, artist_id: str) -> bool:
+    return session.get(ArtistLike, (user_id, artist_id)) is not None
+
+
+def like(session: Session, user_id: int, artist_id: str) -> bool:
+    """
+    Like an artist. Idempotent. False when the artist isn't in the library
+    (no enabled subscription): its similar artists are only known once
+    synced. No commit.
+    """
+    in_library = session.execute(
+        select(ArtistSubscription.id).where(
+            ArtistSubscription.artist_id == artist_id,
+            ArtistSubscription.enabled == True,  # noqa: E712
+        )
+    ).first()
+    if in_library is None:
+        return False
+    if not is_liked(session, user_id, artist_id):
+        session.add(ArtistLike(user_id=user_id, artist_id=artist_id))
+    return True
+
+
+def unlike(session: Session, user_id: int, artist_id: str) -> None:
+    """Idempotent. No commit."""
+    row = session.get(ArtistLike, (user_id, artist_id))
+    if row is not None:
+        session.delete(row)
+
+
+def delete_artist_likes(session: Session, artist_id: str) -> None:
+    """Everyone's like of a deleted artist. No commit."""
+    session.execute(delete(ArtistLike).where(ArtistLike.artist_id == artist_id))
+
+
+def delete_user_data(session: Session, user_id: int) -> None:
+    """A deleted user's likes and dismissals. No commit."""
+    session.execute(delete(ArtistLike).where(ArtistLike.user_id == user_id))
+    session.execute(delete(DismissedRecommendation).where(DismissedRecommendation.user_id == user_id))
+
+
+def count_dismissed(session: Session, user_id: int) -> int:
+    return session.execute(
+        select(func.count()).select_from(DismissedRecommendation).where(DismissedRecommendation.user_id == user_id)
+    ).scalar_one()
+
+
+def list_dismissed(session: Session, user_id: int) -> List[Dict[str, Any]]:
+    """A user's dismissed artists, last dismissed first."""
     rows = session.execute(
-        select(DismissedRecommendation).order_by(DismissedRecommendation.dismissed_at.desc())
+        select(DismissedRecommendation)
+        .where(DismissedRecommendation.user_id == user_id)
+        .order_by(DismissedRecommendation.dismissed_at.desc())
     ).scalars().all()
     return [
         {
@@ -120,12 +188,12 @@ def list_dismissed(session: Session) -> List[Dict[str, Any]]:
     ]
 
 
-def dismiss(session: Session, artist_id: str, user_id: Optional[int]) -> bool:
+def dismiss(session: Session, user_id: int, artist_id: str) -> bool:
     """
-    Mark an artist "not interested". Idempotent. False when the artist is
-    unknown here (in no similar list, not in the library). No commit.
+    Mark an artist "not interested" for a user. Idempotent. False when the
+    artist is unknown here (in no similar list, not in the library). No commit.
     """
-    if session.get(DismissedRecommendation, artist_id):
+    if session.get(DismissedRecommendation, (user_id, artist_id)):
         return True
     rel = session.execute(
         select(RelatedArtist).where(RelatedArtist.related_id == artist_id).limit(1)
@@ -134,17 +202,17 @@ def dismiss(session: Session, artist_id: str, user_id: Optional[int]) -> bool:
     if rel is None and artist is None:
         return False
     session.add(DismissedRecommendation(
+        user_id=user_id,
         artist_id=artist_id,
         name=rel.name if rel else artist.name,
         thumbnail=rel.thumbnail if rel else None,
-        dismissed_by=user_id,
     ))
     return True
 
 
-def restore(session: Session, artist_id: str) -> bool:
-    """Undo a dismissal. False when it wasn't dismissed. No commit."""
-    row = session.get(DismissedRecommendation, artist_id)
+def restore(session: Session, user_id: int, artist_id: str) -> bool:
+    """Undo a user's dismissal. False when it wasn't dismissed. No commit."""
+    row = session.get(DismissedRecommendation, (user_id, artist_id))
     if row is None:
         return False
     session.delete(row)

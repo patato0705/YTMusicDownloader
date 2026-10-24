@@ -20,11 +20,12 @@ from .. import config
 from .. import settings as settings_module
 from ..models import (
     Artist, Album, Track, ArtistSubscription, User, Setting,
-    DismissedRecommendation, Playlist, PlaylistEntry,
+    ArtistLike, DismissedRecommendation, Playlist, PlaylistEntry,
 )
 from ..schemas.export import (
     FORMAT_VERSION,
     ExportDocument,
+    ExportedUser,
     ImportResult,
     ImportWarning,
     LibraryImportResult,
@@ -45,6 +46,7 @@ from . import tracks as tracks_svc
 from . import charts as charts_svc
 from . import auth as auth_svc
 from . import playlists as playlists_svc
+from . import recommendations as recommendations_svc
 
 logger = logging.getLogger("services.export")
 
@@ -106,8 +108,9 @@ def _document_shell() -> Dict[str, Any]:
 
 def build_library_section(session: Session) -> Dict[str, Any]:
     """
-    What this instance follows: artists, explicitly downloaded albums, charts,
-    playlists, and the artists dismissed from recommendations.
+    What this instance follows: artists, explicitly downloaded albums, charts
+    and playlists. Nothing personal: likes and dismissed recommendations go
+    with the users (build_users_section).
     """
     artists = session.execute(
         select(Artist, ArtistSubscription)
@@ -131,9 +134,6 @@ def build_library_section(session: Session) -> Dict[str, Any]:
     ]
 
     charts = charts_svc.list_chart_subscriptions(session, include_disabled=True)
-    dismissed = session.execute(
-        select(DismissedRecommendation).order_by(DismissedRecommendation.name)
-    ).scalars().all()
     playlists = session.execute(select(Playlist).order_by(Playlist.title)).scalars().all()
 
     return {
@@ -157,10 +157,6 @@ def build_library_section(session: Session) -> Dict[str, Any]:
                 "enabled": bool(sub.enabled),
             }
             for sub in charts
-        ],
-        "dismissed_recommendations": [
-            {"id": d.artist_id, "name": d.name, "thumbnail": d.thumbnail}
-            for d in dismissed
         ],
         "playlists": [
             {
@@ -250,6 +246,12 @@ def build_catalog_section(session: Session) -> Dict[str, Any]:
 
 def build_users_section(session: Session) -> List[Dict[str, Any]]:
     users = session.execute(select(User).order_by(User.id)).scalars().all()
+    liked: Dict[int, List[str]] = {}
+    for like in session.execute(select(ArtistLike).order_by(ArtistLike.created_at)).scalars():
+        liked.setdefault(like.user_id, []).append(like.artist_id)
+    dismissed: Dict[int, List[Dict[str, Any]]] = {}
+    for d in session.execute(select(DismissedRecommendation).order_by(DismissedRecommendation.dismissed_at)).scalars():
+        dismissed.setdefault(d.user_id, []).append({"id": d.artist_id, "name": d.name, "thumbnail": d.thumbnail})
     return [
         {
             "username": u.username,
@@ -260,6 +262,8 @@ def build_users_section(session: Session) -> List[Dict[str, Any]]:
             "is_active": bool(u.is_active),
             "must_change_password": bool(u.must_change_password),
             "created_at": u.created_at.isoformat() if u.created_at else None,
+            "liked_artists": liked.get(u.id, []),
+            "dismissed_recommendations": dismissed.get(u.id, []),
         }
         for u in users
     ]
@@ -297,7 +301,6 @@ def build_backup_export(
         if not include_library:
             library["artists"] = []
             library["albums"] = []
-            library["dismissed_recommendations"] = []
             library["playlists"] = []
         if not include_charts:
             library["charts"] = []
@@ -335,33 +338,68 @@ def _import_settings(session: Session, doc: ExportDocument, user_id: Optional[in
     return result
 
 
-def _import_users(session: Session, doc: ExportDocument, warnings: List[ImportWarning]) -> UsersImportResult:
+def _import_users(
+    session: Session, doc: ExportDocument, warnings: List[ImportWarning],
+) -> tuple[UsersImportResult, List[tuple[int, List[str]]]]:
+    """
+    Also returns each account's liked artists, to like once the library is
+    in (only artists of the library can be liked).
+    """
     result = UsersImportResult()
+    likes: List[tuple[int, List[str]]] = []
     for item in doc.users or []:
-        # Never touch an existing account (that includes the admin running the
-        # import): conflicts are reported, not resolved.
-        if auth_svc.get_user_by_username(session, item.username) or (
-            item.oidc_subject and session.execute(
+        # Never change an existing account (that includes the admin running
+        # the import): conflicts are reported, not resolved. Its likes and
+        # dismissals are still added, which only adds to its recommendations.
+        user = auth_svc.get_user_by_username(session, item.username) or (
+            session.execute(
                 select(User).where(User.oidc_issuer == item.oidc_issuer, User.oidc_subject == item.oidc_subject)
-            ).first()
-        ):
+            ).scalars().first()
+            if item.oidc_subject else None
+        )
+        if user is not None:
             result.skipped.append(item.username)
-            continue
-        session.add(User(
-            username=item.username,
-            password_hash=item.password_hash,
-            oidc_issuer=item.oidc_issuer,
-            oidc_subject=item.oidc_subject,
-            role=item.role,
-            is_active=item.is_active,
-            must_change_password=item.must_change_password,
-            created_at=now_utc(),
-        ))
-        session.flush()
-        result.created += 1
+        else:
+            user = _create_user(session, item)
+            result.created += 1
+        likes.append((user.id, item.liked_artists))
+        for d in item.dismissed_recommendations:
+            if session.get(DismissedRecommendation, (user.id, d.id)) is None:
+                session.add(DismissedRecommendation(user_id=user.id, artist_id=d.id, name=d.name, thumbnail=d.thumbnail))
+                session.flush()  # a duplicate in the list finds this one
+                result.dismissed += 1
     if result.skipped:
         warnings.append(ImportWarning(code="users_skipped", detail=", ".join(result.skipped)))
-    return result
+    return result, likes
+
+
+def _import_likes(session: Session, likes: List[tuple[int, List[str]]], result: UsersImportResult) -> None:
+    session.flush()  # autoflush=False: like() looks for the subscriptions just restored
+    for user_id, artist_ids in likes:
+        for artist_id in artist_ids:
+            if recommendations_svc.is_liked(session, user_id, artist_id):
+                continue
+            if recommendations_svc.like(session, user_id, artist_id):
+                session.flush()
+                result.likes += 1
+            else:
+                result.likes_skipped += 1
+
+
+def _create_user(session: Session, item: ExportedUser) -> User:
+    user = User(
+        username=item.username,
+        password_hash=item.password_hash,
+        oidc_issuer=item.oidc_issuer,
+        oidc_subject=item.oidc_subject,
+        role=item.role,
+        is_active=item.is_active,
+        must_change_password=item.must_change_password,
+        created_at=now_utc(),
+    )
+    session.add(user)
+    session.flush()
+    return user
 
 
 def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int], warnings: List[ImportWarning]) -> CatalogImportResult:
@@ -577,17 +615,6 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
         playlists_svc.queue_sync(session, playlist, origin=Origin.BULK, fetch=True)
         result.playlists_added += 1
 
-    # --- Artists dismissed from recommendations ---
-    seen_dismissed: set[str] = set()
-    for item in library.dismissed_recommendations:
-        if item.id in seen_dismissed or session.get(DismissedRecommendation, item.id):
-            continue
-        seen_dismissed.add(item.id)
-        session.add(DismissedRecommendation(
-            artist_id=item.id, name=item.name, thumbnail=item.thumbnail, dismissed_by=user_id,
-        ))
-        result.artists_dismissed += 1
-
     return result
 
 
@@ -600,7 +627,8 @@ def run_import(
     """
     Apply a document to this instance. Section order matters: settings first
     (charts flag gates the chart import), then users, then catalog rows so the
-    library replay finds them, then library.
+    library replay finds them, then library, then the users' likes (only
+    artists of the library can be liked).
 
     With dry_run the whole thing is rolled back and the summary reports what
     would have happened.
@@ -611,12 +639,17 @@ def run_import(
     try:
         if doc.settings is not None:
             result.settings = _import_settings(session, doc, user_id, warnings)
+        likes: List[tuple[int, List[str]]] = []
         if doc.users is not None:
-            result.users = _import_users(session, doc, warnings)
+            result.users, likes = _import_users(session, doc, warnings)
         if doc.catalog is not None:
             result.catalog = _import_catalog(session, doc, user_id, warnings)
         if doc.library is not None:
             result.library = _import_library(session, doc, user_id, warnings)
+        if result.users is not None:
+            _import_likes(session, likes, result.users)
+            if result.users.likes_skipped:
+                warnings.append(ImportWarning(code="likes_skipped", detail=str(result.users.likes_skipped)))
 
         if dry_run:
             session.rollback()

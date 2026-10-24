@@ -270,19 +270,31 @@ class RelatedArtist(Base):
 
 
 class DismissedRecommendation(Base):
-    """An artist someone marked "not interested": never recommended again, until restored."""
+    """
+    An artist a user marked "not interested": never recommended to them
+    again, until restored. Deleted by hand with the user, like ArtistLike.
+    """
     __tablename__ = "dismissed_recommendations"
 
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     artist_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     # Kept to list it, as the artist usually isn't in the library
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     thumbnail: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     dismissed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
-    dismissed_by: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
-    )
+
+
+class ArtistLike(Base):
+    """
+    An artist of the library a user likes: their recommendations are drawn
+    from these. Personal, unlike follows, which are the library's. Deleted
+    by hand with the artist or the user: SQLite isn't enforcing foreign keys here.
+    """
+    __tablename__ = "artist_likes"
+
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True, index=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
 
 # Charts

@@ -166,18 +166,19 @@
     },
     "recommendations": {
       "title": "Recommended for you",
-      "subtitle": "Artists similar to the ones you follow",
+      "subtitle": "Artists similar to the ones you like",
       "similarTo": "Similar to {names}",
-      "similarToMany": "Similar to {count} artists in your library",
+      "similarToMany": "Similar to {count} artists you like",
       "dismiss": "Not interested",
       "dismissedToast": "{name} won't be recommended again",
       "undo": "Undo",
       "dismissedLink": "Dismissed ({count})",
       "dismissedTitle": "Dismissed artists",
-      "dismissedDescription": "These artists aren't recommended. Restore one to see it again when it's similar to artists you follow.",
+      "dismissedDescription": "These artists aren't recommended. Restore one to see it again when it's similar to artists you like.",
       "noDismissed": "No dismissed artists",
       "restore": "Restore",
-      "noneLeft": "No recommendations right now. Follow more artists to get some.",
+      "noneLeft": "No recommendations right now. Like more artists to get some.",
+      "noLikes": "Like artists of your library with their ♥ (following an artist likes it too) and artists similar to them will show up here.",
       "error": "Couldn't update recommendations"
     }
   },
@@ -189,6 +190,9 @@
     "unfollow": "Unfollow",
     "unfollowTitle": "Unfollow Artist",
     "unfollowMessage": "New albums will no longer be automatically followed. All already downloaded content will not be affected.",
+    "like": "Like",
+    "unlike": "Unlike",
+    "likeError": "Couldn't update your liked artists",
     "albums": "Albums",
     "singles": "Singles & EPs",
     "noAlbums": "No Albums Yet",
@@ -610,7 +614,7 @@
           },
           "users": {
             "label": "Users",
-            "description": "User accounts, roles and password hashes. Everyone keeps their password on the new instance."
+            "description": "User accounts, roles and password hashes, with each one's liked artists and dismissed recommendations. Everyone keeps their password on the new instance."
           },
           "settings": {
             "label": "Settings",
@@ -645,13 +649,14 @@
         "chartsCreated": "Charts to follow",
         "chartsExisting": "Charts already followed",
         "chartsSkipped": "Charts skipped",
-        "artistsDismissed": "Artists dismissed from recommendations",
         "playlistsAdded": "Playlists to add",
         "catalogRows": "Catalog rows (artists / albums / tracks)",
         "tracksOnDisk": "Tracks found on disk",
         "tracksToDownload": "Tracks to download",
         "usersCreated": "Users to create",
         "usersSkipped": "Users skipped (already exist)",
+        "likesAdded": "Liked artists to add",
+        "dismissedAdded": "Dismissed recommendations to add",
         "settingsApplied": "Settings to apply",
         "settingsIgnored": "Settings ignored (unknown)",
         "albumsToImport": "Albums to re-fetch (missing tracks or cover)"
@@ -660,7 +665,8 @@
         "charts_disabled": "Charts are disabled on this instance; chart subscriptions were skipped.",
         "settings_ignored": "Some settings are not known to this version and were ignored.",
         "invalid_setting": "A setting has an invalid value and was ignored.",
-        "users_skipped": "Some users already exist here and were left untouched.",
+        "users_skipped": "Some users already exist here: their accounts were left untouched, only their liked artists and dismissed recommendations were added.",
+        "likes_skipped": "Some liked artists aren't in this library and were skipped.",
         "invalid_chart": "A chart subscription could not be created."
       }
     }

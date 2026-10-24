@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from ..models import User
 from .. import config
 from . import auth as auth_svc
+from . import recommendations as recommendations_svc
 
 logger = logging.getLogger("services.admin")
 
@@ -142,6 +143,7 @@ def delete_user(session: Session, user_id: int) -> bool:
     This is a hard delete that removes:
     - The user record
     - All refresh tokens (CASCADE)
+    - The artists they like and dismissed from recommendations
     - All jobs created by user (user_id set to NULL via SET NULL)
     - All settings updated by user (updated_by set to NULL via SET NULL)
 
@@ -160,6 +162,7 @@ def delete_user(session: Session, user_id: int) -> bool:
         raise ValueError(f"User {user_id} not found")
 
     username = user.username
+    recommendations_svc.delete_user_data(session, user_id)
 
     # Delete the user (cascades will handle refresh tokens)
     # Jobs and Settings have SET NULL foreign keys, so they'll just lose the reference

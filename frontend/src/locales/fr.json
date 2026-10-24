@@ -166,18 +166,19 @@
     },
     "recommendations": {
       "title": "Recommandés pour vous",
-      "subtitle": "Des artistes proches de ceux que vous suivez",
+      "subtitle": "Des artistes proches de ceux que vous aimez",
       "similarTo": "Similaire à {names}",
-      "similarToMany": "Similaire à {count} artistes de votre bibliothèque",
+      "similarToMany": "Similaire à {count} artistes que vous aimez",
       "dismiss": "Pas intéressé",
       "dismissedToast": "{name} ne sera plus recommandé",
       "undo": "Annuler",
       "dismissedLink": "Masqués ({count})",
       "dismissedTitle": "Artistes masqués",
-      "dismissedDescription": "Ces artistes ne sont plus recommandés. Rétablissez-en un pour le revoir quand il ressemble à des artistes que vous suivez.",
+      "dismissedDescription": "Ces artistes ne sont plus recommandés. Rétablissez-en un pour le revoir quand il ressemble à des artistes que vous aimez.",
       "noDismissed": "Aucun artiste masqué",
       "restore": "Rétablir",
-      "noneLeft": "Aucune recommandation pour le moment. Suivez d'autres artistes pour en obtenir.",
+      "noneLeft": "Aucune recommandation pour le moment. Aimez d'autres artistes pour en obtenir.",
+      "noLikes": "Aimez des artistes de votre bibliothèque avec leur ♥ (suivre un artiste l'aime aussi) et des artistes proches apparaîtront ici.",
       "error": "Impossible de mettre à jour les recommandations"
     }
   },
@@ -189,6 +190,9 @@
     "unfollow": "Ne plus suivre",
     "unfollowTitle": "Ne plus suivre l'artiste",
     "unfollowMessage": "Les nouveaux albums ne seront plus automatiquement suivis. Le contenu déjà téléchargé ne sera pas affecté.",
+    "like": "J'aime",
+    "unlike": "Je n'aime plus",
+    "likeError": "Impossible de mettre à jour vos artistes aimés",
     "albums": "Albums",
     "singles": "Singles & EPs",
     "noAlbums": "Aucun album pour le moment",
@@ -610,7 +614,7 @@
           },
           "users": {
             "label": "Utilisateurs",
-            "description": "Comptes, rôles et empreintes de mot de passe. Chacun garde son mot de passe sur la nouvelle instance."
+            "description": "Comptes, rôles et empreintes de mot de passe, avec les artistes aimés et les recommandations masquées de chacun. Chacun garde son mot de passe sur la nouvelle instance."
           },
           "settings": {
             "label": "Paramètres",
@@ -645,13 +649,14 @@
         "chartsCreated": "Charts à suivre",
         "chartsExisting": "Charts déjà suivis",
         "chartsSkipped": "Charts ignorés",
-        "artistsDismissed": "Artistes masqués des recommandations",
         "playlistsAdded": "Playlists à ajouter",
         "catalogRows": "Lignes du catalogue (artistes / albums / titres)",
         "tracksOnDisk": "Titres trouvés sur le disque",
         "tracksToDownload": "Titres à télécharger",
         "usersCreated": "Utilisateurs à créer",
         "usersSkipped": "Utilisateurs ignorés (déjà existants)",
+        "likesAdded": "Artistes aimés à ajouter",
+        "dismissedAdded": "Recommandations masquées à ajouter",
         "settingsApplied": "Paramètres à appliquer",
         "settingsIgnored": "Paramètres ignorés (inconnus)",
         "albumsToImport": "Albums à récupérer (titres ou pochette manquants)"
@@ -660,7 +665,8 @@
         "charts_disabled": "Les charts sont désactivés sur cette instance ; les abonnements ont été ignorés.",
         "settings_ignored": "Certains paramètres sont inconnus de cette version et ont été ignorés.",
         "invalid_setting": "Un paramètre a une valeur invalide et a été ignoré.",
-        "users_skipped": "Certains utilisateurs existent déjà ici et n'ont pas été modifiés.",
+        "users_skipped": "Certains utilisateurs existent déjà ici : leurs comptes n'ont pas été modifiés, seuls leurs artistes aimés et recommandations masquées ont été ajoutés.",
+        "likes_skipped": "Certains artistes aimés ne sont pas dans cette bibliothèque et ont été ignorés.",
         "invalid_chart": "Un abonnement à un chart n'a pas pu être créé."
       }
     }

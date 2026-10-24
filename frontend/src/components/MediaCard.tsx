@@ -104,7 +104,7 @@ export const SubtitleLink: React.FC<{ onClick: () => void; children: React.React
         // Space would otherwise press the card behind it
         else if (e.key === ' ') e.stopPropagation();
       }}
-      className="cursor-pointer rounded-sm outline-none hover:text-blue-600 dark:hover:text-red-400 hover:underline focus-visible:underline focus-visible:text-blue-600 dark:focus-visible:text-red-400 transition-colors"
+      className="relative z-10 pointer-events-auto cursor-pointer rounded-sm outline-none hover:text-blue-600 dark:hover:text-red-400 hover:underline focus-visible:underline focus-visible:text-blue-600 dark:focus-visible:text-red-400 transition-colors"
     >
       {children}
     </span>

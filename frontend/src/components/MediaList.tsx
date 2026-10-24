@@ -80,6 +80,8 @@ interface MediaRowProps {
   /** Why this item is in the results when it didn't match by name (e.g. a track inside it did) */
   matchHint?: string;
   onClick?: () => void;
+  /** A small button right after the title (e.g. a like) */
+  titleAction?: React.ReactNode;
 }
 
 /** Shown in a column with nothing to show */
@@ -108,6 +110,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   date,
   matchHint,
   onClick,
+  titleAction,
 }) => {
   const { t, formatLocale } = useI18n();
   const isArtist = type === 'artist';
@@ -129,95 +132,105 @@ export const MediaRow: React.FC<MediaRowProps> = ({
     ? t('library.meta.albumCount', { count: albumsCount ?? 0 })
     : [year, typeLabel].filter(Boolean).join(' · ');
 
+  // The row opens the item through a button stretched over it, rather than
+  // being one: a button can't hold another (the title action, the artist
+  // link). The content lets clicks through to it, except those two.
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group w-full flex items-center gap-3 md:gap-4 px-3 md:px-4 py-2.5 text-left outline-none transition-colors duration-200 hover:bg-slate-100/70 dark:hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/70 dark:focus-visible:ring-red-500/70"
-    >
-      {/* Artwork */}
-      <div
-        className={`relative w-11 h-11 md:w-12 md:h-12 shrink-0 overflow-hidden bg-slate-200 dark:bg-zinc-800 ring-1 ring-slate-900/5 dark:ring-white/10 ${
-          isArtist ? 'rounded-full' : 'rounded-lg'
-        }`}
-      >
-        <Artwork
-          src={thumbnail}
-          name={title}
-          seed={id}
-          className="w-full h-full transition-transform duration-500 ease-out group-hover:scale-105"
-        />
-      </div>
-
-      {/* Title + compact meta */}
-      <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-sm text-foreground truncate transition-colors group-hover:text-blue-600 dark:group-hover:text-red-400">
-          {title}
-        </h3>
-        <p className="text-xs text-muted-foreground truncate lg:hidden">
-          {!isArtist && subtitleNode}
-          {!isArtist && subtitle && compactMeta && ' · '}
-          {compactMeta}
-          <span className="sm:hidden">
-            {(compactMeta || (!isArtist && subtitle)) && ' · '}
-            {t('library.meta.trackCount', { tracks: tracksText })}
-          </span>
-        </p>
-        {matchHint && (
-          <p className="text-xs text-blue-600 dark:text-red-400 truncate" title={matchHint}>
-            {matchHint}
-          </p>
-        )}
-      </div>
-
-      {/* Large-screen columns */}
-      {isArtist ? (
-        <div className={`${COLUMNS.albums} text-sm tabular-nums text-muted-foreground`}>{albumsCount ?? 0}</div>
-      ) : (
-        <>
-          <div className={`${COLUMNS.artist} text-sm text-muted-foreground truncate`}>{subtitleNode || NONE}</div>
-          <div className={COLUMNS.type}>
-            <span className="inline-block rounded-full bg-slate-200/70 dark:bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {typeLabel}
-            </span>
-          </div>
-          <div className={`${COLUMNS.year} text-sm tabular-nums text-muted-foreground`}>{year || NONE}</div>
-        </>
-      )}
-
-      {/* Track progress */}
-      <div className={COLUMNS.tracks}>
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-[width] duration-500 ${
-                complete
-                  ? 'bg-emerald-500'
-                  : mediaStatus === 'failed'
-                    ? 'bg-red-600 dark:bg-rose-500'
-                    : 'bg-blue-600 dark:bg-red-600'
-              }`}
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{tracksText}</span>
+    <div className="group relative flex items-center gap-3 md:gap-4 px-3 md:px-4 py-2.5 transition-colors duration-200 hover:bg-slate-100/70 dark:hover:bg-white/5">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={title}
+        className="absolute inset-0 w-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/70 dark:focus-visible:ring-red-500/70"
+      />
+      <div className="contents pointer-events-none">
+        {/* Artwork */}
+        <div
+          className={`relative w-11 h-11 md:w-12 md:h-12 shrink-0 overflow-hidden bg-slate-200 dark:bg-zinc-800 ring-1 ring-slate-900/5 dark:ring-white/10 ${
+            isArtist ? 'rounded-full' : 'rounded-lg'
+          }`}
+        >
+          <Artwork
+            src={thumbnail}
+            name={title}
+            seed={id}
+            className="w-full h-full transition-transform duration-500 ease-out group-hover:scale-105"
+          />
         </div>
-      </div>
 
-      {/* Date */}
-      <div className={`${COLUMNS.date} text-sm text-muted-foreground truncate`}>{formatDate(date, formatLocale)}</div>
-
-      {/* Status: a pip on small screens, pip and label from lg up */}
-      <div className={`${COLUMNS.status} flex items-center gap-2`}>
-        {mediaStatus && (
-          <>
-            <StatusPip status={mediaStatus} className="shadow-sm ring-2 ring-white dark:ring-zinc-900" />
-            <span className="hidden lg:inline text-xs font-medium text-muted-foreground truncate">
-              {t(statusLabelKey(mediaStatus))}
+        {/* Title + compact meta */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h3 className="font-semibold text-sm text-foreground truncate transition-colors group-hover:text-blue-600 dark:group-hover:text-red-400">
+              {title}
+            </h3>
+            {titleAction && <div className="relative z-10 shrink-0 -my-1 pointer-events-auto">{titleAction}</div>}
+          </div>
+          <p className="text-xs text-muted-foreground truncate lg:hidden">
+            {!isArtist && subtitleNode}
+            {!isArtist && subtitle && compactMeta && ' · '}
+            {compactMeta}
+            <span className="sm:hidden">
+              {(compactMeta || (!isArtist && subtitle)) && ' · '}
+              {t('library.meta.trackCount', { tracks: tracksText })}
             </span>
+          </p>
+          {matchHint && (
+            <p className="text-xs text-blue-600 dark:text-red-400 truncate" title={matchHint}>
+              {matchHint}
+            </p>
+          )}
+        </div>
+
+        {/* Large-screen columns */}
+        {isArtist ? (
+          <div className={`${COLUMNS.albums} text-sm tabular-nums text-muted-foreground`}>{albumsCount ?? 0}</div>
+        ) : (
+          <>
+            <div className={`${COLUMNS.artist} text-sm text-muted-foreground truncate`}>{subtitleNode || NONE}</div>
+            <div className={COLUMNS.type}>
+              <span className="inline-block rounded-full bg-slate-200/70 dark:bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {typeLabel}
+              </span>
+            </div>
+            <div className={`${COLUMNS.year} text-sm tabular-nums text-muted-foreground`}>{year || NONE}</div>
           </>
         )}
+
+        {/* Track progress */}
+        <div className={COLUMNS.tracks}>
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-[width] duration-500 ${
+                  complete
+                    ? 'bg-emerald-500'
+                    : mediaStatus === 'failed'
+                      ? 'bg-red-600 dark:bg-rose-500'
+                      : 'bg-blue-600 dark:bg-red-600'
+                }`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{tracksText}</span>
+          </div>
+        </div>
+
+        {/* Date */}
+        <div className={`${COLUMNS.date} text-sm text-muted-foreground truncate`}>{formatDate(date, formatLocale)}</div>
+
+        {/* Status: a pip on small screens, pip and label from lg up */}
+        <div className={`${COLUMNS.status} flex items-center gap-2`}>
+          {mediaStatus && (
+            <>
+              <StatusPip status={mediaStatus} className="shadow-sm ring-2 ring-white dark:ring-zinc-900" />
+              <span className="hidden lg:inline text-xs font-medium text-muted-foreground truncate">
+                {t(statusLabelKey(mediaStatus))}
+              </span>
+            </>
+          )}
+        </div>
       </div>
-    </button>
+    </div>
   );
 };

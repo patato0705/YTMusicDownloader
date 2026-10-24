@@ -30,6 +30,7 @@ from ..jobs.jobqueue import cancel_download_jobs
 from ..models import Artist, Album, Track, ArtistSubscription, User
 from ..services import folders as folders_svc
 from ..services import playlists as playlists_svc
+from ..services import recommendations as recommendations_svc
 from ..services import subscriptions as subs_svc
 
 logger = logging.getLogger("routers.library")
@@ -110,6 +111,7 @@ def list_followed_artists(
         # albums_count sorting will be done in Python after fetching
 
         rows = query.all()
+        liked = recommendations_svc.liked_artist_ids(db, current_user.id)
 
         result = []
         for artist, subscription, albums_count, total, downloaded, failed in rows:
@@ -128,6 +130,7 @@ def list_followed_artists(
                 "name": artist.name,
                 "thumbnail": artist.image_local,
                 "mode": subscription.mode,
+                "liked": artist.id in liked,
                 "followed_at": subscription.created_at.isoformat() if subscription.created_at else None,
                 "albums_count": albums_count,
                 "tracks_total": tracks_total,
@@ -561,9 +564,10 @@ def delete_artist_from_library(
             _delete_file(artist.image_local)
             _delete_file(artist.banner_local)
 
-        # 3. Delete artist subscription
+        # 3. Delete artist subscription, and everyone's like of it
         if artist_sub:
             db.delete(artist_sub)
+        recommendations_svc.delete_artist_likes(db, artist_id)
 
         # 4. Delete artist record
         if artist:

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import { getLibraryArtists, getLibraryAlbums, getLibraryStats, searchLibraryTracks } from '../api/library';
 import type { LibraryAlbum, LibraryArtist, LibraryStats, LibraryTrack } from '../api/library';
@@ -14,6 +15,7 @@ import { LibraryStatCards } from '../components/LibraryStatCards';
 import { MediaCard } from '../components/MediaCard';
 import { MediaList, MediaRow } from '../components/MediaList';
 import { Button } from '../components/ui/Button';
+import { LikeButton } from '../components/ui/LikeButton';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHero } from '../components/ui/PageHero';
 import { SearchInput } from '../components/ui/SearchInput';
@@ -25,6 +27,7 @@ import { apiErrorMessage, getAlbumStatus, getArtistStatus, createMemoryCache } f
 import { useDebounce } from '../hooks/useDebounce';
 import { useProgressiveList } from '../hooks/useProgressiveList';
 import { useHistoryState } from '../hooks/useHistoryState';
+import { useLikeSync } from '../hooks/useLikeSync';
 
 type LibraryTab = 'all' | 'artists' | 'albums' | 'playlists';
 
@@ -103,7 +106,27 @@ export default function Library(): JSX.Element {
   const debouncedQuery = useDebounce(searchQuery.trim(), TRACK_SEARCH_DEBOUNCE_MS);
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { user } = useAuth();
+  // Visitors are read-only: liking is a member+ action on the backend
+  const canLike = user?.role === 'administrator' || user?.role === 'member';
   const { revision } = useJobActivity();
+  // On screen and in the cache, for coming back
+  const setLiked = (artistId: string, liked: boolean) => {
+    setArtists((current) => current.map((a) => (a.id === artistId ? { ...a, liked } : a)));
+    const snapshot = libraryCache.get(LIBRARY_CACHE_KEY);
+    if (snapshot) {
+      libraryCache.set(LIBRARY_CACHE_KEY, {
+        ...snapshot,
+        artists: snapshot.artists.map((a) => (a.id === artistId ? { ...a, liked } : a)),
+      });
+    }
+  };
+  // Put back if the server says no
+  const likeSync = useLikeSync((artistId, liked) => {
+    setLiked(artistId, liked);
+    setToast(t('artist.likeError'));
+  });
+  const { unsaved: unsavedLikes } = likeSync;
 
   useEffect(() => {
     try {
@@ -140,8 +163,10 @@ export default function Library(): JSX.Element {
         }),
       ]);
 
+      // Hearts clicked but not saved yet keep what the screen shows
+      const likes = unsavedLikes();
       const snapshot: LibrarySnapshot = {
-        artists: artistsList,
+        artists: artistsList.map((a) => (likes.has(a.id) ? { ...a, liked: likes.get(a.id)! } : a)),
         albums: albumsList,
         stats: statsResponse,
         // A failed playlists fetch keeps the ones already shown (the
@@ -330,6 +355,13 @@ export default function Library(): JSX.Element {
       : []),
   ];
 
+  // Flipped right away; the server hears of it once the clicks stop (useLikeSync)
+  const toggleLike = (artist: LibraryArtist) => {
+    const liked = !artist.liked;
+    setLiked(artist.id, liked);
+    likeSync.toggle(artist.id, liked);
+  };
+
   const openArtist = (artistId: string) => navigate(`/artists/${encodeURIComponent(artistId)}`);
   const openAlbum = (albumId: string) => navigate(`/albums/${encodeURIComponent(albumId)}`);
   const GRID = 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4';
@@ -408,16 +440,30 @@ export default function Library(): JSX.Element {
               {viewMode === 'grid' ? (
                 <div className={GRID}>
                   {displayedArtists.map((artist) => (
-                    <MediaCard
-                      key={artist.id}
-                      id={artist.id}
-                      title={artist.name}
-                      thumbnail={getImageUrl(artist.thumbnail)}
-                      type="artist"
-                      mediaStatus={getArtistStatus(artist, albumsByArtist.get(artist.id))}
-                      matchHint={artistMatchHint(artist.id)}
-                      onClick={() => openArtist(artist.id)}
-                    />
+                    <div key={artist.id} className="relative group/like">
+                      <MediaCard
+                        id={artist.id}
+                        title={artist.name}
+                        thumbnail={getImageUrl(artist.thumbnail)}
+                        type="artist"
+                        mediaStatus={getArtistStatus(artist, albumsByArtist.get(artist.id))}
+                        matchHint={artistMatchHint(artist.id)}
+                        onClick={() => openArtist(artist.id)}
+                      />
+                      {/* Outside the card (a button can't hold another), over the
+                          artwork's top-right corner, which the round picture leaves free.
+                          A liked artist always shows its heart, the others on hover */}
+                      {canLike && (
+                        <LikeButton
+                          liked={artist.liked}
+                          name={artist.name}
+                          onToggle={() => toggleLike(artist)}
+                          className={`absolute top-0 right-0 z-20 w-8 h-8 bg-black/55 text-white shadow-md ring-1 ring-white/20 backdrop-blur-md transition-all duration-300 hover:bg-black/75 group-hover/like:-translate-y-1 ${
+                            artist.liked ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/like:opacity-100 focus-visible:opacity-100'
+                          }`}
+                        />
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -436,6 +482,17 @@ export default function Library(): JSX.Element {
                       date={artist.followed_at}
                       matchHint={artistMatchHint(artist.id)}
                       onClick={() => openArtist(artist.id)}
+                      titleAction={canLike && (
+                        // A liked artist always shows its heart, the others on hover
+                        <LikeButton
+                          liked={artist.liked}
+                          name={artist.name}
+                          onToggle={() => toggleLike(artist)}
+                          className={`w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all ${
+                            artist.liked ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100'
+                          }`}
+                        />
+                      )}
                     />
                   ))}
                 </MediaList>

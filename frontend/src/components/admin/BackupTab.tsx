@@ -129,9 +129,6 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       if (r.library.playlists_added) {
         rows.push({ label: t('admin.backup.summary.playlistsAdded'), value: r.library.playlists_added });
       }
-      if (r.library.artists_dismissed) {
-        rows.push({ label: t('admin.backup.summary.artistsDismissed'), value: r.library.artists_dismissed });
-      }
     }
     if (r.catalog) {
       rows.push(
@@ -146,6 +143,12 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
         { label: t('admin.backup.summary.usersCreated'), value: r.users.created },
         { label: t('admin.backup.summary.usersSkipped'), value: r.users.skipped.length ? r.users.skipped.join(', ') : 0 },
       );
+      if (r.users.likes) {
+        rows.push({ label: t('admin.backup.summary.likesAdded'), value: r.users.likes });
+      }
+      if (r.users.dismissed) {
+        rows.push({ label: t('admin.backup.summary.dismissedAdded'), value: r.users.dismissed });
+      }
     }
     if (r.settings) {
       rows.push(

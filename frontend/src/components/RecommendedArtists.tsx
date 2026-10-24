@@ -1,10 +1,12 @@
 // src/components/RecommendedArtists.tsx
 /**
  * "Recommended for you" on the Browse page: YouTube Music's similar artists
- * of the artists you follow, most mentioned first (backend/services/recommendations.py).
+ * of the artists you like, most mentioned first (backend/services/recommendations.py).
+ * Until you like one, it says how. Visitors can't like artists, so they
+ * only get the fallback.
  *
- * Members and admins can dismiss one ("not interested", undoable from the
- * toast) and restore dismissed ones from the "Dismissed (n)" list.
+ * Members and admins can dismiss one ("not interested", for them only,
+ * undoable from the toast) and restore dismissed ones from the "Dismissed (n)" list.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -33,11 +35,11 @@ interface ToastState {
 }
 
 /** The last list shown: back on the page it's there right away, then refreshed */
-const cache = createMemoryCache<{ recommendations: RecommendedArtist[]; dismissedCount: number }>(1);
+const cache = createMemoryCache<{ recommendations: RecommendedArtist[]; likedCount: number; dismissedCount: number }>(1);
 const CACHE_KEY = 'recommendations';
 
 interface RecommendedArtistsProps {
-  /** Shown instead when there's nothing to recommend and nothing dismissed */
+  /** Shown when there's nothing to recommend and nothing dismissed (above how to get some, while you like no artist) */
   fallback?: React.ReactNode;
 }
 
@@ -49,6 +51,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
 
   const [cached] = useState(() => cache.get(CACHE_KEY));
   const [recommendations, setRecommendations] = useState<RecommendedArtist[] | null>(cached?.recommendations ?? null);
+  const [likedCount, setLikedCount] = useState(cached?.likedCount ?? 0);
   const [dismissedCount, setDismissedCount] = useState(cached?.dismissedCount ?? 0);
   const [showDismissed, setShowDismissed] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -58,6 +61,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
     try {
       const data = await getRecommendations();
       setRecommendations(data.recommendations);
+      setLikedCount(data.liked_count);
       setDismissedCount(data.dismissed_count);
     } catch (err) {
       console.error('Failed to load recommendations:', err);
@@ -65,12 +69,12 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (canEdit) load(); }, [load, canEdit]);
 
   // Dismissals and restores included
   useEffect(() => {
-    if (recommendations) cache.set(CACHE_KEY, { recommendations, dismissedCount });
-  }, [recommendations, dismissedCount]);
+    if (recommendations) cache.set(CACHE_KEY, { recommendations, likedCount, dismissedCount });
+  }, [recommendations, likedCount, dismissedCount]);
 
   const listFormat = useMemo(() => new Intl.ListFormat(locale, { type: 'conjunction' }), [locale]);
   const similarTo = (rec: RecommendedArtist) => {
@@ -109,8 +113,20 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
     }
   };
 
+  if (!canEdit) return <>{fallback}</>;
   if (recommendations === null) return null;
-  if (recommendations.length === 0 && dismissedCount === 0) return <>{fallback}</>;
+  if (recommendations.length === 0 && dismissedCount === 0) {
+    if (likedCount > 0) return <>{fallback}</>;
+    return (
+      <div className="space-y-12">
+        {fallback}
+        <section>
+          <SectionHeader className="!mb-2">{t('browse.recommendations.title')}</SectionHeader>
+          <p className="text-sm text-muted-foreground">{t('browse.recommendations.noLikes')}</p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <section>

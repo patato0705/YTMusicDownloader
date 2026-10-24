@@ -1,7 +1,7 @@
 // src/api/recommendations.ts
 /**
  * Artist recommendations: YouTube Music's similar artists of the artists
- * you follow, ranked by how many of them point to each.
+ * you like, ranked by how many of them point to each.
  */
 
 import { api } from './client';
@@ -10,9 +10,9 @@ export interface RecommendedArtist {
   id: string;
   name: string;
   thumbnail: string | null;
-  /** How many followed artists it's similar to */
+  /** How many liked artists it's similar to */
   count: number;
-  /** Those followed artists, most similar first */
+  /** Those liked artists, most similar first */
   similar_to: { id: string; name: string }[];
 }
 
@@ -25,6 +25,8 @@ export interface DismissedArtist {
 
 export async function getRecommendations(): Promise<{
   recommendations: RecommendedArtist[];
+  /** How many artists you like */
+  liked_count: number;
   dismissed_count: number;
 }> {
   return api.get('/recommendations');

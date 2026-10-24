@@ -10,9 +10,11 @@ import { deleteLibraryArtist, getArtistDeletionEffects } from '../api/library';
 import type { DeletionEffects } from '../api/library';
 import { getImageUrl } from '../api/media';
 import { useDeletionNotes } from '../hooks/useDeletionNotes';
+import { useLikeSync } from '../hooks/useLikeSync';
 import { MediaCard } from '../components/MediaCard';
 import { Artwork } from '../components/ui/Artwork';
 import { Button } from '../components/ui/Button';
+import { LikeButton } from '../components/ui/LikeButton';
 import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
@@ -40,12 +42,21 @@ export default function Artist(): JSX.Element {
   // The queue revision the artist on screen is up to date with
   const fetchedRevision = useRef(revision);
   const isAdmin = user?.role === 'administrator';
-  // Visitors are read-only: follow/unfollow is a member+ action on the backend
+  // Visitors are read-only: follow/unfollow and likes are member+ actions on the backend
   const canFollow = isAdmin || user?.role === 'member';
+
+  // Put back if the server says no
+  const likeSync = useLikeSync((_, liked) => {
+    setPage((current) => current && { ...current, liked });
+    setToast({ message: t('artist.likeError'), type: 'error' });
+  });
 
   const fetchArtist = async (id: string): Promise<ArtistPage> => {
     fetchedRevision.current = revision;
-    return getArtist(id);
+    const data = await getArtist(id);
+    // A heart clicked but not saved yet keeps what the screen shows
+    const liked = likeSync.unsaved().get(id);
+    return liked === undefined ? data : { ...data, liked };
   };
 
   useEffect(() => {
@@ -96,6 +107,8 @@ export default function Artist(): JSX.Element {
   const { artist, albums: releases } = page;
   const id = artistId!;
   const followed = page.subscription_mode === 'full';
+  // Only artists of the library can be liked: their similar artists are known
+  const inLibrary = page.subscription_mode != null;
   const { albums, singles } = categorizeAlbums(releases);
 
   const setSubscriptionMode = (mode: ArtistPage['subscription_mode']) =>
@@ -110,7 +123,9 @@ export default function Artist(): JSX.Element {
     setActionLoading(true);
     try {
       await followArtist(id, artist.name);
-      setSubscriptionMode('full');
+      // Following likes it too, which a heart click still waiting mustn't undo
+      setPage((current) => current && { ...current, subscription_mode: 'full', liked: true });
+      if (likeSync.unsaved().has(id)) likeSync.toggle(id, true);
       refreshJobs();
     } catch (err: any) {
       console.error('Follow failed:', err);
@@ -133,6 +148,13 @@ export default function Artist(): JSX.Element {
       setActionLoading(false);
       setUnfollowConfirm(false);
     }
+  };
+
+  // Flipped right away; the server hears of it once the clicks stop (useLikeSync)
+  const toggleLike = () => {
+    const liked = !page.liked;
+    setPage((current) => current && { ...current, liked });
+    likeSync.toggle(id, liked);
   };
 
   const openDeleteConfirm = async () => {
@@ -211,7 +233,16 @@ export default function Artist(): JSX.Element {
 
       <div className="space-y-12 pb-12">
         {/* Artist header */}
-        <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
+        <div className="relative bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
+          {canFollow && inLibrary && (
+            <LikeButton
+              liked={page.liked}
+              name={artist.name}
+              onToggle={toggleLike}
+              className="absolute top-4 right-4 md:top-6 md:right-6 w-11 h-11 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-colors"
+              iconClassName="w-6 h-6"
+            />
+          )}
           <div className="flex flex-col md:flex-row gap-8 items-start">
             <div className="relative group">
               <Artwork

@@ -23,6 +23,8 @@ export interface ArtistPage {
   /** "database" for an artist followed in full (refreshed with the job queue), "ytmusic" otherwise */
   source: 'database' | 'ytmusic';
   subscription_mode: SubscriptionMode | null;
+  /** Whether you like it (only artists of the library, subscription_mode set, can be) */
+  liked: boolean;
   artist: {
     id: string;
     name: string;
@@ -41,9 +43,9 @@ export async function getArtist(artistId: string): Promise<ArtistPage> {
 }
 
 /**
- * Follow an artist in full: every release is downloaded. Returns at once; a
- * sync job fetches the artist and its releases. `name` is shown for it in
- * the library until then.
+ * Follow an artist in full: every release is downloaded, and you like it.
+ * Returns at once; a sync job fetches the artist and its releases. `name`
+ * is shown for it in the library until then.
  */
 export async function followArtist(artistId: string, name: string): Promise<void> {
   await api.post(`/artists/${encodeURIComponent(artistId)}/follow`, { name });
@@ -55,4 +57,18 @@ export async function followArtist(artistId: string, name: string): Promise<void
  */
 export async function unfollowArtist(artistId: string): Promise<void> {
   await api.delete(`/artists/${encodeURIComponent(artistId)}/follow`);
+}
+
+/** Like an artist of the library: its similar artists join your recommendations */
+export async function likeArtist(artistId: string): Promise<void> {
+  await api.put(`/artists/${encodeURIComponent(artistId)}/like`);
+}
+
+export async function unlikeArtist(artistId: string): Promise<void> {
+  await api.delete(`/artists/${encodeURIComponent(artistId)}/like`);
+}
+
+/** Like or unlike, as `liked` says */
+export async function setArtistLiked(artistId: string, liked: boolean): Promise<void> {
+  await (liked ? likeArtist(artistId) : unlikeArtist(artistId));
 }
