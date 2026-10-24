@@ -433,17 +433,34 @@ def _due_condition(cutoff):
     return or_(Artist.genres_checked_at.is_(None), Artist.genres_checked_at < cutoff, unchecked_album)
 
 
-def queue_lookup(session: Session, artist_id: str, *, origin, from_lookup: bool = False) -> bool:
+def queue_lookup(
+    session: Session,
+    artist_id: str,
+    *,
+    origin,
+    from_lookup: bool = False,
+    from_sync: bool = False,
+) -> bool:
     """
     Queue a fetch_genres for this artist if lookups are on and it's due (see
-    _due_condition). One already waiting or running is enough: a waiting one
-    is moved up to `origin`'s class instead. A running one may have read the
-    artist's albums before a sync created the rest, so it calls this again
-    when it's done (from_lookup, which ignores itself): the albums added
-    meanwhile, if any, get a follow-up lookup. Does not commit. Returns
-    whether a job was queued.
+    _due_condition). Does not commit. Returns whether a job was queued.
+
+    Nothing is queued while a sync of the artist is waiting or running: it
+    may still be creating the artist's albums, and a lookup started now
+    would only see some of them, then need another for the rest. The sync
+    queues the lookup itself once they're all there (from_sync, which
+    ignores itself).
+
+    One lookup already waiting or running is enough: a waiting one is moved
+    up to `origin`'s class instead. A running one may have read the artist's
+    albums before others were added, so it calls this again when it's done
+    (from_lookup, which ignores itself): the albums added meanwhile, if any,
+    get a follow-up lookup.
     """
     if not artist_id or not feature_enabled(session, "genres"):
+        return False
+    sync_statuses = ("queued",) if from_sync else ("queued", "reserved")
+    if pending_jobs(session, "sync_artist", statuses=sync_statuses, artist_id=artist_id):
         return False
     statuses = ("queued",) if from_lookup else ("queued", "reserved")
     waiting = pending_jobs(session, "fetch_genres", statuses=statuses, artist_id=artist_id)

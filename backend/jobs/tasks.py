@@ -779,7 +779,7 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
             logger.exception("Failed to queue album imports for artist %s", artist_id)
 
     try:
-        genres_svc.queue_lookup(session, artist_id, origin=Origin(origin))
+        genres_svc.queue_lookup(session, artist_id, origin=Origin(origin), from_sync=True)
         session.commit()
     except Exception:
         session.rollback()
@@ -950,7 +950,8 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
             if embed_mod.set_genres(track.file_path, changed[track.album_id]):
                 retagged += 1
 
-    # Albums a sync added while this ran get a follow-up lookup
+    # Albums added while this ran get a follow-up lookup (unless a sync of
+    # the artist is still at it: it queues one when it's done)
     try:
         if genres_svc.queue_lookup(session, artist_id, origin=Origin(origin), from_lookup=True):
             logger.info("Albums of %s added during the lookup: follow-up queued", name)
