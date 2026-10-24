@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 
 from .. import config
 from .. import settings as settings_module
-from ..downloader.core import safe_name
 from ..models import (
     Artist, Album, Track, ArtistSubscription, User, Setting,
     DismissedRecommendation, Playlist, PlaylistEntry,
@@ -40,6 +39,7 @@ from ..time_utils import now_utc
 from ..jobs.priorities import Origin
 from . import subscriptions as subs_svc
 from . import artists as artists_svc
+from . import folders as folders_svc
 from . import albums as albums_svc
 from . import tracks as tracks_svc
 from . import charts as charts_svc
@@ -380,10 +380,8 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             banner_local=str(banner) if banner and banner.exists() else None,
             description=a.description,
         )
-        # The folder its files had there, so copied files and new ones stay
-        # together; one this instance already named is kept
-        if a.folder and not obj.folder:
-            obj.folder = safe_name(a.folder)
+        if a.folder:
+            folders_svc.restore_folder(session, obj, a.folder)
         result.artists += 1
     session.flush()
 
@@ -408,8 +406,8 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             playlist_id=al.playlist_id,
         )
         obj.mode = "download"
-        if al.folder and not obj.folder:
-            obj.folder = safe_name(al.folder)
+        if al.folder:
+            folders_svc.restore_folder(session, obj, al.folder)
         download_albums[al.id] = al.artist_id
         result.albums += 1
         if not cover_on_disk and not (obj.image_local and Path(obj.image_local).exists()):
