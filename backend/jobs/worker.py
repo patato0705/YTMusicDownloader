@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 import os
 import re
+import select
 import signal
+import socket
 import threading
-import time
 from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
@@ -85,12 +86,21 @@ class Worker:
         self._heartbeat_stop = threading.Event()
         self._heartbeat_thread: Optional[threading.Thread] = None
 
+        # Written to by _handle_signal to cut _sleep short. A socket pair
+        # rather than os.pipe(): select() only takes sockets on Windows.
+        self._wake_r, self._wake_w = socket.socketpair()
+        self._wake_w.setblocking(False)
+
         signal.signal(signal.SIGINT, self._handle_signal)
         signal.signal(signal.SIGTERM, self._handle_signal)
 
     def _handle_signal(self, signum, frame) -> None:
         logger.info("Worker %s received signal %s, shutting down gracefully", self.worker_name, signum)
         self._stopped = True
+        try:
+            self._wake_w.send(b"\0")
+        except OSError:
+            pass  # buffer full: a wake-up byte is already waiting
 
     # -- heartbeat -----------------------------------------------------------
 
@@ -203,12 +213,23 @@ class Worker:
                         processed = True
             except Exception:
                 logger.exception("Worker loop error")
-                time.sleep(self.idle_sleep)
+                self._sleep(self.idle_sleep)
                 continue
             if processed:
                 self._processed += 1
             else:
-                time.sleep(self.poll_interval)
+                self._sleep(self.poll_interval)
+
+    def _sleep(self, seconds: float) -> None:
+        """
+        Sleep, but return as soon as a stop signal arrives. A plain
+        time.sleep() resumes after the signal handler runs, so every idle
+        worker would sit out its whole poll interval, eating into Docker's
+        stop timeout. The handler writes to _wake_w instead, which ends the
+        select() -- or makes it return at once if the signal came first.
+        """
+        if not self._stopped:
+            select.select([self._wake_r], [], [], seconds)
 
     def _run(self, session: Session, job) -> None:
         """Run one reserved job and record its outcome."""
