@@ -50,7 +50,8 @@ services:
       # Optional: single sign-on only (no password sign-in at all)
       # - PASSWORD_LOGIN_ENABLED=false
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      # urlopen raises on the 503 /api/health returns when unhealthy
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=4)"]
       interval: 30s
       timeout: 5s
       retries: 3

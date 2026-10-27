@@ -4,7 +4,7 @@
 #
 # yt-dlp is deliberately NOT pinned here: YouTube breaks it often enough that
 # pinning it would mean the app silently going stale between image releases.
-# deploy/entrypoint.sh runs `pip install -U "yt-dlp[default,deno]"` at container
+# deploy/entrypoint.sh runs `uv pip install --upgrade-package yt-dlp` at container
 # startup so a restart alone can pick up an upstream fix, no rebuild required.
 #
 # The extras matter: YouTube extraction now needs a JavaScript runtime plus
@@ -18,6 +18,9 @@ uvicorn[standard]==0.54.0
 ytmusicapi==1.12.3
 yt-dlp[default,deno]
 requests==2.34.2
+# Not imported by the app: a floor under requests' and yt-dlp's HTTP library,
+# since neither requires a version past the ones with known CVEs (<2.8.0).
+urllib3>=2.8.0
 SQLAlchemy==2.0.54
 pydantic==2.14.0
 httpx==0.28.1

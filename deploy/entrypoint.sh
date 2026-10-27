@@ -65,8 +65,11 @@ echo "[entrypoint] Download workers: $DOWNLOAD_WORKERS"
 # since it needs to write to site-packages.
 # The extras pull the matching challenge-solver (yt-dlp-ejs) and a deno
 # runtime -- see the note in backend/requirements.txt.
+# --upgrade-package rather than uv's --upgrade, which would also lift
+# yt-dlp's dependencies (requests...) past the versions requirements.txt
+# pins: this upgrades yt-dlp alone, plus whatever its new release requires.
 echo "[entrypoint] Updating yt-dlp..."
-if pip install --no-cache-dir --disable-pip-version-check -U "yt-dlp[default,deno]"; then
+if uv pip install --system --no-cache --upgrade-package yt-dlp "yt-dlp[default,deno]"; then
     echo "[entrypoint] yt-dlp update OK: $(yt-dlp --version 2>/dev/null || echo unknown), deno $(deno --version 2>/dev/null | head -1 || echo missing)"
 else
     echo "[entrypoint] yt-dlp update failed, continuing with the version baked into the image" >&2
