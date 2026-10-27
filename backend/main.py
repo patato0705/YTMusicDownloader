@@ -114,7 +114,7 @@ def create_app() -> FastAPI:
         def spa(full_path: str) -> FileResponse:
             return FileResponse(index_file)
 
-        logger.info("Serving the frontend from %s", static_dir)
+        logger.debug("Serving the frontend from %s", static_dir)
     else:
         logger.info("No frontend build at %s; only the API is served", static_dir)
 

@@ -63,6 +63,7 @@ def init_db() -> None:
     with SessionLocal() as session:
         auth_svc.ensure_first_admin(session)
         settings_module.ensure_defaults(session)
+    logger.info("Database is ready (%s)", DB_PATH)
 
 
 def get_session() -> Generator[Session, None, None]:
@@ -78,14 +79,17 @@ def wait_for_db(max_retries: int = 30, delay: float = 1) -> None:
     """
     Wait until the web process has created the tables (workers and the
     scheduler start alongside it). Raises if they never appear.
+
+    Logs at debug only: nine processes call this at once, and init_db
+    already says "Database is ready" in the web process.
     """
     required = {"artists", "jobs", "refresh_tokens"}
-    logger.info("Waiting for database to be ready...")
+    logger.debug("Waiting for database to be ready...")
     for attempt in range(1, max_retries + 1):
         try:
             missing = required - set(inspect(engine).get_table_names())
             if not missing:
-                logger.info("Database is ready")
+                logger.debug("Database is ready")
                 return
             logger.debug("Database not ready, missing tables %s (attempt %s/%s)", sorted(missing), attempt, max_retries)
         except Exception as e:

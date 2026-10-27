@@ -84,6 +84,23 @@ class _DropHealthchecks(logging.Filter):
             return True
 
 
+class _DropUvicornStartupChatter(logging.Filter):
+    """
+    Drop uvicorn's step-by-step startup lines. The pid is already in
+    supervisord's "spawned" line, and "Uvicorn running on ..." still marks
+    the server as up; a failed startup logs at ERROR and is kept.
+    """
+
+    _MESSAGES = frozenset({
+        "Started server process [%d]",
+        "Waiting for application startup.",
+        "Application startup complete.",
+    })
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.msg not in self._MESSAGES
+
+
 def _route_uvicorn_through_root() -> None:
     """
     uvicorn installs its own stdout handlers on "uvicorn", "uvicorn.error"
@@ -96,3 +113,4 @@ def _route_uvicorn_through_root() -> None:
         lg.handlers = []
         lg.propagate = True
     logging.getLogger("uvicorn.access").addFilter(_DropHealthchecks())
+    logging.getLogger("uvicorn.error").addFilter(_DropUvicornStartupChatter())

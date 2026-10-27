@@ -40,8 +40,6 @@ fi
 chown -R "$PUID:$PGID" /config 2>/dev/null || true
 chown "$PUID:$PGID" /data 2>/dev/null || true
 
-echo "[entrypoint] App will run as PUID=$PUID PGID=$PGID"
-
 # Number of yt-dlp download worker processes supervisord starts (see the
 # worker-download program in supervisord.conf). This is only the ceiling:
 # how many of them actually take jobs is the download.max_concurrent
@@ -54,7 +52,7 @@ case "$DOWNLOAD_WORKERS" in
     ''|*[!0-9]*|0) DOWNLOAD_WORKERS=3 ;;
 esac
 export DOWNLOAD_WORKERS
-echo "[entrypoint] Download workers: $DOWNLOAD_WORKERS"
+echo "[entrypoint] Running as PUID=$PUID PGID=$PGID, $DOWNLOAD_WORKERS download workers"
 
 # yt-dlp is deliberately left unpinned in requirements.txt (see the comment
 # there) because YouTube breaks it often. Pulling the latest release here
@@ -68,9 +66,19 @@ echo "[entrypoint] Download workers: $DOWNLOAD_WORKERS"
 # --upgrade-package rather than uv's --upgrade, which would also lift
 # yt-dlp's dependencies (requests...) past the versions requirements.txt
 # pins: this upgrades yt-dlp alone, plus whatever its new release requires.
+# --quiet drops uv's resolver chatter but still prints errors; the line
+# after it says whether anything changed.
 echo "[entrypoint] Updating yt-dlp..."
-if uv pip install --system --no-cache --upgrade-package yt-dlp "yt-dlp[default,deno]"; then
-    echo "[entrypoint] yt-dlp update OK: $(yt-dlp --version 2>/dev/null || echo unknown), deno $(deno --version 2>/dev/null | head -1 || echo missing)"
+YTDLP_BEFORE=$(yt-dlp --version 2>/dev/null || echo unknown)
+if uv pip install --quiet --system --no-cache --upgrade-package yt-dlp "yt-dlp[default,deno]"; then
+    YTDLP_AFTER=$(yt-dlp --version 2>/dev/null || echo unknown)
+    DENO_VERSION=$(deno --version 2>/dev/null | awk 'NR==1 {print $2}')
+    if [ "$YTDLP_AFTER" = "$YTDLP_BEFORE" ]; then
+        YTDLP_STATUS="already latest"
+    else
+        YTDLP_STATUS="updated from $YTDLP_BEFORE"
+    fi
+    echo "[entrypoint] yt-dlp $YTDLP_AFTER ($YTDLP_STATUS), deno ${DENO_VERSION:-missing}"
 else
     echo "[entrypoint] yt-dlp update failed, continuing with the version baked into the image" >&2
 fi

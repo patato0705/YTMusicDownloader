@@ -29,7 +29,8 @@ def jwt_secret() -> str:
             return secret
         logger.warning("No jwt_secret in %s, generating a new one", path)
     except FileNotFoundError:
-        logger.info("No %s yet, generating the JWT signing key", path)
+        # First start: the "Saved a new JWT signing key" line below says it all
+        logger.debug("No %s yet, generating the JWT signing key", path)
     except (OSError, ValueError, AttributeError) as e:
         logger.warning("Unreadable %s (%s), generating a new key: every session is signed out", path, e)
 
