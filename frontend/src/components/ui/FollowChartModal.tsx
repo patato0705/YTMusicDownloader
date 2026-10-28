@@ -62,7 +62,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
             <label htmlFor="chart-top-n" className="text-sm font-semibold text-foreground">
               {t('charts.numberOfArtists')}
             </label>
-            <div className="flex items-center gap-2 bg-blue-500/10 dark:bg-red-500/10 rounded-xl px-3 py-1.5 border border-blue-500/20 dark:border-red-500/20">
+            <div className="flex items-center gap-2 bg-accent-500/10 rounded-xl px-3 py-1.5 border border-accent-500/20">
               <span className="text-xs text-muted-foreground">{t('charts.top')}</span>
               <span className="text-xl font-bold text-gradient leading-none">{topNArtists}</span>
             </div>
@@ -78,7 +78,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
               onChange={(e) => setTopNArtists(parseInt(e.target.value))}
               className="w-full h-2 rounded-full appearance-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, rgb(59,130,246) 0%, rgb(59,130,246) ${sliderPercent}%, rgb(226,232,240) ${sliderPercent}%, rgb(226,232,240) 100%)`,
+                background: `linear-gradient(to right, var(--color-accent) 0%, var(--color-accent) ${sliderPercent}%, rgb(var(--color-border)) ${sliderPercent}%, rgb(var(--color-border)) 100%)`,
               }}
             />
             <div className="flex justify-between mt-1.5 text-xs text-muted-foreground">
@@ -95,7 +95,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
                 onClick={() => setTopNArtists(value)}
                 className={`flex-1 min-w-0 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   topNArtists === value
-                    ? 'bg-blue-600 dark:bg-red-600 text-white shadow-md'
+                    ? 'bg-accent-600 text-white shadow-md'
                     : 'bg-slate-100 dark:bg-white/10 text-muted-foreground hover:bg-slate-200 dark:hover:bg-white/20'
                 }`}
               >

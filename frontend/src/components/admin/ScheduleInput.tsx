@@ -55,7 +55,7 @@ export const useScheduleSummary = () => {
 
 const inputClass =
   'px-3 py-2 glass rounded-xl border text-foreground focus:outline-none focus:ring-2 ' +
-  'focus:ring-blue-500 dark:focus:ring-red-600';
+  'focus:ring-accent-500 dark:focus:ring-accent-600';
 const borderClass = (invalid: boolean) =>
   invalid ? 'border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-white/10';
 
@@ -91,8 +91,8 @@ export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onCha
   };
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col items-stretch sm:items-end gap-2 w-full sm:w-auto">
+      <div className="flex items-center justify-end gap-2">
         <Select
           value={value.mode}
           onChange={setMode}
@@ -130,7 +130,8 @@ export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onCha
       </div>
 
       {value.mode === 'fixed' && (
-        <div className="flex flex-wrap justify-end gap-1" role="group" aria-label={t('admin.settings.schedule.daysLabel')}>
+        // One row of seven on phones, each a comfortable tap target
+        <div className="grid grid-cols-7 gap-1 sm:flex sm:flex-wrap sm:justify-end" role="group" aria-label={t('admin.settings.schedule.daysLabel')}>
           {WEEKDAYS.map((day) => {
             const checked = value.days.includes(day);
             return (
@@ -142,9 +143,9 @@ export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onCha
                 aria-label={longDayNames[day]}
                 title={longDayNames[day]}
                 onClick={() => toggleDay(day)}
-                className={`h-7 min-w-[2.6rem] px-1.5 rounded-full border text-xs font-medium transition-colors ${
+                className={`h-9 sm:h-7 sm:min-w-[2.6rem] px-1 sm:px-1.5 rounded-full border text-xs font-medium transition-colors ${
                   checked
-                    ? 'bg-blue-500/15 text-blue-700 border-blue-500/30 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30'
+                    ? 'bg-accent-500/15 text-accent-700 border-accent-500/30 dark:text-accent-400'
                     : 'border-slate-300/70 dark:border-white/10 text-muted-foreground hover:text-foreground'
                 }`}
               >

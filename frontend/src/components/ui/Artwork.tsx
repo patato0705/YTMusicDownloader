@@ -52,8 +52,8 @@ function gradientFor(seed: string): string {
 
 /**
  * Cover / artist picture with a generated fallback: a gradient picked from the
- * item's id, with its initials on top. The fallback also shows while the image
- * loads, and whenever it fails.
+ * item's id, with its initials on top, for items with no image or a broken one.
+ * While an image loads, a neutral tone stands in.
  */
 export const Artwork: React.FC<ArtworkProps> = ({
   src,
@@ -70,28 +70,34 @@ export const Artwork: React.FC<ArtworkProps> = ({
 
   return (
     <div className={`relative overflow-hidden ${className}`}>
-      <div
-        className="absolute inset-0"
-        style={{ backgroundImage: gradientFor(seed || name || '') }}
-        aria-hidden="true"
-      >
-        {/* SVG text scales with the artwork, from a list thumbnail to a page header */}
-        <svg viewBox="0 0 100 100" className="w-full h-full select-none">
-          <text
-            x="50"
-            y="50"
-            dy="0.35em"
-            textAnchor="middle"
-            fill="white"
-            fillOpacity="0.92"
-            fontSize={initials.length > 1 ? 38 : 46}
-            fontWeight="700"
-            letterSpacing="1"
-          >
-            {initials || '♪'}
-          </text>
-        </svg>
-      </div>
+      {/* While an image loads it sits on a quiet tone: the bright initials are
+          for items that have no artwork, not a flash before every cover */}
+      {imageSrc ? (
+        <div className="absolute inset-0 bg-slate-200 dark:bg-zinc-800" aria-hidden="true" />
+      ) : (
+        <div
+          className="absolute inset-0"
+          style={{ backgroundImage: gradientFor(seed || name || '') }}
+          aria-hidden="true"
+        >
+          {/* SVG text scales with the artwork, from a list thumbnail to a page header */}
+          <svg viewBox="0 0 100 100" className="w-full h-full select-none">
+            <text
+              x="50"
+              y="50"
+              dy="0.35em"
+              textAnchor="middle"
+              fill="white"
+              fillOpacity="0.92"
+              fontSize={initials.length > 1 ? 38 : 46}
+              fontWeight="700"
+              letterSpacing="1"
+            >
+              {initials || '♪'}
+            </text>
+          </svg>
+        </div>
+      )}
 
       {/* Decorative: the name is always written next to it, and an alt text
           would be drawn over the fallback while the image loads or fails */}

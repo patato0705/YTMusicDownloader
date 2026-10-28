@@ -5,7 +5,7 @@ import { useI18n } from '../../contexts/I18nContext';
 import type { SavedPlaylist } from '../../api/playlists';
 
 const chip = 'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border';
-const accent = 'bg-blue-500/10 text-blue-700 border-blue-500/30 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30';
+const accent = 'bg-accent-500/10 text-accent-700 border-accent-500/30 dark:text-accent-400';
 const muted = 'border-slate-300/70 dark:border-white/10 text-muted-foreground';
 
 export const PlaylistBadges: React.FC<{ saved: SavedPlaylist; className?: string }> = ({ saved, className = '' }) => {

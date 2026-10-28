@@ -1,53 +1,31 @@
 // src/components/ui/ActionCard.tsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useI18n } from '../../contexts/I18nContext';
+import { Icon } from './icons';
+import type { IconName } from './icons';
 
 interface ActionCardProps {
   to: string;
-  icon: React.ReactNode;
+  icon: IconName;
   title: string;
   description: string;
-  gradient?: string;
   className?: string;
 }
 
-export const ActionCard: React.FC<ActionCardProps> = ({ 
-  to, 
-  icon, 
-  title, 
-  description,
-  gradient = 'from-blue-500/10 to-indigo-500/10 dark:from-red-900/20 dark:to-red-800/20',
-  className = ''
-}) => {
-  const { t } = useI18n();
-  return (
-    <Link to={to} className="block h-full">
-      <div className={`relative group h-full overflow-hidden rounded-xl glass p-6 border-slate-200 dark:border-white/10 hover:border-blue-400/50 dark:hover:border-red-600/50 transition-all duration-300 hover-lift ${className}`}>
-        {/* Background gradient */}
-        <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-        
-        {/* Content */}
-        <div className="relative z-10 flex flex-col h-full">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-red-950/40 dark:to-red-900/30 mb-4 group-hover:scale-110 transition-transform duration-300">
-            {icon}
-          </div>
-          
-          <h3 className="text-xl font-bold text-foreground mb-2 group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors">
-            {title}
-          </h3>
-          
-          <p className="text-sm text-muted-foreground">
-            {description}
-          </p>
-          
-          {/* Arrow indicator */}
-          <div className="mt-auto pt-4 flex items-center gap-2 text-blue-600 dark:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="text-sm font-medium">{t('home.getStarted')}</span>
-            <span className="group-hover:translate-x-1 transition-transform" aria-hidden="true">→</span>
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
-};
+/** A "get started" link card: where to go next, with a line saying what's there */
+export const ActionCard: React.FC<ActionCardProps> = ({ to, icon, title, description, className = '' }) => (
+  <Link
+    to={to}
+    className={`group flex items-center gap-4 h-full rounded-xl glass p-4 sm:p-5 border-slate-200 dark:border-white/10 hover:border-accent-400/60 dark:hover:border-accent-500/50 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 ${className}`}
+  >
+    <div className="flex shrink-0 items-center justify-center w-12 h-12 rounded-xl bg-accent-500/10 text-accent-600 dark:text-accent-400 transition-colors group-hover:bg-accent-600 group-hover:text-white dark:group-hover:bg-accent-500">
+      <Icon name={icon} className="w-6 h-6" />
+    </div>
+    <div className="min-w-0">
+      <h3 className="font-semibold text-foreground group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">
+        {title}
+      </h3>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
+  </Link>
+);

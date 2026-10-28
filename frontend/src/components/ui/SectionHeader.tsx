@@ -16,7 +16,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
     <h2 className={`text-2xl font-bold mb-6 flex items-center gap-3 ${className}`}>
       <span className="text-gradient">{children}</span>
       {showDivider && (
-        <div className="h-px flex-1 bg-gradient-to-r from-blue-500/50 dark:from-red-600/50 to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-accent-500/50 dark:from-accent-600/50 to-transparent" />
       )}
     </h2>
   );

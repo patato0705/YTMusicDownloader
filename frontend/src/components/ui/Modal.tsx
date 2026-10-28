@@ -113,7 +113,7 @@ export const Modal: React.FC<ModalProps> = ({
         {title && (
           <div className="flex items-start justify-between gap-4 mb-6 shrink-0">
             <div className="min-w-0">
-              <h2 id={titleId} className="text-2xl font-bold text-gradient truncate">{title}</h2>
+              <h2 id={titleId} className="text-2xl font-bold text-foreground truncate">{title}</h2>
               {subtitle && <div className="text-sm text-muted-foreground truncate mt-1">{subtitle}</div>}
             </div>
             <div className="flex items-center gap-3 shrink-0">

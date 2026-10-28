@@ -3,6 +3,7 @@ import React, { useId, useRef, useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from './Button';
 import { Modal } from './Modal';
+import { Icon } from './icons';
 
 interface TemporaryPasswordDialogProps {
   username: string;
@@ -41,8 +42,8 @@ export const TemporaryPasswordDialog: React.FC<TemporaryPasswordDialogProps> = (
   return (
     <Modal onClose={onClose} dismissible={false} labelledBy={titleId}>
       <div className="flex items-start gap-4 mb-6">
-        <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-500/20 text-blue-600 dark:text-blue-400">
-          <span className="text-2xl" aria-hidden="true">🔑</span>
+        <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-accent-500/20 text-accent-600 dark:text-accent-400">
+          <Icon name="key" className="w-6 h-6" />
         </div>
         <div className="flex-1 min-w-0">
           <h2 id={titleId} className="text-xl font-bold text-foreground mb-2">
@@ -61,7 +62,7 @@ export const TemporaryPasswordDialog: React.FC<TemporaryPasswordDialogProps> = (
           readOnly
           value={password}
           onFocus={(e) => e.target.select()}
-          className="flex-1 min-w-0 px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
+          className="flex-1 min-w-0 px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground font-mono text-center focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600"
         />
         <Button onClick={copy} variant="outline">
           {copied ? t('admin.users.copied') : t('admin.users.copy')}

@@ -1,10 +1,11 @@
 // src/components/ui/ChartArtistGrid.tsx
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useI18n } from '../../contexts/I18nContext';
 import { getImageUrl } from '../../api/media';
 import { Artwork } from './Artwork';
 import type { ChartArtist } from '../../api/charts';
+import { artistPath } from '../../utils';
 
 interface ChartArtistGridProps {
   artists: ChartArtist[];
@@ -15,7 +16,6 @@ export const ChartArtistGrid: React.FC<ChartArtistGridProps> = ({
   artists, 
   maxHeight = '200px' 
 }) => {
-  const navigate = useNavigate();
   const { t } = useI18n();
 
   const getTrendIcon = (trend: 'up' | 'down' | 'neutral') => {
@@ -51,16 +51,16 @@ export const ChartArtistGrid: React.FC<ChartArtistGridProps> = ({
           const isFollowed = artist.followed;
 
           return (
-            <button
+            <Link
               key={artist.id}
-              onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
+              to={artistPath(artist.id)}
               className="relative group flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
               title={isFollowed ? t('charts.followedArtist') : undefined}
             >
               {/* Artist Image Circle */}
               <div className="relative w-16 h-16">
                 {/* Rank Badge - Top Left */}
-                <div className="absolute -top-1 -left-1 z-10 w-6 h-6 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 dark:from-red-600 dark:to-red-700 flex items-center justify-center shadow-lg border-2 border-white dark:border-zinc-900">
+                <div className="absolute -top-1 -left-1 z-10 w-6 h-6 rounded-full bg-accent-600 flex items-center justify-center shadow-lg border-2 border-white dark:border-zinc-900">
                   <span className="text-[10px] font-bold text-white">{artist.rank}</span>
                 </div>
 
@@ -72,9 +72,9 @@ export const ChartArtistGrid: React.FC<ChartArtistGridProps> = ({
                 )}
 
                 {/* Artist Image */}
-                <div className={`w-full h-full rounded-full overflow-hidden bg-slate-200 dark:bg-white/10 border-2 transition-all group-hover:border-blue-500 dark:group-hover:border-red-500 ${
+                <div className={`w-full h-full rounded-full overflow-hidden bg-slate-200 dark:bg-white/10 border-2 transition-all group-hover:border-accent-500 ${
                   isFollowed
-                    ? 'border-blue-500/70 dark:border-red-500/70'
+                    ? 'border-accent-500/70'
                     : 'border-slate-300 dark:border-white/20'
                 }`}>
                   <Artwork
@@ -99,7 +99,7 @@ export const ChartArtistGrid: React.FC<ChartArtistGridProps> = ({
               <span className="text-xs font-medium text-center text-foreground line-clamp-1 w-full px-1">
                 {artist.name}
               </span>
-            </button>
+            </Link>
           );
         })}
       </div>

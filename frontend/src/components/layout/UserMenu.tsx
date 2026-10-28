@@ -9,15 +9,14 @@ import { useDropdown } from '../../hooks/useDropdown';
 import { LanguageSelector } from '../ui/LanguageSelector';
 import { ROLE_COLORS } from '../../config/roles';
 import type { Role } from '../../api/auth';
+import { Icon, ICON_PATHS } from '../ui/icons';
 
 const ROLE_GRADIENTS: Record<Role, string> = {
   administrator: 'from-purple-500 to-pink-600',
-  member: 'from-blue-500 to-indigo-600',
+  member: 'from-accent-500 to-accent-600',
   visitor: 'from-slate-500 to-slate-600',
 };
 
-const SUN_PATH = 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z';
-const MOON_PATH = 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z';
 
 interface MenuItemProps {
   icon: string;
@@ -118,9 +117,7 @@ export const UserMenu: React.FC = () => {
                 onClick={toggleTheme}
                 className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 transition-all text-slate-700 dark:text-zinc-200"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={theme === 'dark' ? SUN_PATH : MOON_PATH} />
-                </svg>
+                <Icon name={theme === 'dark' ? 'sun' : 'moon'} className="w-4 h-4" />
                 <span className="text-sm font-medium">
                   {t(theme === 'dark' ? 'settings.theme.light' : 'settings.theme.dark')}
                 </span>
@@ -131,10 +128,10 @@ export const UserMenu: React.FC = () => {
             {/* Single sign-on accounts have no password here */}
             {user.has_password && (
               <MenuItem
-                icon="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                icon={ICON_PATHS.key}
                 label={t('auth.changePassword.title')}
                 onClick={() => go('/change-password')}
-                iconClassName={`${plainItem} group-hover:bg-blue-500 dark:group-hover:bg-red-600`}
+                iconClassName={`${plainItem} group-hover:bg-accent-500 dark:group-hover:bg-accent-600`}
                 className="hover:bg-slate-100 dark:hover:bg-white/10"
               />
             )}

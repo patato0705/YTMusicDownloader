@@ -162,7 +162,11 @@ def list_followed_artists(
 def list_followed_albums(
     current_user: User = Depends(require_auth),
     artist_id: Optional[str] = Query(None, description="Filter by artist ID"),
-    status_filter: Optional[str] = Query(None, pattern="^(completed|downloading|pending|failed)$", description="Filter by download status"),
+    status_filter: Optional[str] = Query(
+        None,
+        pattern="^(completed|downloading|pending|failed)(,(completed|downloading|pending|failed))*$",
+        description="Filter by download status; several comma-separated ones match any of them",
+    ),
     sort_by: str = Query("title", pattern="^(title|year|created_at|download_progress)$"),
     order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: Optional[int] = Query(None, ge=1, description="Maximum number of albums to return"),
@@ -174,13 +178,15 @@ def list_followed_albums(
 
     Query params:
     - artist_id: Filter albums by artist (optional)
-    - status: Filter by download status (completed, downloading, pending, failed)
+    - status_filter: Filter by download status (completed, downloading, pending, failed);
+      comma-separated for several, e.g. Home's unfinished albums
     - sort_by: title, year, download_progress (default: title)
     - order: asc, desc (default: asc)
     - limit / offset: Page through the sorted list (optional)
 
     Returns list of albums with download stats.
     """
+    statuses = set(status_filter.split(",")) if status_filter else None
     try:
         # Track counts for every album in one grouped pass, joined in below,
         # rather than one query per album
@@ -237,7 +243,7 @@ def list_followed_albums(
             download_status = album.download_status or "idle"
 
             # Apply status filter
-            if status_filter and download_status != status_filter:
+            if statuses and download_status not in statuses:
                 continue
 
             result.append({

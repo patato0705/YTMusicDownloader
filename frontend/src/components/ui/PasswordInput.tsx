@@ -55,7 +55,7 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({ id, className = ''
         title={visible ? t('auth.hidePassword') : t('auth.showPassword')}
         aria-pressed={visible}
         aria-controls={inputId}
-        className="absolute inset-y-0 right-0 px-3 flex items-center rounded-r-xl text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="absolute inset-y-0 right-0 px-3 flex items-center rounded-r-xl text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:focus-visible:ring-accent-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {visible ? (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">

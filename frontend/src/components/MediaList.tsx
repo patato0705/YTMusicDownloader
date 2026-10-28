@@ -1,7 +1,7 @@
 // src/components/MediaList.tsx
 import React from 'react';
 import { useI18n } from '../contexts/I18nContext';
-import { StatusPip, SubtitleLink, albumTypeKey, statusLabelKey } from './MediaCard';
+import { CardLink, StatusPip, SubtitleLink, albumTypeKey, statusLabelKey } from './MediaCard';
 import { Artwork } from './ui/Artwork';
 import type { MediaStatus } from '../types';
 
@@ -20,16 +20,21 @@ const COLUMNS = {
   status: 'w-6 lg:w-32 shrink-0',
 };
 
-const HEADER_CELL = 'text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate';
+const HEADER_CELL = 'text-xs font-semibold text-muted-foreground truncate';
+
+/** Whether the list has a status column, read by its rows */
+const StatusColumn = React.createContext(true);
 
 interface MediaListProps {
   kind: MediaListKind;
   children: React.ReactNode;
+  /** Leave out the status column, e.g. when no row has anything to report */
+  showStatus?: boolean;
   className?: string;
 }
 
 /** Glass panel holding MediaRows of one kind, with a column header on large screens */
-export const MediaList: React.FC<MediaListProps> = ({ kind, children, className = '' }) => {
+export const MediaList: React.FC<MediaListProps> = ({ kind, children, showStatus = true, className = '' }) => {
   const { t } = useI18n();
   const isArtist = kind === 'artist';
 
@@ -52,10 +57,12 @@ export const MediaList: React.FC<MediaListProps> = ({ kind, children, className 
         <div className={`${COLUMNS.date} ${HEADER_CELL}`}>
           {t(isArtist ? 'library.columns.followed' : 'library.columns.added')}
         </div>
-        <div className={`${COLUMNS.status} ${HEADER_CELL}`}>{t('library.columns.status')}</div>
+        {showStatus && <div className={`${COLUMNS.status} ${HEADER_CELL}`}>{t('library.columns.status')}</div>}
       </div>
 
-      <div className="divide-y divide-slate-200/60 dark:divide-white/10">{children}</div>
+      <div className="divide-y divide-slate-200/60 dark:divide-white/10">
+        <StatusColumn.Provider value={showStatus}>{children}</StatusColumn.Provider>
+      </div>
     </div>
   );
 };
@@ -66,7 +73,7 @@ interface MediaRowProps {
   /** Artist name, albums only */
   subtitle?: string;
   /** Makes the artist name a link of its own */
-  onSubtitleClick?: () => void;
+  subtitleTo?: string;
   thumbnail?: string;
   type: MediaListKind;
   albumType?: string;
@@ -79,6 +86,8 @@ interface MediaRowProps {
   date?: string | null;
   /** Why this item is in the results when it didn't match by name (e.g. a track inside it did) */
   matchHint?: string;
+  /** Page the row opens: renders a real link (middle-click, open in new tab) */
+  to?: string;
   onClick?: () => void;
   /** A small button right after the title (e.g. a like) */
   titleAction?: React.ReactNode;
@@ -98,7 +107,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   id,
   title,
   subtitle,
-  onSubtitleClick,
+  subtitleTo,
   thumbnail,
   type,
   albumType,
@@ -109,10 +118,12 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   tracksDownloaded,
   date,
   matchHint,
+  to,
   onClick,
   titleAction,
 }) => {
   const { t, formatLocale } = useI18n();
+  const showStatus = React.useContext(StatusColumn);
   const isArtist = type === 'artist';
   const typeLabel = isArtist ? null : t(albumTypeKey(albumType));
 
@@ -122,27 +133,21 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   const complete = hasTracks && downloaded >= total;
   const progress = hasTracks ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
   const tracksText = hasTracks ? `${downloaded}/${total}` : NONE;
+  // A complete count needs no "x/x": the same wording as the tracks column
+  const tracksLabel = complete ? t('album.trackCount', { count: total }) : t('library.meta.trackCount', { tracks: tracksText });
 
   // Everything that has no column at the current width gets folded into the
-  // line under the title, so no info is lost on small screens.
-  const subtitleNode = subtitle && onSubtitleClick
-    ? <SubtitleLink onClick={onSubtitleClick}>{subtitle}</SubtitleLink>
+  // line under the title, in the columns' order, so no info is lost on small screens.
+  const subtitleNode = subtitle && subtitleTo
+    ? <SubtitleLink to={subtitleTo}>{subtitle}</SubtitleLink>
     : subtitle;
   const compactMeta = isArtist
     ? t('library.meta.albumCount', { count: albumsCount ?? 0 })
-    : [year, typeLabel].filter(Boolean).join(' · ');
+    : [typeLabel, year].filter(Boolean).join(' · ');
 
-  // The row opens the item through a button stretched over it, rather than
-  // being one: a button can't hold another (the title action, the artist
-  // link). The content lets clicks through to it, except those two.
   return (
     <div className="group relative flex items-center gap-3 md:gap-4 px-3 md:px-4 py-2.5 transition-colors duration-200 hover:bg-slate-100/70 dark:hover:bg-white/5">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={title}
-        className="absolute inset-0 w-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/70 dark:focus-visible:ring-red-500/70"
-      />
+      <CardLink to={to} onClick={onClick} label={title} className="w-full focus-visible:ring-inset" />
       <div className="contents pointer-events-none">
         {/* Artwork */}
         <div
@@ -161,7 +166,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
         {/* Title + compact meta */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <h3 className="font-semibold text-sm text-foreground truncate transition-colors group-hover:text-blue-600 dark:group-hover:text-red-400">
+            <h3 className="font-semibold text-sm text-foreground truncate transition-colors group-hover:text-accent-600 dark:group-hover:text-accent-400">
               {title}
             </h3>
             {titleAction && <div className="relative z-10 shrink-0 -my-1 pointer-events-auto">{titleAction}</div>}
@@ -172,11 +177,11 @@ export const MediaRow: React.FC<MediaRowProps> = ({
             {compactMeta}
             <span className="sm:hidden">
               {(compactMeta || (!isArtist && subtitle)) && ' · '}
-              {t('library.meta.trackCount', { tracks: tracksText })}
+              {tracksLabel}
             </span>
           </p>
           {matchHint && (
-            <p className="text-xs text-blue-600 dark:text-red-400 truncate" title={matchHint}>
+            <p className="text-xs text-accent-600 dark:text-accent-400 truncate" title={matchHint}>
               {matchHint}
             </p>
           )}
@@ -189,7 +194,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
           <>
             <div className={`${COLUMNS.artist} text-sm text-muted-foreground truncate`}>{subtitleNode || NONE}</div>
             <div className={COLUMNS.type}>
-              <span className="inline-block rounded-full bg-slate-200/70 dark:bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="inline-block rounded-full bg-slate-200/70 dark:bg-white/10 px-2 py-0.5 text-xs font-medium text-muted-foreground">
                 {typeLabel}
               </span>
             </div>
@@ -197,22 +202,22 @@ export const MediaRow: React.FC<MediaRowProps> = ({
           </>
         )}
 
-        {/* Track progress */}
+        {/* Track progress: a bar only while there is something left to get */}
         <div className={COLUMNS.tracks}>
           <div className="flex items-center gap-2">
-            <div className="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-[width] duration-500 ${
-                  complete
-                    ? 'bg-emerald-500'
-                    : mediaStatus === 'failed'
-                      ? 'bg-red-600 dark:bg-rose-500'
-                      : 'bg-blue-600 dark:bg-red-600'
-                }`}
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{tracksText}</span>
+            {hasTracks && !complete && (
+              <div className="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-500 ${
+                    mediaStatus === 'failed' ? 'bg-red-600 dark:bg-red-500' : 'bg-accent-600 dark:bg-accent-500'
+                  }`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            )}
+            <span className={`shrink-0 text-sm tabular-nums text-muted-foreground ${hasTracks && !complete ? 'w-16 text-right' : ''}`}>
+              {complete ? tracksLabel : tracksText}
+            </span>
           </div>
         </div>
 
@@ -220,16 +225,18 @@ export const MediaRow: React.FC<MediaRowProps> = ({
         <div className={`${COLUMNS.date} text-sm text-muted-foreground truncate`}>{formatDate(date, formatLocale)}</div>
 
         {/* Status: a pip on small screens, pip and label from lg up */}
-        <div className={`${COLUMNS.status} flex items-center gap-2`}>
-          {mediaStatus && (
-            <>
-              <StatusPip status={mediaStatus} className="shadow-sm ring-2 ring-white dark:ring-zinc-900" />
-              <span className="hidden lg:inline text-xs font-medium text-muted-foreground truncate">
-                {t(statusLabelKey(mediaStatus))}
-              </span>
-            </>
-          )}
-        </div>
+        {showStatus && (
+          <div className={`${COLUMNS.status} flex items-center gap-2`}>
+            {mediaStatus && (
+              <>
+                <StatusPip status={mediaStatus} className="shadow-sm ring-2 ring-white dark:ring-zinc-900" />
+                <span className="hidden lg:inline text-xs font-medium text-muted-foreground truncate">
+                  {t(statusLabelKey(mediaStatus))}
+                </span>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { GenreChips } from '../components/ui/GenreChips';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
-import { categorizeAlbums, getAlbumStatus, apiErrorMessage } from '../utils';
+import { categorizeAlbums, getAlbumStatus, apiErrorMessage, albumPath } from '../utils';
 
 export default function Artist(): JSX.Element {
   const { artistId } = useParams<{ artistId: string }>();
@@ -196,7 +196,7 @@ export default function Artist(): JSX.Element {
             albumType={album.type}
             year={album.year ?? undefined}
             mediaStatus={getAlbumStatus(album)}
-            onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+            to={albumPath(album.id)}
           />
         ))}
       </div>
@@ -233,17 +233,8 @@ export default function Artist(): JSX.Element {
 
       <div className="space-y-12 pb-12">
         {/* Artist header */}
-        <div className="relative bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
-          {canFollow && inLibrary && (
-            <LikeButton
-              liked={page.liked}
-              name={artist.name}
-              onToggle={toggleLike}
-              className="absolute top-4 right-4 md:top-6 md:right-6 w-11 h-11 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-colors"
-              iconClassName="w-6 h-6"
-            />
-          )}
-          <div className="flex flex-col md:flex-row gap-8 items-start">
+        <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
+          <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
             <div className="relative group">
               <Artwork
                 src={getImageUrl(artist.thumbnail)}
@@ -253,19 +244,11 @@ export default function Artist(): JSX.Element {
                 className="w-48 h-48 md:w-64 md:h-64 rounded-full bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
               {/* Glow effect */}
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 dark:from-red-500/20 dark:to-red-700/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />
+              <div className="absolute inset-0 rounded-full bg-accent-500/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />
             </div>
 
             <div className="flex-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-4">
-                <span className="text-sm text-blue-600 dark:text-red-400 font-medium">
-                  🎤 {t('artist.title')}
-                </span>
-              </div>
-
-              <h1 className="text-4xl md:text-5xl font-bold mb-4">
-                <span className="text-gradient">{artist.name}</span>
-              </h1>
+              <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4">{artist.name}</h1>
 
               <GenreChips genres={artist.genres} className="mb-4" />
 
@@ -273,7 +256,7 @@ export default function Artist(): JSX.Element {
                 {t('artist.releaseCount', { count: releases.length })}
               </p>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 {canFollow && (
                   <Button
                     onClick={handleFollow}
@@ -286,13 +269,20 @@ export default function Artist(): JSX.Element {
                   </Button>
                 )}
 
-                <Button onClick={() => navigate(-1)} variant="ghost" size="lg">
-                  ← {t('common.back')}
-                </Button>
+                {canFollow && inLibrary && (
+                  <LikeButton
+                    liked={page.liked}
+                    name={artist.name}
+                    onToggle={toggleLike}
+                    className="w-[52px] h-[52px] border border-slate-200 dark:border-white/10 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-colors"
+                    iconClassName="w-6 h-6"
+                  />
+                )}
 
+                {/* Last and quiet: it opens a confirmation, the dialog carries the red */}
                 {isAdmin && page.subscription_mode != null && (
-                  <Button onClick={openDeleteConfirm} variant="danger" size="lg" isLoading={deleteLoading}>
-                    🗑️ {t('artist.delete')}
+                  <Button onClick={openDeleteConfirm} variant="subtleDanger" isLoading={deleteLoading} className="md:ml-auto">
+                    {t('artist.delete')}
                   </Button>
                 )}
               </div>
@@ -304,7 +294,7 @@ export default function Artist(): JSX.Element {
         {releaseGrid(t('artist.singles'), singles)}
 
         {releases.length === 0 && (
-          <EmptyState icon="💿" title={t('artist.noAlbums')}>
+          <EmptyState icon="disc" title={t('artist.noAlbums')}>
             <p>{t('artist.noAlbumsDescription')}</p>
           </EmptyState>
         )}

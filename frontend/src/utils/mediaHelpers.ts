@@ -101,3 +101,12 @@ export function formatDurationLong(seconds?: number | null): string {
 
   return `${minutes} min`;
 }
+
+/** Where an artist's page lives (a real href, so it opens in a new tab too) */
+export const artistPath = (id: string): string => `/artists/${encodeURIComponent(id)}`;
+
+/** Where an album's page lives */
+export const albumPath = (id: string): string => `/albums/${encodeURIComponent(id)}`;
+
+/** For lists of your own library, where "downloaded" is the norm: only the exceptions get a badge */
+export const exceptionalStatus = (status: MediaStatus): MediaStatus => (status === 'downloaded' ? undefined : status);

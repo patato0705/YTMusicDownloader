@@ -5,15 +5,20 @@
 
 @layer base {
   :root {
-    /* Light theme: clean blue */
+    /* Light theme: slate with the indigo accent */
     --color-background: 248 250 252;         /* slate-50 */
     --color-foreground: 15 23 42;            /* slate-900 */
     --color-muted-foreground: 100 116 139;   /* slate-500 */
     --color-border: 226 232 240;             /* slate-200 */
+
+    /* The accent, for inline styles (e.g. the chart slider) */
+    --color-accent: theme(colors.accent.500);
+    /* The phone tab bar's height (Navbar), cleared by main and sticky bars */
+    --tab-bar-height: 4.25rem;
   }
 
   .dark {
-    /* Dark theme: deep blacks with crimson accents */
+    /* Dark theme: deep blacks, same indigo accent as light */
     --color-background: 9 9 11;              /* zinc-950 */
     --color-foreground: 250 250 250;         /* zinc-50 */
     --color-muted-foreground: 161 161 170;   /* zinc-400 */
@@ -45,12 +50,12 @@
 @layer utilities {
   /* Gradient text */
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-accent-600 to-accent-500;
   }
 
   /* Dark mode gradient text */
   .dark .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-red-500 via-red-600 to-red-700;
+    @apply from-accent-400 to-accent-300;
   }
 
   /* Glassmorphism - Light mode defaults */
@@ -64,26 +69,18 @@
   }
 
   /* Gradient backgrounds - Light mode defaults */
-  .bg-gradient-tech {
-    background: linear-gradient(135deg,
-      rgba(59, 130, 246, 0.08) 0%,
-      rgba(99, 102, 241, 0.06) 50%,
-      rgba(139, 92, 246, 0.08) 100%
-    );
-  }
-
   .bg-gradient-radial {
     background: radial-gradient(
       circle at top right,
-      rgba(59, 130, 246, 0.1) 0%,
+      theme(colors.accent.500 / 10%) 0%,
       transparent 50%
     );
   }
 
   .bg-grid {
     background-image:
-      linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+      linear-gradient(theme(colors.accent.500 / 4%) 1px, transparent 1px),
+      linear-gradient(90deg, theme(colors.accent.500 / 4%) 1px, transparent 1px);
     background-size: 50px 50px;
   }
 
@@ -91,30 +88,22 @@
     border: 1px solid transparent;
     background:
       linear-gradient(rgb(255, 255, 255), rgb(255, 255, 255)) padding-box,
-      linear-gradient(135deg, rgb(59, 130, 246), rgb(99, 102, 241), rgb(139, 92, 246)) border-box;
+      linear-gradient(135deg, theme(colors.accent.500), theme(colors.accent.400)) border-box;
   }
 
   /* Dark mode gradient backgrounds */
-  .dark .bg-gradient-tech {
-    background: linear-gradient(135deg,
-      rgba(185, 28, 28, 0.15) 0%,
-      rgba(153, 27, 27, 0.12) 50%,
-      rgba(220, 38, 38, 0.15) 100%
-    );
-  }
-
   .dark .bg-gradient-radial {
     background: radial-gradient(
       circle at top right,
-      rgba(220, 38, 38, 0.2) 0%,
+      theme(colors.accent.500 / 14%) 0%,
       transparent 50%
     );
   }
 
   .dark .bg-grid {
     background-image:
-      linear-gradient(rgba(220, 38, 38, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(220, 38, 38, 0.05) 1px, transparent 1px);
+      linear-gradient(theme(colors.accent.400 / 4%) 1px, transparent 1px),
+      linear-gradient(90deg, theme(colors.accent.400 / 4%) 1px, transparent 1px);
     background-size: 50px 50px;
   }
 
@@ -122,17 +111,9 @@
     border: 1px solid transparent;
     background:
       linear-gradient(rgb(24, 24, 27), rgb(24, 24, 27)) padding-box,
-      linear-gradient(135deg, rgb(185, 28, 28), rgb(220, 38, 38), rgb(239, 68, 68)) border-box;
+      linear-gradient(135deg, theme(colors.accent.600), theme(colors.accent.500), theme(colors.accent.400)) border-box;
   }
 
-  /* Hover lift effect */
-  .hover-lift {
-    @apply transition-all duration-300;
-  }
-
-  .hover-lift:hover {
-    @apply -translate-y-1;
-  }
 }
 
 /* Scrollbar styling - Light mode default */
@@ -151,7 +132,7 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-blue-500/60;
+  @apply bg-accent-500/60;
 }
 
 /* Dark mode scrollbar */
@@ -165,22 +146,22 @@
 }
 
 .dark::-webkit-scrollbar-thumb:hover {
-  @apply bg-red-600/60;
+  @apply bg-accent-500/60;
 }
 
 /* Selection styling - Light mode default */
 ::selection {
-  @apply bg-blue-500/30 text-blue-900;
+  @apply bg-accent-500/30 text-accent-900;
 }
 
 .dark ::selection {
-  @apply bg-red-700/40 text-red-100;
+  @apply bg-accent-500/40 text-accent-50;
 }
 
-/* Custom scrollbar for ChartArtistGrid */
+/* Thin scrollbar for inner scrolling areas (chart grid, browse artist row) */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(59, 130, 246, 0.3) transparent;
+  scrollbar-color: theme(colors.accent.500 / 30%) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -192,22 +173,22 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(59, 130, 246, 0.3);
+  background-color: theme(colors.accent.500 / 30%);
   border-radius: 10px;
 }
 
 .dark .custom-scrollbar {
-  scrollbar-color: rgba(239, 68, 68, 0.3) transparent;
+  scrollbar-color: theme(colors.accent.400 / 30%) transparent;
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(239, 68, 68, 0.3);
+  background-color: theme(colors.accent.400 / 30%);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(59, 130, 246, 0.5);
+  background-color: theme(colors.accent.500 / 50%);
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(239, 68, 68, 0.5);
+  background-color: theme(colors.accent.400 / 50%);
 }

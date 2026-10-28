@@ -32,7 +32,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
     >
       <span
         className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-          checked ? 'bg-blue-600 dark:bg-red-600' : 'bg-slate-300 dark:bg-zinc-700'
+          checked ? 'bg-accent-600' : 'bg-slate-300 dark:bg-zinc-700'
         }`}
       >
         <span

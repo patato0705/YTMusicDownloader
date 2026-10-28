@@ -3,6 +3,8 @@ import React, { useId } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from './Button';
 import { Modal } from './Modal';
+import { Icon } from './icons';
+import type { IconName } from './icons';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -16,16 +18,16 @@ interface ConfirmDialogProps {
   isLoading?: boolean;
 }
 
-const ICONS = {
-  danger: '🗑️',
-  warning: '⚠️',
-  info: 'ℹ️',
+const ICONS: Record<'danger' | 'warning' | 'info', IconName> = {
+  danger: 'trash',
+  warning: 'warning',
+  info: 'info',
 };
 
 const COLORS = {
   danger: 'bg-red-500/20 text-red-600 dark:text-red-400',
   warning: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400',
-  info: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+  info: 'bg-accent-500/20 text-accent-600 dark:text-accent-400',
 };
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -46,7 +48,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     <Modal onClose={onCancel} dismissible={!isLoading} labelledBy={titleId}>
       <div className="flex items-start gap-4 mb-6">
         <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${COLORS[variant]}`}>
-          <span className="text-2xl" aria-hidden="true">{ICONS[variant]}</span>
+          <Icon name={ICONS[variant]} className="w-6 h-6" />
         </div>
         <div className="flex-1 min-w-0">
           <h2 id={titleId} className="text-xl font-bold text-foreground mb-2">

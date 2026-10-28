@@ -9,7 +9,7 @@
  * undoable from the toast) and restore dismissed ones from the "Dismissed (n)" list.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -26,7 +26,8 @@ import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
 import { SectionHeader } from './ui/SectionHeader';
 import { Toast } from './ui/Toast';
-import { createMemoryCache } from '../utils';
+import { createMemoryCache, artistPath } from '../utils';
+import { Icon } from './ui/icons';
 
 interface ToastState {
   message: string;
@@ -46,7 +47,6 @@ interface RecommendedArtistsProps {
 export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback = null }) => {
   const { t, locale } = useI18n();
   const { user } = useAuth();
-  const navigate = useNavigate();
   const canEdit = user?.role === 'administrator' || user?.role === 'member';
 
   const [cached] = useState(() => cache.get(CACHE_KEY));
@@ -151,33 +151,29 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
           {recommendations.map((rec) => {
             const text = similarTo(rec);
             return (
-              <div key={rec.id} className="relative group/rec">
-                <MediaCard
-                  id={rec.id}
-                  title={rec.name}
-                  subtitle={text.short}
-                  subtitleTitle={text.full}
-                  subtitleWrap
-                  thumbnail={getImageUrl(rec.thumbnail)}
-                  type="artist"
-                  onClick={() => navigate(`/artists/${encodeURIComponent(rec.id)}`)}
-                />
-                {canEdit && (
-                  // Outside the card (a button can't hold another), over the
-                  // artwork's top-right corner, which the round picture leaves free
+              <MediaCard
+                key={rec.id}
+                id={rec.id}
+                title={rec.name}
+                subtitle={text.short}
+                subtitleTitle={text.full}
+                subtitleWrap
+                thumbnail={getImageUrl(rec.thumbnail)}
+                type="artist"
+                to={artistPath(rec.id)}
+                titleAction={canEdit && (
+                  // Next to the name, like the library's heart; shown on hover where there is one
                   <button
                     type="button"
                     onClick={() => dismiss(rec)}
                     aria-label={`${t('browse.recommendations.dismiss')}: ${rec.name}`}
                     title={t('browse.recommendations.dismiss')}
-                    className="absolute top-0 right-0 z-20 flex w-8 h-8 items-center justify-center rounded-full bg-black/55 text-white shadow-md ring-1 ring-white/20 backdrop-blur-md transition-all duration-300 hover:bg-black/75 group-hover/rec:-translate-y-1 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/rec:opacity-100 focus-visible:opacity-100"
+                    className="flex w-7 h-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <Icon name="close" strokeWidth={2.5} className="w-4 h-4" />
                   </button>
                 )}
-              </div>
+              />
             );
           })}
         </div>
@@ -210,7 +206,6 @@ interface DismissedArtistsModalProps {
 
 const DismissedArtistsModal: React.FC<DismissedArtistsModalProps> = ({ onClose, onRestore }) => {
   const { t } = useI18n();
-  const navigate = useNavigate();
   const [dismissed, setDismissed] = useState<DismissedArtist[] | null>(null);
   const [restoring, setRestoring] = useState<string | null>(null);
 
@@ -245,9 +240,8 @@ const DismissedArtistsModal: React.FC<DismissedArtistsModalProps> = ({ onClose, 
           <ul className="space-y-2">
             {dismissed.map((artist) => (
               <li key={artist.id} className="flex items-center gap-3 rounded-2xl p-2 hover:bg-slate-100/60 dark:hover:bg-white/5 transition-colors">
-                <button
-                  type="button"
-                  onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
+                <Link
+                  to={artistPath(artist.id)}
                   className="flex flex-1 min-w-0 items-center gap-3 text-left"
                 >
                   <Artwork
@@ -257,7 +251,7 @@ const DismissedArtistsModal: React.FC<DismissedArtistsModalProps> = ({ onClose, 
                     className="w-11 h-11 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
                   />
                   <span className="font-medium text-foreground truncate">{artist.name}</span>
-                </button>
+                </Link>
                 <Button
                   size="sm"
                   variant="secondary"

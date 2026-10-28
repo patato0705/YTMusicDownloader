@@ -9,6 +9,7 @@ import { ErrorBanner } from './PageStatus';
 import { getTrackLyrics, updateTrackLyrics } from '../../api/tracks';
 import { apiErrorMessage, primaryArtistName } from '../../utils';
 import type { LyricsKind, Track } from '../../types';
+import { Icon } from './icons';
 
 // Same rule as backend/routers/tracks.py's _LRC_TIMESTAMP_RE: a line that
 // starts with [mm:ss.xx] makes the whole file "synced".
@@ -104,11 +105,11 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
         href={lrclibSearchUrl(track)}
         target="_blank"
         rel="noopener noreferrer"
-        className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10 flex items-center gap-3 mb-4 shrink-0 hover:border-blue-500/40 dark:hover:border-red-500/40 transition-colors group"
+        className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10 flex items-center gap-3 mb-4 shrink-0 hover:border-accent-500/40 transition-colors group"
       >
-        <span className="text-2xl leading-none">🔎</span>
+        <Icon name="search" className="w-6 h-6" />
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-foreground group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors">
+          <p className="font-semibold text-foreground group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">
             {t('lyrics.searchLrclib')}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">{t('lyrics.searchLrclibHint')}</p>
@@ -119,7 +120,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
       {/* Editor */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
-          <Spinner size="lg" className="text-blue-600 dark:text-red-500" />
+          <Spinner size="lg" className="text-accent-600 dark:text-accent-500" />
         </div>
       ) : (
         <div className="flex-1 flex flex-col">
@@ -129,7 +130,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
             readOnly={!isEditing}
             spellCheck={false}
             placeholder={isEditing ? t('lyrics.placeholder') : t('lyrics.empty')}
-            className="flex-1 min-h-[16rem] [@media(max-height:500px)]:min-h-[6rem] w-full resize-none rounded-2xl p-4 font-mono text-sm leading-relaxed bg-white/60 dark:bg-black/30 border border-slate-200/50 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 read-only:opacity-80"
+            className="flex-1 min-h-[16rem] [@media(max-height:500px)]:min-h-[6rem] w-full resize-none rounded-2xl p-4 font-mono text-sm leading-relaxed bg-white/60 dark:bg-black/30 border border-slate-200/50 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 read-only:opacity-80"
           />
           <div className="flex items-center justify-between gap-3 mt-2 px-1 min-h-[1.25rem]">
             <p className="text-xs text-muted-foreground">

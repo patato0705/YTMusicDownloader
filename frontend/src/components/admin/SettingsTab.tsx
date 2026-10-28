@@ -20,6 +20,10 @@ interface SettingsTabProps extends AdminTabProps {
   onSaved: () => void;
 }
 
+/** Each setting's value by key: what the form edits */
+const valuesOf = (settings: Setting[]): Record<string, any> =>
+  Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
+
 export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) => {
   const { t, tOr, locale, formatLocale } = useI18n();
   const scheduleSummary = useScheduleSummary();
@@ -47,7 +51,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
   const loadSettings = async () => {
     const settingsArray = await adminApi.getAllSettings();
     setSettings(settingsArray);
-    setEditedSettings(Object.fromEntries(settingsArray.map(setting => [setting.key, setting.value])));
+    setEditedSettings(valuesOf(settingsArray));
   };
 
   useEffect(() => {
@@ -141,6 +145,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
 
   const invalidScheduleSetting = (setting: Setting): boolean =>
     setting.type === 'schedule' && !isValidSchedule(editedSettings[setting.key], setting.min ?? 1);
+
+  const dirty = settings.some((setting) => JSON.stringify(editedSettings[setting.key]) !== JSON.stringify(setting.value));
+  const discardChanges = () =>
+    setEditedSettings(valuesOf(settings));
 
   const saveSettings = async () => {
     const invalidSchedule = settings.find(invalidScheduleSetting);
@@ -242,7 +250,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                     <label className="font-semibold text-foreground block mb-1">
                       {settingLabel(setting)}
                     </label>
-                    <p className="text-sm text-muted-foreground">{settingDescription(setting)}</p>
+                    <p className="text-sm text-muted-foreground max-w-prose">{settingDescription(setting)}</p>
                     {setting.type === 'schedule' && editedSettings[setting.key] && (
                       <ScheduleHint
                         settingKey={setting.key}
@@ -254,7 +262,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                     )}
                   </div>
 
-                  <div className="flex-shrink-0 ml-auto flex flex-wrap items-center justify-end gap-2 max-w-full">
+                  <div className="w-full sm:w-auto flex-shrink-0 ml-auto flex flex-wrap items-center justify-end gap-2 max-w-full">
                     {!isAtDefault(setting) && (
                       <Button
                         variant="ghost"
@@ -288,7 +296,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                         step={1}
                         value={editedSettings[setting.key] ?? ''}
                         onChange={(e) => handleSettingChange(setting.key, e.target.value, setting.type)}
-                        className={`w-24 px-3 py-2 glass rounded-xl text-foreground text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 ${
+                        className={`w-24 px-3 py-2 glass rounded-xl text-foreground text-center focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 ${
                           invalidIntSetting(setting)
                             ? 'border border-red-500 dark:border-red-500'
                             : 'border-slate-200 dark:border-white/10'
@@ -309,7 +317,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                         type="text"
                         value={editedSettings[setting.key] ?? ''}
                         onChange={(e) => handleSettingChange(setting.key, e.target.value, setting.type)}
-                        className="w-48 px-3 py-2 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600"
+                        className="w-48 px-3 py-2 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600"
                       />
                     )}
                   </div>
@@ -330,7 +338,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                     <label className="font-semibold text-foreground block mb-1">
                       {t('admin.settings.cookies.label')}
                     </label>
-                    <p className="text-sm text-muted-foreground">{t('admin.settings.cookies.description')}</p>
+                    <p className="text-sm text-muted-foreground max-w-prose">{t('admin.settings.cookies.description')}</p>
                     <p className={`text-sm mt-1 ${cookies?.present ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
                       {cookiesStatusText()}
                     </p>
@@ -363,16 +371,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
           </section>
         ))}
 
-        <div className="flex justify-end">
-          <Button
-            onClick={saveSettings}
-            isLoading={saveLoading}
-            variant="primary"
-            size="lg"
-          >
-            {t('admin.settings.save')}
-          </Button>
-        </div>
+        {/* Stays in view while anything is unsaved (above the phone tab bar) */}
+        {dirty && (
+          <div className="sticky bottom-[calc(var(--tab-bar-height)+env(safe-area-inset-bottom)+0.5rem)] md:bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 glass rounded-2xl px-4 py-3 shadow-lg">
+            <span className="text-sm font-medium text-foreground">{t('admin.settings.unsaved')}</span>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={discardChanges} disabled={saveLoading}>
+                {t('common.cancel')}
+              </Button>
+              <Button onClick={saveSettings} isLoading={saveLoading} variant="primary">
+                {t('admin.settings.save')}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </AdminTabShell>
   );

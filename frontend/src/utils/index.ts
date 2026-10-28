@@ -11,6 +11,9 @@ export {
   primaryArtistName,
   formatDuration,
   formatDurationLong,
+  artistPath,
+  albumPath,
+  exceptionalStatus,
 } from './mediaHelpers';
 
 // Formatting utilities

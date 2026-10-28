@@ -38,7 +38,7 @@ export const Toast: React.FC<ToastProps> = ({
   const colors = {
     success: 'bg-green-500/10 dark:bg-green-500/5 border-green-500/50 text-green-600 dark:text-green-400',
     error: 'bg-red-500/10 dark:bg-red-500/5 border-red-500/50 text-red-600 dark:text-red-400',
-    info: 'bg-blue-500/10 dark:bg-blue-500/5 border-blue-500/50 text-blue-600 dark:text-blue-400'
+    info: 'bg-accent-500/10 dark:bg-accent-500/5 border-accent-500/50 text-accent-600 dark:text-accent-400'
   };
 
   return (
@@ -48,7 +48,7 @@ export const Toast: React.FC<ToastProps> = ({
           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${
             type === 'success' ? 'bg-green-500/20' : 
             type === 'error' ? 'bg-red-500/20' : 
-            'bg-blue-500/20'
+            'bg-accent-500/20'
           }`}>
             {icons[type]}
           </div>

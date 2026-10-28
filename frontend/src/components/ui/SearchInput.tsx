@@ -2,6 +2,7 @@
 import React from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Spinner } from './Spinner';
+import { Icon } from './icons';
 
 interface SearchInputProps {
   value: string;
@@ -61,27 +62,19 @@ export const SearchInput: React.FC<SearchInputProps> = ({
         onFocus={onFocus}
         placeholder={label}
         autoFocus={autoFocus}
-        className={`w-full ${sizeClasses[size]} glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 focus:border-transparent transition-all duration-300 ${size === 'lg' ? 'shadow-lg' : ''} ${inputClassName}`}
+        className={`w-full ${sizeClasses[size]} glass rounded-xl border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 focus:border-transparent transition-all duration-300 ${size === 'lg' ? 'shadow-lg' : ''} ${inputClassName}`}
         aria-label={label}
       />
       
       {/* Search icon */}
       <div className={`absolute inset-y-0 left-0 ${iconPadding[size]} flex items-center pointer-events-none z-10`}>
-        <svg 
-          className={`${iconSizes[size]} text-blue-500 dark:text-red-700 drop-shadow-sm`} 
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24" 
-          strokeWidth="2.5"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
+        <Icon name="search" strokeWidth={2.5} className={`${iconSizes[size]} text-accent-500 dark:text-accent-700 drop-shadow-sm`} />
       </div>
 
       {/* Loading spinner */}
       {loading && (
         <div className="absolute inset-y-0 right-0 pr-4 flex items-center z-10">
-          <Spinner size="sm" className="!w-5 !h-5 text-blue-600 dark:text-red-500" />
+          <Spinner size="sm" className="!w-5 !h-5 text-accent-600 dark:text-accent-500" />
         </div>
       )}
 
@@ -93,9 +86,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
           className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground z-10 transition-colors"
           type="button"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <Icon name="close" />
         </button>
       )}
     </div>

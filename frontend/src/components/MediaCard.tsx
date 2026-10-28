@@ -1,8 +1,10 @@
 // src/components/MediaCard.tsx
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { Artwork } from './ui/Artwork';
 import type { MediaStatus } from '../types';
+import { ICON_PATHS } from './ui/icons';
 
 export type MediaKind = 'artist' | 'album' | 'track';
 
@@ -15,7 +17,7 @@ interface MediaCardProps {
   /** Let the subtitle wrap to a second line instead of cutting it short */
   subtitleWrap?: boolean;
   /** Makes the subtitle a link of its own (e.g. an album's artist) */
-  onSubtitleClick?: () => void;
+  subtitleTo?: string;
   thumbnail?: string;
   type?: MediaKind;
   /** Release type as reported by YTMusic ("Album", "EP", "Single"), only used when type is 'album' */
@@ -24,7 +26,11 @@ interface MediaCardProps {
   mediaStatus?: MediaStatus;
   /** Why this item is in the results when it didn't match by name (e.g. a track inside it did) */
   matchHint?: string;
+  /** Page the card opens: renders a real link (middle-click, open in new tab) */
+  to?: string;
   onClick?: () => void;
+  /** A small button right after the title (e.g. a like) */
+  titleAction?: React.ReactNode;
   className?: string;
 }
 
@@ -38,30 +44,28 @@ const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
   downloaded: {
     labelKey: 'mediaCard.status.downloaded',
     className: 'bg-emerald-500',
-    path: 'M5 13l4 4L19 7',
+    path: ICON_PATHS.check,
   },
   in_library: {
     labelKey: 'mediaCard.status.inLibrary',
-    className: 'bg-blue-500 dark:bg-red-600',
-    path: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z',
+    className: 'bg-accent-500 dark:bg-accent-600',
+    path: ICON_PATHS.bookmark,
   },
   downloading: {
     labelKey: 'mediaCard.status.downloading',
     className: 'bg-amber-500',
     iconClassName: 'animate-spin',
-    path: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+    path: ICON_PATHS.refresh,
   },
   queued: {
     labelKey: 'mediaCard.status.queued',
     className: 'bg-slate-500 dark:bg-zinc-600',
-    path: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+    path: ICON_PATHS.clock,
   },
-  // Dark mode already uses red as its accent (see in_library), so this leans
-  // on the "!" glyph and a pinker shade to stay tellable apart from it
   failed: {
     labelKey: 'mediaCard.status.failed',
-    className: 'bg-red-600 dark:bg-rose-500',
-    path: 'M12 8v5m0 3.5h.01',
+    className: 'bg-red-600 dark:bg-red-500',
+    path: ICON_PATHS.alert,
   },
 };
 
@@ -85,31 +89,34 @@ export const StatusPip: React.FC<{ status: NonNullable<MediaStatus>; className?:
 export const statusLabelKey = (status: NonNullable<MediaStatus>): string => STATUS_BADGES[status].labelKey;
 
 /**
- * Clickable text inside a card / row. The card itself is a button, which can't
- * hold another one, so this is a focusable span that keeps the click to itself.
+ * Opens a card's or row's page through a link (or button) stretched over it,
+ * rather than the card being one: then it can still hold controls of its own
+ * (a like, the artist link). Content after it goes pointer-events-none, and those
+ * controls pointer-events-auto above it.
  */
-export const SubtitleLink: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => {
-  const activate = (e: React.SyntheticEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    onClick();
-  };
-  return (
-    <span
-      role="link"
-      tabIndex={0}
-      onClick={activate}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') activate(e);
-        // Space would otherwise press the card behind it
-        else if (e.key === ' ') e.stopPropagation();
-      }}
-      className="relative z-10 pointer-events-auto cursor-pointer rounded-sm outline-none hover:text-blue-600 dark:hover:text-red-400 hover:underline focus-visible:underline focus-visible:text-blue-600 dark:focus-visible:text-red-400 transition-colors"
-    >
-      {children}
-    </span>
+export const CardLink: React.FC<{ to?: string; onClick?: () => void; label: string; className?: string }> = ({
+  to,
+  onClick,
+  label,
+  className = '',
+}) => {
+  const classes = `absolute inset-0 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 ${className}`;
+  return to ? (
+    <Link to={to} onClick={onClick} aria-label={label} className={classes} />
+  ) : (
+    <button type="button" onClick={onClick} aria-label={label} className={classes} />
   );
 };
+
+/** A link inside a card / row (e.g. the artist under an album), above its CardLink */
+export const SubtitleLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, children }) => (
+  <Link
+    to={to}
+    className="relative z-10 pointer-events-auto cursor-pointer rounded-sm outline-none hover:text-accent-600 dark:hover:text-accent-400 hover:underline focus-visible:underline focus-visible:text-accent-600 dark:focus-visible:text-accent-400 transition-colors"
+  >
+    {children}
+  </Link>
+);
 
 /** Release type of an album, falling back to "Album" for anything unexpected */
 export function albumTypeKey(albumType?: string): string {
@@ -129,90 +136,97 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   subtitle,
   subtitleTitle,
   subtitleWrap = false,
-  onSubtitleClick,
+  subtitleTo,
   thumbnail,
   type = 'album',
   albumType,
   year,
   mediaStatus,
   matchHint,
+  to,
   onClick,
+  titleAction,
   className = '',
 }) => {
   const { t } = useI18n();
   const isArtist = type === 'artist';
-  const hasMeta = Boolean(subtitle || year);
 
   // Artists are already told apart by their round artwork (and live in their own
-  // sections), so the badge would only crowd the circle: square artwork keeps it
+  // sections), so they go without; the others name their type under the title
   const typeLabel = isArtist
     ? null
     : type === 'track'
       ? t('mediaCard.type.track')
       : t(albumTypeKey(albumType));
+  // A circle leaves no corner for a pip, so an artist's status is a dot and a word under the name
+  const artistStatus = isArtist && mediaStatus ? mediaStatus : null;
+  const hasMeta = Boolean(subtitle || year || typeLabel || artistStatus);
 
   const shape = isArtist ? 'rounded-full' : 'rounded-2xl';
-  // A circle has no corner to pin the status pip to, so sit it on the edge instead
-  const statusBadgePosition = isArtist ? 'bottom-[6%] left-[6%]' : 'bottom-2 left-2';
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`group w-full text-left rounded-2xl outline-none transition-transform duration-300 hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-blue-500/70 dark:focus-visible:ring-red-500/70 ${className}`}
-    >
-      {/* Artwork: the badges live outside the clipping box so they survive the round shape */}
-      <div className="relative mb-3">
-        <div
-          className={`relative aspect-square overflow-hidden bg-slate-200 dark:bg-zinc-800 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 transition-shadow duration-300 group-hover:shadow-xl group-hover:shadow-blue-500/10 dark:group-hover:shadow-red-500/10 ${shape}`}
-        >
-          <Artwork
-            src={thumbnail}
-            name={title}
-            seed={id}
-            className="w-full h-full transition-transform duration-500 ease-out group-hover:scale-105"
-          />
+    <div className={`group relative w-full text-left rounded-2xl transition-transform duration-300 hover:-translate-y-1 ${className}`}>
+      <CardLink to={to} onClick={onClick} label={title} className="rounded-2xl" />
+      <div className="relative pointer-events-none">
+        {/* Artwork: the badges live outside the clipping box so they survive the round shape */}
+        <div className="relative mb-3">
+          <div
+            className={`relative aspect-square overflow-hidden bg-slate-200 dark:bg-zinc-800 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 transition-shadow duration-300 group-hover:shadow-xl group-hover:shadow-accent-500/10 ${shape}`}
+          >
+            <Artwork
+              src={thumbnail}
+              name={title}
+              seed={id}
+              className="w-full h-full transition-transform duration-500 ease-out group-hover:scale-105"
+            />
 
-          {/* Subtle darkening on hover, keeps the badges readable */}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            {/* Subtle darkening on hover, keeps the status pip readable */}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+          </div>
+
+          {mediaStatus && !isArtist && (
+            <StatusPip
+              status={mediaStatus}
+              className="absolute z-10 bottom-2 left-2 shadow-md ring-2 ring-white dark:ring-zinc-900"
+            />
+          )}
         </div>
 
-        {/* Type badge */}
-        {typeLabel && (
-          <span className="pointer-events-none absolute z-10 top-2 right-2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm ring-1 ring-white/20 backdrop-blur-md">
-            {typeLabel}
-          </span>
-        )}
+        {/* Text content, centered for artists */}
+        <div className={`space-y-0.5 px-0.5 ${isArtist ? 'text-center' : ''}`}>
+          {/* Centred names sit in the middle column, so an action beside them doesn't pull them off centre */}
+          <div className={isArtist ? 'grid grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-1' : 'flex items-center gap-1'}>
+            <h3 className={`min-w-0 font-semibold text-sm text-foreground truncate transition-colors group-hover:text-accent-600 dark:group-hover:text-accent-400 ${isArtist ? 'col-start-2' : ''}`}>
+              {title}
+            </h3>
+            {titleAction && <div className="relative z-10 shrink-0 -my-1 pointer-events-auto justify-self-start">{titleAction}</div>}
+          </div>
 
-        {mediaStatus && (
-          <StatusPip
-            status={mediaStatus}
-            className={`absolute z-10 ${statusBadgePosition} shadow-md ring-2 ring-white dark:ring-zinc-900`}
-          />
-        )}
+          {hasMeta && (
+            <p className={`text-xs text-muted-foreground ${subtitleWrap ? 'line-clamp-2' : 'truncate'}`} title={subtitleTitle}>
+              {artistStatus && (
+                <>
+                  <span className={`inline-block w-2 h-2 mr-1 rounded-full align-middle ${STATUS_BADGES[artistStatus].className}`} aria-hidden="true" />
+                  {t(statusLabelKey(artistStatus))}
+                  {subtitle && ' · '}
+                </>
+              )}
+              {subtitle && (subtitleTo ? <SubtitleLink to={subtitleTo}>{subtitle}</SubtitleLink> : subtitle)}
+              {subtitle && year && ' · '}
+              {year}
+              {(subtitle || year) && typeLabel && ' · '}
+              {typeLabel}
+            </p>
+          )}
+
+          {matchHint && (
+            <p className="text-xs text-accent-600 dark:text-accent-400 truncate" title={matchHint}>
+              {matchHint}
+            </p>
+          )}
+        </div>
       </div>
-
-      {/* Text content, centered for artists */}
-      <div className={`space-y-0.5 px-0.5 ${isArtist ? 'text-center' : ''}`}>
-        <h3 className="font-semibold text-sm text-foreground truncate transition-colors group-hover:text-blue-600 dark:group-hover:text-red-400">
-          {title}
-        </h3>
-
-        {hasMeta && (
-          <p className={`text-xs text-muted-foreground ${subtitleWrap ? 'line-clamp-2' : 'truncate'}`} title={subtitleTitle}>
-            {subtitle && (onSubtitleClick ? <SubtitleLink onClick={onSubtitleClick}>{subtitle}</SubtitleLink> : subtitle)}
-            {subtitle && year && ' · '}
-            {year}
-          </p>
-        )}
-
-        {matchHint && (
-          <p className="text-xs text-blue-600 dark:text-red-400 truncate" title={matchHint}>
-            {matchHint}
-          </p>
-        )}
-      </div>
-    </button>
+    </div>
   );
 };
 

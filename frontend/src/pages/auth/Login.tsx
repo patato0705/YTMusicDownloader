@@ -79,11 +79,11 @@ export default function Login(): JSX.Element {
   };
 
   return (
-    <AuthLayout title={t('auth.login.title')} emoji="🎵" subtitle={t('auth.login.subtitle')}>
+    <AuthLayout title={t('auth.login.title')} subtitle={t('auth.login.subtitle')}>
       <AuthCard>
         {!authConfig ? (
           <div className="flex justify-center py-8">
-            <Spinner size="lg" className="text-blue-600 dark:text-red-500" />
+            <Spinner size="lg" className="text-accent-600 dark:text-accent-500" />
           </div>
         ) : (
           <div className="space-y-6">
@@ -104,7 +104,7 @@ export default function Login(): JSX.Element {
             {authConfig.oidc_enabled && authConfig.password_login_enabled && (
               <div className="flex items-center gap-3">
                 <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
-                <span className="text-xs uppercase tracking-wider text-muted-foreground">{t('common.or')}</span>
+                <span className="text-xs text-muted-foreground">{t('common.or')}</span>
                 <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
               </div>
             )}
@@ -156,7 +156,7 @@ export default function Login(): JSX.Element {
                   {t('auth.login.noAccount')}{' '}
                   <Link
                     to="/register"
-                    className="font-semibold text-blue-600 dark:text-red-400 hover:text-blue-700 dark:hover:text-red-300 transition-colors"
+                    className="font-semibold text-accent-600 dark:text-accent-400 hover:text-accent-700 dark:hover:text-accent-300 transition-colors"
                   >
                     {t('auth.login.register')}
                   </Link>

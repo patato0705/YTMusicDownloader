@@ -82,6 +82,8 @@ export interface GetLibraryAlbumsParams {
   sort_by?: AlbumSortBy;
   order?: SortOrder;
   limit?: number;
+  /** Only albums in one of these download states */
+  statuses?: Array<'completed' | 'downloading' | 'pending' | 'failed'>;
 }
 
 /** What deleting an album or artist also changes, for its confirmation dialog */
@@ -102,8 +104,9 @@ export async function getLibraryArtists(): Promise<LibraryArtist[]> {
 /**
  * Albums in the library (download mode) with their download state
  */
-export async function getLibraryAlbums(params: GetLibraryAlbumsParams = {}): Promise<LibraryAlbum[]> {
-  return (await api.get<{ albums: LibraryAlbum[] }>('/library/albums', params)).albums;
+export async function getLibraryAlbums({ statuses, ...params }: GetLibraryAlbumsParams = {}): Promise<LibraryAlbum[]> {
+  const query = statuses ? { ...params, status_filter: statuses.join(',') } : params;
+  return (await api.get<{ albums: LibraryAlbum[] }>('/library/albums', query)).albums;
 }
 
 /**

@@ -1,6 +1,7 @@
 // src/components/ui/InfoTooltip.tsx
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Icon } from './icons';
 
 interface InfoTooltipProps {
   /** Tooltip body: plain text or richer markup. */
@@ -9,7 +10,7 @@ interface InfoTooltipProps {
   label: string;
   /** Extra classes for the trigger; with custom children they are its only styling. */
   className?: string;
-  /** Custom trigger content, replacing the default "i" badge (e.g. a navbar status badge). */
+  /** Custom trigger content, replacing the default info icon (e.g. a navbar status badge). */
   children?: React.ReactNode;
 }
 
@@ -17,7 +18,7 @@ const GAP = 8;     // distance between the trigger and the bubble
 const MARGIN = 8;  // minimum distance from the viewport edges
 
 /**
- * Small "i" button (or a custom trigger) that reveals a bubble on hover, focus
+ * Small info icon button (or a custom trigger) that reveals a bubble on hover, focus
  * or click/tap, so the details stay reachable on touch devices.
  *
  * The bubble is portaled to <body> with fixed positioning so it is neither
@@ -107,11 +108,11 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
         aria-expanded={open}
         className={
           children
-            ? `focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-red-600 ${className}`
-            : `inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 dark:border-white/20 text-[10px] leading-none normal-case font-serif italic text-muted-foreground hover:text-blue-600 dark:hover:text-red-400 hover:border-blue-400/50 dark:hover:border-red-600/50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 transition-colors ${className}`
+            ? `focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:focus-visible:ring-accent-600 ${className}`
+            : `inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-accent-600 dark:hover:text-accent-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 transition-colors ${className}`
         }
       >
-        {children ?? 'i'}
+        {children ?? <Icon name="info" className="w-4 h-4" />}
       </button>
 
       {open && createPortal(

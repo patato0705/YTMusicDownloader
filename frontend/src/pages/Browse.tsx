@@ -1,20 +1,22 @@
 // src/pages/Browse.tsx
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { search } from '../api/search';
-import type { SearchResults } from '../api/search';
+import type { SearchResults, SearchSong } from '../api/search';
 import { getImageUrl } from '../api/media';
-import { MediaCard } from '../components/MediaCard';
+import { CardLink, MediaCard, SubtitleLink } from '../components/MediaCard';
+import { Artwork } from '../components/ui/Artwork';
 import { RecommendedArtists } from '../components/RecommendedArtists';
 import { SearchInput } from '../components/ui/SearchInput';
 import { SectionHeader } from '../components/ui/SectionHeader';
-import { PageHero } from '../components/ui/PageHero';
+import { PageHeader } from '../components/ui/PageHeader';
 import { FilterTabs } from '../components/ui/FilterTabs';
 import type { FilterTab } from '../components/ui/FilterTabs';
 import { EmptyState, ErrorBanner } from '../components/ui/PageStatus';
-import { apiErrorMessage, createMemoryCache } from '../utils';
+import { apiErrorMessage, createMemoryCache, artistPath, albumPath } from '../utils';
 import { useDebounce } from '../hooks/useDebounce';
+import { Icon } from '../components/ui/icons';
 
 const VALID_FILTERS = ['all', 'artists', 'albums', 'songs'] as const;
 type FilterType = typeof VALID_FILTERS[number];
@@ -25,6 +27,33 @@ const EMPTY_RESULTS: SearchResults = { artists: [], albums: [], songs: [] };
 const resultsCache = createMemoryCache<SearchResults>(20);
 
 const GRID = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4';
+
+/** One song result: a row, since a song is a line in a list, not a cover. Opens its album */
+function SongRow({ song }: { song: SearchSong }): JSX.Element {
+  const artist = song.artists[0]?.name;
+  const artistId = song.artists[0]?.id;
+  return (
+    <div className="group relative flex items-center gap-3 px-3 md:px-4 py-2.5 transition-colors hover:bg-slate-100/70 dark:hover:bg-white/5">
+      {song.album.id && <CardLink to={albumPath(song.album.id)} label={song.title} className="w-full focus-visible:ring-inset" />}
+      <div className="contents pointer-events-none">
+        <Artwork
+          src={getImageUrl(song.thumbnail)}
+          name={song.title}
+          seed={song.id}
+          className="w-11 h-11 shrink-0 rounded-lg overflow-hidden bg-slate-200 dark:bg-zinc-800 ring-1 ring-slate-900/5 dark:ring-white/10"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-sm text-foreground truncate group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">{song.title}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {artist && (artistId ? <SubtitleLink to={artistPath(artistId)}>{artist}</SubtitleLink> : artist)}
+            {artist && song.album.name && ' · '}
+            {song.album.name}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Browse(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -53,7 +82,6 @@ export default function Browse(): JSX.Element {
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
   const { t } = useI18n();
 
   const debouncedQuery = useDebounce(query, 500);
@@ -105,10 +133,6 @@ export default function Browse(): JSX.Element {
     return () => { cancelled = true; };
   }, [debouncedQuery]);
 
-  // The artist named under an album / song opens that artist, when YTM gave its id
-  const openArtist = (artistId?: string | null): (() => void) | undefined =>
-    artistId ? () => navigate(`/artists/${encodeURIComponent(artistId)}`) : undefined;
-
   const hasResults = results.artists.length + results.albums.length + results.songs.length > 0;
   const shows = (filter: FilterType) => activeFilter === 'all' || activeFilter === filter;
 
@@ -121,15 +145,7 @@ export default function Browse(): JSX.Element {
 
   return (
     <div className="space-y-8 pb-12">
-      <PageHero
-        title={
-          <>
-            <span className="text-foreground">{t('browse.heroDiscover')} </span>
-            <span className="text-gradient">{t('browse.heroNewMusic')}</span>
-          </>
-        }
-        subtitle={t('browse.heroSubtitle')}
-      />
+      <PageHeader icon="search" title={t('nav.browse')} subtitle={t('browse.heroSubtitle')} />
 
       {/* Search bar, or import a playlist */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
@@ -154,9 +170,7 @@ export default function Browse(): JSX.Element {
           to="/playlist-import"
           className="flex items-center justify-center gap-2 px-5 py-4 rounded-xl glass text-foreground font-medium hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-300 whitespace-nowrap"
         >
-          <svg className="w-5 h-5 text-blue-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-          </svg>
+          <Icon name="music" className="w-5 h-5 text-accent-600 dark:text-accent-400" />
           {t('playlist.importFromPlaylist')}
         </Link>
       </div>
@@ -167,7 +181,7 @@ export default function Browse(): JSX.Element {
       {!query.trim() && !loading && (
         <RecommendedArtists
           fallback={
-            <EmptyState icon="🔍" title={t('browse.startSearch')}>
+            <EmptyState icon="search" title={t('browse.startSearch')}>
               <p>{t('browse.startSearchDescription')}</p>
             </EmptyState>
           }
@@ -175,7 +189,7 @@ export default function Browse(): JSX.Element {
       )}
 
       {query.trim() && !hasResults && !loading && !error && (
-        <EmptyState icon="😔" title={t('browse.noResults')}>
+        <EmptyState icon="search" title={t('browse.noResults')}>
           <p>{t('browse.noResultsFor', { query: query.trim() })}</p>
           <p className="text-sm">{t('browse.tryDifferentKeywords')}</p>
         </EmptyState>
@@ -189,16 +203,19 @@ export default function Browse(): JSX.Element {
             {shows('artists') && results.artists.length > 0 && (
               <section>
                 <SectionHeader>{t('browse.sections.artists')}</SectionHeader>
-                <div className={GRID}>
+                {/* One sideways row: on phones a grid of big circles pushed the albums screens away.
+                    pt leaves room for the cards' hover lift, which the scroller would clip */}
+                <div className="flex gap-4 overflow-x-auto snap-x scroll-px-4 custom-scrollbar -mx-4 px-4 pt-2 pb-2">
                   {results.artists.map((artist) => (
-                    <MediaCard
-                      key={artist.id}
-                      id={artist.id}
-                      title={artist.name}
-                      thumbnail={getImageUrl(artist.thumbnail)}
-                      type="artist"
-                      onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
-                    />
+                    <div key={artist.id} className="w-28 sm:w-32 lg:w-36 shrink-0 snap-start">
+                      <MediaCard
+                        id={artist.id}
+                        title={artist.name}
+                        thumbnail={getImageUrl(artist.thumbnail)}
+                        type="artist"
+                        to={artistPath(artist.id)}
+                      />
+                    </div>
                   ))}
                 </div>
               </section>
@@ -218,8 +235,8 @@ export default function Browse(): JSX.Element {
                       type="album"
                       albumType={album.type}
                       year={album.year ?? undefined}
-                      onSubtitleClick={openArtist(album.artist_id)}
-                      onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
+                      subtitleTo={album.artist_id ? artistPath(album.artist_id) : undefined}
+                      to={albumPath(album.id)}
                     />
                   ))}
                 </div>
@@ -229,20 +246,9 @@ export default function Browse(): JSX.Element {
             {shows('songs') && results.songs.length > 0 && (
               <section>
                 <SectionHeader>{t('browse.sections.songs')}</SectionHeader>
-                <div className={GRID}>
+                <div className="glass rounded-2xl overflow-hidden divide-y divide-slate-200/60 dark:divide-white/10 md:grid md:grid-cols-2 md:divide-y-0 md:gap-x-px">
                   {results.songs.map((song) => (
-                    <MediaCard
-                      key={song.id}
-                      id={song.id}
-                      title={song.title}
-                      subtitle={song.artists[0]?.name ?? undefined}
-                      thumbnail={getImageUrl(song.thumbnail)}
-                      type="track"
-                      onSubtitleClick={openArtist(song.artists[0]?.id)}
-                      onClick={() => {
-                        if (song.album.id) navigate(`/albums/${encodeURIComponent(song.album.id)}`);
-                      }}
-                    />
+                    <SongRow key={song.id} song={song} />
                   ))}
                 </div>
               </section>

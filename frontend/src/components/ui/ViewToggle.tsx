@@ -39,7 +39,7 @@ export const ViewToggle: React.FC<ViewToggleProps> = ({ value, onChange, classNa
             title={t(ICONS[mode].labelKey)}
             className={`p-2 rounded-xl transition-all duration-300 ${
               active
-                ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
+                ? 'bg-accent-600 text-white shadow-lg'
                 : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
             }`}
           >

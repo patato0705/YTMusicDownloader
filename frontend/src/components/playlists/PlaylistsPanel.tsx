@@ -5,7 +5,7 @@
  * can rescan a followed one, change its options or remove it.
  */
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useI18n } from '../../contexts/I18nContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useJobActivity } from '../../contexts/JobActivityContext';
@@ -30,7 +30,6 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
   const { t, formatLocale } = useI18n();
   const { user } = useAuth();
   const { refresh: refreshJobs } = useJobActivity();
-  const navigate = useNavigate();
   const canModify = user?.role === 'administrator' || user?.role === 'member';
   const playlistStats = usePlaylistStats();
   const [editing, setEditing] = useState<SavedPlaylist | null>(null);
@@ -71,9 +70,8 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
                 key={p.id}
                 className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10 flex flex-col sm:flex-row sm:items-center gap-4"
               >
-                <button
-                  type="button"
-                  onClick={() => navigate(`/playlist-import?url=${encodeURIComponent(p.id)}`)}
+                <Link
+                  to={`/playlist-import?url=${encodeURIComponent(p.id)}`}
                   className="flex items-center gap-4 min-w-0 flex-1 text-left group"
                 >
                   <Artwork
@@ -83,7 +81,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
                     className="w-16 h-16 rounded-xl flex-shrink-0 overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
                   />
                   <div className="min-w-0 space-y-1">
-                    <p className="font-semibold text-foreground truncate group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors">
+                    <p className="font-semibold text-foreground truncate group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">
                       {p.title}
                     </p>
                     <PlaylistBadges saved={p} />
@@ -104,7 +102,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
                       </p>
                     )}
                   </div>
-                </button>
+                </Link>
 
                 {canModify && (
                   <div className="flex gap-2 sm:flex-shrink-0">

@@ -1,8 +1,9 @@
 // src/pages/AdminPanel.tsx
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useFeatures } from '../contexts/FeaturesContext';
-import { PageHero } from '../components/ui/PageHero';
+import { PageHeader } from '../components/ui/PageHeader';
 import { Toast } from '../components/ui/Toast';
 import { FilterTabs } from '../components/ui/FilterTabs';
 import type { FilterTab } from '../components/ui/FilterTabs';
@@ -11,11 +12,14 @@ import { ChartsTab } from '../components/admin/ChartsTab';
 import { SettingsTab } from '../components/admin/SettingsTab';
 import { BackupTab } from '../components/admin/BackupTab';
 
-type Tab = 'users' | 'charts' | 'settings' | 'backup';
+const TABS = ['users', 'charts', 'settings', 'backup'] as const;
+type Tab = typeof TABS[number];
 
 // Role gating happens in <ProtectedRoute adminOnly> around this route (App.tsx)
 export default function AdminPanel(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<Tab>('users');
+  // ?tab= opens a given tab, e.g. from the empty Charts page
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<Tab>(() => TABS.find((tab) => tab === searchParams.get('tab')) ?? 'users');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const { features, refreshFeatures } = useFeatures();
   const { t } = useI18n();
@@ -30,25 +34,17 @@ export default function AdminPanel(): JSX.Element {
   const showToast = (message: string, type: 'success' | 'error') => setToast({ message, type });
 
   const tabs: FilterTab<Tab>[] = [
-    { id: 'users', icon: '👥', label: t('admin.tabs.users') },
-    ...(chartsEnabled ? [{ id: 'charts' as const, icon: '📊', label: t('admin.tabs.charts') }] : []),
-    { id: 'settings', icon: '⚙️', label: t('admin.tabs.settings') },
-    { id: 'backup', icon: '💾', label: t('admin.tabs.backup') },
+    { id: 'users', icon: 'users', label: t('admin.tabs.users') },
+    ...(chartsEnabled ? [{ id: 'charts' as const, icon: 'chart' as const, label: t('admin.tabs.charts') }] : []),
+    { id: 'settings', icon: 'cog', label: t('admin.tabs.settings') },
+    { id: 'backup', icon: 'database', label: t('admin.tabs.backup') },
   ];
 
   return (
     <div className="space-y-8 pb-12">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <PageHero
-        title={
-          <>
-            <span className="text-foreground">{t('admin.title')} </span>
-            <span className="text-gradient">{t('admin.panel')}</span>
-          </>
-        }
-        subtitle={t('admin.subtitle')}
-      />
+      <PageHeader icon="cog" title={t('nav.admin')} subtitle={t('admin.subtitle')} />
 
       <FilterTabs tabs={tabs} active={activeTab} onChange={setActiveTab} fill />
 

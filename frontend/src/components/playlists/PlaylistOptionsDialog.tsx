@@ -107,11 +107,11 @@ export const PlaylistOptionsDialog: React.FC<PlaylistOptionsDialogProps> = ({
                 onClick={() => setMode(value)}
                 className={`text-left rounded-2xl p-4 border transition-colors ${
                   selected
-                    ? 'border-blue-500 bg-blue-500/10 dark:border-red-500 dark:bg-red-500/10'
+                    ? 'border-accent-500 bg-accent-500/10'
                     : 'border-slate-200 dark:border-white/10 hover:bg-slate-100/60 dark:hover:bg-white/5'
                 }`}
               >
-                <span className={`block font-semibold mb-1 ${selected ? 'text-blue-700 dark:text-red-400' : 'text-foreground'}`}>
+                <span className={`block font-semibold mb-1 ${selected ? 'text-accent-700 dark:text-accent-400' : 'text-foreground'}`}>
                   {t(`playlist.options.${value}`)}
                 </span>
                 <span className="block text-xs text-muted-foreground">{t(`playlist.options.${value}Description`)}</span>
@@ -143,8 +143,7 @@ export const PlaylistOptionsDialog: React.FC<PlaylistOptionsDialogProps> = ({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         {editing ? (
-          <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(true)} disabled={busy}
-            className="!text-red-600 dark:!text-red-400">
+          <Button variant="subtleDanger" size="sm" onClick={() => setConfirmRemove(true)} disabled={busy}>
             {t('playlist.options.remove')}
           </Button>
         ) : <span />}

@@ -10,6 +10,7 @@ import { PasswordInput } from '../../components/ui/PasswordInput';
 import { ErrorBanner } from '../../components/ui/PageStatus';
 import * as authApi from '../../api/auth';
 import { confirmErrorKey, passwordErrorKey, retryAfterMinutes } from '../../utils';
+import { Icon } from '../../components/ui/icons';
 
 export default function ChangePassword(): JSX.Element {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -71,11 +72,11 @@ export default function ChangePassword(): JSX.Element {
   }
 
   return (
-    <AuthLayout title={t('auth.changePassword.title')} emoji="🔐" subtitle={t('auth.changePassword.subtitle')}>
+    <AuthLayout title={t('auth.changePassword.title')} subtitle={t('auth.changePassword.subtitle')}>
       {forced && (
         <div className="mb-6 bg-yellow-500/10 dark:bg-yellow-500/5 backdrop-blur-sm rounded-2xl p-5 border border-yellow-500/30">
           <div className="flex items-start gap-3">
-            <span className="text-2xl" aria-hidden="true">⚠️</span>
+            <Icon name="warning" className="w-6 h-6 shrink-0" />
             <div>
               <h3 className="font-semibold text-yellow-600 dark:text-yellow-400 mb-1">
                 {t('auth.changePassword.required')}
@@ -152,7 +153,7 @@ export default function ChangePassword(): JSX.Element {
 
       <div className="mt-6 glass rounded-2xl p-4 border-gradient">
         <div className="flex items-start gap-3">
-          <span className="text-lg" aria-hidden="true">💡</span>
+          <Icon name="info" className="w-5 h-5 shrink-0" />
           <div className="text-xs text-muted-foreground">
             <p className="font-semibold text-foreground mb-1">{t('auth.changePassword.tips.title')}</p>
             <ul className="space-y-1">

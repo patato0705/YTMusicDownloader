@@ -1,11 +1,13 @@
 // src/components/ui/FilterTabs.tsx
 import React from 'react';
+import { Icon } from './icons';
+import type { IconName } from './icons';
 
 export interface FilterTab<T extends string> {
   id: T;
   label: React.ReactNode;
-  /** An emoji shown before the label */
-  icon?: string;
+  /** Shown before the label */
+  icon?: IconName;
 }
 
 interface FilterTabsProps<T extends string> {
@@ -39,11 +41,11 @@ export function FilterTabs<T extends string>({ tabs, active, onChange, fill = fa
                 : 'gap-2 px-2.5 sm:px-4 py-2 text-sm sm:text-base'
             } ${
               selected
-                ? 'bg-blue-600 dark:bg-red-600 text-white shadow-lg'
+                ? 'bg-accent-600 text-white shadow-lg'
                 : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
             }`}
           >
-            {tab.icon && <span aria-hidden="true">{tab.icon}</span>}
+            {tab.icon && <Icon name={tab.icon} className="w-4 h-4 shrink-0" />}
             <span>{tab.label}</span>
           </button>
         );

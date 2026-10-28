@@ -17,17 +17,18 @@ import { MediaList, MediaRow } from '../components/MediaList';
 import { Button } from '../components/ui/Button';
 import { LikeButton } from '../components/ui/LikeButton';
 import { SectionHeader } from '../components/ui/SectionHeader';
-import { PageHero } from '../components/ui/PageHero';
+import { PageHeader } from '../components/ui/PageHeader';
 import { SearchInput } from '../components/ui/SearchInput';
 import { FilterTabs } from '../components/ui/FilterTabs';
 import { Toast } from '../components/ui/Toast';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
 import { ViewToggle, type ViewMode } from '../components/ui/ViewToggle';
-import { apiErrorMessage, getAlbumStatus, getArtistStatus, createMemoryCache } from '../utils';
+import { apiErrorMessage, getAlbumStatus, getArtistStatus, createMemoryCache, artistPath, albumPath, exceptionalStatus } from '../utils';
 import { useDebounce } from '../hooks/useDebounce';
 import { useProgressiveList } from '../hooks/useProgressiveList';
 import { useHistoryState } from '../hooks/useHistoryState';
 import { useLikeSync } from '../hooks/useLikeSync';
+import { Icon } from '../components/ui/icons';
 
 type LibraryTab = 'all' | 'artists' | 'albums' | 'playlists';
 
@@ -268,6 +269,17 @@ export default function Library(): JSX.Element {
     return byArtist;
   }, [albums]);
 
+  // The badge of each item: only the exceptions, worked out once for the cards,
+  // the rows and whether a list needs its status column at all
+  const artistBadge = useMemo(
+    () => new Map(artists.map((artist) => [artist.id, exceptionalStatus(getArtistStatus(artist, albumsByArtist.get(artist.id)))])),
+    [artists, albumsByArtist]
+  );
+  const albumBadge = useMemo(
+    () => new Map(albums.map((album) => [album.id, exceptionalStatus(getAlbumStatus(album))])),
+    [albums]
+  );
+
   // Filter content based on active tab and search query. Name matches are
   // done locally; an item whose name doesn't match still shows up when one of
   // its tracks does, with a hint saying which one.
@@ -311,11 +323,9 @@ export default function Library(): JSX.Element {
       : t('library.trackMatch.many', { title: matches[0].title, count: matches.length - 1 });
   };
 
-  // An album's artist name opens the artist, when we know who it is
-  const openAlbumArtist = (album: LibraryAlbum): (() => void) | undefined => {
-    const artistId = album.artist?.id;
-    return artistId ? () => navigate(`/artists/${encodeURIComponent(artistId)}`) : undefined;
-  };
+  // An album's artist name links to the artist, when we know who it is
+  const albumArtistPath = (album: LibraryAlbum): string | undefined =>
+    album.artist?.id ? artistPath(album.artist.id) : undefined;
 
   const artistMatchHint = (artistId: string): string | undefined => {
     const matches = artistTrackMatches.get(artistId);
@@ -362,21 +372,15 @@ export default function Library(): JSX.Element {
     likeSync.toggle(artist.id, liked);
   };
 
-  const openArtist = (artistId: string) => navigate(`/artists/${encodeURIComponent(artistId)}`);
-  const openAlbum = (albumId: string) => navigate(`/albums/${encodeURIComponent(albumId)}`);
   const GRID = 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4';
 
   return (
-    <div className="space-y-12 pb-12">
+    <div className="space-y-8 pb-12">
       {toast && <Toast message={toast} type="error" onClose={() => setToast(null)} />}
 
-      <PageHero
-        title={
-          <>
-            <span className="text-foreground">{t('library.heroYour')} </span>
-            <span className="text-gradient">{t('library.heroLibrary')}</span>
-          </>
-        }
+      <PageHeader
+        icon="library"
+        title={t('nav.library')}
         subtitle={t('library.heroSubtitle')}
         actions={hasContent && (
           <Button
@@ -384,12 +388,10 @@ export default function Library(): JSX.Element {
             size="sm"
             onClick={handleExport}
             isLoading={exporting}
-            className="gap-2 glass"
+            className="gap-2"
             title={t('library.export.description')}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2" />
-            </svg>
+            <Icon name="download" className="w-4 h-4" />
             {t('library.export.button')}
           </Button>
         )}
@@ -398,10 +400,10 @@ export default function Library(): JSX.Element {
       <LibraryStatCards stats={stats} />
 
       {!hasContent ? (
-        <EmptyState icon="📚" title={t('library.emptyTitle')}>
+        <EmptyState icon="library" title={t('library.emptyTitle')}>
           <p>{t('library.emptyDescription')}</p>
           <Button variant="primary" size="lg" onClick={() => navigate('/browse')} className="gap-2">
-            <span className="text-2xl" aria-hidden="true">🔍</span>
+            <Icon name="search" />
             {t('nav.browse')}
           </Button>
         </EmptyState>
@@ -440,34 +442,35 @@ export default function Library(): JSX.Element {
               {viewMode === 'grid' ? (
                 <div className={GRID}>
                   {displayedArtists.map((artist) => (
-                    <div key={artist.id} className="relative group/like">
-                      <MediaCard
-                        id={artist.id}
-                        title={artist.name}
-                        thumbnail={getImageUrl(artist.thumbnail)}
-                        type="artist"
-                        mediaStatus={getArtistStatus(artist, albumsByArtist.get(artist.id))}
-                        matchHint={artistMatchHint(artist.id)}
-                        onClick={() => openArtist(artist.id)}
-                      />
-                      {/* Outside the card (a button can't hold another), over the
-                          artwork's top-right corner, which the round picture leaves free.
-                          A liked artist always shows its heart, the others on hover */}
-                      {canLike && (
+                    <MediaCard
+                      key={artist.id}
+                      id={artist.id}
+                      title={artist.name}
+                      subtitle={t('library.meta.albumCount', { count: artist.albums_count })}
+                      thumbnail={getImageUrl(artist.thumbnail)}
+                      type="artist"
+                      mediaStatus={artistBadge.get(artist.id)}
+                      matchHint={artistMatchHint(artist.id)}
+                      to={artistPath(artist.id)}
+                      titleAction={canLike && (
+                        // Next to the name, as in the list view; a liked artist always shows its heart, the others on hover
                         <LikeButton
                           liked={artist.liked}
                           name={artist.name}
                           onToggle={() => toggleLike(artist)}
-                          className={`absolute top-0 right-0 z-20 w-8 h-8 bg-black/55 text-white shadow-md ring-1 ring-white/20 backdrop-blur-md transition-all duration-300 hover:bg-black/75 group-hover/like:-translate-y-1 ${
-                            artist.liked ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/like:opacity-100 focus-visible:opacity-100'
+                          className={`w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all ${
+                            artist.liked ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100'
                           }`}
                         />
                       )}
-                    </div>
+                    />
                   ))}
                 </div>
               ) : (
-                <MediaList kind="artist">
+                <MediaList
+                  kind="artist"
+                  showStatus={displayedArtists.some((artist) => artistBadge.get(artist.id))}
+                >
                   {displayedArtists.map((artist) => (
                     <MediaRow
                       key={artist.id}
@@ -475,13 +478,13 @@ export default function Library(): JSX.Element {
                       title={artist.name}
                       thumbnail={getImageUrl(artist.thumbnail)}
                       type="artist"
-                      mediaStatus={getArtistStatus(artist, albumsByArtist.get(artist.id))}
+                      mediaStatus={artistBadge.get(artist.id)}
                       albumsCount={artist.albums_count}
                       tracksTotal={artist.tracks_total}
                       tracksDownloaded={artist.tracks_downloaded}
                       date={artist.followed_at}
                       matchHint={artistMatchHint(artist.id)}
-                      onClick={() => openArtist(artist.id)}
+                      to={artistPath(artist.id)}
                       titleAction={canLike && (
                         // A liked artist always shows its heart, the others on hover
                         <LikeButton
@@ -512,36 +515,36 @@ export default function Library(): JSX.Element {
                       id={album.id}
                       title={album.title}
                       subtitle={album.artist?.name}
-                      onSubtitleClick={openAlbumArtist(album)}
+                      subtitleTo={albumArtistPath(album)}
                       thumbnail={getImageUrl(album.thumbnail)}
                       type="album"
                       albumType={album.type}
                       year={album.year ?? undefined}
-                      mediaStatus={getAlbumStatus(album)}
+                      mediaStatus={albumBadge.get(album.id)}
                       matchHint={albumMatchHint(album.id)}
-                      onClick={() => openAlbum(album.id)}
+                      to={albumPath(album.id)}
                     />
                   ))}
                 </div>
               ) : (
-                <MediaList kind="album">
+                <MediaList kind="album" showStatus={displayedAlbums.some((album) => albumBadge.get(album.id))}>
                   {displayedAlbums.map((album) => (
                     <MediaRow
                       key={album.id}
                       id={album.id}
                       title={album.title}
                       subtitle={album.artist?.name}
-                      onSubtitleClick={openAlbumArtist(album)}
+                      subtitleTo={albumArtistPath(album)}
                       thumbnail={getImageUrl(album.thumbnail)}
                       type="album"
                       albumType={album.type}
                       year={album.year ?? undefined}
-                      mediaStatus={getAlbumStatus(album)}
+                      mediaStatus={albumBadge.get(album.id)}
                       tracksTotal={album.tracks_total}
                       tracksDownloaded={album.tracks_downloaded}
                       date={album.created_at}
                       matchHint={albumMatchHint(album.id)}
-                      onClick={() => openAlbum(album.id)}
+                      to={albumPath(album.id)}
                     />
                   ))}
                 </MediaList>
@@ -552,7 +555,7 @@ export default function Library(): JSX.Element {
 
           {/* No results from search; waits for the track lookup so it doesn't flash */}
           {searchQuery && activeTab !== 'playlists' && trackMatchesReady && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
-            <EmptyState icon="🔍" title={t('library.noMatches')}>
+            <EmptyState icon="search" title={t('library.noMatches')}>
               <p>{t('library.noMatchesDescription', { query: searchQuery })}</p>
             </EmptyState>
           )}

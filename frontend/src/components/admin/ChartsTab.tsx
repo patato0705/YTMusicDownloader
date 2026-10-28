@@ -20,6 +20,8 @@ import { CHART_COUNTRIES, CHART_MAX_ARTISTS, getCountry, useCountryName } from '
 import { apiErrorMessage } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
 import type { AdminTabProps } from './AdminTabShell';
+import { Icon, InlineWarning } from '../ui/icons';
+import { TH_CLASS } from '../ui/tableStyles';
 
 type ChartAction =
   | { kind: 'unfollow'; sub: ChartSubscription }
@@ -224,7 +226,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
 
   const followedCountryCodes = new Set(chartSubscriptions.map(s => s.country_code));
   const availableCountries = CHART_COUNTRIES.filter(c => !followedCountryCodes.has(c.code));
-  const thClass = 'px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider';
+  const thClass = `px-6 ${TH_CLASS}`;
 
   return (
     <AdminTabShell loading={loading} error={error}>
@@ -338,7 +340,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                     <tr>
                       <td colSpan={5} className="px-6 py-12 text-center">
                         <div className="text-muted-foreground">
-                          <span className="text-4xl mb-2 block">📊</span>
+                          <Icon name="chart" className="w-8 h-8 mx-auto mb-2" />
                           <p>{t('admin.charts.noSubscriptions')}</p>
                         </div>
                       </td>
@@ -376,7 +378,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                                   if (e.key === 'Enter') requestTopNChange(sub);
                                   if (e.key === 'Escape') clearTopNDraft(sub.country_code);
                                 }}
-                                className={`w-20 px-3 py-2 glass rounded-xl text-foreground text-center focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 disabled:opacity-50 ${
+                                className={`w-20 px-3 py-2 glass rounded-xl text-foreground text-center focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 disabled:opacity-50 ${
                                   draftValue === null
                                     ? 'border border-red-500 dark:border-red-500'
                                     : 'border-slate-200 dark:border-white/10'
@@ -423,7 +425,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                                 className="mt-1 text-xs text-red-600 dark:text-red-400 max-w-xs truncate"
                                 title={sub.last_error}
                               >
-                                ⚠️ {sub.last_error}
+                                <InlineWarning />{sub.last_error}
                               </div>
                             )}
                           </td>
@@ -448,7 +450,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                               </Button>
                               <Button
                                 onClick={() => setChartAction({ kind: 'unfollow', sub })}
-                                variant="danger"
+                                variant="subtleDanger"
                                 size="sm"
                                 disabled={busy}
                               >

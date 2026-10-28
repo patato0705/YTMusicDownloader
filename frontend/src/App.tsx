@@ -61,7 +61,8 @@ export default function App(): JSX.Element {
               <div className="min-h-screen flex flex-col">
                 <PageBackground />
                 <Navbar />
-                <main className="relative flex-1 container mx-auto px-4 py-6">
+                {/* pb clears the phone tab bar (Navbar) and the safe area under it */}
+                <main className="relative flex-1 container mx-auto px-4 pt-6 pb-[calc(var(--tab-bar-height)+env(safe-area-inset-bottom)+2.75rem)] md:pb-6">
                   <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/browse" element={<Browse />} />

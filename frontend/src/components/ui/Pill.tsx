@@ -34,7 +34,7 @@ export const Pill: React.FC<PillProps> = ({ tone, icon, strokeWidth = 2, label, 
       type="button"
       onClick={onClick}
       title={title}
-      className={`${classes} hover:ring-2 hover:ring-blue-500/40 dark:hover:ring-red-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-600 transition-shadow`}
+      className={`${classes} hover:ring-2 hover:ring-accent-500/40 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 transition-shadow`}
     >
       {content}
     </button>

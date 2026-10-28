@@ -1,6 +1,6 @@
 // src/pages/PlaylistImport.tsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useJobActivity } from '../contexts/JobActivityContext';
@@ -13,13 +13,13 @@ import { Artwork } from '../components/ui/Artwork';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
 import { Toast } from '../components/ui/Toast';
-import { PageHero } from '../components/ui/PageHero';
+import { PageHeader } from '../components/ui/PageHeader';
 import { FilterTabs } from '../components/ui/FilterTabs';
 import type { FilterTab } from '../components/ui/FilterTabs';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
 import { PlaylistOptionsDialog } from '../components/playlists/PlaylistOptionsDialog';
 import { PlaylistBadges, usePlaylistStats } from '../components/playlists/PlaylistBadges';
-import { formatDuration, formatDurationLong, apiErrorMessage, createMemoryCache } from '../utils';
+import { formatDuration, formatDurationLong, apiErrorMessage, createMemoryCache, artistPath, albumPath } from '../utils';
 import { useHistoryState } from '../hooks/useHistoryState';
 
 /** Shown in a column with nothing to show */
@@ -236,7 +236,6 @@ export default function PlaylistImport(): JSX.Element {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const playlistStats = usePlaylistStats();
 
-  const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
   const { refresh: refreshJobs } = useJobActivity();
@@ -382,11 +381,9 @@ export default function PlaylistImport(): JSX.Element {
   // Songs with no album (music videos, uploads): no import brings them in
   const noAlbumCount = tracks.filter((track) => !track.album?.id).length;
 
-  const linkClass = 'hover:text-blue-600 dark:hover:text-red-400 hover:underline transition-colors text-left';
-  const goTo = (path: string) => (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigate(path);
-  };
+  const linkClass = 'hover:text-accent-600 dark:hover:text-accent-400 hover:underline transition-colors text-left';
+  // A link inside a row opens its page without also expanding the row
+  const stopRowToggle = (e: React.MouseEvent) => e.stopPropagation();
 
   const artistLinks = (trackArtists: PlaylistTrack['artists']) => {
     const named = trackArtists.filter((a) => a.name);
@@ -395,7 +392,7 @@ export default function PlaylistImport(): JSX.Element {
       <React.Fragment key={a.id || i}>
         {i > 0 && ', '}
         {a.id ? (
-          <button onClick={goTo(`/artists/${encodeURIComponent(a.id)}`)} className={linkClass}>{a.name}</button>
+          <Link to={artistPath(a.id)} onClick={stopRowToggle} className={linkClass}>{a.name}</Link>
         ) : (
           <span>{a.name}</span>
         )}
@@ -407,9 +404,9 @@ export default function PlaylistImport(): JSX.Element {
     if (!album?.name) return <span>{NONE}</span>;
     if (!album.id) return <span>{album.name}</span>;
     return (
-      <button onClick={goTo(`/albums/${encodeURIComponent(album.id)}`)} className={`${linkClass} truncate`}>
+      <Link to={albumPath(album.id)} onClick={stopRowToggle} className={`${linkClass} truncate`}>
         {album.name}
-      </button>
+      </Link>
     );
   };
 
@@ -463,15 +460,7 @@ export default function PlaylistImport(): JSX.Element {
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
 
-      <PageHero
-        title={
-          <>
-            <span className="text-foreground">{t('playlist.heroImport')} </span>
-            <span className="text-gradient">{t('playlist.heroPlaylist')}</span>
-          </>
-        }
-        subtitle={t('playlist.subtitle')}
-      />
+      <PageHeader icon="link" title={t('playlist.title')} subtitle={t('playlist.subtitle')} />
 
       {/* URL input */}
       <div className="flex flex-col sm:flex-row gap-4">
@@ -483,7 +472,7 @@ export default function PlaylistImport(): JSX.Element {
           placeholder={t('playlist.urlPlaceholder')}
           aria-label={t('playlist.urlPlaceholder')}
           disabled={loading || isBulkRunning}
-          className="flex-1 px-5 py-3.5 rounded-xl bg-white/60 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-red-500 transition-all duration-300 disabled:opacity-50"
+          className="flex-1 px-5 py-3.5 rounded-xl bg-white/60 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 transition-all duration-300 disabled:opacity-50"
         />
         <Button onClick={handleLoad} isLoading={loading} disabled={!url.trim() || isBulkRunning} variant="primary" size="lg">
           {t('playlist.loadPlaylist')}
@@ -507,8 +496,8 @@ export default function PlaylistImport(): JSX.Element {
                 />
 
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl font-bold mb-1">
-                    <span className="text-gradient">{view.title || t('playlist.untitled')}</span>
+                  <h2 className="text-2xl font-bold mb-1 text-foreground">
+                    {view.title || t('playlist.untitled')}
                   </h2>
                   {view.author && <p className="text-sm text-muted-foreground mb-1">{view.author}</p>}
                   <p className="text-muted-foreground">
@@ -577,7 +566,7 @@ export default function PlaylistImport(): JSX.Element {
               <div className="flex items-center gap-2">
                 {bulkProgress?.type === (activeFilter === 'artists' ? 'artists' : 'albums') ? (
                   <div className="flex items-center gap-3 px-4 py-2 rounded-xl glass">
-                    <Spinner size="sm" className="text-blue-600 dark:text-red-500" />
+                    <Spinner size="sm" className="text-accent-600 dark:text-accent-500" />
                     <span className="text-sm font-medium text-foreground">
                       {t(activeFilter === 'artists' ? 'playlist.followingProgress' : 'playlist.downloadingProgress', {
                         current: bulkProgress.current,
@@ -618,17 +607,18 @@ export default function PlaylistImport(): JSX.Element {
                         tracks={groupTrackList(artist.id, artist.tracks, (track) => albumLink(track.album))}
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <button
-                            onClick={goTo(`/artists/${encodeURIComponent(artist.id)}`)}
+                          <Link
+                            to={artistPath(artist.id)}
+                            onClick={stopRowToggle}
                             className={`font-semibold text-foreground truncate min-w-0 ${linkClass}`}
                           >
                             {artist.name}
-                          </button>
+                          </Link>
                           {/* Same rule as "Follow main artists": first artist on at least one track */}
                           <span
                             className={`flex-shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border ${
                               isMain
-                                ? 'bg-blue-500/10 text-blue-700 border-blue-500/30 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30'
+                                ? 'bg-accent-500/10 text-accent-700 border-accent-500/30 dark:text-accent-400'
                                 : 'border-slate-300/70 dark:border-white/10 text-muted-foreground'
                             }`}
                           >
@@ -642,7 +632,7 @@ export default function PlaylistImport(): JSX.Element {
                 </div>
               </div>
             ) : (
-              <EmptyState icon="🎤" title={t('playlist.noArtists')} />
+              <EmptyState icon="mic" title={t('playlist.noArtists')} />
             )
           )}
 
@@ -661,17 +651,18 @@ export default function PlaylistImport(): JSX.Element {
                       )}
                       tracks={groupTrackList(album.id, album.tracks, (track) => artistLinks(track.artists))}
                     >
-                      <button
-                        onClick={goTo(`/albums/${encodeURIComponent(album.id)}`)}
+                      <Link
+                        to={albumPath(album.id)}
+                        onClick={stopRowToggle}
                         className={`font-semibold text-foreground truncate block max-w-full ${linkClass}`}
                       >
                         {album.name}
-                      </button>
+                      </Link>
                       <p className="text-sm text-muted-foreground truncate">
                         {album.artistId ? (
-                          <button onClick={goTo(`/artists/${encodeURIComponent(album.artistId)}`)} className={linkClass}>
+                          <Link to={artistPath(album.artistId)} onClick={stopRowToggle} className={linkClass}>
                             {album.artistName}
-                          </button>
+                          </Link>
                         ) : (
                           <span>{album.artistName}</span>
                         )}
@@ -683,13 +674,13 @@ export default function PlaylistImport(): JSX.Element {
                 </div>
               </div>
             ) : (
-              <EmptyState icon="💿" title={t('playlist.noAlbums')} />
+              <EmptyState icon="disc" title={t('playlist.noAlbums')} />
             )
           )}
 
           {activeFilter === 'tracks' && (
             <div className={listClass}>
-              <div className="hidden sm:flex items-center gap-3 px-4 md:px-6 py-3 bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="hidden sm:flex items-center gap-3 px-4 md:px-6 py-3 bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs font-semibold text-muted-foreground">
                 <span className="w-8" />
                 <span className="flex-[3] min-w-0">{t('album.title')}</span>
                 <span className="flex-[2] min-w-0">{t('album.artist')}</span>
@@ -729,13 +720,13 @@ export default function PlaylistImport(): JSX.Element {
 
       {/* Nothing loaded yet */}
       {!loading && !view && !error && (
-        <EmptyState icon="📋" title={t('playlist.title')}>
-          <p>{t('playlist.subtitle')}</p>
+        <EmptyState icon="link" title={t('playlist.whereLinkTitle')}>
+          <p>{t('playlist.whereLinkBody')}</p>
         </EmptyState>
       )}
 
       {!loading && view && tracks.length === 0 && (
-        <EmptyState icon="😔" title={t('playlist.emptyPlaylist')}>
+        <EmptyState icon="music" title={t('playlist.emptyPlaylist')}>
           <p>{t('playlist.emptyPlaylistDescription')}</p>
         </EmptyState>
       )}

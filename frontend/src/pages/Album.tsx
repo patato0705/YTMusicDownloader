@@ -1,6 +1,6 @@
 // src/pages/Album.tsx
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useJobActivity } from '../contexts/JobActivityContext';
@@ -21,8 +21,10 @@ import { LyricsModal } from '../components/ui/LyricsModal';
 import { GenreChips } from '../components/ui/GenreChips';
 import { TrackStatusBadge } from '../components/ui/TrackStatusBadge';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
-import { formatDuration, primaryArtistName, apiErrorMessage } from '../utils';
+import { formatDuration, primaryArtistName, apiErrorMessage, artistPath } from '../utils';
 import type { Track } from '../types';
+import { Icon } from '../components/ui/icons';
+import { TH_CLASS } from '../components/ui/tableStyles';
 
 export default function Album(): JSX.Element {
   const { albumId } = useParams<{ albumId: string }>();
@@ -103,6 +105,8 @@ export default function Album(): JSX.Element {
   const isFollowing = page.mode === 'download';
   // Lyrics and download state only exist for tracks in our DB
   const showTrackState = page.source === 'database';
+  // On disk is the norm: the status column only appears for the exceptions
+  const showStatus = showTrackState && tracks.some((tr) => tr.status && tr.status !== 'done');
   // Tracks a retry would queue: failed ones, and any left without a job
   const retryableCount = tracks.filter((tr) => tr.status === 'failed' || tr.status === 'available').length;
   const totalDuration = tracks.reduce((sum, track) => sum + (track.duration || 0), 0);
@@ -177,7 +181,7 @@ export default function Album(): JSX.Element {
     }
   };
 
-  const thClass = 'px-3 md:px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider';
+  const thClass = `px-3 md:px-6 ${TH_CLASS}`;
 
   return (
     <>
@@ -214,7 +218,7 @@ export default function Album(): JSX.Element {
       <div className="space-y-12 pb-12">
         {/* Album header */}
         <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
-          <div className="flex flex-col md:flex-row gap-8 items-start">
+          <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
             <div className="relative group">
               <Artwork
                 src={getImageUrl(album.thumbnail)}
@@ -224,61 +228,58 @@ export default function Album(): JSX.Element {
                 className="w-64 h-64 md:w-80 md:h-80 rounded-2xl bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
               {/* Glow effect */}
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 dark:from-red-500/20 dark:to-red-700/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />
+              <div className="absolute inset-0 rounded-2xl bg-accent-500/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />
             </div>
 
             <div className="flex-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-4">
-                <span className="text-sm text-blue-600 dark:text-red-400 font-medium">
-                  💿 {t(albumTypeKey(album.type))}
-                </span>
-              </div>
-
-              <h1 className="text-4xl md:text-5xl font-bold mb-4">
-                <span className="text-gradient">{album.title}</span>
-              </h1>
+              <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-3">{album.title}</h1>
 
               {album.artist?.name && (
                 album.artist.id ? (
-                  <button
-                    onClick={() => navigate(`/artists/${encodeURIComponent(album.artist!.id!)}`)}
-                    className="block text-xl text-blue-600 dark:text-red-400 hover:underline mb-4 transition-colors"
+                  <Link
+                    to={artistPath(album.artist.id)}
+                    className="block w-fit text-xl text-accent-600 dark:text-accent-400 hover:underline mb-4 transition-colors"
                   >
                     {album.artist.name}
-                  </button>
+                  </Link>
                 ) : (
-                  <p className="text-xl text-blue-600 dark:text-red-400 mb-4">{album.artist.name}</p>
+                  <p className="text-xl text-accent-600 dark:text-accent-400 mb-4">{album.artist.name}</p>
                 )
               )}
 
               <GenreChips genres={album.genres} className="mb-4" />
 
               <div className="flex flex-wrap items-center gap-3 text-muted-foreground mb-8">
+                <span className="flex items-center gap-2">
+                  <Icon name="disc" className="w-4 h-4" />
+                  {t(albumTypeKey(album.type))}
+                </span>
+                <span aria-hidden="true">•</span>
                 {album.year && (
                   <>
                     <span className="flex items-center gap-2">
-                      <span className="text-lg" aria-hidden="true">📅</span>
+                      <Icon name="calendar" className="w-4 h-4" />
                       {album.year}
                     </span>
                     <span aria-hidden="true">•</span>
                   </>
                 )}
                 <span className="flex items-center gap-2">
-                  <span className="text-lg" aria-hidden="true">🎵</span>
+                  <Icon name="music" className="w-4 h-4" />
                   {t('album.trackCount', { count: tracks.length })}
                 </span>
                 {totalDuration > 0 && (
                   <>
                     <span aria-hidden="true">•</span>
                     <span className="flex items-center gap-2">
-                      <span className="text-lg" aria-hidden="true">⏱️</span>
+                      <Icon name="clock" className="w-4 h-4" />
                       {formatDuration(totalDuration)}
                     </span>
                   </>
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 {/* Visitors only get the (inert) "in library" indicator */}
                 {(canModify || isFollowing) && (
                   <Button
@@ -288,14 +289,10 @@ export default function Album(): JSX.Element {
                     size="lg"
                     disabled={isFollowing}
                   >
-                    <span className="mr-2" aria-hidden="true">{isFollowing ? '✓' : '⬇️'}</span>
+                    {isFollowing ? <span className="mr-2" aria-hidden="true">✓</span> : <Icon name="download" className="w-5 h-5 mr-2" />}
                     {isFollowing ? t('album.following') : t('album.download')}
                   </Button>
                 )}
-
-                <Button onClick={() => navigate(-1)} variant="ghost" size="lg">
-                  ← {t('common.back')}
-                </Button>
 
                 {canModify && isFollowing && showTrackState && (retryableCount > 0 || page.needs_import) && (
                   <Button onClick={handleRetry} variant="secondary" size="lg" isLoading={retryLoading}>
@@ -304,9 +301,10 @@ export default function Album(): JSX.Element {
                   </Button>
                 )}
 
+                {/* Last and quiet: it opens a confirmation, the dialog carries the red */}
                 {isAdmin && isFollowing && (
-                  <Button onClick={openDeleteConfirm} variant="danger" size="lg" isLoading={deleteLoading}>
-                    🗑️ {t('album.deleteAlbum')}
+                  <Button onClick={openDeleteConfirm} variant="subtleDanger" isLoading={deleteLoading} className="md:ml-auto">
+                    {t('album.deleteAlbum')}
                   </Button>
                 )}
               </div>
@@ -318,7 +316,7 @@ export default function Album(): JSX.Element {
           <section>
             <SectionHeader>{t('album.trackList')}</SectionHeader>
 
-            <div className="glass rounded-2xl overflow-hidden border-gradient">
+            <div className="glass rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
@@ -327,8 +325,8 @@ export default function Album(): JSX.Element {
                       <th className={`${thClass} text-left`}>{t('album.title')}</th>
                       <th className={`${thClass} text-left hidden lg:table-cell`}>{t('album.artist')}</th>
                       <th className={`${thClass} text-right hidden sm:table-cell sm:w-24`}>{t('album.duration')}</th>
-                      {showTrackState && <th className={`${thClass} text-center sm:w-28`}>{t('album.lyrics')}</th>}
-                      {showTrackState && <th className={`${thClass} text-center sm:w-28`}>{t('album.status')}</th>}
+                      {showTrackState && <th className={`${thClass} text-center w-12 sm:w-24`}>{t('album.lyrics')}</th>}
+                      {showStatus && <th className={`${thClass} text-center sm:w-28`}>{t('album.status')}</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-white/10">
@@ -338,7 +336,7 @@ export default function Album(): JSX.Element {
                           {track.track_number || index + 1}
                         </td>
                         <td className="px-3 md:px-6 py-4">
-                          <div className="font-semibold text-foreground group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors">
+                          <div className="font-semibold text-foreground group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">
                             {track.title}
                           </div>
                           <div className="sm:hidden text-xs text-muted-foreground font-mono mt-0.5">
@@ -357,6 +355,7 @@ export default function Album(): JSX.Element {
                           <td className="px-3 md:px-6 py-4 text-center">
                             {track.status && (
                               <LyricsBadge
+                                iconOnly
                                 kind={track.lyrics}
                                 title={t('lyrics.open')}
                                 onClick={() => setLyricsTrack(track)}
@@ -364,7 +363,7 @@ export default function Album(): JSX.Element {
                             )}
                           </td>
                         )}
-                        {showTrackState && (
+                        {showStatus && (
                           <td className="px-3 md:px-6 py-4 text-center">
                             <TrackStatusBadge track={track} downloadsPausedUntil={downloadsPausedUntil} />
                           </td>
@@ -377,7 +376,7 @@ export default function Album(): JSX.Element {
             </div>
           </section>
         ) : (
-          <EmptyState icon="🎵" title={t('album.noTracks')}>
+          <EmptyState icon="music" title={t('album.noTracks')}>
             <p>{t('album.noTracksDescription')}</p>
           </EmptyState>
         )}

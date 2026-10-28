@@ -9,9 +9,9 @@ import { useJobActivity } from '../../contexts/JobActivityContext';
 import { UserMenu } from './UserMenu';
 import { LanguageSelector } from '../ui/LanguageSelector';
 import { InfoTooltip } from '../ui/InfoTooltip';
+import { Icon } from '../ui/icons';
+import type { IconName } from '../ui/icons';
 
-const SUN_PATH = 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z';
-const MOON_PATH = 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z';
 
 export function Navbar(): JSX.Element {
   const { isAuthenticated } = useAuth();
@@ -21,13 +21,12 @@ export function Navbar(): JSX.Element {
   const { activeJobCount, activeByType, downloadsPausedUntil } = useJobActivity();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navLinks = [
-    { to: '/', label: t('nav.home') },
-    { to: '/browse', label: t('nav.browse') },
-    { to: '/library', label: t('nav.library') },
-    ...(features?.charts_enabled ? [{ to: '/charts', label: t('nav.charts') }] : []),
+  const navLinks: { to: string; label: string; icon: IconName }[] = [
+    { to: '/', label: t('nav.home'), icon: 'home' },
+    { to: '/browse', label: t('nav.browse'), icon: 'search' },
+    { to: '/library', label: t('nav.library'), icon: 'library' },
+    ...(features?.charts_enabled ? [{ to: '/charts', label: t('nav.charts'), icon: 'chart' as const }] : []),
   ];
 
   // The badge counts every kind of job, so a finished album can keep it lit
@@ -69,7 +68,7 @@ export function Navbar(): JSX.Element {
   const navLinkClass = (path: string) => {
     const base = 'px-3 lg:px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300';
     return location.pathname === path
-      ? `${base} bg-blue-600 dark:bg-red-600 text-white shadow-lg`
+      ? `${base} bg-accent-600 text-white shadow-lg`
       : `${base} text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-white/10`;
   };
 
@@ -89,30 +88,11 @@ export function Navbar(): JSX.Element {
           >
             <div className="px-4 sm:px-6">
               <div className="flex items-center justify-between h-16">
-                {/* Left: menu button (phones), logo, links (md and up) */}
+                {/* Left: logo, links (md and up; phones get the tab bar below) */}
                 <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-                  {isAuthenticated && (
-                    <button
-                      type="button"
-                      onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                      className="md:hidden shrink-0 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-300"
-                      aria-label={t('nav.toggleMenu')}
-                      aria-expanded={mobileMenuOpen}
-                    >
-                      <svg className="w-6 h-6 text-slate-700 dark:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d={mobileMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'}
-                        />
-                      </svg>
-                    </button>
-                  )}
-
                   <Link to="/" className="flex items-center space-x-2 group min-w-0">
-                    <div className="shrink-0 text-2xl transform group-hover:scale-110 transition-transform" aria-hidden="true">🎵</div>
-                    <span className="text-sm sm:text-lg lg:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-red-500 dark:to-red-700 truncate">
+                    <Icon name="music" className="shrink-0 w-6 h-6 text-accent-600 dark:text-accent-400 transform group-hover:scale-110 transition-transform" />
+                    <span className="text-sm sm:text-lg lg:text-xl font-bold text-accent-600 dark:text-accent-400 truncate">
                       YTMusicDownloader
                     </span>
                   </Link>
@@ -147,9 +127,7 @@ export function Navbar(): JSX.Element {
                       content={jobTooltip}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-medium"
                     >
-                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
+                      <Icon name="refresh" strokeWidth={2.5} className="w-3.5 h-3.5 animate-spin" />
                       <span className="tabular-nums">{activeJobCount}</span>
                     </InfoTooltip>
                   )}
@@ -161,9 +139,7 @@ export function Navbar(): JSX.Element {
                     aria-label={themeLabel}
                     title={themeLabel}
                   >
-                    <svg className="w-5 h-5 text-slate-700 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-red-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={theme === 'dark' ? SUN_PATH : MOON_PATH} />
-                    </svg>
+                    <Icon name={theme === 'dark' ? 'sun' : 'moon'} className="w-5 h-5 text-slate-700 dark:text-zinc-300 group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors" />
                   </button>
 
                   <LanguageSelector variant="navbar" />
@@ -172,24 +148,39 @@ export function Navbar(): JSX.Element {
                 </div>
               </div>
 
-              {isAuthenticated && mobileMenuOpen && (
-                <div className="md:hidden border-t border-slate-200 dark:border-white/10 py-3 space-y-1">
-                  {navLinks.map((link) => (
-                    <Link
-                      key={link.to}
-                      to={link.to}
-                      className={navLinkClass(link.to)}
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      {link.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
       </nav>
+
+      {/* Phones: the destinations stay one tap away at the bottom (App pads main to clear it) */}
+      {isAuthenticated && (
+        <nav
+          aria-label={t('nav.main')}
+          className="md:hidden fixed inset-x-0 bottom-0 z-50 glass !border-x-0 !border-b-0 pb-[env(safe-area-inset-bottom)]"
+        >
+          <div className="flex h-[var(--tab-bar-height)]">
+            {navLinks.map((link) => {
+              const active = location.pathname === link.to;
+              return (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors outline-none focus-visible:bg-accent-500/10 ${
+                    active ? 'text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-zinc-400'
+                  }`}
+                >
+                  <span className={`flex items-center justify-center w-14 h-7 rounded-full transition-colors ${active ? 'bg-accent-500/15' : ''}`}>
+                    <Icon name={link.icon} className="w-5 h-5" />
+                  </span>
+                  {link.label}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </>
   );
 }

@@ -21,6 +21,10 @@ import { ROLE_COLORS } from '../../config/roles';
 import { apiErrorMessage } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
 import type { AdminTabProps } from './AdminTabShell';
+import { Icon } from '../ui/icons';
+import { TH_CLASS } from '../ui/tableStyles';
+
+const thClass = `px-6 ${TH_CLASS}`;
 
 export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
   const { user } = useAuth();
@@ -237,48 +241,48 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
           </div>
         </div>
 
-        {/* Users Table */}
+        {/* Users Table: a table from md up; on phones each row stacks into a small card */}
         <div className="glass rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
+          <div className="md:overflow-x-auto">
+            <table className="w-full block md:table">
+              <thead className="hidden md:table-header-group bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <th className={`${thClass} text-left`}>
                     {t('admin.users.username')}
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <th className={`${thClass} text-left`}>
                     <span className="inline-flex items-center gap-1.5">
                       {t('admin.users.role')}
                       <InfoTooltip label={t('admin.users.roleInfo.title')} content={roleInfo} />
                     </span>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <th className={`${thClass} text-left`}>
                     {t('admin.users.status')}
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <th className={`${thClass} text-right`}>
                     {t('admin.users.actions')}
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-white/10">
+              <tbody className="block md:table-row-group divide-y divide-slate-200 dark:divide-white/10">
                 {filteredUsers.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center">
+                  <tr className="block md:table-row">
+                    <td colSpan={4} className="block md:table-cell px-6 py-12 text-center">
                       <div className="text-muted-foreground">
-                        <span className="text-4xl mb-2 block">👥</span>
+                        <Icon name="users" className="w-8 h-8 mx-auto mb-2" />
                         <p>{t('admin.users.noResults')}</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   filteredUsers.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                      <td className="px-6 py-4">
+                    <tr key={u.id} className="grid grid-cols-[1fr_auto] items-center gap-3 p-4 md:table-row md:p-0 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                      <td className="md:table-cell md:px-6 md:py-4">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-foreground">{u.username}</span>
                           {u.is_oidc && (
                             <span
-                              className="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+                              className="px-2 py-0.5 text-xs font-medium rounded-full bg-accent-500/15 text-accent-600 dark:text-accent-400"
                               title={t('admin.users.ssoTooltip', { name: authConfig?.oidc_provider_name ?? 'SSO' })}
                             >
                               {t('admin.users.ssoBadge')}
@@ -286,7 +290,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="row-start-2 md:table-cell md:px-6 md:py-4">
                         {/* Groups own SSO roles: a change here would be undone at their next sign-in */}
                         <span title={u.is_oidc && authConfig?.oidc_roles_from_groups ? t('admin.users.roleFromGroups') : undefined}>
                           <Select
@@ -299,7 +303,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                           />
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="col-start-2 row-start-1 md:table-cell md:px-6 md:py-4">
                         <ToggleSwitch
                           checked={u.is_active}
                           onChange={() => toggleUserStatus(u.id, u.is_active)}
@@ -307,7 +311,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                           label={u.is_active ? t('admin.users.active') : t('admin.users.inactive')}
                         />
                       </td>
-                      <td className="px-6 py-4 text-right whitespace-nowrap space-x-2">
+                      <td className="col-span-2 flex flex-wrap gap-2 md:table-cell md:px-6 md:py-4 md:text-right md:whitespace-nowrap md:space-x-2">
                         {/* Own password: Change Password instead (needs the current one).
                             SSO accounts have none: their sign-in is the provider's */}
                         {authConfig?.password_login_enabled && !u.is_oidc && (
@@ -322,7 +326,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                         )}
                         <Button
                           onClick={() => setDeleteConfirm({ userId: u.id, username: u.username })}
-                          variant="danger"
+                          variant="subtleDanger"
                           size="sm"
                           disabled={u.id === user?.id}
                         >

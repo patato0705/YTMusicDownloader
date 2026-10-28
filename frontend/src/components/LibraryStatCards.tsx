@@ -5,8 +5,6 @@ import { Spinner } from './ui/Spinner';
 import { StatCard } from './ui/StatCard';
 import { formatNumber } from '../utils';
 
-const icon = (emoji: string) => <span className="text-2xl" aria-hidden="true">{emoji}</span>;
-
 /**
  * The library in four numbers, on Home and Library: followed artists, albums
  * in the library, downloaded tracks, disk usage. Spinners while `loading`.
@@ -16,25 +14,26 @@ export function LibraryStatCards({ stats, loading = false }: { stats: LibrarySta
   const show = (value: (s: LibraryStats) => string) => (stats ? value(stats) : loading ? <Spinner size="sm" /> : '-');
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <StatCard
-        icon={icon('🎤')}
+        icon="mic"
         label={t('library.stats.artists')}
         value={show((s) => formatNumber(s.artists.total, formatLocale))}
       />
       <StatCard
-        icon={icon('💿')}
+        icon="disc"
         label={t('library.stats.albums')}
         value={show((s) => formatNumber(s.albums.downloaded, formatLocale))}
       />
       <StatCard
-        icon={icon('🎵')}
+        icon="music"
         label={t('library.stats.tracks')}
         value={show((s) => formatNumber(s.tracks.downloaded, formatLocale))}
       />
       <StatCard
-        icon={icon('⚡')}
+        icon="database"
         label={t('library.stats.diskUsage')}
+        shortLabel={t('library.stats.diskUsageShort')}
         value={show((s) => `${s.storage.gb.toLocaleString(formatLocale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} GB`)}
         info={t('library.stats.diskUsageInfo')}
       />

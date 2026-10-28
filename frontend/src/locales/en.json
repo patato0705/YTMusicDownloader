@@ -112,7 +112,7 @@
     "library": "Library",
     "charts": "Charts",
     "admin": "Admin Panel",
-    "toggleMenu": "Toggle menu",
+    "main": "Main navigation",
     "activeJobs": "{count} active",
     "rateLimited": "Rate-limited by YouTube: downloads paused until {time}",
     "jobTypes": {
@@ -133,24 +133,19 @@
     "changeLanguage": "Change language"
   },
   "home": {
-    "badge": "System Online",
     "welcomeBack": "Welcome back,",
-    "heroSubtitle": "Your personal music library management system. Download, organize, and sync with Jellyfin.",
-    "quickActions": "Quick Actions",
+    "inProgress": "In progress",
+    "recentlyAdded": "Recently added",
+    "quickActions": "Quick actions",
     "browseDescription": "Search YouTube Music for new content",
     "libraryDescription": "Manage your followed artists and albums",
-    "recentActivity": "Recent Activity",
+    "playlistDescription": "Follow the artists and albums of a YouTube Music playlist",
     "loadingActivity": "Loading recent activity...",
-    "noActivity": "No activity yet",
+    "noActivity": "Your library is empty",
     "noActivityDescription": "Start by browsing and following your favorite artists",
-    "browseMusic": "Browse Music",
-    "getStarted": "Get started",
-    "complete": "Complete",
-    "tracksDownloaded": "{done}/{total} tracks"
+    "browseMusic": "Browse Music"
   },
   "browse": {
-    "heroDiscover": "Discover",
-    "heroNewMusic": "New Music",
     "heroSubtitle": "Search YouTube Music for artists, albums, and tracks to add to your library",
     "searchInputPlaceholder": "Search for artists, albums, or tracks...",
     "noResults": "No results found",
@@ -183,7 +178,6 @@
     }
   },
   "artist": {
-    "title": "Artist",
     "releaseCount": "{count} releases",
     "releaseCount_one": "{count} release",
     "follow": "Follow",
@@ -228,7 +222,6 @@
       "queued": "Queued",
       "paused": "Paused",
       "downloading": "Downloading",
-      "done": "On disk",
       "failed": "Failed"
     },
     "retryingAfter": "Waiting to retry after: {error}",
@@ -264,12 +257,10 @@
     }
   },
   "library": {
-    "heroYour": "Your",
-    "heroLibrary": "Music Library",
     "heroSubtitle": "Manage your followed artists and albums. Track downloads and organize your collection.",
     "artists": "Followed Artists",
     "albums": "Followed Albums",
-    "searchPlaceholder": "Search your library...",
+    "searchPlaceholder": "Artist, album or track...",
     "view": {
       "grid": "Grid view",
       "list": "List view"
@@ -307,6 +298,7 @@
       "albums": "Albums",
       "tracks": "Tracks",
       "diskUsage": "Disk Usage",
+      "diskUsageShort": "Disk",
       "diskUsageInfo": "Total size of the downloaded audio files. Lyrics and covers are not counted."
     },
     "export": {
@@ -324,11 +316,11 @@
     }
   },
   "charts": {
-    "music": "Music",
     "heroSubtitle": "Discover trending artists from around the world",
     "errorTitle": "Error Loading Charts",
     "noCharts": "No Charts Followed",
     "noChartsDescription": "No music charts are currently being tracked. Contact an administrator to follow charts from different countries.",
+    "noChartsAdminDescription": "Pick a country in the admin panel: its trending artists will show up here.",
     "followingTopN": "Following the top {n} of {total}",
     "followedArtist": "Followed artist",
     "lastUpdated": "Last updated: {date}",
@@ -340,8 +332,6 @@
     "disabled": "The charts feature is currently disabled. An administrator can turn it on in the admin panel."
   },
   "admin": {
-    "title": "Admin",
-    "panel": "Panel",
     "subtitle": "Manage application settings and users",
     "tabs": {
       "settings": "Settings",
@@ -351,6 +341,7 @@
     },
     "settings": {
       "save": "Save settings",
+      "unsaved": "Unsaved changes",
       "saved": "Settings saved successfully",
       "saveFailed": "Failed to save settings",
       "invalidNumber": "\"{name}\" must be a whole number of at least {min}",
@@ -673,9 +664,9 @@
   },
   "playlist": {
     "title": "Import Playlist",
-    "heroImport": "Import",
-    "heroPlaylist": "Playlist",
     "subtitle": "Paste a YouTube Music playlist URL to discover and follow artists and albums",
+    "whereLinkTitle": "Where is the link?",
+    "whereLinkBody": "In YouTube Music, open the playlist, then Share › Copy link. It looks like music.youtube.com/playlist?list=…",
     "urlPlaceholder": "Paste a YouTube Music playlist URL...",
     "untitled": "Playlist",
     "loadPlaylist": "Load Playlist",

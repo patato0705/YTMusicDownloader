@@ -43,7 +43,7 @@ export const LikeButton: React.FC<LikeButtonProps> = ({ liked, name, onToggle, c
       aria-pressed={liked}
       aria-label={`${label}: ${name}`}
       title={label}
-      className={`flex items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70 dark:focus-visible:ring-red-500/70 ${className}`}
+      className={`flex items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 ${className}`}
     >
       <HeartIcon filled={liked} className={`${iconClassName} ${liked ? 'text-rose-500' : ''}`} />
     </button>

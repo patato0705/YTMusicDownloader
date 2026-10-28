@@ -111,7 +111,7 @@
     "browse": "Explorer",
     "library": "Bibliothèque",
     "admin": "Administration",
-    "toggleMenu": "Afficher le menu",
+    "main": "Navigation principale",
     "charts": "Charts",
     "activeJobs": "{count} en cours",
     "rateLimited": "Limité par YouTube : téléchargements en pause jusqu'à {time}",
@@ -133,24 +133,19 @@
     "changeLanguage": "Changer de langue"
   },
   "home": {
-    "badge": "Système en ligne",
     "welcomeBack": "Bon retour,",
-    "heroSubtitle": "Votre système personnel de gestion de bibliothèque musicale. Téléchargez, organisez et synchronisez avec Jellyfin.",
+    "inProgress": "En cours",
+    "recentlyAdded": "Ajoutés récemment",
     "quickActions": "Actions rapides",
     "browseDescription": "Rechercher de nouveaux contenus sur YouTube Music",
     "libraryDescription": "Gérer vos artistes et albums suivis",
-    "recentActivity": "Activité récente",
+    "playlistDescription": "Suivre les artistes et albums d'une playlist YouTube Music",
     "loadingActivity": "Chargement de l'activité récente...",
-    "noActivity": "Aucune activité",
+    "noActivity": "Votre bibliothèque est vide",
     "noActivityDescription": "Commencez par explorer et suivre vos artistes favoris",
-    "browseMusic": "Explorer la musique",
-    "getStarted": "Commencer",
-    "complete": "Terminé",
-    "tracksDownloaded": "{done}/{total} titres"
+    "browseMusic": "Explorer la musique"
   },
   "browse": {
-    "heroDiscover": "Découvrir",
-    "heroNewMusic": "Nouvelle Musique",
     "heroSubtitle": "Rechercher des artistes, albums et titres sur YouTube Music à ajouter à votre bibliothèque",
     "searchInputPlaceholder": "Rechercher des artistes, albums ou titres...",
     "noResults": "Aucun résultat trouvé",
@@ -183,7 +178,6 @@
     }
   },
   "artist": {
-    "title": "Artiste",
     "releaseCount": "{count} sorties",
     "releaseCount_one": "{count} sortie",
     "follow": "Suivre",
@@ -228,7 +222,6 @@
       "queued": "En attente",
       "paused": "En pause",
       "downloading": "Téléchargement",
-      "done": "Sur le disque",
       "failed": "Échoué"
     },
     "retryingAfter": "Nouvelle tentative prévue après : {error}",
@@ -264,12 +257,10 @@
     }
   },
   "library": {
-    "heroYour": "Votre",
-    "heroLibrary": "Bibliothèque Musicale",
     "heroSubtitle": "Gérez vos artistes et albums suivis. Suivez les téléchargements et organisez votre collection.",
     "artists": "Artistes suivis",
     "albums": "Albums suivis",
-    "searchPlaceholder": "Rechercher dans votre bibliothèque...",
+    "searchPlaceholder": "Artiste, album ou titre...",
     "view": {
       "grid": "Vue grille",
       "list": "Vue liste"
@@ -307,6 +298,7 @@
       "albums": "Albums",
       "tracks": "Titres",
       "diskUsage": "Espace disque",
+      "diskUsageShort": "Disque",
       "diskUsageInfo": "Taille totale des fichiers audio téléchargés. Les paroles et pochettes ne sont pas comptées."
     },
     "export": {
@@ -324,11 +316,11 @@
     }
   },
   "charts": {
-    "music": "Musique",
     "heroSubtitle": "Découvrez les artistes tendance du monde entier",
     "errorTitle": "Erreur de chargement des charts",
     "noCharts": "Aucun chart suivi",
     "noChartsDescription": "Aucun chart musical n'est actuellement suivi. Contactez un administrateur pour suivre les charts de différents pays.",
+    "noChartsAdminDescription": "Choisissez un pays dans l'administration : ses artistes du moment apparaîtront ici.",
     "followingTopN": "Top {n} suivi sur {total}",
     "followedArtist": "Artiste suivi",
     "lastUpdated": "Dernière mise à jour : {date}",
@@ -340,8 +332,6 @@
     "disabled": "La fonctionnalité Charts est actuellement désactivée. Un administrateur peut l'activer depuis le panneau d'administration."
   },
   "admin": {
-    "title": "Panneau",
-    "panel": "d'administration",
     "subtitle": "Gérer les paramètres de l'application et les utilisateurs",
     "tabs": {
       "settings": "Paramètres",
@@ -351,6 +341,7 @@
     },
     "settings": {
       "save": "Enregistrer les paramètres",
+      "unsaved": "Modifications non enregistrées",
       "saved": "Paramètres enregistrés avec succès",
       "saveFailed": "Échec de l'enregistrement des paramètres",
       "invalidNumber": "« {name} » doit être un nombre entier d'au moins {min}",
@@ -673,9 +664,9 @@
   },
   "playlist": {
     "title": "Importer une playlist",
-    "heroImport": "Importer",
-    "heroPlaylist": "une playlist",
     "subtitle": "Collez une URL de playlist YouTube Music pour découvrir et suivre des artistes et albums",
+    "whereLinkTitle": "Où trouver le lien ?",
+    "whereLinkBody": "Dans YouTube Music, ouvrez la playlist puis Partager › Copier le lien. Il ressemble à music.youtube.com/playlist?list=…",
     "urlPlaceholder": "Collez une URL de playlist YouTube Music...",
     "untitled": "Playlist",
     "loadPlaylist": "Charger la playlist",

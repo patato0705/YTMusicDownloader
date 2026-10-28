@@ -20,6 +20,7 @@ import type { BackupOptions, ExportDocument, ImportResult } from '../../api/expo
 import { apiErrorMessage } from '../../utils';
 import { ErrorBanner } from '../ui/PageStatus';
 import type { AdminTabProps } from './AdminTabShell';
+import { Icon, InlineWarning } from '../ui/icons';
 
 export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
   const { t } = useI18n();
@@ -172,7 +173,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
           <div className="bg-amber-500/10 rounded-xl p-4 border border-amber-500/20 space-y-1">
             {r.warnings.map((w, i) => (
               <p key={i} className="text-sm text-amber-700 dark:text-amber-400">
-                ⚠️ {t(`admin.backup.warnings.${w.code}`)}
+                <InlineWarning />{t(`admin.backup.warnings.${w.code}`)}
                 {w.detail && (
                   <span className="text-muted-foreground"> ({w.detail})</span>
                 )}
@@ -190,7 +191,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       <section>
         <SectionHeader>{t('admin.backup.export.title')}</SectionHeader>
         <div className="glass rounded-2xl p-6 space-y-4">
-          <p className="text-sm text-muted-foreground">{t('admin.backup.export.description')}</p>
+          <p className="text-sm text-muted-foreground max-w-prose">{t('admin.backup.export.description')}</p>
 
           {(['library', 'charts', 'catalog', 'users', 'settings'] as const).map(key => (
             <div key={key} className="flex items-center justify-between py-3 border-b border-slate-200 dark:border-white/10 last:border-0">
@@ -198,7 +199,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
                 <label className="font-semibold text-foreground block mb-1">
                   {t(`admin.backup.export.options.${key}.label`)}
                 </label>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground max-w-prose">
                   {t(`admin.backup.export.options.${key}.description`)}
                 </p>
               </div>
@@ -211,7 +212,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
 
           {options.users && (
             <p className="text-sm text-amber-700 dark:text-amber-400">
-              ⚠️ {t('admin.backup.export.usersWarning')}
+              <InlineWarning />{t('admin.backup.export.usersWarning')}
             </p>
           )}
 
@@ -222,7 +223,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
               disabled={!Object.values(options).some(Boolean)}
               variant="primary"
             >
-              📤 {t('admin.backup.export.button')}
+              <Icon name="download" className="w-4 h-4 mr-2" />{t('admin.backup.export.button')}
             </Button>
           </div>
         </div>
@@ -232,7 +233,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       <section>
         <SectionHeader>{t('admin.backup.import.title')}</SectionHeader>
         <div className="glass rounded-2xl p-6 space-y-4">
-          <p className="text-sm text-muted-foreground">{t('admin.backup.import.description')}</p>
+          <p className="text-sm text-muted-foreground max-w-prose">{t('admin.backup.import.description')}</p>
 
           <div className="flex flex-col md:flex-row md:items-center gap-3">
             <input
@@ -248,7 +249,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
               onClick={() => fileInputRef.current?.click()}
               disabled={previewLoading || applying}
             >
-              📥 {t('admin.backup.import.choose')}
+              <Icon name="upload" className="w-4 h-4 mr-2" />{t('admin.backup.import.choose')}
             </Button>
             {fileName && (
               <span className="text-sm text-muted-foreground truncate">

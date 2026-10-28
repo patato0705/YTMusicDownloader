@@ -11,7 +11,7 @@ interface LanguageSelectorProps {
 }
 
 const BUTTON_CLASSES = {
-  navbar: 'hidden md:flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-blue-600 dark:hover:text-red-400 transition-all duration-300',
+  navbar: 'hidden md:flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-accent-600 dark:hover:text-accent-400 transition-all duration-300',
   menu: 'flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 transition-all text-sm font-medium text-slate-700 dark:text-zinc-300',
 };
 
@@ -55,7 +55,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({ variant }) =
               }}
               className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-3 ${
                 language.code === locale
-                  ? 'bg-blue-600 dark:bg-red-600 text-white font-medium'
+                  ? 'bg-accent-600 text-white font-medium'
                   : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-white/10'
               }`}
             >

@@ -1,7 +1,10 @@
 // src/pages/Charts.tsx
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
-import { PageHero } from '../components/ui/PageHero';
+import { useAuth } from '../contexts/AuthContext';
+import { PageHeader } from '../components/ui/PageHeader';
+import { buttonClass } from '../components/ui/Button';
 import { ChartArtistGrid } from '../components/ui/ChartArtistGrid';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
 import * as chartsApi from '../api/charts';
@@ -10,6 +13,8 @@ import { getCountry, useCountryName } from '../config/charts';
 import { apiErrorMessage } from '../utils';
 
 export default function Charts(): JSX.Element {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'administrator';
   const [subscriptions, setSubscriptions] = useState<ChartSubscription[]>([]);
   const [charts, setCharts] = useState<Record<string, Chart>>({});
   const [loading, setLoading] = useState(true);
@@ -53,8 +58,21 @@ export default function Charts(): JSX.Element {
     if (error) return <ErrorBanner title={t('charts.errorTitle')}>{error}</ErrorBanner>;
     if (subscriptions.length === 0) {
       return (
-        <EmptyState icon="📊" title={t('charts.noCharts')}>
-          <p>{t('charts.noChartsDescription')}</p>
+        // Admins can fix it themselves, so they get the way there instead of "contact an administrator"
+        <EmptyState icon="chart" title={t('charts.noCharts')}>
+          {isAdmin ? (
+            <>
+              <p>{t('charts.noChartsAdminDescription')}</p>
+              <Link
+                to="/admin?tab=charts"
+                className={buttonClass('primary', 'lg')}
+              >
+                {t('admin.charts.followChart')}
+              </Link>
+            </>
+          ) : (
+            <p>{t('charts.noChartsDescription')}</p>
+          )}
         </EmptyState>
       );
     }
@@ -94,15 +112,7 @@ export default function Charts(): JSX.Element {
 
   return (
     <div className="space-y-8 pb-12">
-      <PageHero
-        title={
-          <>
-            <span className="text-foreground">{t('charts.music')} </span>
-            <span className="text-gradient">{t('nav.charts')}</span>
-          </>
-        }
-        subtitle={t('charts.heroSubtitle')}
-      />
+      <PageHeader icon="chart" title={t('nav.charts')} subtitle={t('charts.heroSubtitle')} />
       {content()}
     </div>
   );
