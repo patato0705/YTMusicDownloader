@@ -44,7 +44,7 @@
       "sso": "Se connecter avec {name}",
       "ssoErrors": {
         "denied": "La connexion a été annulée chez le fournisseur.",
-        "not_allowed": "Vous n'avez pas encore de compte ici. Demandez l'accès à un administrateur.",
+        "not_allowed": "Votre compte n'a pas accès ici. Demandez l'accès à un administrateur.",
         "inactive": "Ce compte est désactivé. Contactez un administrateur.",
         "unavailable": "Le fournisseur de connexion est injoignable pour le moment. Réessayez plus tard.",
         "failed": "La connexion a échoué. Réessayez, et contactez un administrateur si le problème persiste."
@@ -385,11 +385,15 @@
           },
           "oidc_signup_enabled": {
             "label": "Nouveaux comptes par authentification unique",
-            "description": "Créer un compte la première fois que quelqu'un se connecte par authentification unique. Désactivé, seuls les comptes existants (et les membres des groupes configurés chez le fournisseur) peuvent se connecter."
+            "description": "Créer un compte la première fois que quelqu'un se connecte par authentification unique. Désactivé, seuls les comptes existants peuvent se connecter. Quand les rôles viennent des groupes du fournisseur, seuls les membres de ces groupes peuvent se connecter : un compte existant qui les a quittés est refusé aussi."
           },
           "oidc_default_role": {
             "label": "Rôle des nouveaux comptes par authentification unique",
-            "description": "Attribué aux comptes créés par authentification unique. Quand les rôles viennent des groupes du fournisseur, attribué aussi à toute personne hors de ces groupes."
+            "description": "Attribué aux comptes créés par authentification unique. Quand les rôles viennent des groupes du fournisseur et que les nouveaux comptes sont autorisés, attribué aussi à toute personne hors de ces groupes."
+          },
+          "oidc_session_hours": {
+            "label": "Durée des sessions par authentification unique (heures)",
+            "description": "Durée d'une session par authentification unique avant de repasser par le fournisseur (en général un clic). Les changements de rôle et désactivations côté fournisseur ne s'appliquent qu'à ce moment-là, d'où une durée plus courte que pour les sessions par mot de passe (7 jours)."
           }
         },
         "download": {
@@ -658,7 +662,8 @@
         "invalid_setting": "Un paramètre a une valeur invalide et a été ignoré.",
         "users_skipped": "Certains utilisateurs existent déjà ici : leurs comptes n'ont pas été modifiés, seuls leurs artistes aimés et recommandations masquées ont été ajoutés.",
         "likes_skipped": "Certains artistes aimés ne sont pas dans cette bibliothèque et ont été ignorés.",
-        "invalid_chart": "Un abonnement à un chart n'a pas pu être créé."
+        "invalid_chart": "Un abonnement à un chart n'a pas pu être créé.",
+        "administrators_created": "Ce fichier crée des comptes administrateur. Son auteur connaît leurs mots de passe : ne l'importez que si vous avez confiance en sa provenance."
       }
     }
   },

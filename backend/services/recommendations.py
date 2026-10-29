@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import Artist, ArtistLike, ArtistSubscription, DismissedRecommendation, RelatedArtist
@@ -151,17 +151,6 @@ def unlike(session: Session, user_id: int, artist_id: str) -> None:
     row = session.get(ArtistLike, (user_id, artist_id))
     if row is not None:
         session.delete(row)
-
-
-def delete_artist_likes(session: Session, artist_id: str) -> None:
-    """Everyone's like of a deleted artist. No commit."""
-    session.execute(delete(ArtistLike).where(ArtistLike.artist_id == artist_id))
-
-
-def delete_user_data(session: Session, user_id: int) -> None:
-    """A deleted user's likes and dismissals. No commit."""
-    session.execute(delete(ArtistLike).where(ArtistLike.user_id == user_id))
-    session.execute(delete(DismissedRecommendation).where(DismissedRecommendation.user_id == user_id))
 
 
 def count_dismissed(session: Session, user_id: int) -> int:

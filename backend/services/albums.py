@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config
@@ -19,6 +20,10 @@ from ..ytm_service import normalizers as N
 from . import folders
 
 logger = logging.getLogger("services.albums")
+
+
+class ArtistDeleted(Exception):
+    """The artist an album was being imported for is no longer in the library."""
 
 
 def upsert_album(
@@ -147,7 +152,8 @@ def fetch_and_upsert_album(
     """
     Fetch an album from YTMusic and store it with its tracks (and its cover,
     if it has none yet). Raises ytm_adapter.YTMusicUnavailable when it can't
-    be read. Does not commit.
+    be read, ArtistDeleted when `artist_id` was deleted from the library
+    while it was being fetched. Does not commit.
 
     The album's audio playlist is fetched too: its video ids are the audio
     versions of the tracks, which the album page itself sometimes lists as
@@ -162,6 +168,11 @@ def fetch_and_upsert_album(
     album_id = album_data["id"]
     tracks = album_data["tracks"]
 
+    # Deleted from the library meanwhile (its albums with it): storing the
+    # album now would bring the artist back. Read from the DB, not the
+    # session's identity map, which may still hold it.
+    if artist_id and session.execute(select(Artist.id).where(Artist.id == artist_id)).first() is None:
+        raise ArtistDeleted(artist_id)
     # The artist from the album itself when not given, with its row: an album
     # pointing at an artist the DB doesn't know shows up with no artist
     # anywhere in the library. The album page only names a new artist: the

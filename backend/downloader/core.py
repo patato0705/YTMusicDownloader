@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from yt_dlp import YoutubeDL
 
 from ..config import DOWNLOAD_DIR, YDL_FORMAT, YDL_PREFERRED_CODEC
+from ..text_utils import is_video_id
 from . import cover as cover_mod
 from . import embed as embed_mod
 
@@ -77,6 +78,10 @@ def download_track_by_videoid(
     Returns:
         (file path, the cover's new path when this call moved it, else None)
     """
+    # Checked where ids come in (YouTube Music, backup import); this is the
+    # backstop that keeps anything else out of yt-dlp's URL
+    if not is_video_id(video_id):
+        raise ValueError(f"not a YouTube video id: {video_id!r}")
     job_dir = _job_download_dir(video_id)
     try:
         with YoutubeDL(_ydl_options(job_dir, cookiefile)) as ydl:
@@ -145,6 +150,9 @@ def _ydl_options(job_dir: Path, cookiefile: Union[str, Path]) -> Dict[str, Any]:
         "quiet": False,
         "no_warnings": True,
         "noplaylist": True,
+        # The YouTube extractor alone: a URL it doesn't take fails instead of
+        # falling through to the generic one, which would fetch anything
+        "allowed_extractors": ["youtube"],
         "postprocessors": [
             {"key": "FFmpegExtractAudio", "preferredcodec": YDL_PREFERRED_CODEC}
         ],

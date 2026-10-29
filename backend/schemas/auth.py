@@ -3,15 +3,29 @@
 Pydantic schemas for authentication endpoints.
 """
 from __future__ import annotations
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AfterValidator, BaseModel, Field
 
 
 # ============================================================================
 # REQUEST SCHEMAS
 # ============================================================================
+
+def _check_username_characters(v: str) -> str:
+    if not (v.isascii() and v.replace("_", "").replace("-", "").isalnum()):
+        raise ValueError("Username must contain only letters, numbers, hyphens, and underscores")
+    return v
+
+
+# A username, wherever an account comes from (registration, admin panel,
+# CLI, backup import; single sign-on names are reduced to the same rules).
+# ASCII only, like the frontend's check: the database compares names
+# ignoring case for ASCII only, and look-alike letters from other alphabets
+# ("аdmin" with a Cyrillic а) would pass for another account.
+Username = Annotated[str, Field(min_length=3, max_length=64), AfterValidator(_check_username_characters)]
+
 
 class LoginRequest(BaseModel):
     username: str
@@ -19,15 +33,8 @@ class LoginRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    username: str = Field(..., min_length=3, max_length=64)
+    username: Username
     password: str = Field(..., min_length=8)
-
-    @field_validator("username")
-    @classmethod
-    def username_alphanumeric(cls, v: str) -> str:
-        if not v.replace("_", "").replace("-", "").isalnum():
-            raise ValueError("Username must contain only letters, numbers, hyphens, and underscores")
-        return v
 
 
 class CreateUserRequest(RegisterRequest):

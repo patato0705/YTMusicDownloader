@@ -36,6 +36,9 @@ engine = create_engine(
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
     cursor = dbapi_conn.cursor()
+    # Off by default in SQLite: without it the models' ON DELETE rules (a
+    # deleted user's sessions, likes...) do nothing. Per connection.
+    cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA journal_mode=WAL")          # Enable WAL mode
     cursor.execute("PRAGMA synchronous=NORMAL")        # Faster writes, still safe
     cursor.execute("PRAGMA cache_size=-64000")         # 64MB cache

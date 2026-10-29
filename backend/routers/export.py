@@ -10,7 +10,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.concurrency import run_in_threadpool
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..db import get_session
@@ -64,8 +67,8 @@ def export_backup(
 
 
 @router.post("/api/import", response_model=ImportResult, status_code=status.HTTP_200_OK)
-def import_document(
-    doc: ExportDocument,
+async def import_document(
+    request: Request,
     dry_run: bool = Query(False, description="Report what would change without applying it"),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_session),
@@ -76,11 +79,22 @@ def import_document(
     Existing subscriptions, users and rows are kept; missing ones are created
     and the matching sync/download jobs queued. The dry run walks the same
     code and rolls back, so its summary is what the real run will do.
+
+    The body is an ExportDocument, read by hand rather than declared as a
+    parameter: FastAPI would read and parse it before checking that the
+    caller is an admin, and it can weigh hundreds of MB.
     """
+    body = await request.body()
+    try:
+        # Up to 256 MB to parse: off the event loop too, like the import
+        doc = await run_in_threadpool(ExportDocument.model_validate_json, body)
+    except ValidationError as e:
+        raise RequestValidationError(e.errors(include_url=False))
     if not any((doc.library, doc.catalog, doc.users, doc.settings)):
         raise HTTPException(status_code=400, detail="Document has no importable section")
     try:
-        return export_svc.run_import(db, doc, user_id=current_user.id, dry_run=dry_run)
+        # Long and synchronous (SQLAlchemy): off the event loop
+        return await run_in_threadpool(export_svc.run_import, db, doc, user_id=current_user.id, dry_run=dry_run)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

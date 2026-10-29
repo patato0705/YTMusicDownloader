@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from . import config
+from .body_limit import BodySizeLimitMiddleware
 from .logging_config import configure_logging
 from .db import init_db
 from .routers import (
@@ -58,6 +59,11 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json",
         redoc_url=None,
     )
+
+    # Before any route reads a body (backend/body_limit.py). Added before
+    # CORS so CORS wraps it: the last middleware added is the outermost,
+    # and its 413s need CORS headers like any other response.
+    app.add_middleware(BodySizeLimitMiddleware)
 
     # CORS - default to same-origin only (no cross-origin access at all).
     # The standard deployment (this Dockerfile) serves the frontend from

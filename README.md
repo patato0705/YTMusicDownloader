@@ -51,12 +51,9 @@ cd YTMusicDownloader
 docker compose up -d --build
 ```
 
-Open <http://localhost:8000> and sign in with the default account:
+On its first start (empty database), the app creates an administrator named `admin` with a generated password, printed once in the log.
 
-- **Username:** `admin`
-- **Password:** `default`
-
-You'll be asked to choose a new password right away (even if you set a custom `FIRST_ADMIN_PASSWORD`: it sits in plain text in the compose file). The first admin is only created when the database is empty; after that, the `FIRST_ADMIN_*` variables are ignored.
+Open <http://localhost:8000> and sign in with it. Lost the log? See [Recovering access](#recovering-access).
 
 The first build takes a few minutes (frontend build + Python dependencies). Subsequent starts are fast.
 
@@ -107,10 +104,9 @@ Set in `docker-compose.yml`. All are optional.
 | `COOKIE_SECURE` | `false` | Set to `true` when served over HTTPS (behind a TLS-terminating reverse proxy). Leave off for plain HTTP or login won't persist. |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Address(es) or subnet(s) of your reverse proxy, comma-separated. Required behind a proxy, see [Running behind a reverse proxy](#running-behind-a-reverse-proxy). |
 | `DOWNLOAD_WORKERS` | `3` | Number of download worker *processes*. This is a ceiling; how many actually run at once is the *Max concurrent downloads* setting in the admin panel. |
+| `YTDLP_AUTO_UPDATE` | `true` | yt-dlp is updated at every start (to releases at least a day old). Set to `false` to keep the version the image was built with. |
 | `CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated origins, only needed if you serve the frontend from a different origin than the API. Leave unset for the standard setup. |
 | `PUBLIC_URL`, `OIDC_*`, `PASSWORD_LOGIN_ENABLED` | – | Single sign-on, see [Single sign-on (OIDC)](#single-sign-on-oidc) |
-| `FIRST_ADMIN_USERNAME` | `admin` | First admin account, created only when the database is empty |
-| `FIRST_ADMIN_PASSWORD` | `default` | |
 | `LOG_LOCAL_TIME` | `1` | Set to `0` for UTC log timestamps |
 
 ### Admin panel settings
@@ -123,8 +119,9 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Failed sign-ins per IP | 10 | Wrong passwords allowed from one IP within the window before it's blocked. Set to 0 to turn this check off. |
 | Failed sign-ins per account | 5 | Wrong passwords allowed for one account within the window before *new* browsers are blocked from it. Browsers signed in to the account before (and not signed out since) get their own allowance, so hammering `admin` from elsewhere doesn't lock you out of your usual browser. Also applies to wrong current passwords on *Change password*. Set to 0 to turn this check off. |
 | Failed sign-in window | 15 min | How long failed sign-ins are remembered; blocks lift as they expire |
-| New single sign-on accounts | on | Create an account at someone's first single sign-on (otherwise only existing accounts, and members of the configured provider groups, get in). Shown only when single sign-on is configured. |
+| New single sign-on accounts | on | Create an account at someone's first single sign-on. When off, only existing accounts get in; with provider groups configured, only members of those groups (an existing account that has left them is refused too). Shown only when single sign-on is configured. |
 | Role of new single sign-on accounts | visitor | *Visitor* or *member*. Shown only when single sign-on is configured. |
+| Single sign-on session length | 24 h | How long a single sign-on session lasts before going through the provider again (usually one click). Role changes and deactivations at the provider only apply from then, hence shorter than password sessions (7 days). Shown only when single sign-on is configured. |
 | Max concurrent downloads | 1 | Parallel YouTube downloads. Capped by `DOWNLOAD_WORKERS`. Every extra stream from one IP raises the odds of being rate-limited. |
 | Rate-limit pause | 10 min | How long all downloads stop after a rate limit. Doubles on each consecutive pause (up to 16×) until a download succeeds. |
 | Lyrics download | on | Fetch lyrics from LRCLIB for every downloaded track |
@@ -153,7 +150,7 @@ Admins create users from **Admin Panel → Users**, or enable public registratio
 
 Changing your password (user menu → *Change Password*) signs you out of every other browser and device; the one you changed it from stays signed in.
 
-Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**, which shows a temporary password once to pass on. The user is signed out everywhere and has to pick a new password at next sign-in. Admins can reset anyone but themselves (use *Change Password*, or the [recovery commands](#recovering-access) if you can't sign in).
+Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**, which shows a temporary password once to pass on. The user is signed out everywhere and has to pick a new password before they can do anything else (the temporary password works for nothing but that). Admins can reset anyone's password, other administrators' included (administrators are trusted), but not their own: use *Change Password*, or the [recovery commands](#recovering-access) if you can't sign in.
 
 ### Following vs. downloading
 
@@ -288,7 +285,9 @@ Single sign-on is on when issuer, client ID and secret are all set. The web proc
 
 **Accounts.** An account is tied to the provider's identity (issuer + subject), never to a name, so nobody can take over an account by picking its username at the provider. The first sign-in creates the account (see the *New single sign-on accounts* and *Role* settings), named after the provider's username: if that name is taken here, a suffix is added (`admin-2`), the two accounts are never merged. Deactivated accounts can't sign in. Single sign-on accounts have no password here, so *Change password* and *Reset password* don't apply to them.
 
-**Roles from provider groups.** With `OIDC_ADMIN_GROUP` and/or `OIDC_MEMBER_GROUP` set, the provider owns the roles of single sign-on accounts: at every sign-in they become *administrator* (in the admin group), *member* (in the member group) or the default role (in neither), and the role can't be edited in the admin panel. Members of those groups can sign in even when *New single sign-on accounts* is off. Groups are read from the ID token and the userinfo endpoint.
+*New single sign-on accounts* is on by default, which lets in **everyone your provider will sign in** (as *visitors* unless you change the role). That's what you want with a provider holding only people you trust (your own Authelia, Authentik, Pocket ID…). With a provider anyone can join (open self-registration, a big organisation's directory, a public identity provider), turn it off and use provider groups instead: visitors can't download or change anything, but they see the whole library and their searches run against YouTube from your server's IP.
+
+**Roles from provider groups.** With `OIDC_ADMIN_GROUP` and/or `OIDC_MEMBER_GROUP` set, the provider owns the roles of single sign-on accounts: at every sign-in they become *administrator* (in the admin group), *member* (in the member group) or the default role (in neither), and the role can't be edited in the admin panel. Turn *New single sign-on accounts* off to let in group members only: they can still sign in for the first time, while anyone in neither group is refused, existing accounts included (and their other sessions are signed out). Groups are read from the ID token and the userinfo endpoint. A change of groups (or an account disabled at the provider) applies at the next sign-in, at most *Single sign-on session length* (24 h by default) later.
 
 **Single sign-on only** (`PASSWORD_LOGIN_ENABLED=false`): the password form, registration, *Create user* and *Reset password* go away, and no password admin is created on first start. Get your first administrator with one of:
 
@@ -378,7 +377,7 @@ Jobs run in order of where they came from, and every job inherits that from the 
 
 ## Troubleshooting
 
-**Downloads fail across the board right after an update to YouTube**: restart the container. yt-dlp is updated from PyPI at every start; wait a day or two for a yt-dlp release if the restart doesn't help.
+**Downloads fail across the board right after an update to YouTube**: restart the container. yt-dlp is updated from PyPI at every start, to the newest release published at least a day ago (a brand-new release could be a compromised one, and those are usually pulled within hours). So a fix released today is picked up by a restart tomorrow.
 
 **A track fails with an age-restriction error**: upload account cookies (see above). Such tracks are retried once a day, up to 5 attempts; after that they're marked failed, and *Retry missing tracks* on the album page queues them again.
 

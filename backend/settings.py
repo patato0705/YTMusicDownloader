@@ -129,18 +129,29 @@ DEFAULT_SETTINGS = {
         "value": True,
         "type": "bool",
         "requires": "oidc",
-        "description": "Create an account on the first single sign-on of someone without one (otherwise they are refused)",
+        "description": "Create an account on the first single sign-on of someone without one. When off, only existing accounts get in; with provider groups configured, only members of those groups (existing accounts outside them are refused too)",
     },
     "auth.oidc_default_role": {
         # No administrator: admins come from OIDC_ADMIN_GROUP, the CLI or the panel
         "value": "visitor",
         "type": "string",
         "requires": "oidc",
-        "description": "Role of accounts created by single sign-on (and of everyone outside the configured groups)",
+        "description": "Role of accounts created by single sign-on (and, while new accounts are allowed, of everyone outside the configured groups)",
         "allowed_values": [
             {"value": "visitor", "label": "Visitor"},
             {"value": "member", "label": "Member"},
         ],
+    },
+    "auth.oidc_session_hours": {
+        # Shorter than password sessions (7 days): what the provider says
+        # (groups, so roles; a deactivated account) only reaches this app
+        # at sign-in, and signing in again is usually one redirect.
+        "value": 24,
+        "type": "int",
+        "min": 1,
+        "max": 168,
+        "requires": "oidc",
+        "description": "Hours a single sign-on session lasts before going through the provider again. Role changes and deactivations at the provider apply from then: keep it short (password sessions last 7 days)",
     },
 
     # Download settings

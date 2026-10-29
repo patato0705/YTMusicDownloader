@@ -68,19 +68,35 @@ echo "[entrypoint] Running as PUID=$PUID PGID=$PGID, $DOWNLOAD_WORKERS download 
 # pins: this upgrades yt-dlp alone, plus whatever its new release requires.
 # --quiet drops uv's resolver chatter but still prints errors; the line
 # after it says whether anything changed.
-echo "[entrypoint] Updating yt-dlp..."
-YTDLP_BEFORE=$(yt-dlp --version 2>/dev/null || echo unknown)
-if uv pip install --quiet --system --no-cache --upgrade-package yt-dlp "yt-dlp[default,deno]"; then
-    YTDLP_AFTER=$(yt-dlp --version 2>/dev/null || echo unknown)
-    DENO_VERSION=$(deno --version 2>/dev/null | awk 'NR==1 {print $2}')
-    if [ "$YTDLP_AFTER" = "$YTDLP_BEFORE" ]; then
-        YTDLP_STATUS="already latest"
-    else
-        YTDLP_STATUS="updated from $YTDLP_BEFORE"
-    fi
-    echo "[entrypoint] yt-dlp $YTDLP_AFTER ($YTDLP_STATUS), deno ${DENO_VERSION:-missing}"
+#
+# Guarding against a compromised release (this runs as root, and the app
+# that imports it can read every secret in /config):
+# - --only-binary: wheels only, so no package's build code ever runs here
+#   (the Dockerfile installs with the same flag);
+# - --exclude-newer: only releases published at least a day ago. Malicious
+#   uploads to PyPI are usually caught and pulled within hours, and a day
+#   is short next to how long YouTube breakages last. An image built less
+#   than a day ago may step yt-dlp back to the previous release until then.
+# YTDLP_AUTO_UPDATE=false keeps the version baked into the image instead.
+if [ "${YTDLP_AUTO_UPDATE:-true}" = "false" ]; then
+    echo "[entrypoint] yt-dlp $(yt-dlp --version 2>/dev/null || echo unknown) (auto-update off)"
 else
-    echo "[entrypoint] yt-dlp update failed, continuing with the version baked into the image" >&2
+    echo "[entrypoint] Updating yt-dlp..."
+    YTDLP_BEFORE=$(yt-dlp --version 2>/dev/null || echo unknown)
+    CUTOFF=$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)
+    if uv pip install --quiet --system --no-cache --only-binary :all: --exclude-newer "$CUTOFF" \
+        --upgrade-package yt-dlp "yt-dlp[default,deno]"; then
+        YTDLP_AFTER=$(yt-dlp --version 2>/dev/null || echo unknown)
+        DENO_VERSION=$(deno --version 2>/dev/null | awk 'NR==1 {print $2}')
+        if [ "$YTDLP_AFTER" = "$YTDLP_BEFORE" ]; then
+            YTDLP_STATUS="already latest"
+        else
+            YTDLP_STATUS="was $YTDLP_BEFORE"
+        fi
+        echo "[entrypoint] yt-dlp $YTDLP_AFTER ($YTDLP_STATUS, releases from the last day skipped), deno ${DENO_VERSION:-missing}"
+    else
+        echo "[entrypoint] yt-dlp update failed, continuing with the version baked into the image" >&2
+    fi
 fi
 
 exec supervisord -n -c /etc/supervisor/supervisord.conf

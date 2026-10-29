@@ -217,11 +217,12 @@ def reset_user_password(
 
     The password is returned once, for the admin to pass on; the user has to
     choose a new one at next sign-in. Signs the user out everywhere and
-    clears their failed sign-in lock. Works on other admins too (an admin
-    can already demote or delete them), but not on yourself: that would
-    skip the current-password check of /api/auth/change-password. Nor on
-    single sign-on accounts: their sign-in is the provider's business (the
-    recovery CLI can still give one a password, as a last resort).
+    clears their failed sign-in lock. Works on other admins too
+    (administrators are trusted, and one can already demote or delete
+    another), but not on yourself: that would skip the current-password
+    check of /api/auth/change-password. Nor on single sign-on accounts:
+    their sign-in is the provider's business (the recovery CLI can still
+    give one a password, as a last resort).
     """
     if not config.PASSWORD_LOGIN_ENABLED:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_login_disabled")

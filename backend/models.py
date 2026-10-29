@@ -45,10 +45,11 @@ class Artist(Base):
         passive_deletes=True,
     )
     # Its "Fans might also like" (see services/recommendations.py). Deleted
-    # by the ORM: SQLite isn't enforcing foreign keys here.
+    # with the artist by the database (ON DELETE CASCADE).
     related: Mapped[List["RelatedArtist"]] = relationship(
         "RelatedArtist",
         cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     def __repr__(self) -> str:
@@ -192,6 +193,11 @@ class ArtistSubscription(Base):
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Not read anywhere: it tells the ORM to write the artist before its
+    # subscription (and delete in the reverse order), which it otherwise
+    # doesn't guarantee within one flush
+    artist: Mapped["Artist"] = relationship("Artist")
+
 
 # Playlists (see services/playlists.py)
 
@@ -225,10 +231,11 @@ class Playlist(Base):
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # In playlist order. Deleted by the ORM: SQLite isn't enforcing foreign keys here.
+    # In playlist order. Deleted with the playlist by the database (ON DELETE CASCADE).
     entries: Mapped[List["PlaylistEntry"]] = relationship(
         "PlaylistEntry",
         cascade="all, delete-orphan",
+        passive_deletes=True,
         order_by="PlaylistEntry.position",
     )
 
@@ -272,7 +279,7 @@ class RelatedArtist(Base):
 class DismissedRecommendation(Base):
     """
     An artist a user marked "not interested": never recommended to them
-    again, until restored. Deleted by hand with the user, like ArtistLike.
+    again, until restored. Deleted with the user by the database.
     """
     __tablename__ = "dismissed_recommendations"
 
@@ -283,18 +290,26 @@ class DismissedRecommendation(Base):
     thumbnail: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     dismissed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
+    # Write order only, like ArtistSubscription.artist (a backup import
+    # creates users and their dismissals in one flush)
+    user: Mapped["User"] = relationship("User")
+
 
 class ArtistLike(Base):
     """
     An artist of the library a user likes: their recommendations are drawn
     from these. Personal, unlike follows, which are the library's. Deleted
-    by hand with the artist or the user: SQLite isn't enforcing foreign keys here.
+    with the artist or the user by the database.
     """
     __tablename__ = "artist_likes"
 
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True, index=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+    # Write order only, like ArtistSubscription.artist
+    user: Mapped["User"] = relationship("User")
+    artist: Mapped["Artist"] = relationship("Artist")
 
 
 # Charts
@@ -327,7 +342,9 @@ class ChartSubscription(Base):
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("oidc_issuer", "oidc_subject"),)
+    # AUTOINCREMENT: SQLite would otherwise give the id of the most recently
+    # created user, once deleted, to the next one created
+    __table_args__ = (UniqueConstraint("oidc_issuer", "oidc_subject"), {"sqlite_autoincrement": True})
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # NOCASE: equality and the unique index are case-insensitive (ASCII), so
@@ -363,9 +380,24 @@ class User(Base):
 
 
 class RefreshToken(Base):
+    """
+    One refresh token of a sign-in. Each refresh replaces it with a new one
+    of the same family (the sign-in); see services/auth.rotate_refresh_token.
+    """
     __tablename__ = "refresh_tokens"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    token: Mapped[str] = mapped_column(String(512), unique=True, nullable=False, index=True)
+    # SHA-256 of the token, never the token itself: a copy of the database
+    # mustn't hold working sessions
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    family_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    # When a refresh replaced it, and with which token. Presented again
+    # after that (past a few seconds' grace) while its replacement has been
+    # used too, it's a stolen copy: the whole family is revoked.
+    replaced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Indexed: every deleted token (the daily expiry sweep) is looked up here for SET NULL
+    replaced_by_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("refresh_tokens.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
     user_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),

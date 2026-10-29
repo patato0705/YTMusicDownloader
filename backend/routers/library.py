@@ -570,12 +570,11 @@ def delete_artist_from_library(
             _delete_file(artist.image_local)
             _delete_file(artist.banner_local)
 
-        # 3. Delete artist subscription, and everyone's like of it
+        # 3. Delete artist subscription
         if artist_sub:
             db.delete(artist_sub)
-        recommendations_svc.delete_artist_likes(db, artist_id)
 
-        # 4. Delete artist record
+        # 4. Delete artist record (everyone's like of it goes with it: ON DELETE CASCADE)
         if artist:
             db.delete(artist)
 

@@ -30,8 +30,15 @@ def _unauthorized(detail: str) -> HTTPException:
     )
 
 
-def _resolve_user_from_token(token: str, session: Session) -> User:
-    """Shared validation: decode/verify a JWT access token and load its user."""
+def _resolve_user_from_token(token: str, session: Session, allow_temporary_password: bool = False) -> User:
+    """
+    Shared validation: decode/verify a JWT access token and load its user.
+
+    A user whose password is a temporary one (generated first admin, admin
+    reset) gets 403 password_change_required: someone else has seen that
+    password, so it's only good for choosing a new one (see
+    require_auth_allow_temporary_password).
+    """
     payload = auth_svc.verify_access_token(token)
     if not payload:
         raise _unauthorized("Invalid or expired token")
@@ -44,6 +51,9 @@ def _resolve_user_from_token(token: str, session: Session) -> User:
     if auth_svc.token_revoked(user, payload["issued_at"]):
         raise _unauthorized("Session revoked")
 
+    if user.must_change_password and not allow_temporary_password:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_change_required")
+
     return user
 
 
@@ -53,6 +63,17 @@ def require_auth(
 ) -> User:
     """The user of the access token in the Authorization header, or 401."""
     return _resolve_user_from_token(credentials.credentials, session)
+
+
+def require_auth_allow_temporary_password(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    session: Session = Depends(get_session),
+) -> User:
+    """
+    Like require_auth, but also lets in a user who still has to replace a
+    temporary password: only for what the change-password page needs.
+    """
+    return _resolve_user_from_token(credentials.credentials, session, allow_temporary_password=True)
 
 
 def require_auth_flexible(

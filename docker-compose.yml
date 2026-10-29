@@ -34,6 +34,10 @@ services:
       # parallel stream from one IP raises the odds of YouTube rate-limiting
       # or bot-checking you.
       # - DOWNLOAD_WORKERS=3
+      # yt-dlp is updated at every start (releases at least a day old) so a
+      # restart picks up fixes for YouTube changes. "false" keeps the
+      # version the image was built with.
+      # - YTDLP_AUTO_UPDATE=true
       # Single sign-on (OpenID Connect: Authelia, Authentik, Pocket ID,
       # Keycloak...). Enabled when issuer, client id and secret are all set.
       # Register PUBLIC_URL/api/auth/oidc/callback as the redirect URI at

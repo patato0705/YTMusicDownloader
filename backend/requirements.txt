@@ -5,7 +5,8 @@
 # yt-dlp is deliberately NOT pinned here: YouTube breaks it often enough that
 # pinning it would mean the app silently going stale between image releases.
 # deploy/entrypoint.sh runs `uv pip install --upgrade-package yt-dlp` at container
-# startup so a restart alone can pick up an upstream fix, no rebuild required.
+# startup so a restart alone can pick up an upstream fix, no rebuild required
+# (wheels only, releases at least a day old: see the entrypoint).
 #
 # The extras matter: YouTube extraction now needs a JavaScript runtime plus
 # yt-dlp's challenge-solver scripts (github.com/yt-dlp/yt-dlp/wiki/EJS).

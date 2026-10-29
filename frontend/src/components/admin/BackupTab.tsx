@@ -140,8 +140,12 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       );
     }
     if (r.users) {
+      // Each account by name and role: whoever wrote the file chose their passwords
+      const created = r.users.created_users.map(u =>
+        `${u.username} (${t(`admin.users.roles.${u.role}`)}${u.single_sign_on ? `, ${t('admin.users.ssoBadge')}` : ''})`
+      );
       rows.push(
-        { label: t('admin.backup.summary.usersCreated'), value: r.users.created },
+        { label: t('admin.backup.summary.usersCreated'), value: created.length ? created.join(', ') : 0 },
         { label: t('admin.backup.summary.usersSkipped'), value: r.users.skipped.length ? r.users.skipped.join(', ') : 0 },
       );
       if (r.users.likes) {

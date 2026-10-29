@@ -16,6 +16,7 @@ Endpoints:
 from __future__ import annotations
 import logging
 import secrets
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -23,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from .. import config
 from ..db import get_session
-from ..dependencies import require_auth
+from ..dependencies import require_auth_allow_temporary_password
 from ..models import User
 from ..schemas import (
     LoginRequest,
@@ -38,6 +39,7 @@ from ..services import auth as auth_svc
 from ..services import login_throttle
 from ..services import oidc
 from ..settings import get_setting
+from ..time_utils import now_utc
 
 logger = logging.getLogger("routers.auth")
 
@@ -68,11 +70,12 @@ def _set_access_cookie(response: Response, access_token: str) -> None:
     )
 
 
-def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+def _set_refresh_cookie(response: Response, refresh_token: str, expires_at: datetime) -> None:
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        max_age=config.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        # The sign-in's own expiry: a rotated token doesn't extend it
+        max_age=max(0, int((expires_at - now_utc()).total_seconds())),
         httponly=True,
         secure=config.COOKIE_SECURE,
         samesite="lax",
@@ -111,10 +114,11 @@ _OIDC_FLOW_PATH = "/api/auth/oidc"
 def _start_session(response: Response, session: Session, user: User) -> str:
     """Open a session for an authenticated user: cookies set, access token returned."""
     access_token = auth_svc.create_access_token(user)
-    refresh_token = auth_svc.create_refresh_token(session, user.id)
+    expires_at = now_utc() + auth_svc.refresh_token_lifetime(session, user)
+    refresh_token = auth_svc.create_refresh_token(session, user.id, expires_at)
     auth_svc.update_last_login(session, user.id)
     _set_access_cookie(response, access_token)
-    _set_refresh_cookie(response, refresh_token)
+    _set_refresh_cookie(response, refresh_token, expires_at)
     return access_token
 
 
@@ -326,8 +330,9 @@ def oidc_callback(
     flow = oidc.decode_flow_state(request.cookies.get(_OIDC_FLOW_COOKIE, ""))
     if not flow:
         return fail("failed", "missing or expired flow cookie (sign-in took over 10 minutes, or cookies are blocked)")
-    # Constant-time compare: the state is what ties this callback to our redirect
-    if not state or not code or not secrets.compare_digest(state, flow["state"]):
+    # Constant-time compare: the state is what ties this callback to our redirect.
+    # As bytes: compare_digest raises on a str with non-ASCII characters
+    if not state or not code or not secrets.compare_digest(state.encode(), flow["state"].encode()):
         return fail("failed", "state mismatch")
 
     try:
@@ -350,9 +355,10 @@ def refresh(
     session: Session = Depends(get_session),
 ):
     """
-    Exchange the refresh_token cookie for a new access token.
-
-    Refresh token remains valid until expiration (7 days).
+    Exchange the refresh_token cookie for a new access token, and the
+    refresh token for a new one (rotation, see
+    services/auth.rotate_refresh_token). The sign-in still ends when it
+    started out to: 7 days, or auth.oidc_session_hours for single sign-on.
     """
     refresh_token = request.cookies.get("refresh_token")
     if not refresh_token:
@@ -362,18 +368,20 @@ def refresh(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Verify refresh token
-    user = auth_svc.verify_refresh_token(session, refresh_token)
-
-    if not user:
+    rotated = auth_svc.rotate_refresh_token(session, refresh_token)
+    if not rotated:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    user, new_refresh_token, expires_at = rotated
 
     access_token = auth_svc.create_access_token(user)
     _set_access_cookie(response, access_token)
+    # None when another tab rotated it a moment ago: the browser has that one
+    if new_refresh_token:
+        _set_refresh_cookie(response, new_refresh_token, expires_at)
 
     return TokenResponse(
         access_token=access_token,
@@ -409,7 +417,7 @@ def logout(
 
 @router.get("/me", response_model=UserResponse)
 def get_current_user_info(
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_auth_allow_temporary_password),
 ):
     """
     Get current authenticated user's information.
@@ -423,11 +431,12 @@ def change_password(
     data: ChangePasswordRequest,
     request: Request,
     response: Response,
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_auth_allow_temporary_password),
     session: Session = Depends(get_session),
 ):
     """
-    Change current user's password.
+    Change current user's password. The one route besides /me open to a
+    user who still has a temporary password.
 
     Requires current password for verification. Wrong current passwords
     count against the per-account limit, so a stolen session can't be used

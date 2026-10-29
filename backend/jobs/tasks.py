@@ -671,6 +671,10 @@ def import_album(
         result = albums_svc.fetch_and_upsert_album(session, browse_id=browse_id, artist_id=artist_id)
         session.commit()
         queued = albums_svc.complete_import(session, result["album_id"], origin=Origin(origin))
+    except albums_svc.ArtistDeleted:
+        session.rollback()
+        logger.info("Artist %s was deleted during the import of album %s, nothing stored", artist_id, browse_id)
+        return {"ok": True, "skipped": "artist deleted during the import"}
     except Exception as e:
         session.rollback()
         logger.exception("import_album failed for %s", browse_id)

@@ -32,7 +32,7 @@ interface JobActivityContextType {
 const JobActivityContext = createContext<JobActivityContextType | undefined>(undefined);
 
 export const JobActivityProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { hasFullAccess } = useAuth();
   const [activeJobCount, setActiveJobCount] = useState(0);
   const [activeByType, setActiveByType] = useState<Record<string, number>>({});
   const [revision, setRevision] = useState(0);
@@ -45,7 +45,7 @@ export const JobActivityProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const refreshRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!hasFullAccess) {
       setActiveJobCount(0);
       setActiveByType({});
       setDownloadsPausedUntil(null);
@@ -136,7 +136,7 @@ export const JobActivityProvider: React.FC<{ children: React.ReactNode }> = ({ c
       window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [isAuthenticated]);
+  }, [hasFullAccess]);
 
   const refresh = useCallback(() => refreshRef.current(), []);
   const value = useMemo(

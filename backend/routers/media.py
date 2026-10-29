@@ -33,6 +33,7 @@ from ..config import (
 )
 from ..dependencies import require_auth_flexible
 from ..models import User
+from ..size_limits import ByteBudget, declared_too_large
 
 logger = logging.getLogger("routers.media")
 
@@ -231,16 +232,13 @@ async def get_thumbnail(
                     },
                 ) as response:
                     response.raise_for_status()
-                    # Content-Length is only a hint (it may be absent or
-                    # wrong), so the streamed byte count is what's enforced.
-                    declared = response.headers.get("content-length")
-                    if declared and declared.isdigit() and int(declared) > THUMBNAIL_MAX_IMAGE_BYTES:
+                    # The streamed byte count is what's enforced (size_limits.py)
+                    if declared_too_large(response.headers.get("content-length"), THUMBNAIL_MAX_IMAGE_BYTES):
                         raise HTTPException(status_code=502, detail="Thumbnail too large")
                     chunks = []
-                    received = 0
+                    budget = ByteBudget(THUMBNAIL_MAX_IMAGE_BYTES)
                     async for chunk in response.aiter_bytes():
-                        received += len(chunk)
-                        if received > THUMBNAIL_MAX_IMAGE_BYTES:
+                        if budget.add(len(chunk)):
                             raise HTTPException(status_code=502, detail="Thumbnail too large")
                         chunks.append(chunk)
                     content = b"".join(chunks)

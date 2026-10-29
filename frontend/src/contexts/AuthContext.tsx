@@ -8,6 +8,8 @@ import { clearMemoryCaches } from '../utils';
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  /** Signed in and free to use the app: no temporary password left to replace (the API refuses the rest until then) */
+  hasFullAccess: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -72,6 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         isAuthenticated: !!user,
+        hasFullAccess: !!user && !user.must_change_password,
         isLoading,
         login,
         logout,

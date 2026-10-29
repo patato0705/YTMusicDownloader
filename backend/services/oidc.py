@@ -327,6 +327,12 @@ def sign_in(session: Session, claims: Dict[str, Any]) -> User:
     """
     The account for these verified claims, created if allowed. With a group
     mapping configured the provider owns roles: re-applied every sign-in.
+
+    Who gets in, with auth.oidc_signup_enabled off: without a group
+    mapping, existing accounts only; with one, members of the configured
+    groups only -- an existing account that has left them is refused too
+    (and signed out everywhere), or leaving the groups would only demote it
+    to the default role.
     """
     issuer = get_metadata()["issuer"]
     subject = claims["sub"]
@@ -334,10 +340,11 @@ def sign_in(session: Session, claims: Dict[str, Any]) -> User:
         select(User).where(User.oidc_issuer == issuer, User.oidc_subject == subject)
     ).scalars().first()
     mapped = role_from_groups(groups_of(claims)) if config.OIDC_ROLES_FROM_GROUPS else None
+    signup_enabled = get_setting(session, "auth.oidc_signup_enabled")
 
     if user is None:
         # Being in a group named in the config means being an intended user
-        if mapped is None and not get_setting(session, "auth.oidc_signup_enabled"):
+        if mapped is None and not signup_enabled:
             raise OidcError("not_allowed", f"no account for {subject!r} and new sign-ins are off")
         user = User(
             username=_username_for(session, claims),
@@ -357,6 +364,11 @@ def sign_in(session: Session, claims: Dict[str, Any]) -> User:
     if not user.is_active:
         raise OidcError("inactive", f"account {user.username} is deactivated")
     if config.OIDC_ROLES_FROM_GROUPS:
+        if mapped is None and not signup_enabled:
+            # Its other sessions end now rather than when they expire
+            auth_svc.revoke_sessions(session, user)
+            session.commit()
+            raise OidcError("not_allowed", f"{user.username} is in none of the configured groups and new sign-ins are off")
         role = mapped or get_setting(session, "auth.oidc_default_role")
         if role != user.role:
             logger.info("Role of %s set to %s from provider groups (was %s)", user.username, role, user.role)

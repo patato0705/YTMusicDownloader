@@ -44,7 +44,7 @@
       "sso": "Sign in with {name}",
       "ssoErrors": {
         "denied": "Sign-in was cancelled at the provider.",
-        "not_allowed": "You don't have an account here yet. Ask an administrator for access.",
+        "not_allowed": "Your account doesn't have access here. Ask an administrator for access.",
         "inactive": "This account is deactivated. Contact an administrator.",
         "unavailable": "The sign-in provider can't be reached right now. Try again later.",
         "failed": "Sign-in failed. Try again, and contact an administrator if it keeps happening."
@@ -385,11 +385,15 @@
           },
           "oidc_signup_enabled": {
             "label": "New single sign-on accounts",
-            "description": "Create an account the first time someone signs in with single sign-on. When off, only existing accounts (and members of the configured provider groups) can sign in."
+            "description": "Create an account the first time someone signs in with single sign-on. When off, only existing accounts can sign in. When roles come from provider groups, only members of those groups can sign in: an existing account that has left them is refused too."
           },
           "oidc_default_role": {
             "label": "Role of new single sign-on accounts",
-            "description": "Given to accounts created by single sign-on. When roles come from provider groups, also given to anyone outside those groups."
+            "description": "Given to accounts created by single sign-on. When roles come from provider groups and new accounts are allowed, also given to anyone outside those groups."
+          },
+          "oidc_session_hours": {
+            "label": "Single sign-on session length (hours)",
+            "description": "How long a single sign-on session lasts before going through the provider again (usually one click). Role changes and deactivations at the provider only apply from then, which is why this is shorter than password sessions (7 days)."
           }
         },
         "download": {
@@ -658,7 +662,8 @@
         "invalid_setting": "A setting has an invalid value and was ignored.",
         "users_skipped": "Some users already exist here: their accounts were left untouched, only their liked artists and dismissed recommendations were added.",
         "likes_skipped": "Some liked artists aren't in this library and were skipped.",
-        "invalid_chart": "A chart subscription could not be created."
+        "invalid_chart": "A chart subscription could not be created.",
+        "administrators_created": "This file creates administrator accounts. Whoever made it knows their passwords: only import it if you trust where it came from."
       }
     }
   },

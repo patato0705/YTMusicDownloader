@@ -4,6 +4,15 @@ import re
 import unicodedata
 from typing import Optional
 
+# What every YouTube video id (and so every Track.id) looks like
+VIDEO_ID_PATTERN = r"^[A-Za-z0-9_-]{11}$"
+_VIDEO_ID_RE = re.compile(VIDEO_ID_PATTERN)
+
+
+def is_video_id(value: Optional[str]) -> bool:
+    # fullmatch: "$" alone would let a trailing newline through
+    return bool(value) and _VIDEO_ID_RE.fullmatch(value) is not None
+
 
 def fold(text: Optional[str]) -> str:
     """

@@ -80,9 +80,9 @@ COOKIE_SECURE = _bool_env("COOKIE_SECURE", False)
 # Password hashing
 BCRYPT_ROUNDS = 12  # Balance between security and performance
 
-# First-time setup
-FIRST_ADMIN_USERNAME = os.environ.get("FIRST_ADMIN_USERNAME", "admin")
-FIRST_ADMIN_PASSWORD = os.environ.get("FIRST_ADMIN_PASSWORD", "default")
+# First-time setup: the account created on an empty database, with a
+# generated password printed to the log once (services/auth.ensure_first_admin)
+FIRST_ADMIN_USERNAME = "admin"
 
 
 # Single sign-on (OpenID Connect). Deployment settings, so env-only: whoever

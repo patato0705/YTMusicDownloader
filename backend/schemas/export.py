@@ -14,7 +14,10 @@ backends. File paths are relative to the music directory.
 from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
+
+from ..text_utils import VIDEO_ID_PATTERN
+from .auth import Username
 
 FORMAT_VERSION = 1
 
@@ -111,7 +114,8 @@ class CatalogAlbum(BaseModel):
 
 
 class CatalogTrack(BaseModel):
-    id: str = Field(..., min_length=1, max_length=128)
+    # A YouTube video id: what tracks are downloaded by
+    id: str = Field(..., pattern=VIDEO_ID_PATTERN)
     title: Optional[str] = Field(None, max_length=1024)
     duration: Optional[int] = Field(None, ge=0)
     artists: Optional[List[Dict[str, Optional[str]]]] = None
@@ -142,7 +146,7 @@ class DismissedArtist(BaseModel):
 
 
 class ExportedUser(BaseModel):
-    username: str = Field(..., min_length=1, max_length=64)
+    username: Username
     # bcrypt hashes are self-contained (salt embedded), so they move between
     # instances as-is. Anything else can't be verified by this app.
     password_hash: Optional[str] = Field(None, pattern=r"^\$2[aby]\$\d{2}\$.{53}$")
@@ -220,14 +224,26 @@ class CatalogImportResult(BaseModel):
     albums_to_import: int = 0
 
 
+class CreatedUser(BaseModel):
+    """An account the import creates, listed so the preview shows who gets in, and as what."""
+    username: str
+    role: str
+    single_sign_on: bool
+
+
 class UsersImportResult(BaseModel):
-    created: int = 0
+    created_users: List[CreatedUser] = Field(default_factory=list)
     skipped: List[str] = Field(default_factory=list)
     # Added to the accounts, created or already there
     likes: int = 0
     # Liked artists not in the library once the import is done
     likes_skipped: int = 0
     dismissed: int = 0
+
+    @computed_field
+    @property
+    def created(self) -> int:
+        return len(self.created_users)
 
 
 class SettingsImportResult(BaseModel):

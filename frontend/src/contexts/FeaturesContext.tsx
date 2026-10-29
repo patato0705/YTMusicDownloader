@@ -18,7 +18,7 @@ interface FeaturesContextType {
 const FeaturesContext = createContext<FeaturesContextType | undefined>(undefined);
 
 export const FeaturesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { hasFullAccess } = useAuth();
   const [features, setFeatures] = useState<Features | null>(null);
 
   const refreshFeatures = useCallback(async () => {
@@ -30,9 +30,9 @@ export const FeaturesProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) refreshFeatures();
+    if (hasFullAccess) refreshFeatures();
     else setFeatures(null);
-  }, [isAuthenticated, refreshFeatures]);
+  }, [hasFullAccess, refreshFeatures]);
 
   const value = useMemo(() => ({ features, refreshFeatures }), [features, refreshFeatures]);
 

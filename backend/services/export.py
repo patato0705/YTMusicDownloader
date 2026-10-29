@@ -24,6 +24,7 @@ from ..models import (
 )
 from ..schemas.export import (
     FORMAT_VERSION,
+    CreatedUser,
     ExportDocument,
     ExportedUser,
     ImportResult,
@@ -361,7 +362,9 @@ def _import_users(
             result.skipped.append(item.username)
         else:
             user = _create_user(session, item)
-            result.created += 1
+            result.created_users.append(
+                CreatedUser(username=user.username, role=user.role, single_sign_on=user.is_oidc)
+            )
         likes.append((user.id, item.liked_artists))
         for d in item.dismissed_recommendations:
             if session.get(DismissedRecommendation, (user.id, d.id)) is None:
@@ -370,6 +373,11 @@ def _import_users(
                 result.dismissed += 1
     if result.skipped:
         warnings.append(ImportWarning(code="users_skipped", detail=", ".join(result.skipped)))
+    # Whoever wrote the file chose these accounts' passwords (or provider
+    # identities): the preview must make new administrators impossible to miss
+    admins = [u.username for u in result.created_users if u.role == config.ROLE_ADMINISTRATOR]
+    if admins:
+        warnings.append(ImportWarning(code="administrators_created", detail=", ".join(admins)))
     return result, likes
 
 
@@ -431,13 +439,16 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
     for al in catalog.albums:
         if al.mode != "download":
             continue
+        # An artist missing from the document can't be pointed at (foreign
+        # key): its import_album finds the album's artist instead
+        artist_id = al.artist_id if al.artist_id and session.get(Artist, al.artist_id) else None
         image = resolve_music_path(al.image_local)
         cover_on_disk = bool(image and image.exists())
         obj = albums_svc.upsert_album(
             session,
             album_id=al.id,
             title=al.title,
-            artist_id=al.artist_id,
+            artist_id=artist_id,
             image_local=str(image) if cover_on_disk else None,
             year=al.year,
             album_type=al.type,
@@ -446,7 +457,7 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
         obj.mode = "download"
         if al.folder:
             folders_svc.restore_folder(session, obj, al.folder)
-        download_albums[al.id] = al.artist_id
+        download_albums[al.id] = artist_id
         result.albums += 1
         if not cover_on_disk and not (obj.image_local and Path(obj.image_local).exists()):
             albums_needing_import.add(al.id)

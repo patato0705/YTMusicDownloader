@@ -7,6 +7,7 @@
  */
 
 import { api } from './client';
+import type { Role } from './auth';
 
 // ============================================================================
 // TYPES
@@ -63,7 +64,14 @@ export interface ImportResult {
     tracks_to_download: number;
     albums_to_import: number;
   } | null;
-  users: { created: number; skipped: string[]; likes: number; likes_skipped: number; dismissed: number } | null;
+  users: {
+    created: number;
+    created_users: { username: string; role: Role; single_sign_on: boolean }[];
+    skipped: string[];
+    likes: number;
+    likes_skipped: number;
+    dismissed: number;
+  } | null;
   settings: { applied: number; ignored: string[] } | null;
   warnings: ImportWarning[];
 }
