@@ -27,17 +27,20 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 
 | | |
 |:---:|:---:|
-| **Browse**: search YouTube Music, or import a playlist<br>![Browse](docs/screenshots/browse.png) | **Artist**: follow once, every release is tracked<br>![Artist page](docs/screenshots/artist.png) |
-| **Album**: per-track download and lyrics status<br>![Album page](docs/screenshots/album.png) | **Lyrics editor**: view, paste or fix lyrics by hand<br>![Lyrics editor](docs/screenshots/lyrics-editor.png) |
-| **Library**: progress for every followed artist and album<br>![Library](docs/screenshots/library-list.png) | **Charts**: auto-follow the top artists of a country<br>![Charts](docs/screenshots/charts.png) |
-| **Admin panel**: backup and restore, users, charts, settings<br>![Admin panel](docs/screenshots/admin-backup.png) | **Light theme**<br>![Home page, light theme](docs/screenshots/home-light.png) |
+| **Browse**: search YouTube Music, or pick from artists similar to the ones you like<br>![Browse](docs/screenshots/browse.png) | **Artist**: follow once, every release is tracked<br>![Artist page](docs/screenshots/artist.png) |
+| **Album**: genres and lyrics status for every track<br>![Album page](docs/screenshots/album.png) | **Lyrics editor**: view, paste or fix lyrics by hand<br>![Lyrics editor](docs/screenshots/lyrics-editor.png) |
+| **Library**: every followed artist and album, with your likes<br>![Library](docs/screenshots/library.png) | **Playlists**: follow a playlist's artists or albums, or keep it in the library as an M3U<br>![Playlist import](docs/screenshots/playlist-import.png) |
+| **Charts**: auto-follow the top artists of a country<br>![Charts](docs/screenshots/charts.png) | **Admin panel**: schedules, users, charts, settings, backups<br>![Admin panel](docs/screenshots/admin-settings.png) |
+| **Light theme**<br>![Home page, light theme](docs/screenshots/home-light.png) | |
 
 <details>
 <summary>Mobile</summary>
 <p align="center">
-  <img src="docs/screenshots/mobile-home.png" width="300" alt="Home page on a phone">
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/mobile-library.png" width="300" alt="Library page on a phone">
+  <img src="docs/screenshots/mobile-home.png" width="260" alt="Home page on a phone">
+  &nbsp;
+  <img src="docs/screenshots/mobile-library.png" width="260" alt="Library page on a phone">
+  &nbsp;
+  <img src="docs/screenshots/mobile-artist.png" width="260" alt="Artist page on a phone">
 </p>
 </details>
 
@@ -222,7 +225,7 @@ The jar is used **only** as a fallback for tracks that fail with an age-gate err
 
 ### Rate limiting
 
-Downloads use an anonymous session. When YouTube throttles it ("rate-limited", "confirm you're not a bot", HTTP 429…), the worker discards its cookie jar and retries once with a fresh session. If that still fails, *all* downloads pause (10 min by default, doubling on each consecutive strike) and the navbar shows a banner with the resume time. The affected tracks go back to *queued*, not *failed*. Once a download succeeds the escalation resets.
+Downloads use an anonymous session. When YouTube throttles it ("rate-limited", "confirm you're not a bot", HTTP 429…), the worker discards its cookie jar and retries once with a fresh session. If that still fails, *all* downloads pause (10 min by default, doubling on each consecutive strike) and a red *!* in the navbar gives the resume time (hover or tap it). The affected tracks go back to *queued*, not *failed*. Once a download succeeds the escalation resets.
 
 ![Rate-limit indicator in the navbar](docs/screenshots/rate-limit.png)
 
@@ -381,7 +384,7 @@ Jobs run in order of where they came from, and every job inherits that from the 
 
 **A track fails with an age-restriction error**: upload account cookies (see above). Such tracks are retried once a day, up to 5 attempts; after that they're marked failed, and *Retry missing tracks* on the album page queues them again.
 
-**Everything is paused with a rate-limit banner**: wait it out; it resolves on its own. If it keeps happening, lower *Max concurrent downloads*.
+**Everything is paused, with a red *!* in the navbar**: wait it out; it resolves on its own. If it keeps happening, lower *Max concurrent downloads*.
 
 **Permission errors on `./config` or `./data`**: make sure `PUID`/`PGID` match your host user. Files that already existed before a `PUID` change need a one-time `chown`.
 
