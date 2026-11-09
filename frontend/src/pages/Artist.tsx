@@ -14,6 +14,7 @@ import { useLikeSync } from '../hooks/useLikeSync';
 import { MediaCard } from '../components/MediaCard';
 import { Artwork } from '../components/ui/Artwork';
 import { Button } from '../components/ui/Button';
+import { BackButton } from '../components/ui/BackButton';
 import { LikeButton } from '../components/ui/LikeButton';
 import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -233,7 +234,8 @@ export default function Artist(): JSX.Element {
 
       <div className="space-y-12 pb-12">
         {/* Artist header */}
-        <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
+        <div className="relative bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
+          <BackButton className="absolute top-1 left-1 w-7 h-7 md:top-3 md:left-3 md:w-9 md:h-9" />
           <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
             <div className="relative group">
               <Artwork
