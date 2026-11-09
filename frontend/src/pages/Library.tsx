@@ -407,22 +407,28 @@ export default function Library(): JSX.Element {
         </EmptyState>
       ) : (
         <>
-          {/* Filter tabs, search and view switch */}
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
-            <FilterTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
-
-            {/* The input stretches to the view switch's height */}
-            <div className="flex items-stretch gap-3 w-full md:w-auto">
-              <SearchInput
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder={t('library.searchPlaceholder')}
-                size="md"
-                className="flex-1 md:flex-none md:w-64 lg:w-96"
-                inputClassName="h-full"
+          {/* Search on the left, filter tabs and view switch on the right.
+              Phones: full width search on top, tabs and view switch below;
+              the tabs scroll sideways when they don't fit beside the switch.
+              The input stretches to the row's height. */}
+          <div className="flex flex-wrap md:flex-nowrap items-stretch gap-3 md:gap-4">
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder={t('library.searchPlaceholder')}
+              size="md"
+              className="basis-full md:basis-auto md:w-64 lg:w-96"
+              inputClassName="h-full"
+            />
+            <div className="flex-1 md:flex-none md:ml-auto min-w-0">
+              <FilterTabs
+                tabs={tabs}
+                active={activeTab}
+                onChange={setActiveTab}
+                className="overflow-x-auto no-scrollbar"
               />
-              {activeTab !== 'playlists' && <ViewToggle value={viewMode} onChange={setViewMode} />}
             </div>
+            {activeTab !== 'playlists' && <ViewToggle value={viewMode} onChange={setViewMode} />}
           </div>
 
           {activeTab === 'playlists' && (

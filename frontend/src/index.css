@@ -168,6 +168,15 @@
   @apply bg-accent-500/40 text-accent-50;
 }
 
+/* Swipe to scroll without a visible bar (library filter tabs on phones) */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Thin scrollbar for inner scrolling areas (chart grid, browse artist row) */
 .custom-scrollbar {
   scrollbar-width: thin;
