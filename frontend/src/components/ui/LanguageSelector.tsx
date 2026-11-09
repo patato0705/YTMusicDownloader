@@ -44,7 +44,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({ variant }) =
       </button>
 
       {open && createPortal(
-        <div ref={menuRef} className="fixed w-48 glass rounded-xl shadow-xl py-2 z-[60]" style={menuStyle}>
+        <div ref={menuRef} className="fixed w-48 glass-chrome rounded-xl shadow-xl py-2 z-[60]" style={menuStyle}>
           {SUPPORTED_LOCALES.map((language) => (
             <button
               key={language.code}

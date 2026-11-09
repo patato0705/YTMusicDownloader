@@ -373,7 +373,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
 
         {/* Stays in view while anything is unsaved (above the phone tab bar) */}
         {dirty && (
-          <div className="sticky bottom-[calc(var(--tab-bar-height)+env(safe-area-inset-bottom)+0.5rem)] md:bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 glass rounded-2xl px-4 py-3 shadow-lg">
+          <div className="sticky bottom-[calc(var(--tab-bar-height)+env(safe-area-inset-bottom)+0.5rem)] md:bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 glass-chrome rounded-2xl px-4 py-3 shadow-lg">
             <span className="text-sm font-medium text-foreground">{t('admin.settings.unsaved')}</span>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={discardChanges} disabled={saveLoading}>

@@ -68,6 +68,16 @@
     @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-none;
   }
 
+  /* Floating chrome (navbar, tab bar, menus): any content can scroll under it,
+     so dark mode needs a dark tint as dense as light mode's white one */
+  .glass-chrome {
+    @apply bg-white/80 backdrop-blur-2xl backdrop-saturate-150 border border-slate-200/60 shadow-sm;
+  }
+
+  .dark .glass-chrome {
+    @apply bg-zinc-900/80 border-white/10 shadow-none;
+  }
+
   /* Gradient backgrounds - Light mode defaults */
   .bg-gradient-radial {
     background: radial-gradient(

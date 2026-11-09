@@ -82,7 +82,7 @@ export function Navbar(): JSX.Element {
       <nav className={`fixed left-4 right-4 z-50 transition-all duration-300 ${scrolled ? 'top-2' : 'top-4'}`}>
         <div className="max-w-[1600px] mx-auto">
           <div
-            className={`glass border-slate-200 dark:border-white/10 rounded-2xl shadow-xl transition-all duration-300 ${
+            className={`glass-chrome rounded-2xl shadow-xl transition-all duration-300 ${
               scrolled ? 'shadow-2xl' : ''
             }`}
           >
@@ -157,7 +157,7 @@ export function Navbar(): JSX.Element {
       {isAuthenticated && (
         <nav
           aria-label={t('nav.main')}
-          className="md:hidden fixed inset-x-0 bottom-0 z-50 glass !border-x-0 !border-b-0 pb-[env(safe-area-inset-bottom)]"
+          className="md:hidden fixed inset-x-0 bottom-0 z-50 glass-chrome !border-x-0 !border-b-0 pb-[env(safe-area-inset-bottom)]"
         >
           <div className="flex h-[var(--tab-bar-height)]">
             {navLinks.map((link) => {

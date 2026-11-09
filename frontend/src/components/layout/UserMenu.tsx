@@ -92,7 +92,7 @@ export const UserMenu: React.FC = () => {
       </button>
 
       {open && createPortal(
-        <div ref={menuRef} className="fixed w-80 glass rounded-2xl shadow-2xl py-3 z-50" style={menuStyle}>
+        <div ref={menuRef} className="fixed w-80 glass-chrome rounded-2xl shadow-2xl py-3 z-50" style={menuStyle}>
           {/* User info */}
           <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10">
             <div className="flex items-center gap-3">

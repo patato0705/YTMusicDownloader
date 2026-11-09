@@ -119,7 +119,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
         <div
           ref={bubbleRef}
           role="tooltip"
-          className="fixed z-50 w-max max-w-[min(18rem,calc(100vw-16px))] px-4 py-3 glass rounded-xl border border-slate-200/50 dark:border-white/10 shadow-xl text-sm font-normal normal-case tracking-normal text-foreground text-left pointer-events-none transition-opacity duration-150"
+          className="fixed z-50 w-max max-w-[min(18rem,calc(100vw-16px))] px-4 py-3 glass-chrome rounded-xl shadow-xl text-sm font-normal normal-case tracking-normal text-foreground text-left pointer-events-none transition-opacity duration-150"
           style={
             position
               ? { top: `${position.top}px`, left: `${position.left}px`, opacity: 1 }
