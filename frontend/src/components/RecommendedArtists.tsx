@@ -246,8 +246,7 @@ const DismissedArtistsModal: React.FC<DismissedArtistsModalProps> = ({ onClose, 
                 >
                   <Artwork
                     src={getImageUrl(artist.thumbnail)}
-                    name={artist.name}
-                    seed={artist.id}
+                    kind="artist"
                     className="w-11 h-11 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
                   />
                   <span className="font-medium text-foreground truncate">{artist.name}</span>

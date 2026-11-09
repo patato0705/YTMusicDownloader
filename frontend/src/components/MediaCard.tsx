@@ -178,8 +178,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           >
             <Artwork
               src={thumbnail}
-              name={title}
-              seed={id}
+              kind={type}
               className="w-full h-full transition-transform duration-500 ease-out group-hover:scale-105"
             />
 

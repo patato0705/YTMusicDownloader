@@ -20,6 +20,16 @@ module.exports = {
           foreground: 'rgb(var(--color-muted-foreground) / <alpha-value>)',
         },
       },
+      // A light band sweeping over an artwork tile while its image loads
+      keyframes: {
+        'artwork-shimmer': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+      },
+      animation: {
+        'artwork-shimmer': 'artwork-shimmer 1.6s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

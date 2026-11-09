@@ -79,8 +79,7 @@ export const ChartArtistGrid: React.FC<ChartArtistGridProps> = ({
                 }`}>
                   <Artwork
                     src={getImageUrl(thumbnail)}
-                    name={artist.name}
-                    seed={artist.id}
+                    kind="artist"
                     className="w-full h-full"
                   />
                 </div>

@@ -240,10 +240,9 @@ export default function Artist(): JSX.Element {
             <div className="relative group">
               <Artwork
                 src={getImageUrl(artist.thumbnail)}
-                name={artist.name}
-                seed={artist.id}
+                kind="artist"
                 loading="eager"
-                className="w-40 h-40 sm:w-48 sm:h-48 md:w-64 md:h-64 rounded-full bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
+                className="w-40 h-40 sm:w-48 sm:h-48 md:w-64 md:h-64 rounded-full shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
               {/* Glow effect */}
               <div className="absolute inset-0 rounded-full bg-accent-500/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />

@@ -146,9 +146,8 @@ function TrackThumb({ track }: { track: PlaylistTrack }) {
   return (
     <Artwork
       src={getImageUrl(track.cover)}
-      name={track.album?.name || track.title}
-      seed={track.album?.id || track.id}
-      className="w-8 h-8 rounded bg-slate-200 dark:bg-zinc-800 flex-shrink-0"
+      kind="album"
+      className="w-8 h-8 rounded flex-shrink-0"
     />
   );
 }
@@ -514,8 +513,8 @@ export default function PlaylistImport(): JSX.Element {
               <div className="flex items-center gap-4 min-w-0">
                 <Artwork
                   src={getImageUrl(view.thumbnail)}
-                  name={view.title}
-                  className="w-24 h-24 rounded-2xl shadow-lg bg-slate-200 dark:bg-zinc-800 flex-shrink-0"
+                  kind="playlist"
+                  className="w-24 h-24 rounded-2xl shadow-lg flex-shrink-0"
                 />
 
                 <div className="flex-1 min-w-0">

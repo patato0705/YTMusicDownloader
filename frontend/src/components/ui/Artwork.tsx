@@ -1,117 +1,84 @@
 // src/components/ui/Artwork.tsx
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { ICON_PATHS } from './icons';
+
+export type ArtworkKind = 'artist' | 'album' | 'track' | 'playlist';
 
 interface ArtworkProps {
   /** Resolved image URL (see getImageUrl) - empty means there's no artwork yet */
   src?: string | null;
-  /** Name of the artist / album - its initials are drawn on the fallback */
-  name?: string | null;
-  /** Stable key (usually the id) picking the fallback colours; defaults to the name */
-  seed?: string | null;
+  /** What the picture stands for: picks the icon drawn when there's none */
+  kind: ArtworkKind;
   /** Applied to the wrapper: size, shape, ring, shadow, hover effects... */
   className?: string;
   loading?: 'lazy' | 'eager';
 }
 
-/** FNV-1a: small, fast, and spreads similar strings far apart */
-function hashString(value: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < value.length; i++) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
-
-/** Up to two letters from the first words, ignoring "(Deluxe)"-style suffixes and leading symbols */
-export function getInitials(name?: string | null): string {
-  const words = (name || '')
-    .replace(/[([{].*?[)\]}]/g, ' ')
-    .split(/\s+/)
-    .map((word) => word.replace(/^[^\p{L}\p{N}]+/u, ''))
-    .filter(Boolean);
-
-  return words
-    .slice(0, 2)
-    .map((word) => Array.from(word)[0])
-    .join('')
-    .toLocaleUpperCase();
-}
-
-/** Same seed, same gradient - so an item keeps its colours across pages and reloads */
-function gradientFor(seed: string): string {
-  const hash = hashString(seed);
-  const hue = hash % 360;
-  const hue2 = (hue + 30 + ((hash >>> 9) % 60)) % 360;
-  const angle = 100 + ((hash >>> 17) % 120);
-  return [
-    'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.25), transparent 60%)',
-    `linear-gradient(${angle}deg, hsl(${hue} 70% 55%), hsl(${hue2} 65% 38%))`,
-  ].join(', ');
-}
-
 /**
- * Cover / artist picture with a generated fallback: a gradient picked from the
- * item's id, with its initials on top, for items with no image or a broken one.
- * While an image loads, a neutral tone stands in.
+ * Cover / artist picture on a neutral tile. While the image loads, a faint
+ * shimmer runs over the tile and the image fades in once it's whole; with no
+ * image (or a broken one) the tile shows a muted icon, the way YTM does.
  */
 export const Artwork: React.FC<ArtworkProps> = ({
   src,
-  name,
-  seed,
+  kind,
   className = '',
   loading = 'lazy',
 }) => {
-  // Remember which URL failed rather than a flag: an artist starts with no
-  // cover and gets one once its sync job lands, and that new URL must be tried
+  // Remember which URL failed / loaded rather than flags: an artist starts with
+  // no cover and gets one once its sync job lands, and that new URL must be tried
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const imageSrc = src && src !== failedSrc ? src : null;
-  const initials = getInitials(name);
+  const loaded = imageSrc !== null && imageSrc === loadedSrc;
+
+  // An image already in the cache is complete before React sees it: show it
+  // at once instead of fading in every cover on each page visit
+  const imageRef = useCallback((img: HTMLImageElement | null) => {
+    if (imageSrc && img?.complete && img.naturalWidth > 0) setLoadedSrc(imageSrc);
+  }, [imageSrc]);
 
   return (
-    <div className={`relative overflow-hidden ${className}`}>
-      {/* While an image loads it sits on a quiet tone: the bright initials are
-          for items that have no artwork, not a flash before every cover */}
+    <div className={`relative overflow-hidden bg-slate-200 dark:bg-zinc-800 ${className}`}>
       {imageSrc ? (
-        <div className="absolute inset-0 bg-slate-200 dark:bg-zinc-800" aria-hidden="true" />
+        !loaded && (
+          <div
+            className="absolute inset-0 -translate-x-full animate-artwork-shimmer bg-gradient-to-r from-transparent via-white/50 dark:via-white/[0.06] to-transparent motion-reduce:hidden"
+            aria-hidden="true"
+          />
+        )
       ) : (
-        <div
-          className="absolute inset-0"
-          style={{ backgroundImage: gradientFor(seed || name || '') }}
+        // Sized against the tile so it reads the same from a list thumbnail to a page header
+        <svg
+          className="absolute inset-0 m-auto w-[30%] h-[30%] text-slate-400 dark:text-zinc-600"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
           aria-hidden="true"
         >
-          {/* SVG text scales with the artwork, from a list thumbnail to a page header */}
-          <svg viewBox="0 0 100 100" className="w-full h-full select-none">
-            <text
-              x="50"
-              y="50"
-              dy="0.35em"
-              textAnchor="middle"
-              fill="white"
-              fillOpacity="0.92"
-              fontSize={initials.length > 1 ? 38 : 46}
-              fontWeight="700"
-              letterSpacing="1"
-            >
-              {initials || '♪'}
-            </text>
-          </svg>
-        </div>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d={kind === 'artist' ? ICON_PATHS.user : ICON_PATHS.music}
+          />
+        </svg>
       )}
 
       {/* Decorative: the name is always written next to it, and an alt text
-          would be drawn over the fallback while the image loads or fails */}
+          would be drawn over the tile while the image loads or fails */}
       {imageSrc && (
         <img
+          ref={imageRef}
           src={imageSrc}
           alt=""
           loading={loading}
           decoding="async"
-          className="absolute inset-0 w-full h-full object-cover"
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 motion-reduce:transition-none ${loaded ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setLoadedSrc(imageSrc)}
           onError={() => setFailedSrc(imageSrc)}
         />
       )}
     </div>
   );
 };
-

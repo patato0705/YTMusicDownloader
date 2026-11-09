@@ -76,8 +76,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
                 >
                   <Artwork
                     src={getImageUrl(p.thumbnail)}
-                    name={p.title}
-                    seed={p.id}
+                    kind="playlist"
                     className="w-16 h-16 rounded-xl flex-shrink-0 overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
                   />
                   <div className="min-w-0 space-y-1">

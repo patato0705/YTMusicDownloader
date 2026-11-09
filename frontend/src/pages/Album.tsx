@@ -224,10 +224,9 @@ export default function Album(): JSX.Element {
             <div className="relative group">
               <Artwork
                 src={getImageUrl(album.thumbnail)}
-                name={album.title}
-                seed={album.id}
+                kind="album"
                 loading="eager"
-                className="w-48 h-48 sm:w-56 sm:h-56 md:w-80 md:h-80 rounded-2xl bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
+                className="w-48 h-48 sm:w-56 sm:h-56 md:w-80 md:h-80 rounded-2xl shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
               {/* Glow effect */}
               <div className="absolute inset-0 rounded-2xl bg-accent-500/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />

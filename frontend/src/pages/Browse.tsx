@@ -36,9 +36,8 @@ function SongRow({ song }: { song: SearchSong }): JSX.Element {
       <div className="contents pointer-events-none">
         <Artwork
           src={getImageUrl(song.thumbnail)}
-          name={song.title}
-          seed={song.id}
-          className="w-11 h-11 shrink-0 rounded-lg overflow-hidden bg-slate-200 dark:bg-zinc-800 ring-1 ring-slate-900/5 dark:ring-white/10"
+          kind="track"
+          className="w-11 h-11 shrink-0 rounded-lg overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
         />
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-sm text-foreground truncate group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">{song.title}</p>
