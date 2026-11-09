@@ -675,7 +675,7 @@
     "urlPlaceholder": "Collez une URL de playlist YouTube Music...",
     "untitled": "Playlist",
     "loadPlaylist": "Charger la playlist",
-    "invalidUrl": "Impossible d'extraire un identifiant de playlist de cette URL",
+    "invalidUrl": "Ce n'est pas un lien ou un identifiant de playlist YouTube Music",
     "artists": "Artistes",
     "albums": "Albums",
     "trackCount": "{count} titres",
@@ -706,7 +706,7 @@
     "partialSuccess": "{succeeded} sur {total} réussis, {failed} échoués",
     "importFromPlaylist": "Importer depuis une playlist",
     "trackView": "Titres",
-    "unavailable": "Impossible de lire cette playlist. Elle doit être publique ou non répertoriée, ou YouTube Music ne répond pas pour le moment.",
+    "unavailable": "Impossible de lire cette playlist. Elle n'existe pas, est privée, ou YouTube Music ne répond pas pour le moment.",
     "noAlbumNote": "{count} titres n'ont pas d'album (clips, mises en ligne) : ignorés.",
     "noAlbumNote_one": "1 titre n'a pas d'album (un clip ou une mise en ligne) : ignoré.",
     "options": {

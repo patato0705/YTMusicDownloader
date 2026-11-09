@@ -50,6 +50,14 @@ def _unreadable() -> HTTPException:
     return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="playlist_unavailable")
 
 
+def _playlist_id(raw: str) -> str:
+    """`raw` as a playlist ID, or a 400 when it can't be one (no YouTube Music call for it)."""
+    playlist_id = playlists_svc.parse_playlist_id(raw)
+    if playlist_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="playlist_invalid")
+    return playlist_id
+
+
 def _saved(session: Session, playlist_id: str) -> Playlist:
     playlist = session.get(Playlist, playlist_id)
     if playlist is None:
@@ -72,6 +80,7 @@ def get_playlist(
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """The playlist from YouTube Music, with how it's added to the library ("saved")."""
+    playlist_id = _playlist_id(playlist_id)
     try:
         data = adapter.get_playlist(playlist_id)
     except YTMusicUnavailable:
@@ -106,6 +115,7 @@ def add_playlist(
     current_user: User = Depends(require_member_or_admin),
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
+    playlist_id = _playlist_id(playlist_id)
     try:
         playlist = playlists_svc.add_playlist(
             session, playlist_id,

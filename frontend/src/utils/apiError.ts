@@ -5,8 +5,10 @@ import type { ApiError } from '../api/client';
 const CODED_ERRORS: Record<string, string> = {
   // YouTube Music couldn't be read (502): usually passes in a moment
   ytmusic_unavailable: 'common.ytmusicUnavailable',
-  // A playlist that can't be read: private, or YouTube Music not answering
+  // A playlist that can't be read: private, gone, or YouTube Music not answering
   playlist_unavailable: 'playlist.unavailable',
+  // Not shaped like a YouTube playlist ID (a word, a video or album ID)
+  playlist_invalid: 'playlist.invalidUrl',
 };
 
 /**

@@ -59,15 +59,38 @@ function groupTracks<G extends TrackGroup>(
 const namedArtist = (artist: PlaylistTrack['artists'][number]): TrackGroup[] =>
   artist?.id && artist.name ? [{ id: artist.id, name: artist.name, tracks: [] }] : [];
 
+/** youtube.com, music.youtube.com, m.youtube.com, youtu.be... */
+const isYouTubeHost = (host: string) => /(^|\.)(youtube\.com|youtu\.be)$/i.test(host);
+
+/**
+ * The playlist ID in a YouTube link (its `list` parameter, or the
+ * browse/VL... of a YouTube Music playlist page) or typed as is, without that
+ * VL (the backend saves it without); null for a link elsewhere or one with no
+ * playlist. Whether it's shaped like a playlist ID is the backend's call
+ * (playlist_invalid).
+ */
 function extractPlaylistId(input: string): string | null {
+  const id = playlistIdIn(input);
+  return id ? id.replace(/^VL/, '') : null;
+}
+
+function playlistIdIn(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
 
-  try {
-    const listParam = new URL(trimmed).searchParams.get('list');
-    if (listParam) return listParam;
-  } catch {
-    // Not a URL: a raw playlist ID
+  // A link, with or without its https://
+  const looksLikeUrl = /^[a-z]+:\/\//i.test(trimmed) || /^[^/\s]+\.[a-z]{2,}\//i.test(trimmed);
+  if (looksLikeUrl) {
+    try {
+      const url = new URL(/^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+      if (!isYouTubeHost(url.hostname)) return null;
+      const list = url.searchParams.get('list');
+      if (list) return list;
+      const browse = url.pathname.match(/^\/browse\/(VL[A-Za-z0-9_-]+)$/);
+      return browse ? browse[1] : null;
+    } catch {
+      return null;
+    }
   }
 
   return /^[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : null;

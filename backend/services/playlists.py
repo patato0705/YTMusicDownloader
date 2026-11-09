@@ -24,6 +24,7 @@ it to artists, like charts; AUTO for the scheduled rescans.
 from __future__ import annotations
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -49,6 +50,26 @@ RETRY_DELAY_SECONDS = 120
 
 class PlaylistAlreadyAdded(ValueError):
     """add_playlist() for a playlist already in the library."""
+
+
+# The playlist IDs YouTube Music opens: user playlists (PL), album playlists
+# (OLAK5uy_), its curated playlists and mixes (RDCLAK5uy_, RDTMAK5uy_...);
+# and, with a signed-in client, the account's liked songs (LM, LL). Anything
+# else (a word, a video, album or artist ID) isn't one, and is turned away
+# before YouTube Music is asked.
+_PLAYLIST_ID = re.compile(r"(?:PL|OLAK5uy_|RD)[A-Za-z0-9_-]{10,}|LM|LL")
+
+
+def parse_playlist_id(raw: str) -> Optional[str]:
+    """
+    The playlist ID in `raw`, without the "VL" its YouTube Music page
+    (browse/VL...) puts before it, so both forms are the same playlist; None
+    when it isn't shaped like a YouTube playlist ID.
+    """
+    playlist_id = raw.strip()
+    if playlist_id.startswith("VL"):
+        playlist_id = playlist_id[2:]
+    return playlist_id if _PLAYLIST_ID.fullmatch(playlist_id) else None
 
 
 def m3u_dir() -> Path:
