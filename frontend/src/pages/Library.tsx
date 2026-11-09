@@ -418,8 +418,6 @@ export default function Library(): JSX.Element {
                 onChange={setSearchQuery}
                 placeholder={t('library.searchPlaceholder')}
                 size="md"
-                showClearButton
-                onClear={() => setSearchQuery('')}
                 className="flex-1 md:flex-none md:w-64 lg:w-96"
                 inputClassName="h-full"
               />

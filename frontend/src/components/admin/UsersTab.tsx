@@ -203,8 +203,6 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                 value={searchQuery}
                 onChange={setSearchQuery}
                 placeholder={t('admin.users.search')}
-                showClearButton
-                onClear={() => setSearchQuery('')}
               />
             </div>
 
