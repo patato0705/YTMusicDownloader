@@ -7,7 +7,8 @@ import { api } from './client';
 import type { AlbumDownloadStatus, AlbumMode, ArtistRef, LyricsKind, SubscriptionMode, TrackStatus } from '../types';
 
 export type SortOrder = 'asc' | 'desc';
-export type AlbumSortBy = 'title' | 'year' | 'created_at' | 'download_progress';
+/** queue: the order the download worker will reach each album, those with nothing waiting last */
+export type AlbumSortBy = 'title' | 'year' | 'created_at' | 'download_progress' | 'queue';
 
 export interface LibraryArtist {
   id: string;

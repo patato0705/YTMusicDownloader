@@ -27,7 +27,7 @@ from ..db import get_session
 from ..dependencies import require_auth, require_admin
 from ..downloader.cover import move_file
 from ..jobs.jobqueue import cancel_download_jobs
-from ..models import Artist, Album, Track, ArtistSubscription, User
+from ..models import Artist, Album, Track, ArtistSubscription, Job, User
 from ..services import folders as folders_svc
 from ..services import playlists as playlists_svc
 from ..services import recommendations as recommendations_svc
@@ -158,6 +158,24 @@ def list_followed_artists(
         raise HTTPException(status_code=500, detail=f"Failed to fetch artists: {e}")
 
 
+def _download_queue_positions(db: Session) -> Dict[str, int]:
+    """
+    Each album's place in the download queue: the rank of its first waiting
+    download_track job, in the order the worker reserves them (highest
+    priority, then oldest; see jobqueue.reserve_job).
+    """
+    rows = (
+        db.query(Track.album_id)
+        .join(Job, Job.payload["track_id"].as_string() == Track.id)
+        .filter(Job.type == "download_track", Job.status == "queued", Track.album_id.is_not(None))
+        .order_by(Job.priority.desc(), Job.created_at.asc(), Job.id.asc())
+    )
+    positions: Dict[str, int] = {}
+    for (album_id,) in rows:
+        positions.setdefault(album_id, len(positions))
+    return positions
+
+
 @router.get("/albums", status_code=status.HTTP_200_OK)
 def list_followed_albums(
     current_user: User = Depends(require_auth),
@@ -167,7 +185,7 @@ def list_followed_albums(
         pattern="^(completed|downloading|pending|failed)(,(completed|downloading|pending|failed))*$",
         description="Filter by download status; several comma-separated ones match any of them",
     ),
-    sort_by: str = Query("title", pattern="^(title|year|created_at|download_progress)$"),
+    sort_by: str = Query("title", pattern="^(title|year|created_at|download_progress|queue)$"),
     order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: Optional[int] = Query(None, ge=1, description="Maximum number of albums to return"),
     offset: int = Query(0, ge=0, description="Number of albums to skip (after sorting)"),
@@ -180,7 +198,9 @@ def list_followed_albums(
     - artist_id: Filter albums by artist (optional)
     - status_filter: Filter by download status (completed, downloading, pending, failed);
       comma-separated for several, e.g. Home's unfinished albums
-    - sort_by: title, year, download_progress (default: title)
+    - sort_by: title, year, download_progress, queue (default: title); queue is
+      the order the download worker will reach each album's next waiting track,
+      albums with nothing waiting last
     - order: asc, desc (default: asc)
     - limit / offset: Page through the sorted list (optional)
 
@@ -275,6 +295,10 @@ def list_followed_albums(
             result.sort(key=lambda x: x["created_at"] or "", reverse=(order == "desc"))
         elif sort_by == "download_progress":
             result.sort(key=lambda x: x["download_progress"], reverse=(order == "desc"))
+        elif sort_by == "queue":
+            positions = _download_queue_positions(db)
+            nothing_waiting = len(positions)
+            result.sort(key=lambda x: positions.get(x["id"], nothing_waiting), reverse=(order == "desc"))
 
         total = len(result)
         end = offset + limit if limit is not None else None

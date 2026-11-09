@@ -62,7 +62,8 @@ export default function Home(): JSX.Element {
           getLibraryStats(),
           getLibraryAlbums({ limit: 6, sort_by: 'created_at', order: 'desc' }),
           // Its own failure (e.g. a backend without multi-status filtering) only empties this section
-          getLibraryAlbums({ statuses: ['downloading', 'pending', 'failed'] }).catch(() => [] as LibraryAlbum[]),
+          // In queue order, so the queued rows are the next ones to start and move up as they do
+          getLibraryAlbums({ statuses: ['downloading', 'pending', 'failed'], sort_by: 'queue' }).catch(() => [] as LibraryAlbum[]),
         ]);
         if (id !== last.id) return;
         setStats(statsData);
