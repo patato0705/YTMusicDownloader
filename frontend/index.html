@@ -18,6 +18,16 @@
             theme === 'dark' ? '#09090b' : '#f8fafc';
         } catch (e) {}
       })();
+
+      // iOS Safari zooms in on a focused field and keeps that zoom, even on
+      // the next load. maximum-scale=1 stops it there, and Safari still lets
+      // the user pinch zoom. Other browsers would block pinch zoom, so iOS only
+      // (iPads report as a Mac with touch).
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent)
+          || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+        document.querySelector('meta[name="viewport"]').content =
+          'width=device-width,initial-scale=1,maximum-scale=1';
+      }
     </script>
     <title>YTMusicDownloader</title>
   </head>

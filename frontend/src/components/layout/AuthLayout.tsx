@@ -14,8 +14,11 @@ interface AuthLayoutProps {
 export const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, children }) => (
   <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden">
     <PageBackground />
-    <div className="fixed top-20 left-20 w-96 h-96 bg-accent-500/20 rounded-full blur-3xl pointer-events-none" />
-    <div className="fixed bottom-20 right-20 w-96 h-96 bg-accent-500/20 dark:bg-accent-700/20 rounded-full blur-3xl pointer-events-none" />
+    {/* Clipped to the screen: glows hanging past its edge let iOS Safari zoom out */}
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute top-20 left-20 w-96 h-96 bg-accent-500/20 rounded-full blur-3xl" />
+      <div className="absolute bottom-20 right-20 w-96 h-96 bg-accent-500/20 dark:bg-accent-700/20 rounded-full blur-3xl" />
+    </div>
 
     <div className="relative max-w-md w-full">
       {/* Which app this is, before what to do in it */}
