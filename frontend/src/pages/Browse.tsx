@@ -2,12 +2,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
+import { useAuth } from '../contexts/AuthContext';
 import { search } from '../api/search';
 import type { SearchResults, SearchSong } from '../api/search';
 import { getImageUrl } from '../api/media';
 import { CardLink, MEDIA_GRID, MediaCard, SubtitleLink } from '../components/MediaCard';
 import { Artwork } from '../components/ui/Artwork';
 import { RecommendedArtists } from '../components/RecommendedArtists';
+import { QuickFollowButton } from '../components/QuickFollowButton';
 import { SearchInput } from '../components/ui/SearchInput';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -80,6 +82,9 @@ export default function Browse(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { t } = useI18n();
+  const { user } = useAuth();
+  // Visitors are read-only: following is a member+ action on the backend
+  const canFollow = user?.role === 'administrator' || user?.role === 'member';
 
   const debouncedQuery = useDebounce(query, 500);
 
@@ -101,15 +106,18 @@ export default function Browse(): JSX.Element {
     const trimmed = debouncedQuery.trim();
     setError(null);
 
-    const cached = trimmed ? resultsCache.get(trimmed) : EMPTY_RESULTS;
-    if (cached) {
-      setResults(cached);
+    if (!trimmed) {
+      setResults(EMPTY_RESULTS);
       setLoading(false);
       return;
     }
 
+    // Shown right away, then refreshed quietly: who's followed may have changed since
+    const cached = resultsCache.get(trimmed);
+    if (cached) setResults(cached);
+
     let cancelled = false;
-    setLoading(true);
+    setLoading(!cached);
 
     search(trimmed, 20)
       .then((response) => {
@@ -118,7 +126,8 @@ export default function Browse(): JSX.Element {
       })
       .catch((err) => {
         console.error('Search error:', err);
-        if (!cancelled) {
+        // A failed refresh keeps the results on screen
+        if (!cancelled && !cached) {
           setError(apiErrorMessage(err, t, t('common.error')));
           setResults(EMPTY_RESULTS);
         }
@@ -129,6 +138,17 @@ export default function Browse(): JSX.Element {
 
     return () => { cancelled = true; };
   }, [debouncedQuery]);
+
+  const setFollowed = (artistId: string, followed: boolean) => {
+    const update = (r: SearchResults): SearchResults => ({
+      ...r,
+      artists: r.artists.map((a) => (a.id === artistId ? { ...a, followed } : a)),
+    });
+    setResults(update);
+    const trimmed = debouncedQuery.trim();
+    const cached = resultsCache.get(trimmed);
+    if (cached) resultsCache.set(trimmed, update(cached));
+  };
 
   const hasResults = results.artists.length + results.albums.length + results.songs.length > 0;
   const shows = (filter: FilterType) => activeFilter === 'all' || activeFilter === filter;
@@ -211,6 +231,14 @@ export default function Browse(): JSX.Element {
                         thumbnail={getImageUrl(artist.thumbnail)}
                         type="artist"
                         to={artistPath(artist.id)}
+                        artworkAction={canFollow && (
+                          <QuickFollowButton
+                            artistId={artist.id}
+                            name={artist.name}
+                            followed={artist.followed}
+                            onChange={(followed) => setFollowed(artist.id, followed)}
+                          />
+                        )}
                       />
                     </div>
                   ))}

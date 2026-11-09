@@ -6,7 +6,9 @@
  * only get the fallback.
  *
  * Members and admins can dismiss one ("not interested", for them only,
- * undoable from the toast) and restore dismissed ones from the "Dismissed (n)" list.
+ * undoable from the toast) and restore dismissed ones from the "Dismissed (n)" list,
+ * or follow one from its card. A followed one stays shown, with its check, until
+ * the list is next loaded: the backend leaves followed artists out.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -21,6 +23,7 @@ import {
 import type { RecommendedArtist, DismissedArtist } from '../api/recommendations';
 import { getImageUrl } from '../api/media';
 import { MEDIA_GRID, MediaCard } from './MediaCard';
+import { QuickFollowButton } from './QuickFollowButton';
 import { Artwork } from './ui/Artwork';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
@@ -53,6 +56,8 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
   const [recommendations, setRecommendations] = useState<RecommendedArtist[] | null>(cached?.recommendations ?? null);
   const [likedCount, setLikedCount] = useState(cached?.likedCount ?? 0);
   const [dismissedCount, setDismissedCount] = useState(cached?.dismissedCount ?? 0);
+  // Followed from here since the list was loaded
+  const [followedIds, setFollowedIds] = useState<ReadonlySet<string>>(new Set());
   const [showDismissed, setShowDismissed] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
@@ -61,6 +66,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
     try {
       const data = await getRecommendations();
       setRecommendations(data.recommendations);
+      setFollowedIds(new Set());
       setLikedCount(data.liked_count);
       setDismissedCount(data.dismissed_count);
     } catch (err) {
@@ -71,10 +77,24 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
 
   useEffect(() => { if (canEdit) load(); }, [load, canEdit]);
 
-  // Dismissals and restores included
+  // Dismissals and restores included; the ones followed since are gone from the next list
   useEffect(() => {
-    if (recommendations) cache.set(CACHE_KEY, { recommendations, likedCount, dismissedCount });
-  }, [recommendations, likedCount, dismissedCount]);
+    if (!recommendations) return;
+    cache.set(CACHE_KEY, {
+      recommendations: recommendations.filter((r) => !followedIds.has(r.id)),
+      likedCount,
+      dismissedCount,
+    });
+  }, [recommendations, followedIds, likedCount, dismissedCount]);
+
+  const setFollowed = (artistId: string, followed: boolean) => {
+    setFollowedIds((current) => {
+      const next = new Set(current);
+      if (followed) next.add(artistId);
+      else next.delete(artistId);
+      return next;
+    });
+  };
 
   const listFormat = useMemo(() => new Intl.ListFormat(locale, { type: 'conjunction' }), [locale]);
   const similarTo = (rec: RecommendedArtist) => {
@@ -161,7 +181,15 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
                 thumbnail={getImageUrl(rec.thumbnail)}
                 type="artist"
                 to={artistPath(rec.id)}
-                titleAction={canEdit && (
+                artworkAction={canEdit && (
+                  <QuickFollowButton
+                    artistId={rec.id}
+                    name={rec.name}
+                    followed={followedIds.has(rec.id)}
+                    onChange={(followed) => setFollowed(rec.id, followed)}
+                  />
+                )}
+                titleAction={canEdit && !followedIds.has(rec.id) && (
                   // Next to the name, like the library's heart; shown on hover where there is one
                   <button
                     type="button"

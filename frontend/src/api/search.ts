@@ -10,6 +10,8 @@ export interface SearchArtist {
   id: string;
   name: string;
   thumbnail: string | null;
+  /** Followed in full (read fresh, not from the search cache) */
+  followed: boolean;
 }
 
 export interface SearchAlbum {

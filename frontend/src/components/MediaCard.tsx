@@ -34,6 +34,8 @@ interface MediaCardProps {
   onClick?: () => void;
   /** A small button right after the title (e.g. a like) */
   titleAction?: React.ReactNode;
+  /** A round button on the artwork's lower right edge (e.g. a quick follow) */
+  artworkAction?: React.ReactNode;
   className?: string;
 }
 
@@ -149,6 +151,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   to,
   onClick,
   titleAction,
+  artworkAction,
   className = '',
 }) => {
   const { t } = useI18n();
@@ -191,6 +194,13 @@ export const MediaCard: React.FC<MediaCardProps> = ({
               status={mediaStatus}
               className="absolute z-10 bottom-2 left-2 shadow-md ring-2 ring-white dark:ring-zinc-900"
             />
+          )}
+
+          {artworkAction && (
+            // On a circle, centred on its edge at 45 degrees (14.6% in from the corner)
+            <div className={`absolute z-10 pointer-events-auto ${isArtist ? 'bottom-[calc(14.6%-1.125rem)] right-[calc(14.6%-1.125rem)]' : 'bottom-2 right-2'}`}>
+              {artworkAction}
+            </div>
           )}
         </div>
 

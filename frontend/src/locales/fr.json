@@ -182,6 +182,7 @@
     "releaseCount_one": "{count} sortie",
     "follow": "Suivre",
     "unfollow": "Ne plus suivre",
+    "followed": "Suivi",
     "unfollowTitle": "Ne plus suivre l'artiste",
     "unfollowMessage": "Les nouveaux albums ne seront plus automatiquement suivis. Le contenu déjà téléchargé ne sera pas affecté.",
     "like": "J'aime",
