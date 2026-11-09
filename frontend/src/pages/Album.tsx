@@ -218,70 +218,70 @@ export default function Album(): JSX.Element {
 
       <div className="space-y-12 pb-12">
         {/* Album header */}
-        <div className="relative bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
-          <BackButton className="absolute top-1 left-1 w-7 h-7 md:top-3 md:left-3 md:w-9 md:h-9" />
-          <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
+        <div className="relative bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-6 md:p-12 border border-slate-200/50 dark:border-white/10">
+          <BackButton className="absolute top-1.5 left-1.5 w-11 h-11 md:top-3 md:left-3 md:w-9 md:h-9" />
+          <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center text-center md:text-left">
             <div className="relative group">
               <Artwork
                 src={getImageUrl(album.thumbnail)}
                 name={album.title}
                 seed={album.id}
                 loading="eager"
-                className="w-64 h-64 md:w-80 md:h-80 rounded-2xl bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
+                className="w-48 h-48 sm:w-56 sm:h-56 md:w-80 md:h-80 rounded-2xl bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
               {/* Glow effect */}
               <div className="absolute inset-0 rounded-2xl bg-accent-500/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />
             </div>
 
-            <div className="flex-1">
-              <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-3">{album.title}</h1>
+            <div className="flex-1 min-w-0 w-full">
+              <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground mb-2 md:mb-3">{album.title}</h1>
 
               {album.artist?.name && (
                 album.artist.id ? (
                   <Link
                     to={artistPath(album.artist.id)}
-                    className="block w-fit text-xl text-accent-600 dark:text-accent-400 hover:underline mb-4 transition-colors"
+                    className="block w-fit mx-auto md:mx-0 text-lg md:text-xl text-accent-600 dark:text-accent-400 hover:underline mb-4 transition-colors"
                   >
                     {album.artist.name}
                   </Link>
                 ) : (
-                  <p className="text-xl text-accent-600 dark:text-accent-400 mb-4">{album.artist.name}</p>
+                  <p className="text-lg md:text-xl text-accent-600 dark:text-accent-400 mb-4">{album.artist.name}</p>
                 )
               )}
 
-              <GenreChips genres={album.genres} className="mb-4" />
+              <GenreChips genres={album.genres} className="justify-center md:justify-start mb-4" />
 
-              <div className="flex flex-wrap items-center gap-3 text-muted-foreground mb-8">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-2 gap-y-1 md:gap-3 text-sm md:text-base text-muted-foreground mb-6 md:mb-8">
                 <span className="flex items-center gap-2">
-                  <Icon name="disc" className="w-4 h-4" />
+                  <Icon name="disc" className="hidden md:block w-4 h-4" />
                   {t(albumTypeKey(album.type))}
                 </span>
                 <span aria-hidden="true">•</span>
                 {album.year && (
                   <>
                     <span className="flex items-center gap-2">
-                      <Icon name="calendar" className="w-4 h-4" />
+                      <Icon name="calendar" className="hidden md:block w-4 h-4" />
                       {album.year}
                     </span>
                     <span aria-hidden="true">•</span>
                   </>
                 )}
                 <span className="flex items-center gap-2">
-                  <Icon name="music" className="w-4 h-4" />
+                  <Icon name="music" className="hidden md:block w-4 h-4" />
                   {t('album.trackCount', { count: tracks.length })}
                 </span>
                 {totalDuration > 0 && (
                   <>
                     <span aria-hidden="true">•</span>
                     <span className="flex items-center gap-2">
-                      <Icon name="clock" className="w-4 h-4" />
+                      <Icon name="clock" className="hidden md:block w-4 h-4" />
                       {formatDuration(totalDuration)}
                     </span>
                   </>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
                 {/* Visitors only get the (inert) "in library" indicator */}
                 {(canModify || isFollowing) && (
                   <Button

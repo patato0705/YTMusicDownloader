@@ -11,7 +11,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { getLibraryStats, getLibraryAlbums } from '../api/library';
 import type { LibraryAlbum, LibraryStats } from '../api/library';
 import { getImageUrl } from '../api/media';
-import { MediaCard } from '../components/MediaCard';
+import { MEDIA_GRID, MediaCard } from '../components/MediaCard';
 import { MediaList, MediaRow } from '../components/MediaList';
 import { EmptyState, LoadingState } from '../components/ui/PageStatus';
 import { LibraryStatCards } from '../components/LibraryStatCards';
@@ -23,6 +23,15 @@ import type { MediaStatus } from '../types';
 const IN_PROGRESS_SHOWN = 5;
 // Moving first, then stuck, then waiting: a bulk import's queue can't hide the album being fetched
 const PROGRESS_ORDER: MediaStatus[] = ['downloading', 'failed', 'queued'];
+/**
+ * Recently added is one strip of 6 cards in the shared card grid, so the 5th and 6th
+ * are hidden wherever they would start a row of their own: 2x2 on phones,
+ * then rows of 3, 4, 5 and 6 as the grid widens
+ */
+const RECENT_HIDDEN: Record<number, string> = {
+  4: 'max-sm:hidden md:max-lg:hidden',
+  5: 'max-sm:hidden md:max-xl:hidden',
+};
 /** Shortest gap between two refreshes triggered by the job queue */
 const REFRESH_MIN_GAP_MS = 5000;
 
@@ -123,10 +132,11 @@ export default function Home(): JSX.Element {
         {loading ? (
           <LoadingState message={t('home.loadingActivity')} className="py-16" />
         ) : recentAlbums.length > 0 ? (
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-            {recentAlbums.map((album) => (
+          <div className={MEDIA_GRID}>
+            {recentAlbums.map((album, index) => (
               <MediaCard
                 key={album.id}
+                className={RECENT_HIDDEN[index] ?? ''}
                 id={album.id}
                 title={album.title}
                 subtitle={album.artist?.name}

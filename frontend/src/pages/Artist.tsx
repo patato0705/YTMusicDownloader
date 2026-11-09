@@ -11,7 +11,7 @@ import type { DeletionEffects } from '../api/library';
 import { getImageUrl } from '../api/media';
 import { useDeletionNotes } from '../hooks/useDeletionNotes';
 import { useLikeSync } from '../hooks/useLikeSync';
-import { MediaCard } from '../components/MediaCard';
+import { MEDIA_GRID, MediaCard } from '../components/MediaCard';
 import { Artwork } from '../components/ui/Artwork';
 import { Button } from '../components/ui/Button';
 import { BackButton } from '../components/ui/BackButton';
@@ -186,7 +186,7 @@ export default function Artist(): JSX.Element {
   const releaseGrid = (title: string, list: ArtistRelease[]) => list.length > 0 && (
     <section>
       <SectionHeader>{title}</SectionHeader>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div className={MEDIA_GRID}>
         {list.map((album) => (
           <MediaCard
             key={album.id}
@@ -234,31 +234,31 @@ export default function Artist(): JSX.Element {
 
       <div className="space-y-12 pb-12">
         {/* Artist header */}
-        <div className="relative bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-slate-200/50 dark:border-white/10">
-          <BackButton className="absolute top-1 left-1 w-7 h-7 md:top-3 md:left-3 md:w-9 md:h-9" />
-          <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
+        <div className="relative bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-6 md:p-12 border border-slate-200/50 dark:border-white/10">
+          <BackButton className="absolute top-1.5 left-1.5 w-11 h-11 md:top-3 md:left-3 md:w-9 md:h-9" />
+          <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center text-center md:text-left">
             <div className="relative group">
               <Artwork
                 src={getImageUrl(artist.thumbnail)}
                 name={artist.name}
                 seed={artist.id}
                 loading="eager"
-                className="w-48 h-48 md:w-64 md:h-64 rounded-full bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
+                className="w-40 h-40 sm:w-48 sm:h-48 md:w-64 md:h-64 rounded-full bg-slate-200 dark:bg-zinc-800 shadow-2xl ring-4 ring-white/50 dark:ring-white/10 group-hover:scale-105 transition-transform duration-300"
               />
               {/* Glow effect */}
               <div className="absolute inset-0 rounded-full bg-accent-500/20 blur-2xl -z-10 group-hover:opacity-75 opacity-0 transition-opacity duration-300" />
             </div>
 
-            <div className="flex-1">
-              <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4">{artist.name}</h1>
+            <div className="flex-1 min-w-0 w-full">
+              <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground mb-3 md:mb-4">{artist.name}</h1>
 
-              <GenreChips genres={artist.genres} className="mb-4" />
+              <GenreChips genres={artist.genres} className="justify-center md:justify-start mb-4" />
 
-              <p className="text-lg text-muted-foreground mb-8">
+              <p className="md:text-lg text-muted-foreground mb-6 md:mb-8">
                 {t('artist.releaseCount', { count: releases.length })}
               </p>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
                 {canFollow && (
                   <Button
                     onClick={handleFollow}

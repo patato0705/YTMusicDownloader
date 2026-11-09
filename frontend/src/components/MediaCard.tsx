@@ -8,6 +8,9 @@ import { ICON_PATHS } from './ui/icons';
 
 export type MediaKind = 'artist' | 'album' | 'track';
 
+/** The grid every list of cards sits in, so a card is the same size on every page */
+export const MEDIA_GRID = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4';
+
 interface MediaCardProps {
   id: string;
   title: string;

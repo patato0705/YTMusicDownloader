@@ -20,7 +20,7 @@ import {
 } from '../api/recommendations';
 import type { RecommendedArtist, DismissedArtist } from '../api/recommendations';
 import { getImageUrl } from '../api/media';
-import { MediaCard } from './MediaCard';
+import { MEDIA_GRID, MediaCard } from './MediaCard';
 import { Artwork } from './ui/Artwork';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
@@ -147,7 +147,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
       {recommendations.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('browse.recommendations.noneLeft')}</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        <div className={MEDIA_GRID}>
           {recommendations.map((rec) => {
             const text = similarTo(rec);
             return (

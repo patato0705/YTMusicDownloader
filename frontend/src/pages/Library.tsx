@@ -12,7 +12,7 @@ import type { SavedPlaylist } from '../api/playlists';
 import { getImageUrl } from '../api/media';
 import { PlaylistsPanel } from '../components/playlists/PlaylistsPanel';
 import { LibraryStatCards } from '../components/LibraryStatCards';
-import { MediaCard } from '../components/MediaCard';
+import { MEDIA_GRID, MediaCard } from '../components/MediaCard';
 import { MediaList, MediaRow } from '../components/MediaList';
 import { Button } from '../components/ui/Button';
 import { LikeButton } from '../components/ui/LikeButton';
@@ -372,8 +372,6 @@ export default function Library(): JSX.Element {
     likeSync.toggle(artist.id, liked);
   };
 
-  const GRID = 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4';
-
   return (
     <div className="space-y-8 pb-12">
       {toast && <Toast message={toast} type="error" onClose={() => setToast(null)} />}
@@ -440,7 +438,7 @@ export default function Library(): JSX.Element {
             <section>
               <SectionHeader>{t('library.artists')}</SectionHeader>
               {viewMode === 'grid' ? (
-                <div className={GRID}>
+                <div className={MEDIA_GRID}>
                   {displayedArtists.map((artist) => (
                     <MediaCard
                       key={artist.id}
@@ -508,7 +506,7 @@ export default function Library(): JSX.Element {
             <section>
               <SectionHeader>{t('library.albums')}</SectionHeader>
               {viewMode === 'grid' ? (
-                <div className={GRID}>
+                <div className={MEDIA_GRID}>
                   {displayedAlbums.map((album) => (
                     <MediaCard
                       key={album.id}

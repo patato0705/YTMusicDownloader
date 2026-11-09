@@ -5,7 +5,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { search } from '../api/search';
 import type { SearchResults, SearchSong } from '../api/search';
 import { getImageUrl } from '../api/media';
-import { CardLink, MediaCard, SubtitleLink } from '../components/MediaCard';
+import { CardLink, MEDIA_GRID, MediaCard, SubtitleLink } from '../components/MediaCard';
 import { Artwork } from '../components/ui/Artwork';
 import { RecommendedArtists } from '../components/RecommendedArtists';
 import { SearchInput } from '../components/ui/SearchInput';
@@ -25,8 +25,6 @@ const EMPTY_RESULTS: SearchResults = { artists: [], albums: [], songs: [] };
 
 /** Results by query: coming back to a search shows them right away */
 const resultsCache = createMemoryCache<SearchResults>(20);
-
-const GRID = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4';
 
 /** One song result: a row, since a song is a line in a list, not a cover. Opens its album */
 function SongRow({ song }: { song: SearchSong }): JSX.Element {
@@ -224,7 +222,7 @@ export default function Browse(): JSX.Element {
             {shows('albums') && results.albums.length > 0 && (
               <section>
                 <SectionHeader>{t('browse.sections.albums')}</SectionHeader>
-                <div className={GRID}>
+                <div className={MEDIA_GRID}>
                   {results.albums.map((album) => (
                     <MediaCard
                       key={album.id}

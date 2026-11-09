@@ -23,7 +23,7 @@ export const BackButton: React.FC<{ className?: string }> = ({ className = '' })
       title={t('common.back')}
       className={`inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-colors ${className}`}
     >
-      <Icon name="arrowLeft" className="w-4 h-4 md:w-5 md:h-5" />
+      <Icon name="arrowLeft" className="w-6 h-6 md:w-5 md:h-5" />
     </button>
   );
 };
