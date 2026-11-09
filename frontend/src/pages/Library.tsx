@@ -269,14 +269,14 @@ export default function Library(): JSX.Element {
     return byArtist;
   }, [albums]);
 
-  // The badge of each item: only the exceptions, worked out once for the cards,
-  // the rows and whether a list needs its status column at all
-  const artistBadge = useMemo(
-    () => new Map(artists.map((artist) => [artist.id, exceptionalStatus(getArtistStatus(artist, albumsByArtist.get(artist.id)))])),
+  // The status of each item, worked out once. Cards badge only the exceptions;
+  // a list shows its status column when some row is one, and then fills every row
+  const artistStatus = useMemo(
+    () => new Map(artists.map((artist) => [artist.id, getArtistStatus(artist, albumsByArtist.get(artist.id))])),
     [artists, albumsByArtist]
   );
-  const albumBadge = useMemo(
-    () => new Map(albums.map((album) => [album.id, exceptionalStatus(getAlbumStatus(album))])),
+  const albumStatus = useMemo(
+    () => new Map(albums.map((album) => [album.id, getAlbumStatus(album)])),
     [albums]
   );
 
@@ -451,7 +451,7 @@ export default function Library(): JSX.Element {
                       subtitle={t('library.meta.albumCount', { count: artist.albums_count })}
                       thumbnail={getImageUrl(artist.thumbnail)}
                       type="artist"
-                      mediaStatus={artistBadge.get(artist.id)}
+                      mediaStatus={exceptionalStatus(artistStatus.get(artist.id))}
                       matchHint={artistMatchHint(artist.id)}
                       to={artistPath(artist.id)}
                       titleAction={canLike && (
@@ -471,7 +471,7 @@ export default function Library(): JSX.Element {
               ) : (
                 <MediaList
                   kind="artist"
-                  showStatus={displayedArtists.some((artist) => artistBadge.get(artist.id))}
+                  showStatus={displayedArtists.some((artist) => exceptionalStatus(artistStatus.get(artist.id)))}
                 >
                   {displayedArtists.map((artist) => (
                     <MediaRow
@@ -480,7 +480,7 @@ export default function Library(): JSX.Element {
                       title={artist.name}
                       thumbnail={getImageUrl(artist.thumbnail)}
                       type="artist"
-                      mediaStatus={artistBadge.get(artist.id)}
+                      mediaStatus={artistStatus.get(artist.id)}
                       albumsCount={artist.albums_count}
                       tracksTotal={artist.tracks_total}
                       tracksDownloaded={artist.tracks_downloaded}
@@ -522,14 +522,14 @@ export default function Library(): JSX.Element {
                       type="album"
                       albumType={album.type}
                       year={album.year ?? undefined}
-                      mediaStatus={albumBadge.get(album.id)}
+                      mediaStatus={exceptionalStatus(albumStatus.get(album.id))}
                       matchHint={albumMatchHint(album.id)}
                       to={albumPath(album.id)}
                     />
                   ))}
                 </div>
               ) : (
-                <MediaList kind="album" showStatus={displayedAlbums.some((album) => albumBadge.get(album.id))}>
+                <MediaList kind="album" showStatus={displayedAlbums.some((album) => exceptionalStatus(albumStatus.get(album.id)))}>
                   {displayedAlbums.map((album) => (
                     <MediaRow
                       key={album.id}
@@ -541,7 +541,7 @@ export default function Library(): JSX.Element {
                       type="album"
                       albumType={album.type}
                       year={album.year ?? undefined}
-                      mediaStatus={albumBadge.get(album.id)}
+                      mediaStatus={albumStatus.get(album.id)}
                       tracksTotal={album.tracks_total}
                       tracksDownloaded={album.tracks_downloaded}
                       date={album.created_at}

@@ -26,9 +26,14 @@ export const TrackStatusBadge: React.FC<TrackStatusBadgeProps> = ({ track, downl
 
   const badge = ((): Badge | null => {
     switch (track.status) {
-      // On disk is the norm: no badge, so the exceptions stand out
+      // Only drawn when the album has exceptions to show: the column is hidden otherwise
       case 'done':
-        return null;
+        return {
+          tone: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 dark:border-emerald-500/25',
+          icon: ICON_PATHS.check,
+          strokeWidth: 2.5,
+          label: t('album.trackStatus.done'),
+        };
       case 'failed':
         return {
           tone: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 dark:border-red-500/25',

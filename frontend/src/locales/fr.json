@@ -218,6 +218,7 @@
     "duration": "Durée",
     "status": "Statut",
     "trackStatus": {
+      "done": "Téléchargé",
       "available": "Non téléchargé",
       "queued": "En attente",
       "paused": "En pause",
