@@ -126,9 +126,18 @@
   "settings": {
     "theme": {
       "light": "Clair",
-      "dark": "Sombre",
-      "switchToLight": "Passer en mode clair",
-      "switchToDark": "Passer en mode sombre"
+      "dark": "Sombre"
+    },
+    "appearance": "Apparence",
+    "accent": {
+      "label": "Couleur d'accent",
+      "colors": {
+        "indigo": "Indigo",
+        "sky": "Bleu ciel",
+        "teal": "Bleu canard",
+        "orange": "Orange",
+        "rose": "Framboise"
+      }
     },
     "changeLanguage": "Changer de langue"
   },

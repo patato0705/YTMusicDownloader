@@ -1,6 +1,7 @@
 // src/contexts/I18nContext.tsx
 import React, { createContext, useCallback, useContext, useState, useEffect, useMemo } from 'react';
 import { Locale, DEFAULT_LOCALE, isValidLocale, regionalLocale } from '../config/i18n';
+import { readStorage, writeStorage } from '../utils/storage';
 
 type Translations = Record<string, any>;
 type Params = Record<string, string | number>;
@@ -49,7 +50,7 @@ function lookup(translations: Translations, key: string): string | undefined {
 }
 
 function initialLocale(): Locale {
-  const stored = localStorage.getItem('locale');
+  const stored = readStorage('locale');
   if (stored && isValidLocale(stored)) return stored;
 
   const browserLang = navigator.language.split('-')[0];
@@ -67,7 +68,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Load translations when locale changes
   useEffect(() => {
     loadTranslations(locale).then(setTranslations);
-    localStorage.setItem('locale', locale);
+    writeStorage('locale', locale);
     document.documentElement.lang = locale;
   }, [locale]);
 

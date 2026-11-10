@@ -2,11 +2,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTheme } from '../../contexts/ThemeContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { useFeatures } from '../../contexts/FeaturesContext';
 import { useJobActivity } from '../../contexts/JobActivityContext';
 import { UserMenu } from './UserMenu';
+import { AppearanceMenu } from './AppearanceMenu';
 import { LanguageSelector } from '../ui/LanguageSelector';
 import { InfoTooltip } from '../ui/InfoTooltip';
 import { Icon } from '../ui/icons';
@@ -15,7 +15,6 @@ import type { IconName } from '../ui/icons';
 
 export function Navbar(): JSX.Element {
   const { isAuthenticated } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const { formatLocale, t, tOr } = useI18n();
   const { features } = useFeatures();
   const { activeJobCount, activeByType, downloadsPausedUntil } = useJobActivity();
@@ -72,8 +71,6 @@ export function Navbar(): JSX.Element {
       : `${base} text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-white/10`;
   };
 
-  const themeLabel = theme === 'dark' ? t('settings.theme.switchToLight') : t('settings.theme.switchToDark');
-
   return (
     <>
       {/* Keeps the page clear of the floating navbar */}
@@ -108,7 +105,7 @@ export function Navbar(): JSX.Element {
                   )}
                 </div>
 
-                {/* Right: status badges, theme and language (md and up), user menu */}
+                {/* Right: status badges, appearance and language (md and up), user menu */}
                 <div className="flex items-center shrink-0 space-x-1 lg:space-x-2">
                   {/* YouTube rate limit: downloads paused (backend/jobs/gate.py) */}
                   {isAuthenticated && downloadsPausedUntil && (
@@ -132,15 +129,7 @@ export function Navbar(): JSX.Element {
                     </InfoTooltip>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={toggleTheme}
-                    className="hidden md:block p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-300 group"
-                    aria-label={themeLabel}
-                    title={themeLabel}
-                  >
-                    <Icon name={theme === 'dark' ? 'sun' : 'moon'} className="w-5 h-5 text-slate-700 dark:text-zinc-300 group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors" />
-                  </button>
+                  <AppearanceMenu />
 
                   <LanguageSelector variant="navbar" />
 

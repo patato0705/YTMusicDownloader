@@ -6,7 +6,7 @@
     <!-- Kept in sync with the active theme by ThemeContext; colours the browser chrome on mobile -->
     <meta name="theme-color" content="#f8fafc" />
     <script>
-      // Apply the saved theme before first paint. Avoids a light flash when
+      // Apply the saved theme and accent before first paint. Avoids a light flash when
       // loading in dark mode, and hands mobile browsers the right theme-color
       // from the start (Safari only re-reads it on toolbar transitions).
       (function () {
@@ -16,6 +16,9 @@
           if (theme === 'dark') document.documentElement.classList.add('dark');
           document.querySelector('meta[name="theme-color"]').content =
             theme === 'dark' ? '#09090b' : '#f8fafc';
+          // The accent colour (ThemeContext); an unknown one matches no rule and shows the default
+          var accent = localStorage.getItem('accent');
+          if (accent) document.documentElement.dataset.accent = accent;
         } catch (e) {}
       })();
 

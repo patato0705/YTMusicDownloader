@@ -126,9 +126,18 @@
   "settings": {
     "theme": {
       "light": "Light",
-      "dark": "Dark",
-      "switchToLight": "Switch to light mode",
-      "switchToDark": "Switch to dark mode"
+      "dark": "Dark"
+    },
+    "appearance": "Appearance",
+    "accent": {
+      "label": "Accent color",
+      "colors": {
+        "indigo": "Indigo",
+        "sky": "Sky",
+        "teal": "Teal",
+        "orange": "Orange",
+        "rose": "Rose"
+      }
     },
     "changeLanguage": "Change language"
   },

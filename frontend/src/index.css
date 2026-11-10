@@ -5,7 +5,7 @@
 
 @layer base {
   :root {
-    /* Light theme: slate with the indigo accent */
+    /* Light theme: slate, with the accent picked in the appearance menu */
     --color-background: 248 250 252;         /* slate-50 */
     --color-foreground: 15 23 42;            /* slate-900 */
     --color-muted-foreground: 100 116 139;   /* slate-500 */
@@ -18,7 +18,7 @@
   }
 
   .dark {
-    /* Dark theme: deep blacks, same indigo accent as light */
+    /* Dark theme: deep blacks, same accent as light */
     --color-background: 9 9 11;              /* zinc-950 */
     --color-foreground: 250 250 250;         /* zinc-50 */
     --color-muted-foreground: 161 161 170;   /* zinc-400 */

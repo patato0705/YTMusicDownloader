@@ -4,12 +4,12 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
-import { useTheme } from '../../contexts/ThemeContext';
 import { useDropdown } from '../../hooks/useDropdown';
 import { LanguageSelector } from '../ui/LanguageSelector';
+import { AccentSwatches, ThemeSwitch } from './AppearanceMenu';
 import { ROLE_COLORS } from '../../config/roles';
 import type { Role } from '../../api/auth';
-import { Icon, ICON_PATHS } from '../ui/icons';
+import { ICON_PATHS } from '../ui/icons';
 
 const ROLE_GRADIENTS: Record<Role, string> = {
   administrator: 'from-purple-500 to-pink-600',
@@ -45,7 +45,6 @@ const MenuItem: React.FC<MenuItemProps> = ({ icon, label, onClick, iconClassName
 export const UserMenu: React.FC = () => {
   const { open, setOpen, toggle, buttonRef, menuRef, menuStyle } = useDropdown('right', 12);
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const { t } = useI18n();
   const navigate = useNavigate();
 
@@ -110,19 +109,14 @@ export const UserMenu: React.FC = () => {
           </div>
 
           <div className="py-2">
-            {/* Theme and language: in the navbar from md up */}
-            <div className="md:hidden px-4 py-3 border-b border-slate-200 dark:border-white/10 mb-2 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 transition-all text-slate-700 dark:text-zinc-200"
-              >
-                <Icon name={theme === 'dark' ? 'sun' : 'moon'} className="w-4 h-4" />
-                <span className="text-sm font-medium">
-                  {t(theme === 'dark' ? 'settings.theme.light' : 'settings.theme.dark')}
-                </span>
-              </button>
-              <LanguageSelector variant="menu" />
+            {/* Theme, accent and language: in the navbar from md up */}
+            <div className="md:hidden px-4 py-3 border-b border-slate-200 dark:border-white/10 mb-2 space-y-3">
+              <ThemeSwitch />
+              <AccentSwatches className="justify-between px-1" />
+              {/* A flex row: the menu variant stretches across it */}
+              <div className="flex">
+                <LanguageSelector variant="menu" />
+              </div>
             </div>
 
             {/* Single sign-on accounts have no password here */}

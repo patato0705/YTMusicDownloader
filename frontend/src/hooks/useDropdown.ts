@@ -53,6 +53,12 @@ export function useDropdown(
     const place = () => {
       const rect = buttonRef.current?.getBoundingClientRect();
       if (!rect) return;
+      // The button went away (a navbar-only one, the window narrowed past md):
+      // with nothing to anchor to or to close it from, close the menu
+      if (rect.width === 0 && rect.height === 0) {
+        setOpen(false);
+        return;
+      }
       // Without the scrollbar: `right` is measured from the inner edge
       const viewport = document.documentElement.clientWidth;
       const area = bounds?.current?.getBoundingClientRect();
