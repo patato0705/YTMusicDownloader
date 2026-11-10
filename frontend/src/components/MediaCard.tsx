@@ -21,6 +21,8 @@ interface MediaCardProps {
   subtitleWrap?: boolean;
   /** Makes the subtitle a link of its own (e.g. an album's artist) */
   subtitleTo?: string;
+  /** Makes the subtitle a button of its own (e.g. opening the full list it sums up) */
+  onSubtitleClick?: () => void;
   thumbnail?: string;
   type?: MediaKind;
   /** Release type as reported by YTMusic ("Album", "EP", "Single"), only used when type is 'album' */
@@ -113,14 +115,20 @@ export const CardLink: React.FC<{ to?: string; onClick?: () => void; label: stri
   );
 };
 
+const SUBTITLE_CONTROL = 'relative z-10 pointer-events-auto cursor-pointer rounded-sm outline-none hover:text-accent-600 dark:hover:text-accent-400 hover:underline focus-visible:underline focus-visible:text-accent-600 dark:focus-visible:text-accent-400 transition-colors';
+
 /** A link inside a card / row (e.g. the artist under an album), above its CardLink */
 export const SubtitleLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, children }) => (
-  <Link
-    to={to}
-    className="relative z-10 pointer-events-auto cursor-pointer rounded-sm outline-none hover:text-accent-600 dark:hover:text-accent-400 hover:underline focus-visible:underline focus-visible:text-accent-600 dark:focus-visible:text-accent-400 transition-colors"
-  >
+  <Link to={to} className={SUBTITLE_CONTROL}>
     {children}
   </Link>
+);
+
+/** The same as a button, for a subtitle opening something on the page */
+const SubtitleButton: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
+  <button type="button" onClick={onClick} className={`${SUBTITLE_CONTROL} [text-align:inherit]`}>
+    {children}
+  </button>
 );
 
 /** Release type of an album, falling back to "Album" for anything unexpected */
@@ -142,6 +150,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   subtitleTitle,
   subtitleWrap = false,
   subtitleTo,
+  onSubtitleClick,
   thumbnail,
   type = 'album',
   albumType,
@@ -223,7 +232,11 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                   {subtitle && ' · '}
                 </>
               )}
-              {subtitle && (subtitleTo ? <SubtitleLink to={subtitleTo}>{subtitle}</SubtitleLink> : subtitle)}
+              {subtitle && (subtitleTo
+                ? <SubtitleLink to={subtitleTo}>{subtitle}</SubtitleLink>
+                : onSubtitleClick
+                  ? <SubtitleButton onClick={onSubtitleClick}>{subtitle}</SubtitleButton>
+                  : subtitle)}
               {subtitle && year && ' · '}
               {year}
               {(subtitle || year) && typeLabel && ' · '}

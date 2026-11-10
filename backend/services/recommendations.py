@@ -70,11 +70,11 @@ def _dismissed_ids(user_id: int):
 def list_recommendations(session: Session, user_id: int, limit: int = DEFAULT_LIMIT) -> List[Dict[str, Any]]:
     """
     The best recommendations for a user, each with the liked artists it's
-    similar to (most similar first).
+    similar to (most similar first), with their pictures.
     """
     liked = _liked_ids(user_id)
     rows = session.execute(
-        select(RelatedArtist, Artist.name)
+        select(RelatedArtist, Artist.name, Artist.image_local)
         .join(Artist, Artist.id == RelatedArtist.artist_id)
         .where(
             RelatedArtist.artist_id.in_(liked),
@@ -86,7 +86,7 @@ def list_recommendations(session: Session, user_id: int, limit: int = DEFAULT_LI
     ).all()
 
     by_id: Dict[str, Dict[str, Any]] = {}
-    for rel, source_name in rows:
+    for rel, source_name, source_image in rows:
         entry = by_id.setdefault(rel.related_id, {
             "id": rel.related_id,
             "name": rel.name,
@@ -95,7 +95,7 @@ def list_recommendations(session: Session, user_id: int, limit: int = DEFAULT_LI
             "similar_to": [],
         })
         entry["positions"].append(rel.position)
-        entry["similar_to"].append({"id": rel.artist_id, "name": source_name})
+        entry["similar_to"].append({"id": rel.artist_id, "name": source_name, "thumbnail": source_image})
 
     ranked = sorted(
         by_id.values(),

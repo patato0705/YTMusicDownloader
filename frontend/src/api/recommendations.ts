@@ -13,7 +13,7 @@ export interface RecommendedArtist {
   /** How many liked artists it's similar to */
   count: number;
   /** Those liked artists, most similar first */
-  similar_to: { id: string; name: string }[];
+  similar_to: { id: string; name: string; thumbnail: string | null }[];
 }
 
 export interface DismissedArtist {

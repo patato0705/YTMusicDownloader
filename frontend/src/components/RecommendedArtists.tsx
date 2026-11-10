@@ -9,6 +9,9 @@
  * undoable from the toast) and restore dismissed ones from the "Dismissed (n)" list,
  * or follow one from its card. A followed one stays shown, with its check, until
  * the list is next loaded: the backend leaves followed artists out.
+ *
+ * A card similar to more liked artists than its line can name sums them up
+ * ("Similar to 5 artists you like"); clicking that lists them all.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -59,6 +62,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
   // Followed from here since the list was loaded
   const [followedIds, setFollowedIds] = useState<ReadonlySet<string>>(new Set());
   const [showDismissed, setShowDismissed] = useState(false);
+  const [similarToShown, setSimilarToShown] = useState<RecommendedArtist | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
 
@@ -99,9 +103,11 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
   const listFormat = useMemo(() => new Intl.ListFormat(locale, { type: 'conjunction' }), [locale]);
   const similarTo = (rec: RecommendedArtist) => {
     const names = listFormat.format(rec.similar_to.map((a) => a.name));
+    const summed = rec.count > 2;
     return {
-      short: rec.count <= 2 ? t('browse.recommendations.similarTo', { names }) : t('browse.recommendations.similarToMany', { count: rec.count }),
+      short: summed ? t('browse.recommendations.similarToMany', { count: rec.count }) : t('browse.recommendations.similarTo', { names }),
       full: t('browse.recommendations.similarTo', { names }),
+      summed,
     };
   };
 
@@ -178,6 +184,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
                 subtitle={text.short}
                 subtitleTitle={text.full}
                 subtitleWrap
+                onSubtitleClick={text.summed ? () => setSimilarToShown(rec) : undefined}
                 thumbnail={getImageUrl(rec.thumbnail)}
                 type="artist"
                 to={artistPath(rec.id)}
@@ -207,6 +214,13 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
         </div>
       )}
 
+      {similarToShown && (
+        <SimilarToModal
+          recommendation={similarToShown}
+          onClose={() => setSimilarToShown(null)}
+        />
+      )}
+
       {showDismissed && (
         <DismissedArtistsModal
           onClose={() => setShowDismissed(false)}
@@ -224,6 +238,40 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
         />
       )}
     </section>
+  );
+};
+
+/** Every liked artist a recommendation is similar to, most similar first */
+const SimilarToModal: React.FC<{ recommendation: RecommendedArtist; onClose: () => void }> = ({ recommendation, onClose }) => {
+  const { t } = useI18n();
+  return (
+    <Modal
+      title={recommendation.name}
+      subtitle={t('browse.recommendations.similarToMany', { count: recommendation.count })}
+      onClose={onClose}
+      className="flex flex-col"
+    >
+      <div className="overflow-y-auto -mx-2 px-2">
+        <ul className="space-y-2">
+          {recommendation.similar_to.map((artist) => (
+            <li key={artist.id}>
+              <Link
+                to={artistPath(artist.id)}
+                onClick={onClose}
+                className="flex items-center gap-3 rounded-2xl p-2 hover:bg-slate-100/60 dark:hover:bg-white/5 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 transition-colors"
+              >
+                <Artwork
+                  src={getImageUrl(artist.thumbnail)}
+                  kind="artist"
+                  className="w-11 h-11 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
+                />
+                <span className="font-medium text-foreground truncate">{artist.name}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Modal>
   );
 };
 
