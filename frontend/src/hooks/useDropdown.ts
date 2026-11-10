@@ -1,21 +1,46 @@
 // src/hooks/useDropdown.ts
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, RefObject } from 'react';
 
 // Menus open right now, oldest first. A click inside a menu opened from
 // another one (the language list inside the user menu) leaves the first open.
 const openMenus: HTMLElement[] = [];
 
+/** Pixels kept between a menu and the screen's edges */
+const SCREEN_GUTTER = 16;
+/** The least height `fitBelow` leaves a menu: below it, scrolling the page shows the rest */
+const MIN_FIT_HEIGHT = 240;
+
+interface DropdownOptions {
+  /**
+   * An element whose left and right edges the menu stays within (e.g. the
+   * page's content column), instead of the screen's. A wider menu is narrowed.
+   */
+  bounds?: RefObject<HTMLElement>;
+  /**
+   * The button is in the page, not in fixed chrome like the navbar: the menu
+   * is placed in page coordinates (add `absolute` rather than `fixed`) and
+   * the browser scrolls it along with the page. Nothing runs while scrolling,
+   * so it never lags behind its button.
+   */
+  inPage?: boolean;
+  /** A max height keeping the menu within the screen's bottom when it opens (it scrolls inside) */
+  fitBelow?: boolean;
+}
+
 /**
- * A menu opened by a button, portaled to <body> with fixed positioning: the
- * navbar's blurred glass would otherwise clip it and its own blur. It stays
- * under its button through scrolling and resizing, and closes on a click
- * outside or Escape.
+ * A menu opened by a button, portaled to <body>: the navbar's blurred glass
+ * would otherwise clip it and its own blur. It stays under its button through
+ * scrolling and resizing, and closes on a click outside or Escape.
  *
  * `align`: which edge of the button the menu lines up with
  * `gap`: pixels between the button and the menu
  */
-export function useDropdown(align: 'left' | 'right', gap: number) {
+export function useDropdown(
+  align: 'left' | 'right',
+  gap: number,
+  { bounds, inPage = false, fitBelow = false }: DropdownOptions = {},
+) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -28,9 +53,32 @@ export function useDropdown(align: 'left' | 'right', gap: number) {
     const place = () => {
       const rect = buttonRef.current?.getBoundingClientRect();
       if (!rect) return;
-      setMenuStyle(align === 'left'
-        ? { top: rect.bottom + gap, left: rect.left }
-        : { top: rect.bottom + gap, right: window.innerWidth - rect.right });
+      // Without the scrollbar: `right` is measured from the inner edge
+      const viewport = document.documentElement.clientWidth;
+      const area = bounds?.current?.getBoundingClientRect();
+      const minX = Math.max(SCREEN_GUTTER, area?.left ?? 0);
+      const maxX = Math.min(viewport - SCREEN_GUTTER, area?.right ?? viewport);
+      // Set on the element itself, before measuring, so the width read is
+      // the one it will have (React leaves style properties it doesn't set alone)
+      menu.style.maxWidth = `${maxX - minX}px`;
+      const width = menu.offsetWidth;
+      const top = rect.bottom + gap;
+      const vertical: CSSProperties = {
+        top: inPage ? top + window.scrollY : top,
+        ...(fitBelow && { maxHeight: Math.max(MIN_FIT_HEIGHT, window.innerHeight - top - SCREEN_GUTTER) }),
+      };
+      const scrollX = inPage ? window.scrollX : 0;
+      // A menu with no room on its side lines up with the button's other
+      // edge instead, or failing that, with the edge of the area it overflows
+      const fitsLeft = rect.left + width <= maxX;
+      const fitsRight = rect.right - width >= minX;
+      if (align === 'left' ? fitsLeft : !fitsRight && fitsLeft) {
+        setMenuStyle({ ...vertical, left: rect.left + scrollX });
+      } else if (fitsRight) {
+        setMenuStyle({ ...vertical, right: viewport - rect.right - scrollX });
+      } else {
+        setMenuStyle({ ...vertical, left: Math.max(minX, maxX - width) + scrollX });
+      }
     };
     place();
     openMenus.push(menu);
@@ -45,7 +93,9 @@ export function useDropdown(align: 'left' | 'right', gap: number) {
       if (event.key === 'Escape' && openMenus[openMenus.length - 1] === menu) setOpen(false);
     };
 
-    window.addEventListener('scroll', place, { passive: true });
+    // A menu in the page scrolls with it on its own; one under fixed chrome
+    // follows its button (the navbar moves a little as the page scrolls)
+    if (!inPage) window.addEventListener('scroll', place, { passive: true });
     window.addEventListener('resize', place);
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
@@ -56,7 +106,7 @@ export function useDropdown(align: 'left' | 'right', gap: number) {
       document.removeEventListener('keydown', onKeyDown);
       openMenus.splice(openMenus.indexOf(menu), 1);
     };
-  }, [open, align, gap]);
+  }, [open, align, gap, bounds, inPage, fitBelow]);
 
   return {
     open,
@@ -64,7 +114,7 @@ export function useDropdown(align: 'left' | 'right', gap: number) {
     toggle: () => setOpen((value) => !value),
     buttonRef,
     menuRef,
-    /** Position of the menu (add `fixed`) */
+    /** Position of the menu (add `fixed`, or `absolute` with `inPage`) */
     menuStyle,
   };
 }

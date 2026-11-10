@@ -27,4 +27,8 @@ def get_features(
     session: Session = Depends(get_session),
 ) -> dict:
     """Return the state of every feature flag the UI depends on."""
-    return {"charts_enabled": feature_enabled(session, "charts")}
+    return {
+        "charts_enabled": feature_enabled(session, "charts"),
+        "lyrics_enabled": feature_enabled(session, "lyrics"),
+        "genres_enabled": feature_enabled(session, "genres"),
+    }

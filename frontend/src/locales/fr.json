@@ -315,6 +315,114 @@
       "playlistsUnfollowed": "Ces playlists suivies ne seront plus suivies, pour qu'elles ne le retéléchargent pas : {titles}. Elles restent dans la bibliothèque, comme playlists ajoutées une fois.",
       "playlistsUnfollowed_one": "La playlist suivie {titles} ne sera plus suivie, pour qu'elle ne le retélécharge pas. Elle reste dans la bibliothèque, comme playlist ajoutée une fois.",
       "quoted": "« {title} »"
+    },
+    "filters": {
+      "button": "Filtres",
+      "buttonActive": "Filtres, {count} choisis",
+      "buttonActive_one": "Filtres, 1 choisi",
+      "title": "Filtres",
+      "clearAll": "Tout effacer",
+      "clear": "Effacer les filtres",
+      "remove": "Retirer le filtre : {label}",
+      "results": "{formatted} résultats",
+      "results_one": "{formatted} résultat",
+      "showResults": "Afficher {formatted} résultats",
+      "showResults_one": "Afficher {formatted} résultat",
+      "noMatchesTitle": "Rien ne correspond à ces filtres",
+      "noMatchesDescription": "Essayez de retirer un ou deux filtres.",
+      "noMatchesWithSearch": "Aucun résultat pour « {query} » avec ces filtres. Essayez d'en retirer un ou deux.",
+      "genreSearch": "Chercher un genre",
+      "noGenreMatch": "Aucun genre ne correspond.",
+      "showAllGenres": "Afficher les {count} genres",
+      "showFewerGenres": "Afficher moins",
+      "groups": {
+        "downloads": "Téléchargements",
+        "lyrics": "Paroles",
+        "metadata": "Pochettes et genres",
+        "type": "Type de sortie",
+        "decade": "Décennie",
+        "genre": "Genre",
+        "source": "Ajouté par",
+        "follow": "Suivi de l'artiste",
+        "liked": "J'aime"
+      },
+      "options": {
+        "downloads": {
+          "missing": "Titres manquants",
+          "failed": "Titres en échec",
+          "active": "En cours"
+        },
+        "lyrics": {
+          "missing": "Paroles manquantes",
+          "plain": "Paroles non synchronisées"
+        },
+        "metadata": {
+          "artwork": "Pochette manquante",
+          "genre": "Aucun genre trouvé"
+        },
+        "type": {
+          "album": "Albums",
+          "single": "Singles",
+          "ep": "EP"
+        },
+        "decade": {
+          "value": "Années {decade}",
+          "unknown": "Année inconnue"
+        },
+        "source": {
+          "artist": "Un artiste suivi",
+          "playlist": "Une playlist",
+          "own": "Suivi seul"
+        },
+        "follow": {
+          "full": "Suivi complet",
+          "light": "Suivi léger"
+        },
+        "liked": {
+          "liked": "Artistes aimés"
+        }
+      },
+      "hints": {
+        "missingTracks": "{count} titres manquants sur {total}",
+        "missingTracks_one": "1 titre manquant sur {total}",
+        "failedTracks": "{count} titres en échec",
+        "failedTracks_one": "1 titre en échec",
+        "missingLyrics": "{count} titres sans paroles",
+        "missingLyrics_one": "1 titre sans paroles",
+        "plainLyrics": "{count} titres aux paroles non synchronisées",
+        "plainLyrics_one": "1 titre aux paroles non synchronisées",
+        "noArtwork": "Pas de pochette",
+        "noGenre": "Aucun genre trouvé"
+      }
+    },
+    "sort": {
+      "label": "Trier par",
+      "button": "Trier par {key}, {order}",
+      "orderLabel": "Ordre",
+      "keys": {
+        "name": "Nom",
+        "added": "Date d'ajout",
+        "year": "Année de sortie",
+        "completion": "Progression"
+      },
+      "order": {
+        "name": {
+          "asc": "De A à Z",
+          "desc": "De Z à A"
+        },
+        "added": {
+          "asc": "Plus anciens d'abord",
+          "desc": "Plus récents d'abord"
+        },
+        "year": {
+          "asc": "Plus anciens d'abord",
+          "desc": "Plus récents d'abord"
+        },
+        "completion": {
+          "asc": "Moins complets d'abord",
+          "desc": "Plus complets d'abord"
+        }
+      }
     }
   },
   "charts": {

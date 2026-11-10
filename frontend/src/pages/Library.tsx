@@ -1,8 +1,9 @@
 // src/pages/Library.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useFeatures } from '../contexts/FeaturesContext';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import { getLibraryArtists, getLibraryAlbums, getLibraryStats, searchLibraryTracks } from '../api/library';
 import type { LibraryAlbum, LibraryArtist, LibraryStats, LibraryTrack } from '../api/library';
@@ -29,6 +30,22 @@ import { useProgressiveList } from '../hooks/useProgressiveList';
 import { useHistoryState } from '../hooks/useHistoryState';
 import { useLikeSync } from '../hooks/useLikeSync';
 import { Icon } from '../components/ui/icons';
+import { ActiveFilters, LibraryFilterControl, SortControl, filterHintText } from '../components/library/LibraryFilters';
+import {
+  FILTER_GROUPS,
+  activeFilterCount,
+  albumHints,
+  albumMatches,
+  artistHints,
+  artistMatches,
+  filtersFromParams,
+  sortAlbums,
+  sortArtists,
+  sortFromParams,
+  toggleFilter,
+  withFilterParams,
+} from '../utils/libraryFilters';
+import type { FilterContext, FilterGroup, FilterHint, FilterItems, LibraryFilters, LibrarySort, OfferedFilters } from '../utils/libraryFilters';
 
 type LibraryTab = 'all' | 'artists' | 'albums' | 'playlists';
 
@@ -76,6 +93,11 @@ function groupTrackMatches(query: string, tracks: LibraryTrack[]): TrackMatches 
   return { query, byAlbum, byArtist };
 }
 
+/** One line under a card or row: why it's listed, from the search and from the filters */
+function joinHints(...parts: Array<string | undefined>): string | undefined {
+  return parts.filter(Boolean).join(' · ') || undefined;
+}
+
 function loadViewMode(): ViewMode {
   try {
     return localStorage.getItem(VIEW_STORAGE_KEY) === 'list' ? 'list' : 'grid';
@@ -106,8 +128,17 @@ export default function Library(): JSX.Element {
   const [exporting, setExporting] = useState(false);
   const debouncedQuery = useDebounce(searchQuery.trim(), TRACK_SEARCH_DEBOUNCE_MS);
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, formatLocale } = useI18n();
   const { user } = useAuth();
+  const { features } = useFeatures();
+  // Filters and sort are in the URL: a link can open the library filtered,
+  // and the back button brings them back
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
+  const sort = useMemo(() => sortFromParams(searchParams), [searchParams]);
+  const filtersActive = activeFilterCount(filters) > 0;
+  // The filter popover stays within the toolbar's width
+  const toolbarRef = useRef<HTMLDivElement>(null);
   // Visitors are read-only: liking is a member+ action on the backend
   const canLike = user?.role === 'administrator' || user?.role === 'member';
   const { revision } = useJobActivity();
@@ -285,14 +316,14 @@ export default function Library(): JSX.Element {
   // its tracks does, with a hint saying which one.
   const query = searchQuery.toLowerCase();
 
-  const filteredArtists = useMemo(
+  const searchedArtists = useMemo(
     () => activeTab === 'albums' || activeTab === 'playlists' ? [] : artists.filter(artist =>
       artist.name.toLowerCase().includes(query) || artistTrackMatches.has(artist.id)
     ),
     [artists, activeTab, query, artistTrackMatches]
   );
 
-  const filteredAlbums = useMemo(
+  const searchedAlbums = useMemo(
     () => activeTab === 'artists' || activeTab === 'playlists' ? [] : albums.filter(album =>
       album.title.toLowerCase().includes(query) ||
       album.artist?.name.toLowerCase().includes(query) ||
@@ -301,9 +332,59 @@ export default function Library(): JSX.Element {
     [albums, activeTab, query, albumTrackMatches]
   );
 
+  // Then the filters (see utils/libraryFilters.ts) and the sort
+  const artistById = useMemo(() => new Map(artists.map((artist) => [artist.id, artist])), [artists]);
+  const filterContext = useMemo<FilterContext>(
+    () => ({ artistById, albumsByArtist, albumStatus }),
+    [artistById, albumsByArtist, albumStatus]
+  );
+  const collator = useMemo(() => new Intl.Collator(formatLocale, { sensitivity: 'base', numeric: true }), [formatLocale]);
+
+  const filteredArtists = useMemo(() => {
+    const matching = filtersActive ? searchedArtists.filter((artist) => artistMatches(artist, filters, filterContext)) : searchedArtists;
+    return sortArtists(matching, sort, filterContext, collator);
+  }, [searchedArtists, filters, filtersActive, sort, filterContext, collator]);
+
+  const filteredAlbums = useMemo(() => {
+    const matching = filtersActive ? searchedAlbums.filter((album) => albumMatches(album, filters, filterContext)) : searchedAlbums;
+    return sortAlbums(matching, sort, collator);
+  }, [searchedAlbums, filters, filtersActive, sort, filterContext, collator]);
+
+  // Lyrics filters only when lyrics are fetched; "No genre found" only when genres are looked up
+  const lyricsEnabled = !!features?.lyrics_enabled;
+  const genresEnabled = !!features?.genres_enabled;
+  const offeredFilters = useMemo<OfferedFilters>(() => ({
+    groups: FILTER_GROUPS.filter((group) => group !== 'lyrics' || lyricsEnabled),
+    genresLookedUp: genresEnabled,
+  }), [lyricsEnabled, genresEnabled]);
+  // For the filter panel's counts
+  const libraryItems = useMemo<FilterItems>(() => ({ artists, albums }), [artists, albums]);
+  const shownItems = useMemo<FilterItems>(
+    () => ({ artists: searchedArtists, albums: searchedAlbums }),
+    [searchedArtists, searchedAlbums]
+  );
+
+  // Written to the URL in place: picking filters adds no history entries
+  const updateFilters = useCallback(
+    (change: (current: LibraryFilters, sort: LibrarySort) => [LibraryFilters, LibrarySort]) => {
+      setSearchParams((prev) => {
+        const [nextFilters, nextSort] = change(filtersFromParams(prev), sortFromParams(prev));
+        return withFilterParams(prev, nextFilters, nextSort);
+      }, { replace: true });
+    },
+    [setSearchParams]
+  );
+  const onToggleFilter = (group: FilterGroup, value: string) =>
+    updateFilters((current, currentSort) => [toggleFilter(current, group, value), currentSort]);
+  const clearFilters = () => updateFilters((_current, currentSort) => [{}, currentSort]);
+  const setSort = (next: LibrarySort) => updateFilters((current) => [current, next]);
+
+  const filterHint = (found: FilterHint[]): string | undefined =>
+    found.length > 0 ? found.map((hint) => filterHintText(t, hint)).join(' · ') : undefined;
+
   // Large libraries hold thousands of albums: mount the cards a page at a
-  // time as the user scrolls, starting over on a new search or tab
-  const listResetKey = `${activeTab}|${query}`;
+  // time as the user scrolls, starting over on a new search, tab, filter or sort
+  const listResetKey = `${activeTab}|${query}|${withFilterParams(new URLSearchParams(), filters, sort).toString()}`;
   const {
     visible: displayedArtists,
     hasMore: moreArtists,
@@ -314,6 +395,11 @@ export default function Library(): JSX.Element {
     hasMore: moreAlbums,
     sentinelRef: albumsSentinelRef,
   } = useProgressiveList(filteredAlbums, PAGE_SIZE, listResetKey, 'albums');
+
+  const albumHint = (album: LibraryAlbum): string | undefined =>
+    joinHints(albumMatchHint(album.id), filtersActive ? filterHint(albumHints(album, filters)) : undefined);
+  const artistHint = (artist: LibraryArtist): string | undefined =>
+    joinHints(artistMatchHint(artist.id), filtersActive ? filterHint(artistHints(artist, filters, filterContext)) : undefined);
 
   const albumMatchHint = (albumId: string): string | undefined => {
     const matches = albumTrackMatches.get(albumId);
@@ -407,28 +493,62 @@ export default function Library(): JSX.Element {
         </EmptyState>
       ) : (
         <>
-          {/* Search on the left, filter tabs and view switch on the right.
-              Phones: full width search on top, tabs and view switch below;
-              the tabs scroll sideways when they don't fit beside the switch.
-              The input stretches to the row's height. */}
-          <div className="flex flex-wrap md:flex-nowrap items-stretch gap-3 md:gap-4">
-            <SearchInput
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder={t('library.searchPlaceholder')}
-              size="md"
-              className="basis-full md:basis-auto md:w-64 lg:w-96"
-              inputClassName="h-full"
-            />
-            <div className="flex-1 md:flex-none md:ml-auto min-w-0">
-              <FilterTabs
-                tabs={tabs}
-                active={activeTab}
-                onChange={setActiveTab}
-                className="overflow-x-auto no-scrollbar"
-              />
+          {/* Search, filters and sort on the left, tabs and view switch on the right.
+              Below xl they take a row each: search, filters and sort on top,
+              tabs and view switch under them; the tabs scroll sideways when
+              they don't fit beside the switch. Phones keep the sort in the
+              filter sheet. Everything stretches to the row's height.
+              The picked filters line up under it all. */}
+          <div ref={toolbarRef} className="space-y-3">
+            <div className="flex flex-wrap xl:flex-nowrap items-stretch gap-3 xl:gap-4">
+              <div className="flex items-stretch gap-2 md:gap-3 basis-full xl:basis-auto min-w-0">
+                <SearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder={t('library.searchPlaceholder')}
+                  size="md"
+                  className="flex-1 min-w-0 xl:flex-none xl:w-72 2xl:w-96"
+                  inputClassName="h-full"
+                />
+                {activeTab !== 'playlists' && (
+                  <>
+                    <LibraryFilterControl
+                      filters={filters}
+                      onToggle={onToggleFilter}
+                      onClear={clearFilters}
+                      shown={shownItems}
+                      library={libraryItems}
+                      context={filterContext}
+                      offered={offeredFilters}
+                      collator={collator}
+                      resultCount={filteredArtists.length + filteredAlbums.length}
+                      sort={sort}
+                      onSortChange={setSort}
+                      boundsRef={toolbarRef}
+                    />
+                    <SortControl sort={sort} onChange={setSort} className="hidden md:flex w-56" />
+                  </>
+                )}
+              </div>
+              <div className="flex-1 xl:flex-none xl:ml-auto min-w-0">
+                <FilterTabs
+                  tabs={tabs}
+                  active={activeTab}
+                  onChange={setActiveTab}
+                  className="overflow-x-auto no-scrollbar"
+                />
+              </div>
+              {activeTab !== 'playlists' && <ViewToggle value={viewMode} onChange={setViewMode} />}
             </div>
-            {activeTab !== 'playlists' && <ViewToggle value={viewMode} onChange={setViewMode} />}
+
+            {activeTab !== 'playlists' && (
+              <ActiveFilters
+                filters={filters}
+                onToggle={onToggleFilter}
+                onClear={clearFilters}
+                resultCount={filteredArtists.length + filteredAlbums.length}
+              />
+            )}
           </div>
 
           {activeTab === 'playlists' && (
@@ -452,7 +572,7 @@ export default function Library(): JSX.Element {
                       thumbnail={getImageUrl(artist.thumbnail)}
                       type="artist"
                       mediaStatus={exceptionalStatus(artistStatus.get(artist.id))}
-                      matchHint={artistMatchHint(artist.id)}
+                      matchHint={artistHint(artist)}
                       to={artistPath(artist.id)}
                       titleAction={canLike && (
                         // Next to the name, as in the list view; a liked artist always shows its heart, the others on hover
@@ -485,7 +605,7 @@ export default function Library(): JSX.Element {
                       tracksTotal={artist.tracks_total}
                       tracksDownloaded={artist.tracks_downloaded}
                       date={artist.followed_at}
-                      matchHint={artistMatchHint(artist.id)}
+                      matchHint={artistHint(artist)}
                       to={artistPath(artist.id)}
                       titleAction={canLike && (
                         // A liked artist always shows its heart, the others on hover
@@ -523,7 +643,7 @@ export default function Library(): JSX.Element {
                       albumType={album.type}
                       year={album.year ?? undefined}
                       mediaStatus={exceptionalStatus(albumStatus.get(album.id))}
-                      matchHint={albumMatchHint(album.id)}
+                      matchHint={albumHint(album)}
                       to={albumPath(album.id)}
                     />
                   ))}
@@ -545,7 +665,7 @@ export default function Library(): JSX.Element {
                       tracksTotal={album.tracks_total}
                       tracksDownloaded={album.tracks_downloaded}
                       date={album.created_at}
-                      matchHint={albumMatchHint(album.id)}
+                      matchHint={albumHint(album)}
                       to={albumPath(album.id)}
                     />
                   ))}
@@ -555,11 +675,22 @@ export default function Library(): JSX.Element {
             </section>
           )}
 
-          {/* No results from search; waits for the track lookup so it doesn't flash */}
-          {searchQuery && activeTab !== 'playlists' && trackMatchesReady && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
-            <EmptyState icon="search" title={t('library.noMatches')}>
-              <p>{t('library.noMatchesDescription', { query: searchQuery })}</p>
-            </EmptyState>
+          {/* No results from search or filters; waits for the track lookup so it doesn't flash */}
+          {(searchQuery || filtersActive) && activeTab !== 'playlists' && trackMatchesReady && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
+            filtersActive ? (
+              <EmptyState icon="filter" title={t('library.filters.noMatchesTitle')}>
+                <p>
+                  {searchQuery
+                    ? t('library.filters.noMatchesWithSearch', { query: searchQuery })
+                    : t('library.filters.noMatchesDescription')}
+                </p>
+                <Button variant="primary" onClick={clearFilters}>{t('library.filters.clear')}</Button>
+              </EmptyState>
+            ) : (
+              <EmptyState icon="search" title={t('library.noMatches')}>
+                <p>{t('library.noMatchesDescription', { query: searchQuery })}</p>
+              </EmptyState>
+            )
           )}
         </>
       )}

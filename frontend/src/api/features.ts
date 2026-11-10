@@ -7,6 +7,10 @@ import { api } from './client';
 
 export interface Features {
   charts_enabled: boolean;
+  /** Lyrics are fetched with the tracks (LRCLIB) */
+  lyrics_enabled: boolean;
+  /** Genres are looked up on MusicBrainz / Deezer */
+  genres_enabled: boolean;
 }
 
 /**

@@ -2,6 +2,7 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useI18n } from '../../contexts/I18nContext';
+import { useSheetDismiss } from '../../hooks/useSheetDismiss';
 
 interface ModalProps {
   onClose: () => void;
@@ -18,9 +19,17 @@ interface ModalProps {
   headerExtra?: React.ReactNode;
   labelledBy?: string;
   size?: 'md' | 'lg' | 'xl';
+  /**
+   * A bottom sheet instead of a centered dialog (phones): full width, slides
+   * up from the bottom edge, at most 85% of the screen tall, and back down
+   * when closed or swiped down (see useSheetDismiss). The page under it
+   * stops scrolling while it is open.
+   */
+  sheet?: boolean;
   /** Extra classes on the panel (e.g. a flex column) */
   className?: string;
-  children: React.ReactNode;
+  /** A function gets `close`, which closes the way Escape does (a sheet slides down first) */
+  children: React.ReactNode | ((close: () => void) => React.ReactNode);
 }
 
 const WIDTHS = { md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-2xl' };
@@ -42,18 +51,21 @@ export const Modal: React.FC<ModalProps> = ({
   headerExtra,
   labelledBy,
   size = 'md',
+  sheet = false,
   className = '',
   children,
 }) => {
   const { t } = useI18n();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   // A click only closes when it started on the backdrop too: selecting text
   // in the dialog and releasing outside of it mustn't
   const pressedBackdrop = useRef(false);
+  const close = useSheetDismiss(sheet && dismissible, panelRef, backdropRef, onClose);
   // Read by the listeners below, which are only set up once
-  const latest = useRef({ onClose, dismissible });
-  latest.current = { onClose, dismissible };
+  const latest = useRef({ close, dismissible });
+  latest.current = { close, dismissible };
 
   useEffect(() => {
     const panel = panelRef.current;
@@ -66,7 +78,7 @@ export const Modal: React.FC<ModalProps> = ({
       if (openModals[openModals.length - 1] !== panel) return;
       if (event.key === 'Escape' && latest.current.dismissible) {
         event.preventDefault();
-        latest.current.onClose();
+        latest.current.close();
       } else if (event.key === 'Tab') {
         // Wrap around instead of leaving for the page underneath
         const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
@@ -87,7 +99,13 @@ export const Modal: React.FC<ModalProps> = ({
     };
     document.addEventListener('keydown', onKeyDown);
 
+    // A sheet covers the bottom of the page, which could otherwise be
+    // scrolled behind it by a swipe that starts on the backdrop
+    const overflow = document.body.style.overflow;
+    if (sheet) document.body.style.overflow = 'hidden';
+
     return () => {
+      document.body.style.overflow = overflow;
       document.removeEventListener('keydown', onKeyDown);
       openModals.splice(openModals.indexOf(panel), 1);
       previouslyFocused?.focus?.();
@@ -96,19 +114,28 @@ export const Modal: React.FC<ModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-      onMouseDown={(e) => { pressedBackdrop.current = e.target === e.currentTarget; }}
+      className={`fixed inset-0 z-50 flex justify-center ${sheet ? 'items-end' : 'items-center p-4 bg-black/60'}`}
+      onMouseDown={(e) => { pressedBackdrop.current = e.target === e.currentTarget || e.target === backdropRef.current; }}
       onClick={(e) => {
-        if (e.target === e.currentTarget && pressedBackdrop.current && dismissible) onClose();
+        const onBackdrop = e.target === e.currentTarget || e.target === backdropRef.current;
+        if (onBackdrop && pressedBackdrop.current && dismissible) close();
       }}
     >
+      {/* A sheet's backdrop is a layer of its own, so it can fade without the sheet */}
+      {sheet && (
+        <div ref={backdropRef} className="absolute inset-0 bg-black/60 animate-fade-in motion-reduce:animate-none" />
+      )}
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : labelledBy}
         tabIndex={-1}
-        className={`glass rounded-3xl p-6 sm:p-8 w-full ${WIDTHS[size]} max-h-[calc(100dvh-2rem)] overflow-y-auto border-gradient shadow-2xl outline-none ${className}`}
+        className={`relative w-full shadow-2xl outline-none ${
+          sheet
+            ? 'glass-chrome !border-x-0 !border-b-0 rounded-t-3xl max-h-[85dvh] overflow-hidden flex flex-col animate-sheet-up motion-reduce:animate-none'
+            : `glass rounded-3xl p-6 sm:p-8 ${WIDTHS[size]} max-h-[calc(100dvh-2rem)] overflow-y-auto border-gradient`
+        } ${className}`}
       >
         {title && (
           <div className="flex items-start justify-between gap-4 mb-6 shrink-0">
@@ -120,7 +147,7 @@ export const Modal: React.FC<ModalProps> = ({
               {headerExtra}
               <button
                 type="button"
-                onClick={onClose}
+                onClick={close}
                 disabled={!dismissible}
                 aria-label={t('common.close')}
                 className="w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-50 transition-all text-sm"
@@ -130,7 +157,7 @@ export const Modal: React.FC<ModalProps> = ({
             </div>
           </div>
         )}
-        {children}
+        {typeof children === 'function' ? children(close) : children}
       </div>
     </div>,
     document.body,

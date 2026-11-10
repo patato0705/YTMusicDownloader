@@ -315,6 +315,113 @@
       "playlistsUnfollowed": "These followed playlists will be unfollowed, so they don't download it again: {titles}. They stay in the library as one-time playlists.",
       "playlistsUnfollowed_one": "The followed playlist {titles} will be unfollowed, so it doesn't download it again. It stays in the library as a one-time playlist.",
       "quoted": "“{title}”"
+    },
+    "filters": {
+      "button": "Filters",
+      "buttonActive": "Filters, {count} picked",
+      "buttonActive_one": "Filters, 1 picked",
+      "title": "Filters",
+      "clearAll": "Clear all",
+      "clear": "Clear filters",
+      "remove": "Remove filter: {label}",
+      "results": "{formatted} results",
+      "results_one": "{formatted} result",
+      "showResults": "Show {formatted} results",
+      "showResults_one": "Show {formatted} result",
+      "noMatchesTitle": "Nothing matches these filters",
+      "noMatchesDescription": "Try removing a filter or two.",
+      "noMatchesWithSearch": "Nothing matching \"{query}\" fits these filters. Try removing a filter or two.",
+      "genreSearch": "Find a genre",
+      "noGenreMatch": "No genre matches.",
+      "showAllGenres": "Show all {count} genres",
+      "showFewerGenres": "Show fewer",
+      "groups": {
+        "downloads": "Downloads",
+        "lyrics": "Lyrics",
+        "metadata": "Artwork and genres",
+        "type": "Release type",
+        "decade": "Decade",
+        "genre": "Genre",
+        "source": "Brought in by",
+        "follow": "Artist follow",
+        "liked": "Likes"
+      },
+      "options": {
+        "downloads": {
+          "missing": "Missing tracks",
+          "failed": "Failed tracks",
+          "active": "In progress"
+        },
+        "lyrics": {
+          "missing": "Missing lyrics",
+          "plain": "Unsynced lyrics"
+        },
+        "metadata": {
+          "artwork": "Missing artwork",
+          "genre": "No genre found"
+        },
+        "type": {
+          "album": "Albums",
+          "single": "Singles",
+          "ep": "EPs"
+        },
+        "decade": {
+          "value": "{decade}s",
+          "unknown": "Unknown year"
+        },
+        "source": {
+          "artist": "A followed artist",
+          "playlist": "A playlist",
+          "own": "Followed on its own"
+        },
+        "follow": {
+          "full": "Full follow",
+          "light": "Light follow"
+        },
+        "liked": {
+          "liked": "Liked artists"
+        }
+      },
+      "hints": {
+        "missingTracks": "{count} of {total} tracks missing",
+        "failedTracks": "{count} failed tracks",
+        "failedTracks_one": "1 failed track",
+        "missingLyrics": "{count} tracks without lyrics",
+        "missingLyrics_one": "1 track without lyrics",
+        "plainLyrics": "{count} tracks with unsynced lyrics",
+        "plainLyrics_one": "1 track with unsynced lyrics",
+        "noArtwork": "No artwork",
+        "noGenre": "No genre found"
+      }
+    },
+    "sort": {
+      "label": "Sort by",
+      "button": "Sort by {key}, {order}",
+      "orderLabel": "Order",
+      "keys": {
+        "name": "Name",
+        "added": "Date added",
+        "year": "Release year",
+        "completion": "Completion"
+      },
+      "order": {
+        "name": {
+          "asc": "A to Z",
+          "desc": "Z to A"
+        },
+        "added": {
+          "asc": "Oldest first",
+          "desc": "Newest first"
+        },
+        "year": {
+          "asc": "Oldest first",
+          "desc": "Newest first"
+        },
+        "completion": {
+          "asc": "Least complete first",
+          "desc": "Most complete first"
+        }
+      }
     }
   },
   "charts": {

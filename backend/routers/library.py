@@ -20,14 +20,14 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case
+from sqlalchemy import func, case, exists
 
 from .. import config
 from ..db import get_session
 from ..dependencies import require_auth, require_admin
 from ..downloader.cover import move_file
 from ..jobs.jobqueue import cancel_download_jobs
-from ..models import Artist, Album, Track, ArtistSubscription, Job, User
+from ..models import Artist, Album, Track, ArtistSubscription, Job, Playlist, PlaylistEntry, User
 from ..services import folders as folders_svc
 from ..services import playlists as playlists_svc
 from ..services import recommendations as recommendations_svc
@@ -129,6 +129,9 @@ def list_followed_artists(
                 "id": artist.id,
                 "name": artist.name,
                 "thumbnail": artist.image_local,
+                "genres": artist.genres or [],
+                # Looked up and none found, as opposed to not looked up yet
+                "genres_checked": artist.genres_checked_at is not None,
                 "mode": subscription.mode,
                 "liked": artist.id in liked,
                 "followed_at": subscription.created_at.isoformat() if subscription.created_at else None,
@@ -216,10 +219,21 @@ def list_followed_albums(
                 func.count(Track.id).label("total"),
                 func.sum(case((Track.status == "done", 1), else_=0)).label("downloaded"),
                 func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
-                func.sum(case((Track.lyrics.is_not(None), 1), else_=0)).label("with_lyrics"),
+                # Lyrics are fetched with the audio, so only downloaded tracks count
+                func.sum(case(((Track.status == "done") & Track.lyrics.is_(None), 1), else_=0)).label("missing_lyrics"),
+                func.sum(case(((Track.status == "done") & (Track.lyrics == "plain"), 1), else_=0)).label("plain_lyrics"),
             )
             .group_by(Track.album_id)
             .subquery()
+        )
+
+        # Brought in by a playlist: one in albums mode lists a song of it
+        # (playlists in artists mode bring in the artist instead). Checked per
+        # row on the album_id index, rather than loading every playlist entry.
+        from_playlist = exists().where(
+            PlaylistEntry.album_id == Album.id,
+            PlaylistEntry.playlist_id == Playlist.id,
+            Playlist.mode == "albums",
         )
 
         # Query albums directly (mode is now on the Album row)
@@ -231,7 +245,9 @@ def list_followed_albums(
                 tracks_counts.c.total,
                 tracks_counts.c.downloaded,
                 tracks_counts.c.failed,
-                tracks_counts.c.with_lyrics,
+                tracks_counts.c.missing_lyrics,
+                tracks_counts.c.plain_lyrics,
+                from_playlist.label("from_playlist"),
             )
             .outerjoin(Artist, Artist.id == Album.artist_id)
             .outerjoin(tracks_counts, tracks_counts.c.album_id == Album.id)
@@ -248,11 +264,10 @@ def list_followed_albums(
             return {"albums": [], "total": 0}
 
         result = []
-        for album, artist_db_id, artist_name, total, downloaded, failed, with_lyrics in rows:
+        for album, artist_db_id, artist_name, total, downloaded, failed, missing_lyrics, plain_lyrics, in_playlist in rows:
             tracks_total = int(total or 0)
             tracks_downloaded = int(downloaded or 0)
             tracks_failed = int(failed or 0)
-            tracks_with_lyrics = int(with_lyrics or 0)
 
             # Calculate download progress
             download_progress = 0.0
@@ -281,7 +296,12 @@ def list_followed_albums(
                 "tracks_total": tracks_total,
                 "tracks_downloaded": tracks_downloaded,
                 "tracks_failed": tracks_failed,
-                "tracks_with_lyrics": tracks_with_lyrics,
+                "tracks_missing_lyrics": int(missing_lyrics or 0),
+                "tracks_plain_lyrics": int(plain_lyrics or 0),
+                "genres": album.genres or [],
+                # Looked up and none found, as opposed to not looked up yet
+                "genres_checked": album.genres_checked_at is not None,
+                "from_playlist": bool(in_playlist),
                 "download_progress": download_progress,
                 "created_at": album.created_at.isoformat() if album.created_at else None,
             })

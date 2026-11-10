@@ -14,6 +14,9 @@ export interface LibraryArtist {
   id: string;
   name: string;
   thumbnail: string | null;
+  genres: string[];
+  /** Genres were looked up (an empty list then means none were found) */
+  genres_checked: boolean;
   mode: SubscriptionMode;
   /** Whether you like it */
   liked: boolean;
@@ -38,7 +41,15 @@ export interface LibraryAlbum {
   tracks_total: number;
   tracks_downloaded: number;
   tracks_failed: number;
-  tracks_with_lyrics: number;
+  /** Downloaded tracks without lyrics */
+  tracks_missing_lyrics: number;
+  /** Downloaded tracks whose lyrics aren't synced */
+  tracks_plain_lyrics: number;
+  genres: string[];
+  /** Genres were looked up (an empty list then means none were found) */
+  genres_checked: boolean;
+  /** A playlist (in albums mode) lists one of its songs */
+  from_playlist: boolean;
   download_progress: number;
   created_at: string | null;
 }

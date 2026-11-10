@@ -26,9 +26,20 @@ module.exports = {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(100%)' },
         },
+        // A bottom sheet coming up from under the screen's edge
+        'sheet-up': {
+          '0%': { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(0)' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
       },
       animation: {
         'artwork-shimmer': 'artwork-shimmer 1.6s ease-in-out infinite',
+        'sheet-up': 'sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
+        'fade-in': 'fade-in 0.28s ease-out',
       },
     },
   },
