@@ -1,5 +1,5 @@
 // src/hooks/useDropdown.ts
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, RefObject } from 'react';
 
 // Menus open right now, oldest first. A click inside a menu opened from
@@ -10,6 +10,16 @@ const openMenus: HTMLElement[] = [];
 const SCREEN_GUTTER = 16;
 /** The least height `fitBelow` leaves a menu: below it, scrolling the page shows the rest */
 const MIN_FIT_HEIGHT = 240;
+/** How long a closing menu stays on screen fading out: the length of `animate-menu-out` */
+const EXIT_MS = 110;
+
+const MOTION = {
+  open: 'animate-menu-in motion-reduce:animate-none',
+  // Not clickable while it fades: a click goes to what is underneath
+  closing: 'animate-menu-out motion-reduce:animate-none pointer-events-none',
+};
+
+const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 interface DropdownOptions {
   /**
@@ -33,6 +43,10 @@ interface DropdownOptions {
  * would otherwise clip it and its own blur. It stays under its button through
  * scrolling and resizing, and closes on a click outside or Escape.
  *
+ * It grows out of its button when it opens and fades when it closes: render
+ * it while `mounted` (not `open`, which turns false as the fade starts) and
+ * add `menuMotion` to its classes.
+ *
  * `align`: which edge of the button the menu lines up with
  * `gap`: pixels between the button and the menu
  */
@@ -42,13 +56,42 @@ export function useDropdown(
   { bounds, inPage = false, fitBelow = false }: DropdownOptions = {},
 ) {
   const [open, setOpen] = useState(false);
+  // Still on screen after closing, for the fade
+  const [shown, setShown] = useState(false);
+  const mounted = open || shown;
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Before paint: with reduced motion, a closed menu goes at once
+  useLayoutEffect(() => {
+    if (open) {
+      setShown(true);
+      return;
+    }
+    if (!shown) return;
+    if (prefersReducedMotion()) {
+      setShown(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShown(false), EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [open, shown]);
+
+  // A fading menu is out of reach of the keyboard and screen readers. The
+  // focus it held goes back to the page first, so menus that hand it back to
+  // their button on closing (useMenuFocus) see it left.
   useLayoutEffect(() => {
     const menu = menuRef.current;
-    if (!open || !menu) return;
+    if (!menu) return;
+    if (!open && menu.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+    menu.inert = !open;
+  }, [open, mounted]);
+
+  // Placement, from the moment the menu is on screen until it is gone
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!mounted || !menu) return;
 
     const place = () => {
       const rect = buttonRef.current?.getBoundingClientRect();
@@ -78,15 +121,33 @@ export function useDropdown(
       // edge instead, or failing that, with the edge of the area it overflows
       const fitsLeft = rect.left + width <= maxX;
       const fitsRight = rect.right - width >= minX;
-      if (align === 'left' ? fitsLeft : !fitsRight && fitsLeft) {
-        setMenuStyle({ ...vertical, left: rect.left + scrollX });
-      } else if (fitsRight) {
-        setMenuStyle({ ...vertical, right: viewport - rect.right - scrollX });
+      const left = align === 'left' ? fitsLeft : !fitsRight && fitsLeft;
+      const menuLeft = left ? rect.left : fitsRight ? rect.right - width : Math.max(minX, maxX - width);
+      // It grows from under the middle of its button
+      const originX = Math.min(width, Math.max(0, rect.left + rect.width / 2 - menuLeft));
+      const placed = { ...vertical, transformOrigin: `${originX}px top` };
+      if (left || !fitsRight) {
+        setMenuStyle({ ...placed, left: menuLeft + scrollX });
       } else {
-        setMenuStyle({ ...vertical, left: Math.max(minX, maxX - width) + scrollX });
+        setMenuStyle({ ...placed, right: viewport - rect.right - scrollX });
       }
     };
     place();
+
+    // A menu in the page scrolls with it on its own; one under fixed chrome
+    // follows its button (the navbar moves a little as the page scrolls)
+    if (!inPage) window.addEventListener('scroll', place, { passive: true });
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place);
+      window.removeEventListener('resize', place);
+    };
+  }, [mounted, align, gap, bounds, inPage, fitBelow]);
+
+  // Closing, while it is open
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!open || !menu) return;
     openMenus.push(menu);
 
     const onPointerDown = (event: MouseEvent) => {
@@ -99,28 +160,26 @@ export function useDropdown(
       if (event.key === 'Escape' && openMenus[openMenus.length - 1] === menu) setOpen(false);
     };
 
-    // A menu in the page scrolls with it on its own; one under fixed chrome
-    // follows its button (the navbar moves a little as the page scrolls)
-    if (!inPage) window.addEventListener('scroll', place, { passive: true });
-    window.addEventListener('resize', place);
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      window.removeEventListener('scroll', place);
-      window.removeEventListener('resize', place);
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
       openMenus.splice(openMenus.indexOf(menu), 1);
     };
-  }, [open, align, gap, bounds, inPage, fitBelow]);
+  }, [open]);
 
   return {
     open,
+    /** Whether to render the menu: open, or fading after closing */
+    mounted,
     setOpen,
     toggle: () => setOpen((value) => !value),
     buttonRef,
     menuRef,
     /** Position of the menu (add `fixed`, or `absolute` with `inPage`) */
     menuStyle,
+    /** Classes animating the menu in and out */
+    menuMotion: open ? MOTION.open : MOTION.closing,
   };
 }

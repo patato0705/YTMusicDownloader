@@ -71,7 +71,7 @@ export const ThemeSwitch: React.FC<{ className?: string }> = ({ className = '' }
 
 /** The navbar's appearance button (md and up): light or dark, and the accent colour */
 export const AppearanceMenu: React.FC = () => {
-  const { open, toggle, buttonRef, menuRef, menuStyle } = useDropdown('right', 20);
+  const { open, mounted, toggle, buttonRef, menuRef, menuStyle, menuMotion } = useDropdown('right', 20);
   const { t } = useI18n();
   const title = t('settings.appearance');
 
@@ -89,8 +89,8 @@ export const AppearanceMenu: React.FC = () => {
         <Icon name="swatch" className="w-5 h-5 text-slate-700 dark:text-zinc-300 group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors" />
       </button>
 
-      {open && createPortal(
-        <div ref={menuRef} className="fixed w-64 glass-chrome rounded-2xl shadow-xl p-3 z-[60] space-y-3" style={menuStyle}>
+      {mounted && createPortal(
+        <div ref={menuRef} className={`fixed w-64 glass-chrome rounded-2xl shadow-xl p-3 z-[60] space-y-3 ${menuMotion}`} style={menuStyle}>
           <ThemeSwitch />
           <div>
             <div className="px-1 mb-2 text-xs font-medium text-muted-foreground">{t('settings.accent.label')}</div>

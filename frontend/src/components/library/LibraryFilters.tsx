@@ -211,13 +211,13 @@ export const SortControl: React.FC<SortControlProps> = ({ sort, onChange, classN
       </button>
 
       {/* In the page, scrolling with it: z-40 passes it under the navbar's z-50 like the page */}
-      {open && createPortal(
+      {dropdown.mounted && createPortal(
         <div
           ref={menuRef}
           role="menu"
           aria-label={t('library.sort.label')}
           onKeyDown={onMenuKeyDown}
-          className="absolute z-40 w-64 glass-chrome rounded-2xl shadow-2xl py-2"
+          className={`absolute z-40 w-64 glass-chrome rounded-2xl shadow-2xl py-2 ${dropdown.menuMotion}`}
           style={dropdown.menuStyle}
         >
           <MenuHeading>{t('library.sort.label')}</MenuHeading>
@@ -481,11 +481,12 @@ export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
   const active = activeFilterCount(filters);
   const results = t('library.filters.results', { count: resultCount, formatted: formatNumber(resultCount, formatLocale) });
 
-  // The counts are only worked out while the panel is open. Those over the
-  // whole library change with the library alone; the others with the picks too.
+  // The counts are only worked out while the panel is on screen (open, or
+  // fading after closing). Those over the whole library change with the
+  // library alone; the others with the picks too.
   const libraryCounts = useMemo(
-    () => (open ? libraryOptionCounts(library, context, offered, collator) : null),
-    [open, library, context, offered, collator]
+    () => (dropdown.mounted ? libraryOptionCounts(library, context, offered, collator) : null),
+    [dropdown.mounted, library, context, offered, collator]
   );
   const groups = useMemo(
     () => (libraryCounts ? filterCounts(shown, libraryCounts, filters, context) : []),
@@ -539,14 +540,14 @@ export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
       </button>
 
       {/* Scrolls with the page and under the navbar, like the sort menu */}
-      {dropdown.open && wide && createPortal(
+      {dropdown.mounted && wide && createPortal(
         <div
           ref={dropdown.menuRef}
           role="dialog"
           aria-labelledby={titleId}
           tabIndex={-1}
           onKeyDown={keepTabInside}
-          className="absolute z-40 w-[44rem] glass-chrome rounded-2xl shadow-2xl flex flex-col overflow-hidden outline-none"
+          className={`absolute z-40 w-[44rem] glass-chrome rounded-2xl shadow-2xl flex flex-col overflow-hidden outline-none ${dropdown.menuMotion}`}
           style={dropdown.menuStyle}
         >
           <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-slate-200/70 dark:border-white/10">

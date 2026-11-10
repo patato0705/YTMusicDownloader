@@ -86,11 +86,23 @@ module.exports = {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
         },
+        // A menu growing out of its button (useDropdown sets the origin)
+        'menu-in': {
+          '0%': { opacity: '0', transform: 'scale(0.95)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        'menu-out': {
+          '0%': { opacity: '1' },
+          '100%': { opacity: '0' },
+        },
       },
       animation: {
         'artwork-shimmer': 'artwork-shimmer 1.6s ease-in-out infinite',
         'sheet-up': 'sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
         'fade-in': 'fade-in 0.28s ease-out',
+        'menu-in': 'menu-in 0.16s cubic-bezier(0.16, 1, 0.3, 1)',
+        // As long as EXIT_MS in useDropdown, and holding its end until the menu goes
+        'menu-out': 'menu-out 0.11s ease-in forwards',
       },
     },
   },

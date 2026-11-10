@@ -17,7 +17,7 @@ const BUTTON_CLASSES = {
 
 export const LanguageSelector: React.FC<LanguageSelectorProps> = ({ variant }) => {
   const { locale, setLocale, t } = useI18n();
-  const { open, setOpen, toggle, buttonRef, menuRef, menuStyle } = useDropdown(variant === 'navbar' ? 'right' : 'left', 20);
+  const { open, mounted, setOpen, toggle, buttonRef, menuRef, menuStyle, menuMotion } = useDropdown(variant === 'navbar' ? 'right' : 'left', 20);
   const current = getLanguage(locale) ?? SUPPORTED_LOCALES[0];
 
   return (
@@ -43,8 +43,8 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({ variant }) =
         </svg>
       </button>
 
-      {open && createPortal(
-        <div ref={menuRef} className="fixed w-48 glass-chrome rounded-xl shadow-xl py-2 z-[60]" style={menuStyle}>
+      {mounted && createPortal(
+        <div ref={menuRef} className={`fixed w-48 glass-chrome rounded-xl shadow-xl py-2 z-[60] ${menuMotion}`} style={menuStyle}>
           {SUPPORTED_LOCALES.map((language) => (
             <button
               key={language.code}
