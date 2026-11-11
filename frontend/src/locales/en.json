@@ -250,6 +250,7 @@
     "retryImport": "The album's tracklist will be fetched again, then its tracks downloaded",
     "retryFailed": "Could not queue the tracks",
     "lyrics": "Lyrics",
+    "notDownloadedNote": "Not downloaded: lyrics and download status appear once the album is downloaded.",
     "noTracks": "No Tracks",
     "noTracksDescription": "This album doesn't have any tracks available yet.",
     "notFound": "Album not found"
@@ -267,9 +268,14 @@
     "formatHint": "Lines starting with [mm:ss.xx] are treated as synced lyrics.",
     "willSaveAs": "Will be saved as {kind} lyrics.",
     "willClear": "Saving with empty text removes the lyrics file; the next retry sweep will query LRCLIB again.",
+    "instrumental": "LRCLIB lists this track as instrumental: there are no lyrics.",
+    "instrumentalHint": "LRCLIB lists this track as instrumental, so it is not retried. Paste lyrics to override.",
+    "pendingHint": "Not looked up on LRCLIB yet: this happens once the audio is downloaded and the lyrics queue gets to it.",
     "kind": {
       "synced": "Synced",
       "plain": "Plain",
+      "instrumental": "Instrumental",
+      "pending": "Pending",
       "none": "None"
     }
   },

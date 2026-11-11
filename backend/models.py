@@ -113,6 +113,8 @@ class Track(Base):
         index=True,
     )
     track_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # synced | plain (a .lrc at lyrics_local) | instrumental (LRCLIB says there
+    # are no lyrics; no file) | None (not found yet, retried by the scheduler)
     lyrics: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, default=None)
     lyrics_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     # When the scheduler last queued a lyrics recovery/upgrade for this track.

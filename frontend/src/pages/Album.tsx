@@ -316,6 +316,8 @@ export default function Album(): JSX.Element {
         {tracks.length > 0 ? (
           <section>
             <SectionHeader>{t('album.trackList')}</SectionHeader>
+            {/* YTMusic's tracklist: says why there's no lyrics or status column */}
+            {!isFollowing && <p className="text-sm text-muted-foreground -mt-2 mb-4 px-1">{t('album.notDownloadedNote')}</p>}
 
             <div className="glass rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
@@ -358,6 +360,7 @@ export default function Album(): JSX.Element {
                               <LyricsBadge
                                 iconOnly
                                 kind={track.lyrics}
+                                pending={track.lyrics_pending}
                                 title={t('lyrics.open')}
                                 onClick={() => setLyricsTrack(track)}
                               />

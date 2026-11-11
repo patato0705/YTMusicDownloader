@@ -15,7 +15,7 @@ import { Icon } from './icons';
 // starts with [mm:ss.xx] makes the whole file "synced".
 const LRC_TIMESTAMP_RE = /^\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]/m;
 
-function classifyLyrics(content: string): LyricsKind {
+function classifyLyrics(content: string): 'synced' | 'plain' | null {
   if (!content.trim()) return null;
   return LRC_TIMESTAMP_RE.test(content) ? 'synced' : 'plain';
 }
@@ -73,6 +73,9 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
   const isEditing = canEdit && editable;
   const draftKind = classifyLyrics(draft);
   const clearing = dirty && draftKind === null;
+  // LRCLIB says there are no lyrics; pasting some still overrides that
+  const instrumental = track.lyrics === 'instrumental' && !original;
+  const pending = !track.lyrics && !!track.lyrics_pending;
 
   const handleSave = async () => {
     setSaving(true);
@@ -92,7 +95,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
     <Modal
       title={track.title}
       subtitle={primaryArtistName(track) || t('album.unknownArtist')}
-      headerExtra={<LyricsBadge kind={track.lyrics} />}
+      headerExtra={<LyricsBadge kind={track.lyrics} pending={track.lyrics_pending} />}
       onClose={onClose}
       dismissible={!dirty && !saving}
       size="xl"
@@ -129,7 +132,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
             onChange={(e) => setDraft(e.target.value)}
             readOnly={!isEditing}
             spellCheck={false}
-            placeholder={isEditing ? t('lyrics.placeholder') : t('lyrics.empty')}
+            placeholder={isEditing ? t('lyrics.placeholder') : instrumental ? t('lyrics.instrumental') : t('lyrics.empty')}
             className="flex-1 min-h-[16rem] [@media(max-height:500px)]:min-h-[6rem] w-full resize-none rounded-2xl p-4 font-mono text-sm leading-relaxed bg-white/60 dark:bg-black/30 border border-slate-200/50 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 read-only:opacity-80"
           />
           <div className="flex items-center justify-between gap-3 mt-2 px-1 min-h-[1.25rem]">
@@ -142,7 +145,11 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
                     ? draftKind
                       ? t('lyrics.willSaveAs', { kind: t(`lyrics.kind.${draftKind}`) })
                       : t('lyrics.willClear')
-                    : t('lyrics.formatHint')}
+                    : instrumental
+                      ? t('lyrics.instrumentalHint')
+                      : pending
+                        ? t('lyrics.pendingHint')
+                        : t('lyrics.formatHint')}
             </p>
             {track.lyrics_local && (
               <p className="text-xs text-muted-foreground font-mono truncate max-w-[50%]" title={track.lyrics_local}>

@@ -340,7 +340,7 @@ def list_tracks(
     artist_id: Optional[str] = Query(None, description="Filter by artist ID"),
     album_id: Optional[str] = Query(None, description="Filter by album ID"),
     status_filter: Optional[str] = Query(None, pattern="^(available|queued|downloading|done|failed)$", description="Filter by track status"),
-    lyrics: Optional[str] = Query(None, pattern="^(synced|plain|any)$", description="Filter by lyrics type (synced, plain, any)"),
+    lyrics: Optional[str] = Query(None, pattern="^(synced|plain|instrumental|any)$", description="Filter by lyrics type (synced, plain, instrumental, any)"),
     q: Optional[str] = Query(None, max_length=200, description="Case-insensitive substring match on track title"),
     limit: int = Query(100, ge=1, le=1000, description="Max results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
@@ -353,7 +353,8 @@ def list_tracks(
     - artist_id: Filter by artist (optional)
     - album_id: Filter by album (optional)
     - status: Filter by status (available, queued, downloading, done, failed)
-    - lyrics: Filter by lyrics type (synced, plain, any)
+    - lyrics: Filter by lyrics type (synced, plain, instrumental, any;
+      "any" is any lyrics file, so not instrumental)
     - q: Case-insensitive substring match on the track title
     - limit: Max results (default 100, max 1000)
     - offset: Pagination offset (default 0)
@@ -377,7 +378,7 @@ def list_tracks(
 
         if lyrics is not None:
             if lyrics == "any":
-                query = query.filter(Track.lyrics.is_not(None))
+                query = query.filter(Track.lyrics.in_(("synced", "plain")))
             else:
                 query = query.filter(Track.lyrics == lyrics)
 
@@ -454,16 +455,17 @@ def get_library_stats(
             count_where(Track.status == "downloading").label("downloading"),
             count_where(Track.status == "queued").label("pending"),
             count_where(Track.status == "failed").label("failed"),
-            count_where(Track.lyrics.is_not(None)).label("with_lyrics"),
+            count_where(Track.lyrics.in_(("synced", "plain"))).label("with_lyrics"),
             count_where(Track.lyrics == "synced").label("with_synced_lyrics"),
             count_where(Track.lyrics == "plain").label("with_plain_lyrics"),
+            count_where(Track.lyrics == "instrumental").label("instrumental"),
             func.sum(case((Track.status == "done", Track.file_size), else_=0)).label("storage_bytes"),
         ).one()
 
         album_fields = ["total", "downloaded", "completed", "downloading", "pending", "failed"]
         track_fields = [
             "total", "downloaded", "downloading", "pending", "failed",
-            "with_lyrics", "with_synced_lyrics", "with_plain_lyrics",
+            "with_lyrics", "with_synced_lyrics", "with_plain_lyrics", "instrumental",
         ]
         storage_bytes = int(tracks.storage_bytes or 0)
 

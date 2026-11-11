@@ -86,6 +86,8 @@ export interface LibraryStats {
     with_lyrics: number;
     with_synced_lyrics: number;
     with_plain_lyrics: number;
+    /** LRCLIB lists them as instrumental: no lyrics to fetch */
+    instrumental: number;
   };
   storage: { bytes: number; gb: number };
 }

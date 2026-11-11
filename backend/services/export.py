@@ -470,6 +470,8 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
         on_disk = bool(audio and audio.exists())
         lrc = resolve_music_path(t.lyrics_local) if on_disk else None
         lrc_on_disk = bool(lrc and lrc.exists())
+        # Instrumental tracks have no .lrc: the kind alone carries over
+        instrumental = on_disk and t.lyrics == "instrumental"
 
         obj = tracks_svc.upsert_track(
             session,
@@ -482,7 +484,7 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             status="done" if on_disk else "available",
             file_path=str(audio) if on_disk else None,
             artist_valid=t.artist_valid,
-            lyrics=t.lyrics if lrc_on_disk else None,
+            lyrics=t.lyrics if lrc_on_disk or instrumental else None,
             lyrics_local=str(lrc) if lrc_on_disk else None,
         )
         result.tracks += 1

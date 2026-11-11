@@ -250,6 +250,7 @@
     "retryImport": "La liste des titres de l'album va être récupérée à nouveau, puis ses titres téléchargés",
     "retryFailed": "Impossible de mettre les titres en file d'attente",
     "lyrics": "Paroles",
+    "notDownloadedNote": "Non téléchargé : les paroles et l'état du téléchargement apparaissent une fois l'album téléchargé.",
     "noTracks": "Aucun titre",
     "noTracksDescription": "Cet album n'a pas encore de titres disponibles.",
     "notFound": "Album introuvable"
@@ -267,9 +268,14 @@
     "formatHint": "Les lignes commençant par [mm:ss.xx] sont considérées comme synchronisées.",
     "willSaveAs": "Sera enregistré comme paroles {kind}.",
     "willClear": "Enregistrer un texte vide supprime le fichier de paroles ; la prochaine vérification interrogera à nouveau LRCLIB.",
+    "instrumental": "LRCLIB indique que ce titre est instrumental : il n'a pas de paroles.",
+    "instrumentalHint": "LRCLIB indique que ce titre est instrumental, il n'est donc pas revérifié. Collez des paroles pour passer outre.",
+    "pendingHint": "Pas encore recherchées sur LRCLIB : la recherche a lieu une fois l'audio téléchargé, quand la file des paroles y arrive.",
     "kind": {
       "synced": "Synchronisées",
       "plain": "Texte brut",
+      "instrumental": "Instrumental",
+      "pending": "En attente",
       "none": "Aucune"
     }
   },

@@ -11,7 +11,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Download single albums** without following the artist.
 - **Playlists**: paste a YouTube Music playlist URL, then follow every artist in it or download every album it contains in bulk, or add the playlist to the library: followed (new songs bring in their albums or artists), and/or written as an M3U file that Jellyfin picks up as a playlist.
 - **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly).
-- **Synced lyrics** from [LRCLIB](https://lrclib.net), saved as `.lrc` sidecar files. Missing lyrics are retried daily; plain lyrics are upgraded to synced when they become available. Lyrics can also be viewed and edited by hand in the UI.
+- **Synced lyrics** from [LRCLIB](https://lrclib.net), saved as `.lrc` sidecar files. Missing lyrics are retried daily (instrumental tracks are recognised and left alone); plain lyrics are upgraded to synced when they become available. Lyrics can also be viewed and edited by hand in the UI.
 - **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
 - **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year, genres and embedded cover art.
 - **Genres** from [MusicBrainz](https://musicbrainz.org) (specific, community-voted) with [Deezer](https://www.deezer.com) as a fallback, written to the tags and NFO files so Jellyfin can browse and mix by genre. No account or API key needed.
@@ -204,7 +204,7 @@ Admins follow a country chart from **Admin Panel → Charts** and choose how man
 
 ### Lyrics
 
-After a track is downloaded, a `download_lyrics` job queries LRCLIB (cached lookup → exact lookup → fuzzy search with duration matching). Synced lyrics are saved as `<track>.lrc` next to the audio file. Each track has a lyrics badge (synced / plain / none); click it to view, paste or edit lyrics manually. Clearing the text deletes the `.lrc` and lets the next retry sweep query LRCLIB again.
+After a track is downloaded, a `download_lyrics` job queries LRCLIB (cached lookup → exact lookup → fuzzy search with duration matching). Synced lyrics are saved as `<track>.lrc` next to the audio file. Tracks LRCLIB lists as instrumental are marked as such and not retried. Each track has a lyrics badge (synced / plain / instrumental / none); click it to view, paste or edit lyrics manually. Clearing the text deletes the `.lrc` and lets the next retry sweep query LRCLIB again.
 
 ### Genres
 

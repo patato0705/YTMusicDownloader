@@ -10,16 +10,19 @@ Endpoints :
 """
 from __future__ import annotations
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..dependencies import require_auth, require_member_or_admin
 from ..jobs.jobqueue import pending_jobs
 from ..jobs.priorities import Origin
-from ..models import Album, Track, User
+from ..models import Album, Job, Track, User
+from ..settings import feature_enabled
+from ..time_utils import now_utc
 from ..services import albums as albums_svc
 from ..services import subscriptions as subs_svc
 from ..services import tracks as tracks_svc
@@ -46,6 +49,34 @@ def _ytmusic_track(track: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _mark_lyrics_pending(session: Session, tracks: List[Dict[str, Any]]) -> None:
+    """
+    Set "lyrics_pending" on each track: no lyrics yet, but a lookup is on
+    its way. That is a lyrics job running or ready to run (not one waiting
+    out a "not found" backoff, see jobs.tasks.download_lyrics), or audio
+    still to download, whose lyrics job is queued once it is on disk.
+    """
+    enabled = feature_enabled(session, "lyrics")
+    missing = [t["id"] for t in tracks if t["lyrics"] is None]
+    looking_up = set()
+    if enabled and missing:
+        track_id = Job.payload["track_id"].as_string()
+        looking_up = set(session.execute(
+            select(track_id).where(
+                Job.type == "download_lyrics",
+                track_id.in_(missing),
+                or_(
+                    Job.status == "reserved",
+                    and_(Job.status == "queued", or_(Job.scheduled_at.is_(None), Job.scheduled_at <= now_utc())),
+                ),
+            )
+        ).scalars())
+    for t in tracks:
+        t["lyrics_pending"] = enabled and t["lyrics"] is None and (
+            t["id"] in looking_up or t["status"] in ("queued", "downloading")
+        )
+
+
 @router.get("/{album_id}", status_code=status.HTTP_200_OK)
 def get_album(
     album_id: str,
@@ -65,6 +96,7 @@ def get_album(
     album = albums_svc.get_album_from_db(session, album_id)
     db_tracks = album.pop("tracks") if album else []
     if db_tracks:
+        _mark_lyrics_pending(session, db_tracks)
         return {"source": "database", "mode": album["mode"], "needs_import": False, "album": album, "tracks": db_tracks}
 
     try:

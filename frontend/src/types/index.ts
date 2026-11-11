@@ -22,7 +22,7 @@ export type MediaStatus = 'downloaded' | 'in_library' | 'downloading' | 'queued'
 export type TrackStatus = 'available' | 'queued' | 'downloading' | 'done' | 'failed';
 
 /** What kind of .lrc a downloaded track has on disk; null = none yet */
-export type LyricsKind = 'synced' | 'plain' | null;
+export type LyricsKind = 'synced' | 'plain' | 'instrumental' | null;
 
 /** Album download state (backend/services/subscriptions.py), null for albums not being downloaded */
 export type AlbumDownloadStatus = 'completed' | 'downloading' | 'pending' | 'failed' | 'idle' | null;
@@ -49,4 +49,7 @@ export interface Track {
   last_error?: string | null;
   lyrics?: LyricsKind;
   lyrics_local?: string | null;
+  /** No lyrics yet, but an LRCLIB lookup is queued or the audio is still
+   *  downloading (album page only) */
+  lyrics_pending?: boolean;
 }
