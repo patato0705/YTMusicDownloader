@@ -14,7 +14,14 @@ export interface PlaylistTrack {
   duration_seconds: number;
   track_number?: number | null;
   isExplicit?: boolean;
+  /** YouTube Music's musicVideoType: MUSIC_VIDEO_TYPE_ATV (a song), _OMV (a music video), _UGC (an upload) */
+  video_type?: string | null;
+  /** A music video's song, found by the backend: the album above is the song's */
+  song?: { id: string; title: string } | null;
 }
+
+/** An upload: not a song, and what it credits is the channel that posted it, not an artist */
+export const isUpload = (track: PlaylistTrack): boolean => track.video_type === 'MUSIC_VIDEO_TYPE_UGC';
 
 export type PlaylistMode = 'albums' | 'artists';
 
@@ -32,7 +39,7 @@ export interface SavedPlaylist {
   /** Path of the M3U file in the music folder */
   m3u_file: string | null;
   songs: number;
-  /** Songs that bring nothing in: no album (music videos, uploads) */
+  /** Songs that bring nothing in: uploads, music videos whose song wasn't found (albums mode) */
   skipped: number;
   /** Songs found in the library */
   available: number;
@@ -61,6 +68,8 @@ export interface Playlist {
   /** Its artists already followed, and its albums already downloaded */
   followed_artists: string[];
   downloaded_albums: string[];
+  /** Music videos whose song a job is looking for: the page asks again once the queue moves */
+  songs_pending: string[];
 }
 
 /** A playlist from YouTube Music with its tracks, and how it's added to the library */

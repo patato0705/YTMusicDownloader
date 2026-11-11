@@ -9,6 +9,8 @@ const CODED_ERRORS: Record<string, string> = {
   playlist_unavailable: 'playlist.unavailable',
   // Not shaped like a YouTube playlist ID (a word, a video or album ID)
   playlist_invalid: 'playlist.invalidUrl',
+  // A YouTube user's channel (what an upload credits): nothing to follow
+  not_an_artist: 'artist.notAnArtist',
 };
 
 /**

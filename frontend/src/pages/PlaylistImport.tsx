@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useJobActivity } from '../contexts/JobActivityContext';
-import { getPlaylist } from '../api/playlists';
+import { getPlaylist, isUpload } from '../api/playlists';
 import type { Playlist, PlaylistTrack, SavedPlaylist } from '../api/playlists';
 import { followArtist } from '../api/artists';
 import { downloadAlbum } from '../api/albums';
@@ -103,7 +103,7 @@ interface PlaylistView {
   thumbnail: string | null;
   author: string | null;
   tracks: PlaylistTrack[];
-  /** Every artist named on a track */
+  /** Every artist named on a track (not on uploads: they credit the channel that posted them) */
   artists: TrackGroup[];
   /** The first artist of each track, what "Follow main artists" follows */
   mainArtistIds: Set<string>;
@@ -112,14 +112,15 @@ interface PlaylistView {
 
 function playlistView(id: string, playlist: Playlist): PlaylistView {
   const tracks = playlist.tracks || [];
+  const songs = tracks.filter((track) => !isUpload(track));
   return {
     id,
     title: playlist.title || null,
     thumbnail: playlist.thumbnail || null,
     author: playlist.author || null,
     tracks,
-    artists: groupTracks<TrackGroup>(tracks, (track) => track.artists.flatMap(namedArtist)),
-    mainArtistIds: new Set(tracks.flatMap((track) => namedArtist(track.artists[0]).map((a) => a.id))),
+    artists: groupTracks<TrackGroup>(songs, (track) => track.artists.flatMap(namedArtist)),
+    mainArtistIds: new Set(songs.flatMap((track) => namedArtist(track.artists[0]).map((a) => a.id))),
     albums: groupTracks<AlbumGroup>(tracks, (track) =>
       track.album?.id && track.album.name
         ? [{
@@ -242,6 +243,8 @@ export default function PlaylistImport(): JSX.Element {
   const [saved, setSaved] = useState<SavedPlaylist | null>(restored?.playlist.saved ?? null);
   const [followedArtists, setFollowedArtists] = useState<Set<string>>(() => new Set(restored?.playlist.followed_artists));
   const [downloadedAlbums, setDownloadedAlbums] = useState<Set<string>>(() => new Set(restored?.playlist.downloaded_albums));
+  // Music videos whose song a job is still looking for
+  const [songsPending, setSongsPending] = useState<Set<string>>(() => new Set(restored?.playlist.songs_pending));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -260,7 +263,7 @@ export default function PlaylistImport(): JSX.Element {
 
   const { t } = useI18n();
   const { user } = useAuth();
-  const { refresh: refreshJobs } = useJobActivity();
+  const { revision, refresh: refreshJobs } = useJobActivity();
   // Visitors are read-only: follow/download are member+ actions on the backend
   const canModify = user?.role === 'administrator' || user?.role === 'member';
 
@@ -280,6 +283,9 @@ export default function PlaylistImport(): JSX.Element {
     setSaved(playlist.saved ?? null);
     setFollowedArtists(new Set(playlist.followed_artists));
     setDownloadedAlbums(new Set(playlist.downloaded_albums));
+    setSongsPending(new Set(playlist.songs_pending));
+    // The lookup job just queued: the badge shows it, and its end bumps `revision`
+    if (playlist.songs_pending.length > 0) refreshJobs();
   };
 
   // `refresh`: the playlist is already on screen (from the cache) and stays
@@ -342,6 +348,13 @@ export default function PlaylistImport(): JSX.Element {
     });
   }, [loadedId, saved, followedArtists, downloadedAlbums]);
 
+  // Music videos still being looked up: asked again whenever the queue moves,
+  // until their songs (and so their albums) are in
+  const lookingUp = songsPending.size > 0;
+  useEffect(() => {
+    if (loadedId && lookingUp) fetchPlaylist(loadedId, true);
+  }, [revision]);
+
   const markFollowed = (id: string) => setFollowedArtists((prev) => new Set(prev).add(id));
   const markDownloaded = (id: string) => setDownloadedAlbums((prev) => new Set(prev).add(id));
   const follow = (artist: TrackGroup) => followArtist(artist.id, artist.name);
@@ -400,8 +413,17 @@ export default function PlaylistImport(): JSX.Element {
   const unfollowedArtists = artists.filter((a) => !followedArtists.has(a.id));
   const unfollowedMainArtists = mainArtists.filter((a) => !followedArtists.has(a.id));
   const undownloadedAlbums = albums.filter((a) => !downloadedAlbums.has(a.id));
-  // Songs with no album (music videos, uploads): no import brings them in
-  const noAlbumCount = tracks.filter((track) => !track.album?.id).length;
+  // What the playlist can't bring in, as its summary counts it (backend
+  // services/playlists.summary: no album, or in artists mode no main
+  // artist), by reason: uploads; videos with no album (their song not
+  // found, those still being looked up aside); in artists mode, songs with
+  // no artist credited
+  const uploads = tracks.filter(isUpload);
+  const artistsMode = saved?.mode === 'artists';
+  const songsLeft = tracks.filter((track) => !isUpload(track) && !songsPending.has(track.id));
+  const noAlbum = songsLeft.filter((track) => !track.album?.id);
+  const noArtist = artistsMode ? songsLeft.filter((track) => track.album?.id && !track.artists[0]?.id) : [];
+  const skippedCount = uploads.length + noAlbum.length + noArtist.length;
 
   const linkClass = 'hover:text-accent-600 dark:hover:text-accent-400 hover:underline transition-colors text-left';
   // A link inside a row opens its page without also expanding the row
@@ -431,6 +453,21 @@ export default function PlaylistImport(): JSX.Element {
       </Link>
     );
   };
+
+  /** One reason songs are skipped, and their titles */
+  const skippedList = (heading: string, list: PlaylistTrack[]) => list.length > 0 && (
+    <div className="mt-2">
+      <p className="font-medium">{heading}</p>
+      <ul className="mt-1 max-h-48 overflow-y-auto space-y-0.5 pl-3">
+        {list.map((track, idx) => (
+          <li key={`${track.id}-${idx}`} className="truncate">
+            {track.title}
+            {track.artists[0]?.name && <> · {track.artists[0].name}</>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 
   const duration = (track: PlaylistTrack) => (track.duration_seconds ? formatDuration(track.duration_seconds) : NONE);
 
@@ -510,7 +547,8 @@ export default function PlaylistImport(): JSX.Element {
           {/* Playlist summary */}
           <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-6 md:p-8 border-gradient shadow-sm">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="flex items-center gap-4 min-w-0">
+              {/* The card's width, not its longest line's (a long skipped title) */}
+              <div className="flex items-center gap-4 min-w-0 self-stretch sm:flex-1">
                 <Artwork
                   src={getImageUrl(view.thumbnail)}
                   kind="playlist"
@@ -530,10 +568,21 @@ export default function PlaylistImport(): JSX.Element {
                       formatDurationLong(tracks.reduce((sum, track) => sum + (track.duration_seconds || 0), 0)),
                     ].join(' · ')}
                   </p>
-                  {noAlbumCount > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {t('playlist.noAlbumNote', { count: noAlbumCount })}
+                  {lookingUp && (
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                      <Spinner size="sm" className="text-accent-600 dark:text-accent-500" />
+                      {t('playlist.songsPending', { count: songsPending.size })}
                     </p>
+                  )}
+                  {skippedCount > 0 && (
+                    <details className="text-xs text-muted-foreground mt-1">
+                      <summary className="cursor-pointer select-none w-fit hover:text-foreground transition-colors">
+                        {t('playlist.skippedNote', { count: skippedCount })}
+                      </summary>
+                      {skippedList(t('playlist.skippedUploads', { count: uploads.length }), uploads)}
+                      {skippedList(t('playlist.skippedNoSong', { count: noAlbum.length }), noAlbum)}
+                      {skippedList(t('playlist.skippedNoArtist', { count: noArtist.length }), noArtist)}
+                    </details>
                   )}
                 </div>
               </div>

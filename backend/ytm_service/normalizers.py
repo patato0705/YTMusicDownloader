@@ -67,18 +67,20 @@ def resize_thumbnail_url(url: Optional[str], size: int, crop: bool = False) -> O
     hint computed for the original picture, which Google refuses (HTTP 400)
     once the size changes. crop=True adds "p", which crops the original
     picture to a square instead of fitting it inside one; an artist's square
-    crop shows more than its banner, which is a crop too.
+    crop shows more than its banner, which is a crop too. "c" (a channel
+    picture's crop) does the same, and Google refuses the two together.
 
     URLs from other hosts (i.ytimg.com video stills) are returned unchanged.
     """
     if not url or not any(host in url for host in _RESIZABLE_HOSTS):
         return url
     base, _, options = url.partition("=")
+    split = options.split("-")
     kept = [
-        o for o in options.split("-")
-        if o and not _SIZE_OPTION.match(o) and o != "p" and not o.startswith("dc")
+        o for o in split
+        if o and not _SIZE_OPTION.match(o) and o not in ("p", "c") and not o.startswith("dc")
     ]
-    wanted = [f"w{size}", f"h{size}"] + (["p"] if crop or "p" in options.split("-") else [])
+    wanted = [f"w{size}", f"h{size}"] + (["p"] if crop or "p" in split or "c" in split else [])
     return f"{base}={'-'.join(wanted + kept)}"
 
 
@@ -97,6 +99,18 @@ def normalize_artist_entry(raw: Any) -> Dict[str, Optional[str]]:
         aid = endpoint.get("browseId") if isinstance(endpoint, dict) else None
     name = raw.get("name") or raw.get("title") or raw.get("artist")
     return {"id": str(aid) if aid else None, "name": str(name) if name else None}
+
+
+UPLOAD_VIDEO_TYPE = "MUSIC_VIDEO_TYPE_UGC"
+
+
+def is_upload(track: Dict[str, Any]) -> bool:
+    """
+    A normalized track that's an upload (UGC), not a song or an artist's
+    music video: what it credits is the channel that uploaded it, a YouTube
+    user's (see adapter.get_artist's "channel"), not the song's artist.
+    """
+    return track.get("video_type") == UPLOAD_VIDEO_TYPE
 
 
 def normalize_track(raw: Dict[str, Any], index: Optional[int] = None) -> Dict[str, Any]:
@@ -122,6 +136,8 @@ def normalize_track(raw: Dict[str, Any], index: Optional[int] = None) -> Dict[st
         "duration_seconds": _int_or_none(raw.get("duration_seconds")) or 0,
         "track_number": _int_or_none(raw.get("trackNumber")) or index,
         "isExplicit": bool(raw.get("isExplicit")),
+        # MUSIC_VIDEO_TYPE_ATV (a song), _OMV (a music video), _UGC (an upload)...
+        "video_type": raw.get("videoType") or None,
     }
 
 

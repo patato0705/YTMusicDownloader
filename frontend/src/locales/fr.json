@@ -120,7 +120,8 @@
       "download_lyrics": "paroles",
       "sync_artist": "synchros d'artiste",
       "sync_chart": "synchros de charts",
-      "import_album": "imports d'album"
+      "import_album": "imports d'album",
+      "find_video_songs": "recherches de clips"
     }
   },
   "settings": {
@@ -205,7 +206,12 @@
     "delete": "Supprimer l'artiste",
     "deleteTitle": "Supprimer l'artiste",
     "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet artiste et tous les albums, titres et fichiers associés ? Cette action est irréversible.",
-    "deleted": "Artiste supprimé avec succès"
+    "deleted": "Artiste supprimé avec succès",
+    "channelTitle": "Pas une page d'artiste",
+    "channelNotice": "C'est une chaîne YouTube : une mise en ligne crédite la chaîne qui l'a publiée. Elle n'a aucune sortie à suivre.",
+    "namesakes": "Artistes portant ce nom",
+    "noNamesakes": "Aucun artiste de ce nom sur YouTube Music.",
+    "notAnArtist": "C'est une chaîne YouTube, pas un artiste : il n'y a rien à suivre."
   },
   "album": {
     "album": "Album",
@@ -826,8 +832,13 @@
     "importFromPlaylist": "Importer depuis une playlist",
     "trackView": "Titres",
     "unavailable": "Impossible de lire cette playlist. Elle n'existe pas, est privée, ou YouTube Music ne répond pas pour le moment.",
-    "noAlbumNote": "{count} titres n'ont pas d'album (clips, mises en ligne) : ignorés.",
-    "noAlbumNote_one": "1 titre n'a pas d'album (un clip ou une mise en ligne) : ignoré.",
+    "skippedNote": "{count} titres ne peuvent pas être importés",
+    "skippedNote_one": "1 titre ne peut pas être importé",
+    "skippedUploads": "Mises en ligne ({count}) : ce ne sont pas des morceaux. Elles créditent la chaîne YouTube qui les a publiées, pas un artiste.",
+    "skippedNoSong": "Sans album ({count}) : vidéos dont YouTube Music n'a pas le morceau.",
+    "songsPending": "Recherche des morceaux de {count} clips...",
+    "songsPending_one": "Recherche du morceau d'1 clip...",
+    "skippedNoArtist": "Aucun artiste crédité ({count})",
     "options": {
       "addTitle": "Ajouter la playlist à la bibliothèque",
       "editTitle": "Options de la playlist",

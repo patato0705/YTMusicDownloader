@@ -6,12 +6,12 @@ read, so a caller never mistakes an outage for an empty answer.
 """
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .client import call
 from . import normalizers as N
 from ..schemas import AlbumSchema, PlaylistSchema, TrackSchema
-from ..text_utils import fold
+from ..text_utils import fold, song_title_key
 
 logger = logging.getLogger("ytm_service.adapter")
 
@@ -60,14 +60,20 @@ def get_artist(channel_id: str) -> Dict[str, Any]:
     (the full lists, not the page's first 10), and its similar artists.
     """
     raw = _call("get_artist", channel_id, dict, channelId=channel_id)
-    thumbnails = N.normalize_thumbnails(raw.get("thumbnails"))
+    picture = N.best_thumbnail(raw.get("picture"))
     return {
         "id": str(channel_id),
         "name": str(raw["name"]) if raw.get("name") else None,
+        # A YouTube user's channel (a YouTuber credited on an upload), not an
+        # artist: no releases, and nothing to follow
+        "channel": bool(raw.get("channel")),
         # The page's wide banner (kept for backdrop.jpg)
-        "thumbnails": thumbnails,
-        # The artist is shown round, so the same picture cropped square
-        "thumbnail": N.resize_thumbnail_url(N.pick_best_thumbnail_url(thumbnails), N.CARD_THUMBNAIL_SIZE, crop=True),
+        "thumbnails": N.normalize_thumbnails(raw.get("thumbnails")),
+        # What the square picture is cropped from: the banner's original for
+        # an artist, the channel's own (round) picture for a YouTube user
+        "picture": picture,
+        # The artist is shown round, so that picture cropped square
+        "thumbnail": N.resize_thumbnail_url(picture, N.CARD_THUMBNAIL_SIZE, crop=True),
         "description": _trim_to_complete_sentence(raw.get("description") or ""),
         "albums": _artist_releases(raw.get("albums"), channel_id),
         "singles": _artist_releases(raw.get("singles"), channel_id),
@@ -279,4 +285,50 @@ def search_all(q: str, limit_per_type: int) -> Dict[str, List[Dict[str, Any]]]:
         "artists": artists,
         "albums": _live_albums(_search(q, "albums", limit_per_type, {"album"}), artists),
         "songs": _search(q, "songs", limit_per_type, {"song", "track"}),
+    }
+
+
+def artists_named(name: str, exclude_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    The artists YouTube Music finds under exactly this name (case, accents
+    and punctuation aside): where a YouTube user's channel points to, when
+    the same person also has an artist page. [{id, name, thumbnail}]
+    """
+    wanted = fold(name)
+    found = (N.normalize_search_item(item, {"artist"}) for item in _call("search", name, list, name, filter="artists", limit=10))
+    return [
+        {"id": a["id"], "name": a["name"], "thumbnail": a.get("thumbnail")}
+        for a in found
+        if a and a.get("id") and a["id"] != exclude_id and fold(a.get("name")) == wanted
+    ]
+
+
+def find_song(video_title: str, artist_id: str, artist_name: Optional[str]) -> Optional[Dict[str, Any]]:
+    """
+    The song of a music video: a video has no album, its song does. Only
+    an exact find is taken: a song of the same artist (its id among the
+    song's artists) with the same title, or the same title once what only
+    videos add is left out ("(Official Video)", the "Artist - " before it,
+    how featured artists are written; see text_utils.song_title_key). A
+    version in brackets ("(Live)", "(Radio Edit)") must be the same.
+    {"id", "title", "album": {"id", "name"}}, or None when there's no such
+    song.
+    """
+    query = f"{artist_name} {video_title}" if artist_name else video_title
+    songs = [
+        s for s in _call("search", query, list, query, filter="songs", limit=10)
+        if isinstance(s, dict) and s.get("videoId") and (s.get("album") or {}).get("id")
+        and artist_id in {(a or {}).get("id") for a in s.get("artists") or []}
+    ]
+    exact = fold(video_title)
+    key = song_title_key(video_title, artist_name)
+    song = next((s for s in songs if fold(s.get("title")) == exact), None) or next(
+        (s for s in songs if song_title_key(s.get("title"), artist_name) == key), None
+    )
+    if song is None:
+        return None
+    return {
+        "id": str(song["videoId"]),
+        "title": str(song.get("title") or video_title),
+        "album": {"id": str(song["album"]["id"]), "name": song["album"].get("name")},
     }

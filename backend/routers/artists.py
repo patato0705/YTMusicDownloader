@@ -19,8 +19,9 @@ from sqlalchemy.orm import Session
 from ..db import get_session
 from ..dependencies import require_auth, require_member_or_admin
 from ..jobs.priorities import Origin
-from ..models import Artist, User
+from ..models import Artist, User, UserChannel
 from ..services import albums as albums_svc
+from ..services import artists as artists_svc
 from ..services import recommendations as recommendations_svc
 from ..services import subscriptions as subs_svc
 from ..ytm_service import adapter as ytm_adapter
@@ -42,6 +43,10 @@ def get_artist(
     the DB ("source": "database"); otherwise from YTMusic, each release
     marked with what the DB knows of it (in_database, mode, download_status).
     "liked": whether you like it (only artists of the library can be).
+    "channel": a YouTube user's channel, not an artist (what an upload
+    credits), with "namesakes": the artists of the same name, where the
+    page points instead. "in_library": it has a row (one an admin can
+    delete), followed or not.
     """
     subscription = subs_svc.get_artist_subscription(session, artist_id)
     artist = session.get(Artist, artist_id)
@@ -53,6 +58,9 @@ def get_artist(
             "source": "database",
             "subscription_mode": "full",
             "liked": liked,
+            "channel": False,
+            "namesakes": [],
+            "in_library": True,
             "artist": {
                 "id": artist.id,
                 "name": artist.name,
@@ -66,6 +74,11 @@ def get_artist(
         artist_data = ytm_adapter.get_artist(artist_id)
     except ytm_adapter.YTMusicUnavailable:
         raise ytmusic_unavailable()
+
+    # Remembered either way, so a channel is never followed (and an artist
+    # once taken for one can be again)
+    artists_svc.note_channel(session, artist_id, artist_data["channel"])
+    session.commit()
 
     known = {album["id"]: album for album in db_albums}
     albums = []
@@ -81,10 +94,19 @@ def get_artist(
             "mode": album["mode"] if album else None,
             "download_status": album["download_status"] if album else None,
         })
+    namesakes = []
+    if artist_data["channel"] and artist_data["name"]:
+        try:
+            namesakes = ytm_adapter.artists_named(artist_data["name"], exclude_id=artist_id)
+        except ytm_adapter.YTMusicUnavailable:
+            logger.warning("Couldn't search for artists named like channel %s", artist_id)
     return {
         "source": "ytmusic",
         "subscription_mode": subscription.mode if subscription else None,
         "liked": liked,
+        "channel": artist_data["channel"],
+        "namesakes": namesakes,
+        "in_library": artist is not None,
         "artist": {
             "id": artist_data["id"],
             "name": artist_data["name"],
@@ -108,8 +130,11 @@ def follow_artist(
     subscription, and like it (no longer "not interested" either):
     following is a choice of yours, unlike the follows of charts and
     playlists. `name` is the artist's name as the page shows it, for its
-    row until the sync job fetches the artist and its releases.
+    row until the sync job fetches the artist and its releases. A YouTube
+    user's channel isn't an artist: 400 not_an_artist.
     """
+    if session.get(UserChannel, artist_id) is not None:
+        raise HTTPException(status_code=400, detail="not_an_artist")
     followed = subs_svc.follow_artist(session, artist_id, name, user_id=current_user.id, origin=Origin.USER)
     session.flush()  # autoflush=False: the like checks the new subscription
     recommendations_svc.like(session, current_user.id, artist_id)

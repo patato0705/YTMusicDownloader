@@ -25,7 +25,6 @@ from ..dependencies import require_auth, require_member_or_admin
 from ..jobs.priorities import Origin
 from ..models import Album, ArtistSubscription, Playlist, User
 from ..services import playlists as playlists_svc
-from ..ytm_service import adapter
 from ..ytm_service.adapter import YTMusicUnavailable
 
 logger = logging.getLogger("routers.playlists")
@@ -79,12 +78,20 @@ def get_playlist(
     current_user: User = Depends(require_auth),
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    """The playlist from YouTube Music, with how it's added to the library ("saved")."""
+    """
+    The playlist from YouTube Music, with how it's added to the library
+    ("saved"). Its music videos stand for their songs where those were found
+    already; the others are looked up by a job ("songs_pending": their
+    video ids), and the page asks again once it's done.
+    """
     playlist_id = _playlist_id(playlist_id)
     try:
-        data = adapter.get_playlist(playlist_id)
+        data = playlists_svc.fetch_playlist(session, playlist_id)
     except YTMusicUnavailable:
         raise _unreadable()
+    to_look_up = data.pop("videos_to_look_up")
+    if to_look_up:
+        playlists_svc.queue_song_lookup(session, playlist_id, to_look_up, origin=Origin.USER)
     playlist = session.get(Playlist, playlist_id)
     tracks = data.get("tracks") or []
     artist_ids = {a["id"] for t in tracks for a in t.get("artists") or [] if a.get("id")}
@@ -105,6 +112,7 @@ def get_playlist(
         "saved": playlists_svc.summary(session, playlist) if playlist else None,
         "followed_artists": list(followed_artists),
         "downloaded_albums": list(downloaded_albums),
+        "songs_pending": [v["id"] for v in to_look_up],
     }
 
 

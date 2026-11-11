@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..jobs.jobqueue import cancel_download_jobs, enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
-from ..models import Artist, Album, ArtistSubscription, Track
+from ..models import Artist, Album, ArtistSubscription, Track, UserChannel
 from ..time_utils import now_utc
 
 logger = logging.getLogger("services.subscriptions")
@@ -82,8 +82,11 @@ def follow_artist(
     Follow an artist in full: its row (named `name` if it's new), a full
     subscription (a light one upgraded), and a sync job, which fetches the
     artist and brings in every release. No network here. Does not commit.
-    Returns False when it was already followed in full.
+    Returns False when it was already followed in full, or is a YouTube
+    user's channel (UserChannel), which isn't followed.
     """
+    if session.get(UserChannel, artist_id) is not None:
+        return False
     subscription = get_artist_subscription(session, artist_id)
     if subscription is not None and subscription.mode == "full":
         return False

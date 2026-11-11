@@ -259,6 +259,36 @@ class PlaylistEntry(Base):
     duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
+class UserChannel(Base):
+    """
+    A YouTube user's channel met where an artist was expected (what an
+    upload credits; adapter.get_artist's "channel"): never followed
+    (subscriptions.follow_artist). Forgotten if its page turns out to be an
+    artist's after all (services/artists.note_channel).
+    """
+    __tablename__ = "user_channels"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    seen_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
+class VideoSong(Base):
+    """
+    The song of a music video seen in a playlist (a video has no album, its
+    song does), as adapter.find_song found it: song_id None when it found
+    none, looked for again once checked_at is old enough
+    (services/playlists.VIDEO_SONG_RETRY).
+    """
+    __tablename__ = "video_songs"
+
+    video_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    song_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    song_title: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    album_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    album_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    checked_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
 # Recommendations (see services/recommendations.py)
 
 class RelatedArtist(Base):

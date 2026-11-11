@@ -43,6 +43,8 @@ class TrackSchema(BaseModel):
     duration_seconds: int
     track_number: Optional[int] = None
     isExplicit: bool = False
+    # YouTube Music's musicVideoType: an upload (UGC) credits its uploader, not an artist
+    video_type: Optional[str] = None
 
     model_config = {"extra": "ignore"}
 

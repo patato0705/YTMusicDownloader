@@ -21,7 +21,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { GenreChips } from '../components/ui/GenreChips';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
-import { categorizeAlbums, getAlbumStatus, apiErrorMessage, albumPath } from '../utils';
+import { categorizeAlbums, getAlbumStatus, apiErrorMessage, albumPath, artistPath } from '../utils';
 
 export default function Artist(): JSX.Element {
   const { artistId } = useParams<{ artistId: string }>();
@@ -110,6 +110,8 @@ export default function Artist(): JSX.Element {
   const followed = page.subscription_mode === 'full';
   // Only artists of the library can be liked: their similar artists are known
   const inLibrary = page.subscription_mode != null;
+  // What an admin can delete: a subscription, or a row left without one
+  const deletable = isAdmin && (inLibrary || page.in_library);
   const { albums, singles } = categorizeAlbums(releases);
 
   const setSubscriptionMode = (mode: ArtistPage['subscription_mode']) =>
@@ -183,6 +185,12 @@ export default function Artist(): JSX.Element {
     }
   };
 
+  const deleteButton = deletable && (
+    <Button onClick={openDeleteConfirm} variant="subtleDanger" isLoading={deleteLoading} className="md:ml-auto">
+      {t('artist.delete')}
+    </Button>
+  );
+
   const releaseGrid = (title: string, list: ArtistRelease[]) => list.length > 0 && (
     <section>
       <SectionHeader>{title}</SectionHeader>
@@ -251,6 +259,15 @@ export default function Artist(): JSX.Element {
             <div className="flex-1 min-w-0 w-full">
               <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground mb-3 md:mb-4">{artist.name}</h1>
 
+              {page.channel ? (
+                // A YouTube user's channel: nothing here to follow or like
+                <div className="max-w-xl mx-auto md:mx-0">
+                  <p className="md:text-lg font-semibold text-foreground mb-1">{t('artist.channelTitle')}</p>
+                  <p className="text-muted-foreground">{t('artist.channelNotice')}</p>
+                  {deleteButton && <div className="mt-6">{deleteButton}</div>}
+                </div>
+              ) : (
+              <>
               <GenreChips genres={artist.genres} className="justify-center md:justify-start mb-4" />
 
               <p className="md:text-lg text-muted-foreground mb-6 md:mb-8">
@@ -281,20 +298,40 @@ export default function Artist(): JSX.Element {
                 )}
 
                 {/* Last and quiet: it opens a confirmation, the dialog carries the red */}
-                {isAdmin && page.subscription_mode != null && (
-                  <Button onClick={openDeleteConfirm} variant="subtleDanger" isLoading={deleteLoading} className="md:ml-auto">
-                    {t('artist.delete')}
-                  </Button>
-                )}
+                {deleteButton}
               </div>
+              </>
+              )}
             </div>
           </div>
         </div>
 
+        {page.channel && (
+          <section>
+            <SectionHeader>{t('artist.namesakes')}</SectionHeader>
+            {page.namesakes.length > 0 ? (
+              <div className={MEDIA_GRID}>
+                {page.namesakes.map((namesake) => (
+                  <MediaCard
+                    key={namesake.id}
+                    id={namesake.id}
+                    title={namesake.name}
+                    thumbnail={getImageUrl(namesake.thumbnail)}
+                    type="artist"
+                    to={artistPath(namesake.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground">{t('artist.noNamesakes')}</p>
+            )}
+          </section>
+        )}
+
         {releaseGrid(t('artist.albums'), albums)}
         {releaseGrid(t('artist.singles'), singles)}
 
-        {releases.length === 0 && (
+        {!page.channel && releases.length === 0 && (
           <EmptyState icon="disc" title={t('artist.noAlbums')}>
             <p>{t('artist.noAlbumsDescription')}</p>
           </EmptyState>

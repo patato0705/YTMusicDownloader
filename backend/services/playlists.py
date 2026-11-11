@@ -14,8 +14,13 @@ library scan: additions, removals, order). It lists the playlist's songs
 that are in the library, in playlist order, with paths relative to it, and
 is rewritten after each scan and whenever one of its songs finishes
 downloading. A song that leaves a followed playlist leaves the M3U; its
-file stays, it belongs to its album. Songs with no album (music videos,
-uploads) are skipped.
+file stays, it belongs to its album.
+
+A music video has no album: its song is looked for and, found, stands in
+for it (fetch_playlist). An upload (UGC) isn't a song, and what it credits
+is whoever uploaded it, a YouTube user and not an artist: it brings in
+nothing, in either mode, and is counted as skipped like a video whose song
+wasn't found.
 
 The work a playlist starts (album downloads, artist follows) carries the
 origin of the sync that found it: BULK for adding a playlist or switching
@@ -25,20 +30,23 @@ from __future__ import annotations
 import logging
 import os
 import re
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import or_, select, func
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from .. import config
 from ..downloader.core import safe_name
 from ..jobs.jobqueue import enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
-from ..models import Album, Job, Playlist, PlaylistEntry, Track
-from ..time_utils import now_utc
+from ..models import Album, Job, Playlist, PlaylistEntry, Track, VideoSong
+from ..time_utils import ensure_timezone_aware, now_utc
 from ..ytm_service import adapter as ytm_adapter
+from ..ytm_service import normalizers as N
 from . import subscriptions as subs_svc
 
 logger = logging.getLogger("services.playlists")
@@ -80,23 +88,185 @@ def m3u_dir() -> Path:
 # ENTRIES
 # ============================================================================
 
+def fetch_playlist(session: Session, playlist_id: str) -> Dict[str, Any]:
+    """
+    adapter.get_playlist, with the songs already found for its music videos
+    (a video has no album, its song does: see VideoSong): such a track gets
+    its song's album and a "song": {id, title}. The music videos still to
+    look up are in "videos_to_look_up", for look_up_songs: one search each
+    is too slow for a request, so a job does it (queue_song_lookup, or the
+    scan itself). Raises YTMusicUnavailable when the playlist can't be read.
+    """
+    data = ytm_adapter.get_playlist(playlist_id)
+    tracks = [t for t in data.get("tracks") or [] if _needs_song(t)]
+    known = _known_songs(session, {t["id"] for t in tracks})
+    for t in tracks:
+        row = known.get(t["id"])
+        if row is not None and row.song_id:
+            t["album"] = {"id": row.album_id, "name": row.album_title}
+            t["song"] = {"id": row.song_id, "title": row.song_title}
+    to_look_up = {t["id"]: _video(t) for t in tracks if t["id"] not in known}
+    data["videos_to_look_up"] = list(to_look_up.values())
+    return data
+
+
+# How long a music video whose song wasn't found waits to be looked up again
+VIDEO_SONG_RETRY = timedelta(days=7)
+# Searches at once: fewer than the client's YTM_MAX_CONC, so syncs, imports
+# and pages still get through while a long playlist is looked up
+LOOKUP_WORKERS = 2
+
+
+def _needs_song(track: Dict[str, Any]) -> bool:
+    """A video with no album that isn't an upload, credited to an artist: what find_song can look up."""
+    main = next(iter(track.get("artists") or []), None) or {}
+    return bool(track.get("id") and not (track.get("album") or {}).get("id")
+                and not N.is_upload(track) and main.get("id"))
+
+
+def _video(track: Dict[str, Any]) -> Dict[str, Any]:
+    """A track to look up, as look_up_songs takes it."""
+    main = track["artists"][0]
+    return {"id": track["id"], "title": track.get("title") or "", "artist_id": main["id"], "artist_name": main.get("name")}
+
+
+def _known_songs(session: Session, video_ids: Iterable[str]) -> Dict[str, VideoSong]:
+    """The VideoSongs still good: a song found, or none found recently."""
+    ids = set(video_ids)
+    if not ids:
+        return {}
+    stale_before = now_utc() - VIDEO_SONG_RETRY
+    return {
+        r.video_id: r
+        for r in session.scalars(select(VideoSong).where(VideoSong.video_id.in_(ids)))
+        if r.song_id or ensure_timezone_aware(r.checked_at) > stale_before
+    }
+
+
+def look_up_songs(session: Session, videos: List[Dict[str, Any]]) -> int:
+    """
+    Look up the songs of music videos ({id, title, artist_id, artist_name})
+    not known yet (adapter.find_song), LOOKUP_WORKERS at a time, and keep
+    what was found, or that nothing was. Nothing is held in the DB while
+    YouTube Music answers: the results are written in one short transaction
+    at the end. Returns how many searches failed (those are looked up again
+    next time). Commits.
+    """
+    known = _known_songs(session, (v["id"] for v in videos))
+    session.commit()  # no transaction open through the searches
+    todo = list({v["id"]: v for v in videos if v["id"] not in known}.values())
+    if not todo:
+        return 0
+
+    def look_up(video: Dict[str, Any]) -> Tuple[str, Optional[Dict[str, Any]], bool]:
+        try:
+            return video["id"], ytm_adapter.find_song(video["title"], video["artist_id"], video["artist_name"]), True
+        except ytm_adapter.YTMusicUnavailable:
+            logger.warning("Couldn't look up the song of video %s", video["id"], exc_info=True)
+            return video["id"], None, False
+
+    with ThreadPoolExecutor(max_workers=LOOKUP_WORKERS) as pool:
+        results = list(pool.map(look_up, todo))
+
+    failed = 0
+    for video_id, song, answered in results:
+        if not answered:
+            failed += 1
+            continue
+        album = (song or {}).get("album") or {}
+        values = {
+            "song_id": song["id"] if song else None,
+            "song_title": song["title"][:1024] if song else None,
+            "album_id": album.get("id"),
+            "album_title": (album.get("name") or "")[:255] or None,
+            "checked_at": now_utc(),
+        }
+        # Upsert: a scan and a page's lookup can find the same video at once
+        session.execute(
+            sqlite_insert(VideoSong).values(video_id=video_id, **values)
+            .on_conflict_do_update(index_elements=[VideoSong.video_id], set_=values)
+        )
+    session.commit()
+    logger.info("Looked up the songs of %s music videos (%s failed)", len(todo), failed)
+    return failed
+
+
+def queue_song_lookup(session: Session, playlist_id: str, videos: List[Dict[str, Any]], *, origin: Origin) -> None:
+    """
+    Queue a find_video_songs job for a playlist's music videos, unless one
+    is already waiting or running for it. Commits.
+    """
+    if pending_jobs(session, "find_video_songs", playlist_id=playlist_id):
+        return
+    enqueue_job(
+        session, job_type="find_video_songs",
+        payload={"playlist_id": playlist_id, "videos": videos},
+        origin=origin, commit=True,
+    )
+
+
+def _stand_in_songs(session: Session, playlist_id: str) -> int:
+    """
+    Make the playlist's music videos their songs: the entries with a main
+    artist and no album (uploads have no main artist), looked up first.
+    A video found to be a song takes its id, title and album; its duration
+    is the video's, so it's dropped (the M3U then takes the track's).
+    Returns how many searches failed. Commits.
+    """
+    def videos_left() -> List[PlaylistEntry]:
+        return session.scalars(
+            select(PlaylistEntry).where(
+                PlaylistEntry.playlist_id == playlist_id,
+                PlaylistEntry.album_id.is_(None),
+                PlaylistEntry.artist_id.is_not(None),
+                PlaylistEntry.video_id.is_not(None),
+            )
+        ).all()
+
+    videos = [
+        {"id": e.video_id, "title": e.title, "artist_id": e.artist_id, "artist_name": e.artist_name}
+        for e in videos_left()
+    ]
+    if not videos:
+        return 0
+    failed = look_up_songs(session, videos)
+    rows = videos_left()
+    known = _known_songs(session, (e.video_id for e in rows))
+    for entry in rows:
+        found = known.get(entry.video_id)
+        if found is not None and found.song_id:
+            entry.video_id = found.song_id
+            entry.title = found.song_title or entry.title
+            entry.album_id, entry.album_title = found.album_id, found.album_title
+            entry.duration = None
+    session.commit()
+    return failed
+
+
 def entries_from_playlist(tracks: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """adapter.get_playlist's tracks as entry fields, in playlist order."""
+    """
+    fetch_playlist's tracks as entry fields, in playlist order. A music
+    video found to be a song is that song (its id, title and album: what
+    the library has of it). An upload has no main artist: what it credits
+    is whoever uploaded it.
+    """
     out = []
     for t in tracks:
-        title = (t.get("title") or "").strip()
+        song = t.get("song") or {}
+        title = (song.get("title") or t.get("title") or "").strip()
         if not title:
             continue
         main = next(iter(t.get("artists") or []), None) or {}
         album = t.get("album") or {}
         out.append({
-            "video_id": t.get("id") or None,
+            "video_id": song.get("id") or t.get("id") or None,
             "title": title[:1024],
-            "artist_id": main.get("id") or None,
+            "artist_id": None if N.is_upload(t) else (main.get("id") or None),
             "artist_name": (main.get("name") or None) and main["name"][:255],
             "album_id": album.get("id") or None,
             "album_title": (album.get("name") or None) and album["name"][:255],
-            "duration": t.get("duration_seconds") or None,
+            # A video's length isn't its song's: the M3U takes the track's
+            "duration": None if song else (t.get("duration_seconds") or None),
         })
     return out
 
@@ -356,7 +526,7 @@ def run_sync(session: Session, playlist_id: str, *, fetch: bool, origin: Origin)
 
     if fetch and playlist.followed:
         try:
-            data = ytm_adapter.get_playlist(playlist_id)
+            data = fetch_playlist(session, playlist_id)
         except ytm_adapter.YTMusicUnavailable as e:
             # Recorded as a sync, like artists: a playlist that stays
             # unreadable is retried by the job, then waits for its next turn
@@ -369,6 +539,13 @@ def run_sync(session: Session, playlist_id: str, *, fetch: bool, origin: Origin)
         playlist.thumbnail = data.get("thumbnail")
         _store_entries(session, playlist, entries_from_playlist(data.get("tracks") or []))
         session.commit()
+
+    # Music videos not looked up yet (new ones, or added with the playlist):
+    # their songs, and so their albums, before anything is brought in
+    songs_failed = _stand_in_songs(session, playlist_id)
+    playlist = session.get(Playlist, playlist_id)
+    if playlist is None:  # removed meanwhile
+        return {"ok": True, "skipped": True, "reason": "playlist removed"}
 
     entries = _entry_dicts(session, playlist_id)
     user_id = playlist.created_by
@@ -383,20 +560,22 @@ def run_sync(session: Session, playlist_id: str, *, fetch: bool, origin: Origin)
         return {"ok": True, "skipped": True, "reason": "playlist removed"}
     refresh_m3u(session, playlist)
     playlist.last_synced_at = now_utc()
-    playlist.last_error = (
-        f"{albums_failed} album(s) couldn't be read from YouTube Music" if albums_failed else None
-    )
+    problems = [
+        f"{albums_failed} album(s) couldn't be read from YouTube Music" if albums_failed else None,
+        f"the songs of {songs_failed} music video(s) couldn't be looked up" if songs_failed else None,
+    ]
+    playlist.last_error = "; ".join(p for p in problems if p) or None
     session.commit()
 
     result = {
-        "ok": not albums_failed,
+        "ok": not (albums_failed or songs_failed),
         "entries": len(entries),
         "albums_started": albums_started,
         "artists_followed": artists_followed,
         "available": playlist.available_count,
     }
-    if albums_failed:
-        # The albums done are skipped next time: the retry only does the rest
+    if albums_failed or songs_failed:
+        # What's done is skipped next time: the retry only does the rest
         result.update(error=playlist.last_error, retry_delay_seconds=RETRY_DELAY_SECONDS)
     logger.info("Synced playlist %s (%s): %s", playlist_id, playlist.mode, result)
     return result
@@ -459,7 +638,7 @@ def add_playlist(
     if session.get(Playlist, playlist_id) is not None:
         raise PlaylistAlreadyAdded(playlist_id)
 
-    data = ytm_adapter.get_playlist(playlist_id)
+    data = fetch_playlist(session, playlist_id)
     playlist = Playlist(
         id=playlist_id,
         title=(data.get("title") or playlist_id)[:255],
@@ -581,8 +760,9 @@ def summary(session: Session, playlist: Playlist, syncing: Optional[set] = None)
     entries = session.execute(
         select(PlaylistEntry.album_id, PlaylistEntry.artist_id).where(PlaylistEntry.playlist_id == playlist.id)
     ).all()
-    # Songs that bring nothing in for this mode: no album (music videos,
-    # uploads), or in artists mode no main artist
+    # Songs that bring nothing in for this mode: no album (uploads, music
+    # videos whose song wasn't found), or in artists mode no main artist
+    # (uploads: see entries_from_playlist)
     skipped = sum(
         1 for album_id, artist_id in entries
         if not album_id or (playlist.mode == "artists" and not artist_id)

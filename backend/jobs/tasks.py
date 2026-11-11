@@ -16,6 +16,7 @@ Task types:
 - sync_artist: Check artist for new releases
 - sync_chart: Follow a chart's top artists
 - sync_playlist: Scan a playlist added to the library
+- find_video_songs: Look up the songs of a playlist's music videos (for its page)
 - fetch_genres: Look up an artist's and its albums' genres (MusicBrainz, Deezer)
 """
 from __future__ import annotations
@@ -25,7 +26,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
 import requests
@@ -728,9 +729,19 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
         # again shortly rather than wait for the next scheduled sync
         return {"ok": False, "error": str(e), "retry_delay_seconds": 120}
 
+    if artist_data["channel"]:
+        # Followed by id alone (the API, a playlist credit) before its page
+        # was read: a YouTube user's channel has nothing to bring in
+        artists_svc.drop_channel(session, artist_id)
+        session.commit()
+        logger.warning("Artist %s is a YouTube user's channel, not an artist: unfollowed", artist_id)
+        return {"ok": True, "skipped": "not an artist (a YouTube user's channel)"}
+
     artist = session.get(Artist, artist_id)
     try:
-        artists_svc.ensure_artist_images(session, artist, thumbnails=artist_data["thumbnails"])
+        artists_svc.ensure_artist_images(
+            session, artist, thumbnails=artist_data["thumbnails"], picture=artist_data["picture"]
+        )
         session.commit()
     except Exception:
         logger.exception("Failed to download artist pictures for %s", artist_id)
@@ -884,6 +895,32 @@ def sync_playlist(
 
 
 # ============================================================================
+# TASK: FIND VIDEO SONGS
+# ============================================================================
+
+def find_video_songs(
+    session: Session,
+    playlist_id: str,
+    videos: List[Dict[str, Any]],
+    *,
+    origin: str,
+) -> Dict[str, Any]:
+    """
+    Look up the songs of a playlist's music videos, for its page
+    (services/playlists.look_up_songs): the page shows them once this is
+    done. Searches that failed are retried.
+    """
+    failed = playlists_svc.look_up_songs(session, videos)
+    if failed:
+        return {
+            "ok": False,
+            "error": f"the songs of {failed} music video(s) couldn't be looked up",
+            "retry_delay_seconds": 120,
+        }
+    return {"ok": True, "playlist_id": playlist_id, "videos": len(videos)}
+
+
+# ============================================================================
 # TASK: FETCH GENRES
 # ============================================================================
 
@@ -990,6 +1027,7 @@ _TASK_MAP = {
     "sync_chart": sync_chart,
     "fetch_genres": fetch_genres,
     "sync_playlist": sync_playlist,
+    "find_video_songs": find_video_songs,
 }
 
 ALL_JOB_TYPES = tuple(_TASK_MAP)

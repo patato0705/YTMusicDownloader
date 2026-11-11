@@ -25,6 +25,12 @@ export interface ArtistPage {
   subscription_mode: SubscriptionMode | null;
   /** Whether you like it (only artists of the library, subscription_mode set, can be) */
   liked: boolean;
+  /** A YouTube user's channel (what an upload credits), not an artist: nothing to follow */
+  channel: boolean;
+  /** For a channel: the artists of the same name, where the page points instead */
+  namesakes: Array<{ id: string; name: string; thumbnail: string | null }>;
+  /** It has a row in the library (an admin can delete it), followed or not */
+  in_library: boolean;
   artist: {
     id: string;
     name: string;
