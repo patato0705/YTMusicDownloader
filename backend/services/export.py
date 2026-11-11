@@ -262,6 +262,7 @@ def build_users_section(session: Session) -> List[Dict[str, Any]]:
             "role": u.role,
             "is_active": bool(u.is_active),
             "must_change_password": bool(u.must_change_password),
+            "onboarding_seen": u.onboarding_seen,
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "liked_artists": liked.get(u.id, []),
             "dismissed_recommendations": dismissed.get(u.id, []),
@@ -403,6 +404,7 @@ def _create_user(session: Session, item: ExportedUser) -> User:
         role=item.role,
         is_active=item.is_active,
         must_change_password=item.must_change_password,
+        onboarding_seen_at=now_utc() if item.onboarding_seen else None,
         created_at=now_utc(),
     )
     session.add(user)

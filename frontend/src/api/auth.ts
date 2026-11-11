@@ -20,6 +20,8 @@ export interface User {
   has_password: boolean;
   /** Signs in with single sign-on */
   is_oidc: boolean;
+  /** Closed the welcome tour: it opens until then */
+  onboarding_seen: boolean;
   created_at: string;
   last_login_at: string | null;
 }
@@ -91,6 +93,13 @@ export async function logout(): Promise<void> {
  */
 export async function getCurrentUser(): Promise<User> {
   return api.get<User>('/auth/me');
+}
+
+/**
+ * The welcome tour was closed: it doesn't open again for this account
+ */
+export async function markOnboardingSeen(): Promise<void> {
+  await api.post('/auth/me/onboarding');
 }
 
 /**

@@ -11,6 +11,7 @@ Endpoints:
 - POST /api/auth/refresh - Refresh access token
 - POST /api/auth/logout - Revoke refresh token
 - GET /api/auth/me - Get current user info
+- POST /api/auth/me/onboarding - The welcome tour was closed
 - POST /api/auth/change-password - Change password
 """
 from __future__ import annotations
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from .. import config
 from ..db import get_session
-from ..dependencies import require_auth_allow_temporary_password
+from ..dependencies import require_auth, require_auth_allow_temporary_password
 from ..models import User
 from ..schemas import (
     LoginRequest,
@@ -424,6 +425,18 @@ def get_current_user_info(
 
     """
     return UserResponse.model_validate(current_user)
+
+
+@router.post("/me/onboarding", status_code=status.HTTP_204_NO_CONTENT)
+def mark_onboarding_seen(
+    current_user: User = Depends(require_auth),
+    session: Session = Depends(get_session),
+) -> Response:
+    """The welcome tour was closed: it doesn't open again for this account."""
+    if current_user.onboarding_seen_at is None:
+        current_user.onboarding_seen_at = now_utc()
+        session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/change-password", response_model=TokenResponse)

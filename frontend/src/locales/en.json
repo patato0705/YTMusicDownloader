@@ -884,6 +884,76 @@
       "syncQueued": "Scan queued"
     }
   },
+  "onboarding": {
+    "label": "Quick tour",
+    "step": "{current} / {total}",
+    "goTo": "Step {current} of {total}",
+    "skip": "Skip",
+    "next": "Next",
+    "finish": "Get started",
+    "welcome": {
+      "title": "Welcome, {name}",
+      "body": "Here's a quick look at what you can do, including a few things that are easy to miss. First, set the app up the way you like it:",
+      "bodyVisitor": "Here's a quick look around. Your account can browse the library, read lyrics and see the charts; an administrator can let you add music. First, set the app up the way you like it:",
+      "language": "Language",
+      "theme": "Theme",
+      "note": "Saved in this browser. Change them any time from the top bar, or from the account menu on a phone."
+    },
+    "follow": {
+      "title": "Follow an artist, or take one album",
+      "body": "Following an artist downloads everything they've released, then new releases as they come out. For a single album, Download Album on its page takes just that one."
+    },
+    "activity": {
+      "title": "Downloads at work",
+      "body": "While music downloads, the top bar counts the jobs running: hover or tap it for details. If YouTube slows things down, a red badge says downloads are paused. They resume on their own."
+    },
+    "lyrics": {
+      "title": "Lyrics for every track",
+      "body": "On an album page, the Lyrics column shows what each downloaded track has. Click a badge to read the lyrics.",
+      "bodyEditor": "On an album page, the Lyrics column shows what each downloaded track has. Click a badge to read the lyrics, or to paste and fix them by hand.",
+      "kinds": {
+        "synced": "lines light up in time with the music",
+        "plain": "the words, without timing",
+        "instrumental": "no lyrics to look for",
+        "pending": "not looked up yet",
+        "none": "none found yet, looked for again regularly"
+      }
+    },
+    "likes": {
+      "title": "Recommendations from your likes",
+      "body": "Like artists with the heart, on their page or in the Library (following an artist likes it too). Browse then suggests similar artists. Not for you? The cross on a suggestion (shown on hover) hides it, for you only.",
+      "try": "Try the heart",
+      "dismissed": "Hidden from your recommendations"
+    },
+    "playlists": {
+      "title": "Bring in a whole playlist",
+      "body": "Next to the Browse search bar, paste a YouTube Music playlist link: follow its artists or download its albums in one go, or keep it in the library, followed for new songs and saved as a playlist Jellyfin picks up."
+    },
+    "charts": {
+      "title": "What's trending",
+      "body": "The Charts page shows the top artists of the countries followed here, with a check on those already in the library.",
+      "bodyAdmin": "Follow a country's chart from the admin panel: its top artists are followed for you, and kept up to date as the chart changes. Everyone sees it on the Charts page."
+    },
+    "admin": {
+      "title": "Running the instance",
+      "body": "The Admin Panel is in your account menu. Only administrators can delete artists and albums, and deleting also removes their files from disk.",
+      "tabs": {
+        "users": "Create accounts, set roles, reset passwords",
+        "charts": "The countries whose top artists are followed",
+        "settings": "Sign-ups, schedules, downloads, lyrics, genres and more",
+        "backup": "Export the library, users and settings, or restore them"
+      }
+    },
+    "done": {
+      "title": "You're all set",
+      "body": "That's the tour. Where would you like to start?",
+      "browse": "Search YouTube Music for artists and albums",
+      "library": "Everything that's been downloaded",
+      "playlist": "Follow a playlist's artists, or download its albums",
+      "charts": "The top artists of the countries followed",
+      "admin": "Users, schedules, settings and backups"
+    }
+  },
   "errorBoundary": {
     "title": "Something went wrong",
     "description": "The page ran into an unexpected error. Reloading usually fixes it; the details below help when reporting it.",

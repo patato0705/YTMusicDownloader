@@ -77,7 +77,8 @@ export const Modal: React.FC<ModalProps> = ({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (openModals[openModals.length - 1] !== panel) return;
-      if (event.key === 'Escape' && latest.current.dismissible) {
+      // An Escape already taken (an open bubble inside) closes only that
+      if (event.key === 'Escape' && latest.current.dismissible && !event.defaultPrevented) {
         event.preventDefault();
         latest.current.close();
       } else if (event.key === 'Tab') {

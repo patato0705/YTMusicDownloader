@@ -398,6 +398,13 @@ class User(Base):
     # password changes, see services/auth.change_password). Whole seconds,
     # like JWT "iat".
     tokens_valid_after: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the welcome tour was closed: it opens at the first sign-in until
+    # then, once per account (not per browser), whatever the role becomes
+    onboarding_seen_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def onboarding_seen(self) -> bool:
+        return self.onboarding_seen_at is not None
 
     @property
     def has_password(self) -> bool:

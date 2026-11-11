@@ -885,6 +885,76 @@
       "syncQueued": "Analyse programmée"
     }
   },
+  "onboarding": {
+    "label": "Visite rapide",
+    "step": "{current} / {total}",
+    "goTo": "Étape {current} sur {total}",
+    "skip": "Passer",
+    "next": "Suivant",
+    "finish": "C'est parti",
+    "welcome": {
+      "title": "Bienvenue, {name}",
+      "body": "Un petit tour de ce que vous pouvez faire, y compris quelques fonctions faciles à manquer. D'abord, réglez l'application à votre goût :",
+      "bodyVisitor": "Un petit tour des lieux. Votre compte peut parcourir la bibliothèque, lire les paroles et voir les charts ; un administrateur peut vous permettre d'ajouter de la musique. D'abord, réglez l'application à votre goût :",
+      "language": "Langue",
+      "theme": "Thème",
+      "note": "Enregistré dans ce navigateur. Modifiable à tout moment depuis la barre du haut, ou le menu du compte sur téléphone."
+    },
+    "follow": {
+      "title": "Suivre un artiste, ou prendre un album",
+      "body": "Suivre un artiste télécharge tout ce qu'il a sorti, puis ses nouveautés à leur sortie. Pour un seul album, Télécharger l'album sur sa page prend juste celui-là."
+    },
+    "activity": {
+      "title": "Les téléchargements en cours",
+      "body": "Pendant les téléchargements, la barre du haut compte les tâches en cours : survolez-la ou touchez-la pour le détail. Si YouTube ralentit les choses, un badge rouge indique que les téléchargements sont en pause. Ils reprennent tout seuls."
+    },
+    "lyrics": {
+      "title": "Les paroles de chaque titre",
+      "body": "Sur la page d'un album, la colonne Paroles indique ce qu'a chaque titre téléchargé. Cliquez sur un badge pour lire les paroles.",
+      "bodyEditor": "Sur la page d'un album, la colonne Paroles indique ce qu'a chaque titre téléchargé. Cliquez sur un badge pour lire les paroles, ou pour les coller et les corriger à la main.",
+      "kinds": {
+        "synced": "les lignes s'allument au rythme de la musique",
+        "plain": "le texte, sans le minutage",
+        "instrumental": "pas de paroles à chercher",
+        "pending": "pas encore recherchées",
+        "none": "rien trouvé pour l'instant, recherchées à nouveau régulièrement"
+      }
+    },
+    "likes": {
+      "title": "Des recommandations selon vos goûts",
+      "body": "Aimez des artistes avec le cœur, sur leur page ou dans la Bibliothèque (suivre un artiste l'aime aussi). Explorer vous suggère alors des artistes proches. Pas pour vous ? La croix d'une suggestion (visible au survol) la masque, rien que pour vous.",
+      "try": "Essayez le cœur",
+      "dismissed": "Masqué de vos recommandations"
+    },
+    "playlists": {
+      "title": "Toute une playlist d'un coup",
+      "body": "À côté de la recherche d'Explorer, collez le lien d'une playlist YouTube Music : suivez ses artistes ou téléchargez ses albums d'un coup, ou gardez-la dans la bibliothèque, suivie pour ses nouveaux titres et enregistrée comme playlist pour Jellyfin."
+    },
+    "charts": {
+      "title": "Les tendances",
+      "body": "La page Charts montre les artistes en tête des pays suivis ici, avec une coche sur ceux déjà dans la bibliothèque.",
+      "bodyAdmin": "Suivez le chart d'un pays depuis l'administration : ses meilleurs artistes sont suivis pour vous, et mis à jour au fil du classement. Tout le monde le voit sur la page Charts."
+    },
+    "admin": {
+      "title": "Gérer l'instance",
+      "body": "L'administration se trouve dans le menu de votre compte. Seuls les administrateurs peuvent supprimer des artistes et des albums, et la suppression efface aussi leurs fichiers du disque.",
+      "tabs": {
+        "users": "Créer des comptes, attribuer des rôles, réinitialiser des mots de passe",
+        "charts": "Les pays dont les meilleurs artistes sont suivis",
+        "settings": "Inscriptions, planification, téléchargements, paroles, genres et plus",
+        "backup": "Exporter la bibliothèque, les utilisateurs et les réglages, ou les restaurer"
+      }
+    },
+    "done": {
+      "title": "Tout est prêt",
+      "body": "C'est tout pour la visite. Par où voulez-vous commencer ?",
+      "browse": "Chercher des artistes et albums sur YouTube Music",
+      "library": "Tout ce qui a été téléchargé",
+      "playlist": "Suivre les artistes d'une playlist, ou télécharger ses albums",
+      "charts": "Les meilleurs artistes des pays suivis",
+      "admin": "Utilisateurs, planification, réglages et sauvegardes"
+    }
+  },
   "errorBoundary": {
     "title": "Une erreur s'est produite",
     "description": "La page a rencontré une erreur inattendue. Recharger suffit en général ; les détails ci-dessous aident à la signaler.",

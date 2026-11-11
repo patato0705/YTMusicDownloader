@@ -156,6 +156,8 @@ class ExportedUser(BaseModel):
     role: Literal["administrator", "member", "visitor"] = "visitor"
     is_active: bool = True
     must_change_password: bool = False
+    # Closed the welcome tour (shown again on the new instance otherwise)
+    onboarding_seen: bool = False
     created_at: Optional[str] = None
     # What their recommendations come from, and leave out
     liked_artists: List[str] = Field(default_factory=list, max_length=MAX_ARTISTS)

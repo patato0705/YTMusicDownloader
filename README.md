@@ -151,6 +151,8 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 
 Admins create users from **Admin Panel → Users**, or enable public registration in Settings.
 
+At their first sign-in, everyone gets a short tour of what their role can do (the lyrics badges, charts, likes and recommendations, playlist import...), starting with the language and theme. It's shown once per account, on any device, and closing it at any step ends it for good.
+
 Changing your password (user menu → *Change Password*) signs you out of every other browser and device; the one you changed it from stays signed in.
 
 Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**, which shows a temporary password once to pass on. The user is signed out everywhere and has to pick a new password before they can do anything else (the temporary password works for nothing but that). Admins can reset anyone's password, other administrators' included (administrators are trusted), but not their own: use *Change Password*, or the [recovery commands](#recovering-access) if you can't sign in.

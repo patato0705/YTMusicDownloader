@@ -79,16 +79,20 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
       setOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key !== 'Escape') return;
+      // Taken: a dialog the bubble sits in stays open (see Modal)
+      event.preventDefault();
+      setOpen(false);
     };
 
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('touchstart', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
+    // Capture: before the listeners of a dialog the bubble sits in
+    document.addEventListener('keydown', handleKeyDown, true);
     return () => {
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('touchstart', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [open]);
 

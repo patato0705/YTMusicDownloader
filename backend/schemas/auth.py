@@ -65,6 +65,8 @@ class UserResponse(BaseModel):
     must_change_password: bool = False
     has_password: bool = True
     is_oidc: bool = False
+    # The welcome tour was closed (it opens until then)
+    onboarding_seen: bool = False
     created_at: datetime
     last_login_at: Optional[datetime] = None
 

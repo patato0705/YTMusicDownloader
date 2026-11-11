@@ -8,20 +8,13 @@ import { useJobActivity } from '../../contexts/JobActivityContext';
 import { UserMenu } from './UserMenu';
 import { AppearanceMenu } from './AppearanceMenu';
 import { LanguageSelector } from '../ui/LanguageSelector';
-import { InfoTooltip } from '../ui/InfoTooltip';
+import { JobsBadge, RateLimitBadge } from './StatusBadges';
 import { Icon } from '../ui/icons';
 import type { IconName } from '../ui/icons';
 
-
-// The status badges are 28px tall: this puts their bubbles where the navbar's
-// menus open (40px buttons, 20px gap), clear of the navbar. A bubble over the
-// navbar's glass blurs the spinning badge, so the browser redraws it, and any
-// menu over it, every frame, leaving a flickering seam along the bottom.
-const BADGE_TOOLTIP_GAP = 26;
-
 export function Navbar(): JSX.Element {
   const { isAuthenticated } = useAuth();
-  const { formatLocale, t, tOr } = useI18n();
+  const { t } = useI18n();
   const { features } = useFeatures();
   const { activeJobCount, activeByType, downloadsPausedUntil } = useJobActivity();
   const location = useLocation();
@@ -33,36 +26,6 @@ export function Navbar(): JSX.Element {
     { to: '/library', label: t('nav.library'), icon: 'library' },
     ...(features?.charts_enabled ? [{ to: '/charts', label: t('nav.charts'), icon: 'chart' as const }] : []),
   ];
-
-  // The badge counts every kind of job, so a finished album can keep it lit
-  // while its per-track lyrics fetches drain. Spell out what's actually running.
-  const jobBreakdown = Object.entries(activeByType)
-    .filter(([, count]) => count > 0)
-    .sort(([, a], [, b]) => b - a);
-
-  const jobSummary = t('nav.activeJobs', { count: activeJobCount });
-
-  const jobTooltip = (
-    <>
-      <div className="font-medium">{jobSummary}</div>
-      {jobBreakdown.length > 0 && (
-        <ul className="mt-1.5 space-y-0.5 text-muted-foreground">
-          {jobBreakdown.map(([type, count]) => (
-            <li key={type} className="flex justify-between gap-6">
-              <span>{tOr(`nav.jobTypes.${type}`, type.replace(/_/g, ' '))}</span>
-              <span className="tabular-nums">{count}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
-  );
-
-  const pausedTooltip = downloadsPausedUntil
-    ? t('nav.rateLimited', {
-        time: new Date(downloadsPausedUntil).toLocaleTimeString(formatLocale, { hour: '2-digit', minute: '2-digit' }),
-      })
-    : '';
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -113,29 +76,8 @@ export function Navbar(): JSX.Element {
 
                 {/* Right: status badges, appearance and language (md and up), user menu */}
                 <div className="flex items-center shrink-0 space-x-1 lg:space-x-2">
-                  {/* YouTube rate limit: downloads paused (backend/jobs/gate.py) */}
-                  {isAuthenticated && downloadsPausedUntil && (
-                    <InfoTooltip
-                      label={pausedTooltip}
-                      content={pausedTooltip}
-                      gap={BADGE_TOOLTIP_GAP}
-                      className="flex items-center justify-center w-7 h-7 rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 text-sm font-bold"
-                    >
-                      !
-                    </InfoTooltip>
-                  )}
-
-                  {isAuthenticated && activeJobCount > 0 && (
-                    <InfoTooltip
-                      label={jobSummary}
-                      content={jobTooltip}
-                      gap={BADGE_TOOLTIP_GAP}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-medium"
-                    >
-                      <Icon name="refresh" strokeWidth={2.5} className="w-3.5 h-3.5 animate-spin" />
-                      <span className="tabular-nums">{activeJobCount}</span>
-                    </InfoTooltip>
-                  )}
+                  {isAuthenticated && downloadsPausedUntil && <RateLimitBadge until={downloadsPausedUntil} />}
+                  {isAuthenticated && activeJobCount > 0 && <JobsBadge count={activeJobCount} byType={activeByType} />}
 
                   <AppearanceMenu />
 

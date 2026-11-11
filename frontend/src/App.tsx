@@ -9,6 +9,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ScrollRestoration } from './components/ScrollRestoration';
 import { LoadingState } from './components/ui/PageStatus';
+import { OnboardingDialog } from './components/onboarding/OnboardingDialog';
 
 // Auth pages
 import Login from './pages/auth/Login';
@@ -82,6 +83,8 @@ export default function App(): JSX.Element {
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </main>
+                {/* First sign-in only */}
+                <OnboardingDialog />
               </div>
             </ProtectedRoute>
           }

@@ -14,6 +14,8 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /** The welcome tour was closed: hidden at once, remembered by the server in the background */
+  markOnboardingSeen: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -69,6 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const markOnboardingSeen = () => {
+    setUser((current) => (current ? { ...current, onboarding_seen: true } : current));
+    // A failed request only means it opens again at the next visit
+    authApi.markOnboardingSeen().catch((error) => console.error('Failed to save the welcome tour as seen:', error));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -79,6 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         refreshUser,
+        markOnboardingSeen,
       }}
     >
       {children}
