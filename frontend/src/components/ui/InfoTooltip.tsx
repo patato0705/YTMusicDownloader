@@ -12,9 +12,10 @@ interface InfoTooltipProps {
   className?: string;
   /** Custom trigger content, replacing the default info icon (e.g. a navbar status badge). */
   children?: React.ReactNode;
+  /** Pixels between the trigger and the bubble */
+  gap?: number;
 }
 
-const GAP = 8;     // distance between the trigger and the bubble
 const MARGIN = 8;  // minimum distance from the viewport edges
 
 /**
@@ -25,7 +26,7 @@ const MARGIN = 8;  // minimum distance from the viewport edges
  * clipped by overflow-hidden/auto ancestors (cards, table wrappers) nor
  * affected by their text styles (e.g. an uppercase <th>).
  */
-export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, className = '', children }) => {
+export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, className = '', children, gap = 8 }) => {
   const [open, setOpen] = useState(false);
   // null until the bubble has been measured, so it is never painted at (0, 0)
   const [position, setPosition] = useState<{ top: number; left: number; arrowLeft: number; placement: 'top' | 'bottom' } | null>(null);
@@ -42,8 +43,8 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
     const rect = button.getBoundingClientRect();
     const width = bubble.offsetWidth;
     const height = bubble.offsetHeight;
-    const placement = rect.top - GAP - height >= MARGIN ? 'top' : 'bottom';
-    const top = placement === 'top' ? rect.top - GAP - height : rect.bottom + GAP;
+    const placement = rect.top - gap - height >= MARGIN ? 'top' : 'bottom';
+    const top = placement === 'top' ? rect.top - gap - height : rect.bottom + gap;
     const centerX = rect.left + rect.width / 2;
     const left = Math.min(Math.max(centerX - width / 2, MARGIN), window.innerWidth - width - MARGIN);
 

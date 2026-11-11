@@ -13,6 +13,12 @@ import { Icon } from '../ui/icons';
 import type { IconName } from '../ui/icons';
 
 
+// The status badges are 28px tall: this puts their bubbles where the navbar's
+// menus open (40px buttons, 20px gap), clear of the navbar. A bubble over the
+// navbar's glass blurs the spinning badge, so the browser redraws it, and any
+// menu over it, every frame, leaving a flickering seam along the bottom.
+const BADGE_TOOLTIP_GAP = 26;
+
 export function Navbar(): JSX.Element {
   const { isAuthenticated } = useAuth();
   const { formatLocale, t, tOr } = useI18n();
@@ -112,6 +118,7 @@ export function Navbar(): JSX.Element {
                     <InfoTooltip
                       label={pausedTooltip}
                       content={pausedTooltip}
+                      gap={BADGE_TOOLTIP_GAP}
                       className="flex items-center justify-center w-7 h-7 rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 text-sm font-bold"
                     >
                       !
@@ -122,6 +129,7 @@ export function Navbar(): JSX.Element {
                     <InfoTooltip
                       label={jobSummary}
                       content={jobTooltip}
+                      gap={BADGE_TOOLTIP_GAP}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-medium"
                     >
                       <Icon name="refresh" strokeWidth={2.5} className="w-3.5 h-3.5 animate-spin" />
