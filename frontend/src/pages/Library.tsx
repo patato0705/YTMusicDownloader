@@ -141,7 +141,8 @@ export default function Library(): JSX.Element {
   const toolbarRef = useRef<HTMLDivElement>(null);
   // Visitors are read-only: liking is a member+ action on the backend
   const canLike = user?.role === 'administrator' || user?.role === 'member';
-  const { revision } = useJobActivity();
+  const { revision, downloadsPausedUntil } = useJobActivity();
+  const downloadsPaused = downloadsPausedUntil !== null;
   // On screen and in the cache, for coming back
   const setLiked = (artistId: string, liked: boolean) => {
     setArtists((current) => current.map((a) => (a.id === artistId ? { ...a, liked } : a)));
@@ -303,12 +304,12 @@ export default function Library(): JSX.Element {
   // The status of each item, worked out once. Cards badge only the exceptions;
   // a list shows its status column when some row is one, and then fills every row
   const artistStatus = useMemo(
-    () => new Map(artists.map((artist) => [artist.id, getArtistStatus(artist, albumsByArtist.get(artist.id))])),
-    [artists, albumsByArtist]
+    () => new Map(artists.map((artist) => [artist.id, getArtistStatus(artist, albumsByArtist.get(artist.id), downloadsPaused)])),
+    [artists, albumsByArtist, downloadsPaused]
   );
   const albumStatus = useMemo(
-    () => new Map(albums.map((album) => [album.id, getAlbumStatus(album)])),
-    [albums]
+    () => new Map(albums.map((album) => [album.id, getAlbumStatus(album, downloadsPaused)])),
+    [albums, downloadsPaused]
   );
 
   // Filter content based on active tab and search query. Name matches are

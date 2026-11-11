@@ -26,6 +26,7 @@
       "inLibrary": "Dans la bibliothèque",
       "downloading": "Téléchargement",
       "queued": "En attente",
+      "paused": "En pause",
       "failed": "Échec"
     }
   },

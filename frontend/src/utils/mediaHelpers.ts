@@ -13,9 +13,16 @@ interface AlbumState {
 }
 
 /**
- * Badge to show on an album card.
+ * Badge to show on an album card. While YouTube has us rate-limited
+ * (downloadsPaused), an album still to download shows as paused: no worker
+ * fetches anything until the pause lifts.
  */
-export function getAlbumStatus(album: AlbumState): MediaStatus {
+export function getAlbumStatus(album: AlbumState, downloadsPaused = false): MediaStatus {
+  const status = downloadStatus(album);
+  return downloadsPaused && (status === 'downloading' || status === 'queued') ? 'paused' : status;
+}
+
+function downloadStatus(album: AlbumState): MediaStatus {
   // Not in the DB, or only its metadata: nothing is downloaded
   if (album.in_database === false || album.mode !== 'download') return undefined;
 
@@ -47,9 +54,10 @@ export function getAlbumStatus(album: AlbumState): MediaStatus {
  * Badge to show on a followed artist card: a download running for one of its
  * albums, otherwise its track counts.
  */
-export function getArtistStatus(artist: LibraryArtist, albums: LibraryAlbum[] = []): MediaStatus {
-  const albumStatuses = albums.map(getAlbumStatus);
+export function getArtistStatus(artist: LibraryArtist, albums: LibraryAlbum[] = [], downloadsPaused = false): MediaStatus {
+  const albumStatuses = albums.map((album) => getAlbumStatus(album, downloadsPaused));
   if (albumStatuses.includes('downloading')) return 'downloading';
+  if (albumStatuses.includes('paused')) return 'paused';
   if (albumStatuses.includes('queued')) return 'queued';
   if (albumStatuses.includes('failed') || artist.tracks_failed > 0) return 'failed';
 

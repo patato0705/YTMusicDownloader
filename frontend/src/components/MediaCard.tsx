@@ -64,6 +64,12 @@ const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
     iconClassName: 'animate-spin',
     path: ICON_PATHS.refresh,
   },
+  // Rate-limited: no download runs until the pause lifts
+  paused: {
+    labelKey: 'mediaCard.status.paused',
+    className: 'bg-amber-500',
+    path: ICON_PATHS.pause,
+  },
   queued: {
     labelKey: 'mediaCard.status.queued',
     className: 'bg-slate-500 dark:bg-zinc-600',

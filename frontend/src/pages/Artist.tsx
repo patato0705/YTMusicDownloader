@@ -40,7 +40,7 @@ export default function Artist(): JSX.Element {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
-  const { revision, refresh: refreshJobs } = useJobActivity();
+  const { revision, refresh: refreshJobs, downloadsPausedUntil } = useJobActivity();
   // The queue revision the artist on screen is up to date with
   const fetchedRevision = useRef(revision);
   const isAdmin = user?.role === 'administrator';
@@ -205,7 +205,7 @@ export default function Artist(): JSX.Element {
             type="album"
             albumType={album.type}
             year={album.year ?? undefined}
-            mediaStatus={getAlbumStatus(album)}
+            mediaStatus={getAlbumStatus(album, downloadsPausedUntil !== null)}
             to={albumPath(album.id)}
           />
         ))}

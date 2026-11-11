@@ -26,6 +26,7 @@
       "inLibrary": "In library",
       "downloading": "Downloading",
       "queued": "Queued",
+      "paused": "Paused",
       "failed": "Failed"
     }
   },

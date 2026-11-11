@@ -83,7 +83,7 @@ function albumTest(group: FilterGroup, value: string, album: LibraryAlbum, ctx: 
       if (value === 'missing') return album.tracks_downloaded < album.tracks_total;
       const status = ctx.albumStatus.get(album.id);
       if (value === 'failed') return album.tracks_failed > 0 || status === 'failed';
-      return status === 'downloading' || status === 'queued';
+      return status === 'downloading' || status === 'queued' || status === 'paused';
     }
     case 'lyrics':
       return value === 'missing' ? album.tracks_missing_lyrics > 0 : album.tracks_plain_lyrics > 0;

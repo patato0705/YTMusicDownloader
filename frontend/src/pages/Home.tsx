@@ -43,7 +43,8 @@ export default function Home(): JSX.Element {
   const [inProgress, setInProgress] = useState<LibraryAlbum[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const { revision } = useJobActivity();
+  const { revision, downloadsPausedUntil } = useJobActivity();
+  const downloadsPaused = downloadsPausedUntil !== null;
   // When the last load started, and which one is the latest (an older answer is dropped)
   const lastLoadRef = useRef({ startedAt: 0, id: 0 });
 
@@ -68,6 +69,7 @@ export default function Home(): JSX.Element {
         if (id !== last.id) return;
         setStats(statsData);
         setRecentAlbums(albumsData);
+        // Ranked without the rate-limit pause: the albums that had started stay first while it lasts
         const rank = (album: LibraryAlbum) => PROGRESS_ORDER.indexOf(getAlbumStatus(album));
         setInProgress([...unfinished].sort((a, b) => rank(a) - rank(b)).slice(0, IN_PROGRESS_SHOWN));
       } catch (err) {
@@ -117,7 +119,7 @@ export default function Home(): JSX.Element {
                 type="album"
                 albumType={album.type}
                 year={album.year ?? undefined}
-                mediaStatus={getAlbumStatus(album)}
+                mediaStatus={getAlbumStatus(album, downloadsPaused)}
                 tracksTotal={album.tracks_total}
                 tracksDownloaded={album.tracks_downloaded}
                 date={album.created_at}
@@ -144,7 +146,7 @@ export default function Home(): JSX.Element {
                 thumbnail={getImageUrl(album.thumbnail)}
                 type="album"
                 albumType={album.type}
-                mediaStatus={exceptionalStatus(getAlbumStatus(album))}
+                mediaStatus={exceptionalStatus(getAlbumStatus(album, downloadsPaused))}
                 to={albumPath(album.id)}
               />
             ))}

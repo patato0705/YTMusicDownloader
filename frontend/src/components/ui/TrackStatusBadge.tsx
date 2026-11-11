@@ -56,7 +56,7 @@ export const TrackStatusBadge: React.FC<TrackStatusBadgeProps> = ({ track, downl
           const time = new Date(downloadsPausedUntil).toLocaleTimeString(formatLocale, { hour: '2-digit', minute: '2-digit' });
           return {
             tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 dark:border-amber-500/25',
-            icon: ICON_PATHS.pause,
+            icon: ICON_PATHS.pauseCircle,
             label: t('album.trackStatus.paused'),
             title: t('album.pausedUntil', { time }),
           };

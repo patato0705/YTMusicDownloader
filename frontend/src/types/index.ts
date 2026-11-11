@@ -11,7 +11,7 @@ export interface ArtistRef {
 }
 
 /** Badge shown on a MediaCard; undefined means "nothing to show" */
-export type MediaStatus = 'downloaded' | 'in_library' | 'downloading' | 'queued' | 'failed' | undefined;
+export type MediaStatus = 'downloaded' | 'in_library' | 'downloading' | 'queued' | 'paused' | 'failed' | undefined;
 
 /**
  * Download state of a track in the DB (backend/services/tracks.py):
