@@ -94,13 +94,15 @@ _YOUTUBE_THROTTLE_MARKERS = (
     "confirm you're not a bot",
     "http error 429",
     "too many requests",
-    # "unable to download video data: HTTP Error 403: Forbidden": the
-    # googlevideo CDN refusing this IP/session outright, which is what too
-    # many concurrent downloads get before (or instead of) the bot check.
-    # A stale yt-dlp signature gives the same 403 -- also global, not
-    # per-video, so pausing is right either way.
-    "http error 403",
 )
+
+# "unable to download video data: HTTP Error 403: Forbidden": the googlevideo
+# CDN refusing the download. That can be this IP/session (too many concurrent
+# downloads get it before, or instead of, the bot check; a stale yt-dlp
+# signature too) or just this one video, which YouTube sometimes refuses (or
+# answers 503) for a while when the tracks around it download fine. Only a
+# second track refused tells them apart (jobs.gate.note_download_refused).
+_YOUTUBE_REFUSED_MARKER = "http error 403"
 
 # yt-dlp errors that mean "this video needs a signed-in, age-verified
 # account" -- the one case the user's own cookie jar is used for.
@@ -126,6 +128,11 @@ def _is_youtube_rate_limit_error(error: Any) -> bool:
     if any(marker in text for marker in _YOUTUBE_THROTTLE_MARKERS):
         return True
     return "this content isn't available" in text and "try again later" in text
+
+
+def _is_youtube_refused_error(error: Any) -> bool:
+    """A 403 from YouTube: this video, or the IP (see _YOUTUBE_REFUSED_MARKER)."""
+    return _YOUTUBE_REFUSED_MARKER in _error_text(error)
 
 
 def _is_youtube_age_gate_error(error: Any) -> bool:
@@ -185,8 +192,8 @@ def _download_with_fallbacks(track_id: str, **metadata: Any) -> Tuple[str, Optio
     """
     downloader.core.download_track_by_videoid with two fallbacks, each tried
     at most once:
-      - YouTube throttles us -> reset this worker's anonymous cookie jar
-        (fresh session) and retry;
+      - YouTube throttles or refuses us -> reset this worker's anonymous
+        cookie jar (fresh session) and retry;
       - the video is age-gated -> retry with the account cookies the admin
         uploaded, if any. That jar is used for nothing else: not for
         ordinary downloads, and NOT to get past a rate limit, so the
@@ -215,14 +222,16 @@ def _download_with_fallbacks(track_id: str, **metadata: Any) -> Tuple[str, Optio
                     )
                 raise
 
-            if _is_youtube_rate_limit_error(error) and cookiefile != YDL_USER_COOKIEFILE:
-                logger.warning("YouTube rate limit detected for track %s", track_id)
+            throttled = _is_youtube_rate_limit_error(error)
+            if (throttled or _is_youtube_refused_error(error)) and cookiefile != YDL_USER_COOKIEFILE:
+                what = "rate limit" if throttled else "refusal (HTTP 403)"
+                logger.warning("YouTube %s for track %s", what, track_id)
                 if not cookies_reset and _reset_youtube_cookies():
                     cookies_reset = True
                     logger.info("Retrying download for track %s after cookie reset", track_id)
                     time.sleep(2)
                     continue
-                logger.error("YouTube rate limit persists for track %s", track_id)
+                logger.error("YouTube %s persists for track %s", what, track_id)
             raise
 
 
@@ -372,13 +381,26 @@ def _download_track(session: Session, track_id: str, *, origin: str) -> Dict[str
     return {"ok": True, "file_path": file_path}
 
 
+def _pause_downloads(session: Session, track_id: str, error: Exception) -> None:
+    """
+    Stop every download worker for a while rather than letting the others
+    keep hammering a blocked IP (jobs.gate).
+    """
+    try:
+        gate.pause_downloads(session, reason=f"track {track_id}: {tracks_svc.truncate_error(error)}")
+    except Exception:
+        logger.exception("Failed to pause downloads after rate limit")
+        session.rollback()
+
+
 def _download_failed(session: Session, track_id: str, error: Exception) -> Dict[str, Any]:
     """The task result for a failed download, with the reason recorded on the track."""
     session.rollback()
     throttled = _is_youtube_rate_limit_error(error)
+    refused = not throttled and _is_youtube_refused_error(error)
     if throttled:
         logger.warning("Download of track %s hit YouTube's rate limit; requeued", track_id)
-    else:
+    elif not refused:
         logger.error("Download failed for track %s", track_id, exc_info=error)
 
     track = session.get(Track, track_id)
@@ -397,15 +419,33 @@ def _download_failed(session: Session, track_id: str, error: Exception) -> Dict[
         )
         return {"ok": False, "error": f"Download failed: {hint} -- {error}", "retry_delay_seconds": 86400}
 
+    if refused:
+        # The IP or this one video? (jobs.gate.note_download_refused)
+        try:
+            ip_refused = gate.note_download_refused(session, track_id)
+        except Exception:
+            logger.exception("Failed to record the refused download of track %s", track_id)
+            session.rollback()
+            ip_refused = False
+        if ip_refused:
+            logger.warning("Download of track %s refused by YouTube (403) right after another refusal or pause: the IP, not the video", track_id)
+            _pause_downloads(session, track_id, error)
+        else:
+            logger.warning("Download of track %s refused by YouTube (403); retrying it later, the queue carries on", track_id)
+        # Never refunded, unlike a rate limit: if one video keeps being
+        # refused, spending its attempts is what lets it fail for good
+        # instead of holding up the queue after every pause.
+        return {
+            "ok": False,
+            "error": f"Download failed: {error}",
+            # Once the pause lifts, or, for the one video, after a while:
+            # YouTube refusing a video tends to last a good half hour
+            "retry_delay_seconds": 600 if ip_refused else 1800,
+        }
+
     if throttled:
         # Still limited after a fresh session: it's the IP, not the cookies.
-        # Stop every download worker for a while rather than letting the
-        # others keep hammering (jobs.gate).
-        try:
-            gate.pause_downloads(session, reason=f"track {track_id}: {tracks_svc.truncate_error(error)}")
-        except Exception:
-            logger.exception("Failed to pause downloads after rate limit")
-            session.rollback()
+        _pause_downloads(session, track_id, error)
         return {
             "ok": False,
             "error": f"Download failed: {error}",

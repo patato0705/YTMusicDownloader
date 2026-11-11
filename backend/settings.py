@@ -196,6 +196,17 @@ DEFAULT_SETTINGS = {
         "internal": True,
         "description": "Downloads are paused until this time (set automatically on rate limit)",
     },
+    "download.last_refused": {
+        # "<track id> <ISO time>" of the last download YouTube refused with a
+        # 403 since the last one that got through, empty otherwise. A 403
+        # can be one video YouTube won't serve for now or the whole IP
+        # refused: a second track refused tells them apart
+        # (jobs.gate.note_download_refused).
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last download refused by YouTube (set automatically)",
+    },
 
     # Feature flags
     "features.lyrics_enabled": {

@@ -13,7 +13,9 @@ from two settings the workers re-read on every poll:
 - download.paused_until: set by pause_downloads() when a download still
   hits YouTube's rate limit after a cookie reset. While it's in the future
   *no* worker takes download jobs -- with one IP, the other workers
-  carrying on is how a soft limit turns into a ban.
+  carrying on is how a soft limit turns into a ban. A plain 403 only
+  pauses once note_download_refused() rules out one video YouTube won't
+  serve.
 
 Other job types (metadata, lyrics) are never gated.
 """
@@ -45,17 +47,22 @@ def active_download_slots(session: Session) -> int:
     return max(1, min(_int_setting(session, "download.max_concurrent", 1), config.DOWNLOAD_WORKERS))
 
 
-def downloads_paused_until(session: Session) -> Optional[datetime]:
-    """The end of the current rate-limit pause, or None if downloads run."""
-    raw = get_setting(session, "download.paused_until")
+def _time_setting(session: Session, key: str) -> Optional[datetime]:
+    """A setting holding an ISO time; None when empty or unparseable."""
+    raw = get_setting(session, key)
     if not raw:
         return None
     try:
-        until = ensure_timezone_aware(datetime.fromisoformat(str(raw)))
+        return ensure_timezone_aware(datetime.fromisoformat(str(raw)))
     except ValueError:
-        logger.warning("Ignoring unparseable download.paused_until=%r", raw)
+        logger.warning("Ignoring unparseable %s=%r", key, raw)
         return None
-    return until if until > now_utc() else None
+
+
+def downloads_paused_until(session: Session) -> Optional[datetime]:
+    """The end of the current rate-limit pause, or None if downloads run."""
+    until = _time_setting(session, "download.paused_until")
+    return until if until and until > now_utc() else None
 
 
 # Each consecutive pause (no successful download in between) doubles the
@@ -91,15 +98,64 @@ def pause_downloads(session: Session, reason: str) -> datetime:
     return until
 
 
+# How long a refused download, or the end of a pause, is remembered when
+# telling one video YouTube won't serve apart from the whole IP being
+# refused (note_download_refused). A success in between forgets the
+# refused download sooner.
+REFUSAL_WINDOW = timedelta(minutes=30)
+
+
+def note_download_refused(session: Session, track_id: str) -> bool:
+    """
+    Record that YouTube refused this track's download (HTTP 403) and say
+    whether that means the IP is refused rather than the one video. One
+    video YouTube won't serve for now must not pause the whole queue (it
+    would be retried first after every pause and hold everything up); with
+    an IP block, the very next track gets the same 403. So it is the IP when,
+    within REFUSAL_WINDOW:
+    - a *different* track was refused with no download getting through
+      since, or
+    - a pause ended with no download getting through since (pause_streak):
+      the block is still on, and probing it with one more track after
+      every pause would only spend that track's attempts too.
+    Commits.
+    """
+    now = now_utc()
+    paused_until = _time_setting(session, "download.paused_until")
+    ip_refused = (
+        _int_setting(session, "download.pause_streak", 0) > 0
+        and paused_until is not None
+        and now - paused_until <= REFUSAL_WINDOW
+    )
+
+    raw = str(get_setting(session, "download.last_refused") or "")
+    previous_track, _, previous_at = raw.partition(" ")
+    if not ip_refused and previous_track and previous_track != track_id:
+        try:
+            at = ensure_timezone_aware(datetime.fromisoformat(previous_at))
+            ip_refused = now - at <= REFUSAL_WINDOW
+        except ValueError:
+            logger.warning("Ignoring unparseable download.last_refused=%r", raw)
+
+    set_setting(session, "download.last_refused", f"{track_id} {now.isoformat()}")
+    return ip_refused
+
+
 def note_download_succeeded(session: Session) -> None:
     """
-    Reset the pause escalation once a download gets through. Commits if
-    needed. Ignored while a pause is in force: with several workers, one
-    tripping the limit while the others are mid-download is the normal
-    case, and those downloads started *before* the block -- them finishing
-    says nothing about whether it has lifted. Without this the streak was
-    wiped within a second of every pause and never escalated past 10 min.
+    A download got through: forget the last refused one (a 403 since then
+    is that video's own problem again) and reset the pause escalation.
+    Commits if needed.
+
+    The escalation is kept while a pause is in force: with several
+    workers, one tripping the limit while the others are mid-download is
+    the normal case, and those downloads started *before* the block --
+    them finishing says nothing about whether it has lifted. Without this
+    the streak was wiped within a second of every pause and never
+    escalated past 10 min.
     """
+    if get_setting(session, "download.last_refused"):
+        set_setting(session, "download.last_refused", "")
     if downloads_paused_until(session):
         return
     if _int_setting(session, "download.pause_streak", 0) > 0:
