@@ -100,7 +100,8 @@ export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onCha
             { value: 'interval', label: t(`admin.settings.schedule.modeInterval_${unit}`) },
             { value: 'fixed', label: t('admin.settings.schedule.modeFixed') },
           ]}
-          className="w-36 !py-2"
+          // min-w-0: gives way on the narrowest phones rather than pushing the row off screen
+          className="w-36 min-w-0 !py-2"
         />
         {value.mode === 'interval' ? (
           <>

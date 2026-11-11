@@ -556,10 +556,10 @@ export default function PlaylistImport(): JSX.Element {
                 />
 
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl font-bold mb-1 text-foreground">
+                  <h2 className="text-2xl font-bold mb-1 text-foreground break-words">
                     {view.title || t('playlist.untitled')}
                   </h2>
-                  {view.author && <p className="text-sm text-muted-foreground mb-1">{view.author}</p>}
+                  {view.author && <p className="text-sm text-muted-foreground mb-1 break-words">{view.author}</p>}
                   <p className="text-muted-foreground">
                     {[
                       t('playlist.summary.tracks', { count: tracks.length }),

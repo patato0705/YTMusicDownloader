@@ -233,13 +233,13 @@ export default function Album(): JSX.Element {
             </div>
 
             <div className="flex-1 min-w-0 w-full">
-              <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground mb-2 md:mb-3">{album.title}</h1>
+              <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground mb-2 md:mb-3 break-words">{album.title}</h1>
 
               {album.artist?.name && (
                 album.artist.id ? (
                   <Link
                     to={artistPath(album.artist.id)}
-                    className="block w-fit mx-auto md:mx-0 text-lg md:text-xl text-accent-600 dark:text-accent-400 hover:underline mb-4 transition-colors"
+                    className="block w-fit max-w-full break-words mx-auto md:mx-0 text-lg md:text-xl text-accent-600 dark:text-accent-400 hover:underline mb-4 transition-colors"
                   >
                     {album.artist.name}
                   </Link>

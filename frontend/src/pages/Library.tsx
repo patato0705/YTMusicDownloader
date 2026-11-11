@@ -535,7 +535,6 @@ export default function Library(): JSX.Element {
                   tabs={tabs}
                   active={activeTab}
                   onChange={setActiveTab}
-                  className="overflow-x-auto no-scrollbar"
                 />
               </div>
               {activeTab !== 'playlists' && <ViewToggle value={viewMode} onChange={setViewMode} />}

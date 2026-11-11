@@ -17,7 +17,8 @@ export const GenreChips: React.FC<GenreChipsProps> = ({ genres, className = '' }
       {genres.map((genre) => (
         <span
           key={genre}
-          className="px-3 py-1 rounded-full glass text-sm text-muted-foreground"
+          className="max-w-full truncate px-3 py-1 rounded-full glass text-sm text-muted-foreground"
+          title={genre}
         >
           {genre}
         </span>

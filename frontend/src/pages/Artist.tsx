@@ -257,7 +257,7 @@ export default function Artist(): JSX.Element {
             </div>
 
             <div className="flex-1 min-w-0 w-full">
-              <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground mb-3 md:mb-4">{artist.name}</h1>
+              <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground mb-3 md:mb-4 break-words">{artist.name}</h1>
 
               {page.channel ? (
                 // A YouTube user's channel: nothing here to follow or like
