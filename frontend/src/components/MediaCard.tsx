@@ -67,7 +67,7 @@ const STATUS_BADGES: Record<NonNullable<MediaStatus>, {
   queued: {
     labelKey: 'mediaCard.status.queued',
     className: 'bg-slate-500 dark:bg-zinc-600',
-    path: ICON_PATHS.clock,
+    path: ICON_PATHS.hourglass,
   },
   failed: {
     labelKey: 'mediaCard.status.failed',

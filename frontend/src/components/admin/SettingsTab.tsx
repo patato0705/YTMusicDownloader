@@ -14,6 +14,7 @@ import { apiErrorMessage } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
 import { ScheduleControls, ScheduleHint, isValidSchedule, useScheduleSummary } from './ScheduleInput';
 import type { AdminTabProps } from './AdminTabShell';
+import { Icon } from '../ui/icons';
 
 interface SettingsTabProps extends AdminTabProps {
   /** Called after a successful save; feature flags may have changed. */
@@ -270,7 +271,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                         onClick={() => resetToDefault(setting)}
                         title={t('admin.settings.resetToDefault', { value: defaultValueLabel(setting) })}
                       >
-                        <span className="mr-1" aria-hidden="true">↺</span>
+                        <Icon name="undo" className="w-4 h-4 mr-1" />
                         {t('admin.settings.default')}
                       </Button>
                     )}

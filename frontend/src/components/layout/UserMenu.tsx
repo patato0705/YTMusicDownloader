@@ -9,7 +9,7 @@ import { LanguageSelector } from '../ui/LanguageSelector';
 import { AccentSwatches, ThemeSwitch } from './AppearanceMenu';
 import { ROLE_COLORS } from '../../config/roles';
 import type { Role } from '../../api/auth';
-import { ICON_PATHS } from '../ui/icons';
+import { ICON_PATHS, Icon } from '../ui/icons';
 
 const ROLE_GRADIENTS: Record<Role, string> = {
   administrator: 'from-purple-500 to-pink-600',
@@ -80,14 +80,7 @@ export const UserMenu: React.FC = () => {
           <div className="text-sm font-medium text-slate-700 dark:text-zinc-200">{user.username}</div>
           <div className="text-xs text-muted-foreground">{roleName}</div>
         </div>
-        <svg
-          className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <Icon name="chevronDown" className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {mounted && createPortal(

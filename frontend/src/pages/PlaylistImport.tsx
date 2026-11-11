@@ -21,6 +21,7 @@ import { PlaylistOptionsDialog } from '../components/playlists/PlaylistOptionsDi
 import { PlaylistBadges, usePlaylistStats } from '../components/playlists/PlaylistBadges';
 import { formatDuration, formatDurationLong, apiErrorMessage, createMemoryCache, artistPath, albumPath } from '../utils';
 import { useHistoryState } from '../hooks/useHistoryState';
+import { Icon } from '../components/ui/icons';
 
 /** Shown in a column with nothing to show */
 const NONE = '-';
@@ -172,15 +173,7 @@ function ExpandableRow({ expanded, onToggle, children, action, tracks }: Expanda
         onClick={onToggle}
         className="flex items-start sm:items-center gap-4 px-4 md:px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer select-none"
       >
-        <svg
-          className={`w-4 h-4 flex-shrink-0 mt-1 sm:mt-0 text-muted-foreground transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
+        <Icon name="chevronRight" className={`w-4 h-4 flex-shrink-0 mt-1 sm:mt-0 text-muted-foreground transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
         <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
           <div className="flex-1 min-w-0">{children}</div>
           {action}
@@ -495,13 +488,13 @@ export default function PlaylistImport(): JSX.Element {
         variant={done ? 'secondary' : 'primary'}
         size="sm"
       >
-        {done ? `✓ ${doneLabel}` : label}
+        {done ? <><Icon name="check" strokeWidth={2.5} className="w-4 h-4 mr-1.5" />{doneLabel}</> : label}
       </Button>
     );
 
   const bulkButton = (label: string, remaining: number, onClick: () => void, variant: 'primary' | 'secondary') => (
     <Button onClick={onClick} disabled={isBulkRunning || remaining === 0} variant={variant}>
-      {remaining === 0 ? `✓ ${label}` : `${label} (${remaining})`}
+      {remaining === 0 ? <><Icon name="check" strokeWidth={2.5} className="w-4 h-4 mr-1.5" />{label}</> : `${label} (${remaining})`}
     </Button>
   );
 

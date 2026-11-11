@@ -117,7 +117,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">{t('lyrics.searchLrclibHint')}</p>
         </div>
-        <span className="text-muted-foreground text-sm">↗</span>
+        <Icon name="externalLink" className="w-4 h-4 shrink-0 text-muted-foreground" />
       </a>
 
       {/* Editor */}

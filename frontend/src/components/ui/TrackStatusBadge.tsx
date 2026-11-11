@@ -14,6 +14,7 @@ interface TrackStatusBadgeProps {
 interface Badge {
   tone: string;
   icon: string;
+  iconClassName?: string;
   strokeWidth?: number;
   label: string;
   /** Details on hover */
@@ -37,16 +38,16 @@ export const TrackStatusBadge: React.FC<TrackStatusBadgeProps> = ({ track, downl
       case 'failed':
         return {
           tone: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 dark:border-red-500/25',
-          icon: ICON_PATHS.close,
-          strokeWidth: 2.5,
+          icon: ICON_PATHS.alertCircle,
           label: t('album.trackStatus.failed'),
           // The download error, on hover
           title: track.last_error ? `${t('album.downloadError')}: ${track.last_error}` : undefined,
         };
       case 'downloading':
         return {
-          tone: 'bg-accent-500/15 text-accent-700 dark:text-accent-400 border-accent-500/30 dark:border-accent-500/25',
-          icon: ICON_PATHS.download,
+          tone: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 dark:border-amber-500/25',
+          icon: ICON_PATHS.refresh,
+          iconClassName: 'animate-spin',
           label: t('album.trackStatus.downloading'),
         };
       case 'queued':
@@ -63,7 +64,7 @@ export const TrackStatusBadge: React.FC<TrackStatusBadgeProps> = ({ track, downl
         // A queued track with an error is waiting out a retry backoff
         return {
           tone: 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-400/30 dark:border-slate-500/30',
-          icon: ICON_PATHS.clock,
+          icon: ICON_PATHS.hourglass,
           label: t('album.trackStatus.queued'),
           title: track.last_error ? t('album.retryingAfter', { error: track.last_error }) : undefined,
         };

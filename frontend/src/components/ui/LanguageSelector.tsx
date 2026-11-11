@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { SUPPORTED_LOCALES, getLanguage } from '../../config/i18n';
 import { useI18n } from '../../contexts/I18nContext';
 import { useDropdown } from '../../hooks/useDropdown';
+import { Icon } from './icons';
 
 interface LanguageSelectorProps {
   /** navbar: desktop navbar button; menu: full-width button inside the user menu (phones) */
@@ -33,14 +34,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({ variant }) =
       >
         <span aria-hidden="true">{current.flag}</span>
         <span className={variant === 'navbar' ? 'hidden lg:inline' : ''}>{current.code.toUpperCase()}</span>
-        <svg
-          className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <Icon name="chevronDown" className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {mounted && createPortal(
@@ -61,7 +55,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({ variant }) =
             >
               <span className="text-lg" aria-hidden="true">{language.flag}</span>
               <span>{language.name}</span>
-              {language.code === locale && <span className="ml-auto">✓</span>}
+              {language.code === locale && <Icon name="check" strokeWidth={3} className="w-4 h-4 ml-auto" />}
             </button>
           ))}
         </div>,

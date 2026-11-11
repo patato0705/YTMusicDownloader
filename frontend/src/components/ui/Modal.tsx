@@ -3,6 +3,7 @@ import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useI18n } from '../../contexts/I18nContext';
 import { useSheetDismiss } from '../../hooks/useSheetDismiss';
+import { Icon } from './icons';
 
 interface ModalProps {
   onClose: () => void;
@@ -152,7 +153,7 @@ export const Modal: React.FC<ModalProps> = ({
                 aria-label={t('common.close')}
                 className="w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/10 disabled:opacity-50 transition-all text-sm"
               >
-                ✕
+                <Icon name="close" className="w-4 h-4" />
               </button>
             </div>
           </div>

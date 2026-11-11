@@ -22,6 +22,7 @@ import { SectionHeader } from '../components/ui/SectionHeader';
 import { GenreChips } from '../components/ui/GenreChips';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
 import { categorizeAlbums, getAlbumStatus, apiErrorMessage, albumPath, artistPath } from '../utils';
+import { Icon } from '../components/ui/icons';
 
 export default function Artist(): JSX.Element {
   const { artistId } = useParams<{ artistId: string }>();
@@ -99,7 +100,7 @@ export default function Artist(): JSX.Element {
       <div className="space-y-6 py-8">
         <ErrorBanner title={t('common.error')}>{error || t('artist.notFound')}</ErrorBanner>
         <Button onClick={() => navigate('/browse')} variant="primary">
-          ← {t('common.back')}
+          <Icon name="arrowLeft" className="w-4 h-4 mr-2" />{t('common.back')}
         </Button>
       </div>
     );
@@ -282,7 +283,7 @@ export default function Artist(): JSX.Element {
                     variant={followed ? 'secondary' : 'primary'}
                     size="lg"
                   >
-                    <span className="mr-2" aria-hidden="true">{followed ? '✓' : '+'}</span>
+                    <Icon name={followed ? 'check' : 'plus'} strokeWidth={2.5} className="w-5 h-5 mr-2" />
                     {followed ? t('artist.unfollow') : t('artist.follow')}
                   </Button>
                 )}

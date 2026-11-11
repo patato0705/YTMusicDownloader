@@ -202,12 +202,7 @@ export const SortControl: React.FC<SortControlProps> = ({ sort, onChange, classN
           <span className="block text-sm font-medium text-foreground truncate">{keyLabel}</span>
           <span className="block text-xs text-muted-foreground truncate">{currentOrder}</span>
         </span>
-        <svg
-          className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <Icon name="chevronDown" className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {/* In the page, scrolling with it: z-40 passes it under the navbar's z-50 like the page */}

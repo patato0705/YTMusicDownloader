@@ -7,6 +7,8 @@ interface PillProps {
   /** SVG path of the icon */
   icon: string;
   strokeWidth?: number;
+  /** Extra classes on the icon, e.g. animate-spin */
+  iconClassName?: string;
   label: string;
   /** Hover text */
   title?: string;
@@ -18,11 +20,11 @@ interface PillProps {
 }
 
 /** Small rounded badge with an icon: the track status and lyrics columns */
-export const Pill: React.FC<PillProps> = ({ tone, icon, strokeWidth = 2, label, title, labelClassName = '', onClick, className = '' }) => {
+export const Pill: React.FC<PillProps> = ({ tone, icon, strokeWidth = 2, iconClassName = '', label, title, labelClassName = '', onClick, className = '' }) => {
   const classes = `inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium whitespace-nowrap rounded-full border backdrop-blur-sm ${tone} ${className}`;
   const content = (
     <>
-      <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <svg className={`w-3 h-3 shrink-0 ${iconClassName}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={strokeWidth} d={icon} />
       </svg>
       <span className={labelClassName}>{label}</span>

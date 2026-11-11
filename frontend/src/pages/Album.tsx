@@ -95,7 +95,7 @@ export default function Album(): JSX.Element {
       <div className="space-y-6 py-8">
         <ErrorBanner title={t('common.error')}>{error || t('album.notFound')}</ErrorBanner>
         <Button onClick={() => navigate('/browse')} variant="primary">
-          ← {t('common.back')}
+          <Icon name="arrowLeft" className="w-4 h-4 mr-2" />{t('common.back')}
         </Button>
       </div>
     );
@@ -290,14 +290,14 @@ export default function Album(): JSX.Element {
                     size="lg"
                     disabled={isFollowing}
                   >
-                    {isFollowing ? <span className="mr-2" aria-hidden="true">✓</span> : <Icon name="download" className="w-5 h-5 mr-2" />}
+                    <Icon name={isFollowing ? 'check' : 'download'} strokeWidth={isFollowing ? 2.5 : 2} className="w-5 h-5 mr-2" />
                     {isFollowing ? t('album.following') : t('album.download')}
                   </Button>
                 )}
 
                 {canModify && isFollowing && showTrackState && (retryableCount > 0 || page.needs_import) && (
                   <Button onClick={handleRetry} variant="secondary" size="lg" isLoading={retryLoading}>
-                    <span className="mr-2" aria-hidden="true">↻</span>
+                    <Icon name="refresh" className="w-5 h-5 mr-2" />
                     {t('album.retry')}
                   </Button>
                 )}

@@ -1,6 +1,8 @@
 // src/components/ui/Toast.tsx
 import React, { useEffect, useRef } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
+import { Icon } from './icons';
+import type { IconName } from './icons';
 
 export interface ToastProps {
   message: string;
@@ -29,10 +31,10 @@ export const Toast: React.FC<ToastProps> = ({
     return () => clearTimeout(timer);
   }, [duration, message]);
 
-  const icons = {
-    success: '✓',
-    error: '✗',
-    info: 'ℹ'
+  const icons: Record<typeof type, IconName> = {
+    success: 'check',
+    error: 'warning',
+    info: 'info'
   };
 
   const colors = {
@@ -45,12 +47,12 @@ export const Toast: React.FC<ToastProps> = ({
     <div role="status" className="fixed top-24 right-4 z-[100]">
       <div className={`glass rounded-2xl p-4 border shadow-2xl ${colors[type]} min-w-[300px] max-w-md`}>
         <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
             type === 'success' ? 'bg-green-500/20' : 
             type === 'error' ? 'bg-red-500/20' : 
             'bg-accent-500/20'
           }`}>
-            {icons[type]}
+            <Icon name={icons[type]} strokeWidth={2.5} className="w-4 h-4" />
           </div>
           <p className="flex-1 font-medium">{message}</p>
           {action && (
@@ -66,7 +68,7 @@ export const Toast: React.FC<ToastProps> = ({
             aria-label={t('common.close')}
             className="text-current hover:opacity-70 transition-opacity"
           >
-            ✕
+            <Icon name="close" className="w-4 h-4" />
           </button>
         </div>
       </div>
