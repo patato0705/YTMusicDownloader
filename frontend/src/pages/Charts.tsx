@@ -98,7 +98,7 @@ export default function Charts(): JSX.Element {
                 <div className="flex items-center gap-3 mb-4">
                   <span className="text-4xl" aria-hidden="true">{country.flag}</span>
                   <div>
-                    <h3 className="text-xl font-bold text-foreground">{countryName(country.code)}</h3>
+                    <h2 className="text-xl font-bold text-foreground">{countryName(country.code)}</h2>
                     <p className="text-sm text-muted-foreground">
                       {t('charts.followingTopN', { n: subscription.top_n_artists, total: chart.artists.length })}
                     </p>

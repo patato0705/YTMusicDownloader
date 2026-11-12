@@ -1,5 +1,7 @@
 {
   "common": {
+    "unknownArtist": "Unknown artist",
+    "untitled": "Untitled",
     "loading": "Loading...",
     "error": "Error",
     "cancel": "Cancel",
@@ -217,7 +219,6 @@
   "album": {
     "album": "Album",
     "downloadError": "Download error",
-    "unknownArtist": "Unknown Artist",
     "trackCount": "{count} tracks",
     "trackCount_one": "{count} track",
     "download": "Download Album",
@@ -656,6 +657,7 @@
       "ssoBadge": "SSO",
       "ssoTooltip": "Signs in with {name}",
       "roleFromGroups": "This role comes from the user's groups at the sign-in provider",
+      "roleFromGroupsShort": "From provider groups",
       "noResults": "No users found",
       "created": "User created successfully",
       "deleted": "User deleted successfully",

@@ -171,6 +171,9 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 }) => {
   const { t } = useI18n();
   const isArtist = type === 'artist';
+  // A row can lack a name (an artist followed by an id YouTube Music doesn't
+  // know): never an empty heading or a link with no text
+  const shownTitle = title.trim() || t(type === 'artist' ? 'common.unknownArtist' : 'common.untitled');
 
   // Artists are already told apart by their round artwork (and live in their own
   // sections), so they go without; the others name their type under the title
@@ -187,7 +190,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
   return (
     <div className={`group relative w-full text-left rounded-2xl transition-transform duration-300 hover:-translate-y-1 ${className}`}>
-      <CardLink to={to} onClick={onClick} label={title} className="rounded-2xl" />
+      <CardLink to={to} onClick={onClick} label={shownTitle} className="rounded-2xl" />
       <div className="relative pointer-events-none">
         {/* Artwork: the badges live outside the clipping box so they survive the round shape */}
         <div className="relative mb-3">
@@ -224,7 +227,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           {/* Centred names sit in the middle column, so an action beside them doesn't pull them off centre */}
           <div className={isArtist ? 'grid grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-1' : 'flex items-center gap-1'}>
             <h3 className={`min-w-0 font-semibold text-sm text-foreground truncate transition-colors group-hover:text-accent-600 dark:group-hover:text-accent-400 ${isArtist ? 'col-start-2' : ''}`}>
-              {title}
+              {shownTitle}
             </h3>
             {titleAction && <div className="relative z-10 shrink-0 -my-1 pointer-events-auto justify-self-start">{titleAction}</div>}
           </div>

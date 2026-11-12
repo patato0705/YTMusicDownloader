@@ -6,7 +6,8 @@ const BASE = 'inline-flex items-center justify-center font-semibold rounded-xl t
 
 /** danger: the final confirm of a destructive action; subtleDanger: the button that opens that confirm */
 const VARIANTS = {
-  primary: 'bg-accent-600 text-white hover:bg-accent-700 dark:bg-accent-500 dark:hover:bg-accent-600 focus:ring-accent-500',
+  // 600 in dark mode too: white on 500 is 4.46:1, just under WCAG AA's 4.5
+  primary: 'bg-accent-600 text-white hover:bg-accent-700 focus:ring-accent-500',
   secondary: 'bg-slate-200 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100 hover:bg-slate-300 dark:hover:bg-zinc-700 focus:ring-slate-400 dark:focus:ring-zinc-600',
   outline: 'border-2 border-accent-500 dark:border-accent-600 text-accent-600 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-950/30 focus:ring-accent-500 dark:focus:ring-accent-600',
   ghost: 'text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 focus:ring-slate-400 dark:focus:ring-zinc-600',

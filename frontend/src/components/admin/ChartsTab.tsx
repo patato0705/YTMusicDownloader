@@ -29,6 +29,22 @@ type ChartAction =
   | { kind: 'topN'; sub: ChartSubscription; value: number }
   | { kind: 'sync'; sub: ChartSubscription };
 
+/** A sync error on one line, in full on a tap: a tooltip never shows on a phone */
+const SyncError: React.FC<{ error: string }> = ({ error }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((value) => !value)}
+      aria-expanded={open}
+      title={error}
+      className={`mt-1 block max-w-xs text-left text-xs text-red-600 dark:text-red-400 ${open ? 'whitespace-normal break-words' : 'truncate'}`}
+    >
+      <InlineWarning />{error}
+    </button>
+  );
+};
+
 export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
   const { t, formatLocale } = useI18n();
   const countryName = useCountryName();
@@ -295,7 +311,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                 variant="primary"
                 disabled={!selectedCountry || loadingChart}
               >
-                + {t('admin.charts.followChart')}
+                <Icon name="plus" className="w-4 h-4 mr-2" />{t('admin.charts.followChart')}
               </Button>
             </div>
 
@@ -428,13 +444,9 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                                 ? new Date(sub.last_synced_at).toLocaleString(formatLocale)
                                 : t('admin.charts.neverSynced')}
                             </div>
-                            {sub.last_error && (
-                              <div
-                                className="mt-1 text-xs text-red-600 dark:text-red-400 max-w-xs truncate"
-                                title={sub.last_error}
-                              >
-                                <InlineWarning />{sub.last_error}
-                              </div>
+                            {sub.last_error && <SyncError error={sub.last_error} />}
+                            {!sub.enabled && (
+                              <div className="mt-1 text-xs text-muted-foreground">{t('admin.charts.syncDisabledHint')}</div>
                             )}
                           </td>
                           <td className="px-6 py-4 text-right">

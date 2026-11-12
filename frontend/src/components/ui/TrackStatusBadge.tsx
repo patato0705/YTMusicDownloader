@@ -70,7 +70,8 @@ export const TrackStatusBadge: React.FC<TrackStatusBadgeProps> = ({ track, downl
         };
       case 'available':
         return {
-          tone: 'bg-slate-500/5 text-slate-400 dark:text-slate-500 border-slate-400/15 dark:border-slate-500/15',
+          // Quieter than queued by its fill and border; the text still reads (AA)
+          tone: 'bg-slate-500/5 text-slate-600 dark:text-slate-400 border-slate-400/15 dark:border-slate-500/15',
           icon: ICON_PATHS.cloud,
           label: t('album.trackStatus.available'),
         };

@@ -347,7 +347,7 @@ export default function Album(): JSX.Element {
                           </div>
                         </td>
                         <td className="px-3 md:px-6 py-4 text-sm text-muted-foreground hidden lg:table-cell">
-                          {primaryArtistName(track) || t('album.unknownArtist')}
+                          {primaryArtistName(track) || t('common.unknownArtist')}
                         </td>
                         <td className="px-3 md:px-6 py-4 text-sm text-muted-foreground text-right font-mono hidden sm:table-cell">
                           {formatDuration(track.duration)}

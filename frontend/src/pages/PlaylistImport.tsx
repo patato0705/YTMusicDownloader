@@ -590,6 +590,12 @@ export default function PlaylistImport(): JSX.Element {
                   <>
                     <PlaylistBadges saved={saved} className="sm:justify-end" />
                     <p className="text-xs text-muted-foreground">{playlistStats(saved)}</p>
+                    {/* In full: the library card only has room for two lines */}
+                    {saved.last_error && !saved.syncing && (
+                      <p className="text-xs text-red-600 dark:text-red-400 break-words max-w-sm sm:text-right">
+                        {t('playlist.status.lastError', { error: saved.last_error })}
+                      </p>
+                    )}
                     {canModify && (
                       <Button variant="secondary" size="sm" onClick={() => setOptionsOpen(true)} disabled={isBulkRunning}>
                         {t('playlist.options.editButton')}

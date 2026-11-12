@@ -43,7 +43,7 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({ title, children, class
       <Icon name="warning" className={`shrink-0 text-red-600 dark:text-red-400 ${title ? 'w-6 h-6' : 'w-5 h-5'}`} />
       {title ? (
         <div>
-          <h3 className="font-semibold text-red-600 dark:text-red-400 mb-1">{title}</h3>
+          <h2 className="font-semibold text-red-600 dark:text-red-400 mb-1">{title}</h2>
           <p className="text-sm text-red-600/80 dark:text-red-400/80">{children}</p>
         </div>
       ) : (
@@ -66,7 +66,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, children })
       <Icon name={icon} className="w-8 h-8" />
     </div>
     {/* break-words: an unbroken link or search fits narrow screens */}
-    <h3 className="text-2xl font-bold mb-3 text-foreground break-words">{title}</h3>
+    <h2 className="text-2xl font-bold mb-3 text-foreground break-words">{title}</h2>
     {children && <div className="text-muted-foreground max-w-md mx-auto space-y-6 break-words">{children}</div>}
   </div>
 );

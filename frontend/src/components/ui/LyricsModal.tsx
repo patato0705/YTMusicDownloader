@@ -94,7 +94,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
   return (
     <Modal
       title={track.title}
-      subtitle={primaryArtistName(track) || t('album.unknownArtist')}
+      subtitle={primaryArtistName(track) || t('common.unknownArtist')}
       headerExtra={<LyricsBadge kind={track.lyrics} pending={track.lyrics_pending} />}
       onClose={onClose}
       dismissible={!dirty && !saving}

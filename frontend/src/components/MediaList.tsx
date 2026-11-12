@@ -123,6 +123,9 @@ export const MediaRow: React.FC<MediaRowProps> = ({
   titleAction,
 }) => {
   const { t, formatLocale } = useI18n();
+  // A row can lack a name (an artist followed by an id YouTube Music doesn't
+  // know): never an empty heading or a link with no text
+  const shownTitle = title.trim() || t(type === 'artist' ? 'common.unknownArtist' : 'common.untitled');
   const showStatus = React.useContext(StatusColumn);
   const isArtist = type === 'artist';
   const typeLabel = isArtist ? null : t(albumTypeKey(albumType));
@@ -147,7 +150,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
 
   return (
     <div className="group relative flex items-center gap-3 md:gap-4 px-3 md:px-4 py-2.5 transition-colors duration-200 hover:bg-slate-100/70 dark:hover:bg-white/5">
-      <CardLink to={to} onClick={onClick} label={title} className="w-full focus-visible:ring-inset" />
+      <CardLink to={to} onClick={onClick} label={shownTitle} className="w-full focus-visible:ring-inset" />
       <div className="contents pointer-events-none">
         {/* Artwork */}
         <div
@@ -166,7 +169,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <h3 className="font-semibold text-sm text-foreground truncate transition-colors group-hover:text-accent-600 dark:group-hover:text-accent-400">
-              {title}
+              {shownTitle}
             </h3>
             {titleAction && <div className="relative z-10 shrink-0 -my-1 pointer-events-auto">{titleAction}</div>}
           </div>

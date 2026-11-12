@@ -233,7 +233,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
 
             {authConfig?.password_login_enabled && (
               <Button onClick={() => setShowCreateModal(true)} variant="primary">
-                + {t('admin.users.create')}
+                <Icon name="plus" className="w-4 h-4 mr-2" />{t('admin.users.create')}
               </Button>
             )}
           </div>
@@ -304,6 +304,10 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                             className={`text-xs font-medium ${ROLE_COLORS[u.role]} border-0 py-1`}
                           />
                         </span>
+                        {/* Visible, not only in the tooltip: phones never show one */}
+                        {u.is_oidc && authConfig?.oidc_roles_from_groups && (
+                          <p className="mt-1 text-[11px] text-muted-foreground">{t('admin.users.roleFromGroupsShort')}</p>
+                        )}
                       </td>
                       <td className="col-start-2 row-start-1 md:table-cell md:px-6 md:py-4">
                         <ToggleSwitch
