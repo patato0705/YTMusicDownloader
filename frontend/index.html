@@ -7,6 +7,14 @@
     <meta name="robots" content="noindex, nofollow" />
     <!-- Kept in sync with the active theme by ThemeContext; colours the browser chrome on mobile -->
     <meta name="theme-color" content="#f8fafc" />
+    <!-- Icons from public/, which Vite serves under /static. The .ico is for
+         browsers without SVG favicons; iOS takes the 180px PNG and rounds it -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- The home screen label: the full name gets cut short there -->
+    <meta name="apple-mobile-web-app-title" content="MusicDL" />
     <script>
       // Apply the saved theme and accent before first paint. Avoids a light flash when
       // loading in dark mode, and hands mobile browsers the right theme-color

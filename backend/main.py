@@ -33,6 +33,8 @@ _ASSETS_CACHE_CONTROL = "public, max-age=31536000, immutable"
 # next: always revalidated (a 304 when unchanged), or a browser holding an
 # old copy asks for assets the new image no longer has and shows a blank page
 _INDEX_CACHE_CONTROL = "no-cache"
+# Icons requested at the site root by convention (frontend/public)
+_ROOT_ICONS = frozenset({"favicon.ico", "apple-touch-icon.png"})
 
 
 class SecurityHeadersMiddleware:
@@ -171,9 +173,13 @@ def create_app() -> FastAPI:
     if index_file.exists():
         app.mount("/static", _AssetFiles(directory=str(static_dir)), name="static")
 
-        # Every other path is a frontend route: React Router handles it (404s included)
+        # Every other path is a frontend route: React Router handles it (404s
+        # included). Except the icons browsers and iOS look for at the root
+        # without reading index.html first: those are the files under /static.
         @app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
         def spa(full_path: str) -> FileResponse:
+            if full_path in _ROOT_ICONS:
+                return FileResponse(static_dir / full_path, headers={"Cache-Control": _INDEX_CACHE_CONTROL})
             return FileResponse(index_file, headers={"Cache-Control": _INDEX_CACHE_CONTROL})
 
         logger.debug("Serving the frontend from %s", static_dir)
