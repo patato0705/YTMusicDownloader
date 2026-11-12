@@ -23,20 +23,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
 
 from .. import config
-from ..downloader.core import safe_name
+from ..downloader.core import fit_name, safe_name
 from ..models import Album, Artist
 from .playlists import M3U_DIR_NAME
 
 # The folder of albums without an artist
 NO_ARTIST = safe_name(None)
-
-# Longest file name most filesystems allow, in bytes
-_MAX_NAME_BYTES = 255
-
-
-def _fit(name: str, reserve: int = 0) -> str:
-    """name cut to fit the filesystem's limit, leaving `reserve` bytes for a suffix."""
-    return name.encode()[: _MAX_NAME_BYTES - reserve].decode(errors="ignore").rstrip()
 
 
 def _free_name(name: str, taken: Set[str]) -> str:
@@ -46,7 +38,7 @@ def _free_name(name: str, taken: Set[str]) -> str:
     while candidate.casefold() in taken:
         n += 1
         suffix = f" ({n})"
-        candidate = _fit(name, len(suffix.encode())) + suffix
+        candidate = fit_name(name, len(suffix.encode())) + suffix
     return candidate
 
 
@@ -76,7 +68,7 @@ def _claim(session: Session, row: Union[Artist, Album], name: Optional[str]) -> 
         session.execute(update(model).where(model.id == row.id).values(folder=model.folder))
         folder = session.execute(select(model.folder).where(model.id == row.id)).scalar_one()
         if folder is None:
-            folder = _free_name(_fit(safe_name(name)), _taken(session, row))
+            folder = _free_name(fit_name(safe_name(name)), _taken(session, row))
             session.execute(update(model).where(model.id == row.id).values(folder=folder))
         set_committed_value(row, "folder", folder)
     return row.folder

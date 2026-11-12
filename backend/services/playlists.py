@@ -40,7 +40,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from .. import config
-from ..downloader.core import safe_name
+from ..downloader.core import fit_name, safe_name
 from ..jobs.jobqueue import enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
 from ..models import Album, Job, Playlist, PlaylistEntry, Track, VideoSong
@@ -377,10 +377,19 @@ def resolve_entries(session: Session, entries: List[Dict[str, Any]]) -> List[Tup
 # M3U
 # ============================================================================
 
+# Bytes kept free in an M3U file name: " (999).m3u8", and the temp file's
+# leading "." and ".<pid>.tmp"
+_M3U_NAME_RESERVE = len(" (999).m3u8") + len("..4194304.tmp")
+
+
 def _pick_m3u_name(session: Session, title: str) -> str:
     """A file name of its own in m3u_dir: not another playlist's, not a file already there."""
-    # safe_name drops characters (/, [ ]...) but leaves their spaces: "A / B" -> "A  B"
-    base = " ".join(safe_name(title).split()) if title else "Playlist"
+    # safe_name drops characters (/, [ ]...) but leaves their spaces: "A / B" -> "A  B".
+    # No leading dot: a hidden file, which library scans skip ("...Ready For It").
+    # Cut to leave room in the filesystem's limit for " (n).m3u8" and the
+    # temp file's ".<name>.<pid>.tmp"
+    base = " ".join(safe_name(title).split()).lstrip(". ") if title else ""
+    base = fit_name(base, _M3U_NAME_RESERVE) or "Playlist"
     taken = set(session.execute(select(Playlist.m3u_name).where(Playlist.m3u_name.is_not(None))).scalars())
     n = 1
     while True:
@@ -418,7 +427,8 @@ def refresh_m3u(session: Session, playlist: Playlist) -> None:
         if path.exists() and path.read_text(encoding="utf-8") == text:
             return
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(f".{path.name}.tmp")
+        # Per process: several download workers can refresh one playlist at once
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
         tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, path)  # atomic: a library scan never reads half a file
         logger.info("Wrote %s (%s songs)", path, len(resolved))
@@ -444,9 +454,17 @@ def refresh_for_track(session: Session, track: Track) -> None:
         matches.append(PlaylistEntry.album_id == track.album_id)
     if track.title:
         matches.append(PlaylistEntry.title == track.title)
-    playlist_ids = set(session.execute(
-        select(PlaylistEntry.playlist_id).where(or_(*matches))
-    ).scalars())
+    # Only the playlists it can be a song of (resolve_entries): its own id,
+    # or its title. Every other track of an album a playlist lists matches
+    # the query too, and a big playlist's refresh isn't cheap
+    key = _norm(track.title)
+    playlist_ids = {
+        playlist_id
+        for playlist_id, video_id, title in session.execute(
+            select(PlaylistEntry.playlist_id, PlaylistEntry.video_id, PlaylistEntry.title).where(or_(*matches))
+        )
+        if video_id == track.id or _norm(title) == key
+    }
     for playlist_id in playlist_ids:
         playlist = session.get(Playlist, playlist_id)
         if playlist:
@@ -543,7 +561,9 @@ def run_sync(session: Session, playlist_id: str, *, fetch: bool, origin: Origin)
     # Music videos not looked up yet (new ones, or added with the playlist):
     # their songs, and so their albums, before anything is brought in
     songs_failed = _stand_in_songs(session, playlist_id)
-    playlist = session.get(Playlist, playlist_id)
+    # Read again from the DB, not the session's copy (kept across commits):
+    # removed, switched off or renamed by a request meanwhile
+    playlist = session.get(Playlist, playlist_id, populate_existing=True)
     if playlist is None:  # removed meanwhile
         return {"ok": True, "skipped": True, "reason": "playlist removed"}
 
@@ -555,7 +575,9 @@ def run_sync(session: Session, playlist_id: str, *, fetch: bool, origin: Origin)
     else:
         albums_started, albums_failed = _download_albums(session, entries, origin, user_id)
 
-    playlist = session.get(Playlist, playlist_id)
+    # Again: the brought-in part can take minutes, and a download may have
+    # named its M3U meanwhile (refresh_for_track)
+    playlist = session.get(Playlist, playlist_id, populate_existing=True)
     if playlist is None:  # removed meanwhile
         return {"ok": True, "skipped": True, "reason": "playlist removed"}
     refresh_m3u(session, playlist)
@@ -760,12 +782,13 @@ def summary(session: Session, playlist: Playlist, syncing: Optional[set] = None)
     entries = session.execute(
         select(PlaylistEntry.album_id, PlaylistEntry.artist_id).where(PlaylistEntry.playlist_id == playlist.id)
     ).all()
-    # Songs that bring nothing in for this mode: no album (uploads, music
-    # videos whose song wasn't found), or in artists mode no main artist
-    # (uploads: see entries_from_playlist)
+    # Songs that bring nothing in for this mode: in albums mode no album
+    # (uploads, music videos whose song wasn't found), in artists mode no
+    # main artist (uploads: see entries_from_playlist); a music video with no
+    # album still brings its artist in (_follow_artists)
     skipped = sum(
         1 for album_id, artist_id in entries
-        if not album_id or (playlist.mode == "artists" and not artist_id)
+        if not (artist_id if playlist.mode == "artists" else album_id)
     )
     syncing = playlist.id in (syncing if syncing is not None else _syncing_ids(session))
     return {

@@ -30,6 +30,15 @@ def safe_name(s: Optional[str]) -> str:
     return name if name.strip(".") else "Unknown"
 
 
+# Longest file name most filesystems allow, in bytes
+MAX_NAME_BYTES = 255
+
+
+def fit_name(name: str, reserve: int = 0) -> str:
+    """name cut to fit the filesystem's limit, leaving `reserve` bytes for a suffix."""
+    return name.encode()[: MAX_NAME_BYTES - reserve].decode(errors="ignore").rstrip()
+
+
 def _job_download_dir(video_id: str) -> Path:
     """
     Scratch directory for one download. Each download gets its own so that

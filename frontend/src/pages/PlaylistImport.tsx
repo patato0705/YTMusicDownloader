@@ -407,15 +407,16 @@ export default function PlaylistImport(): JSX.Element {
   const unfollowedMainArtists = mainArtists.filter((a) => !followedArtists.has(a.id));
   const undownloadedAlbums = albums.filter((a) => !downloadedAlbums.has(a.id));
   // What the playlist can't bring in, as its summary counts it (backend
-  // services/playlists.summary: no album, or in artists mode no main
-  // artist), by reason: uploads; videos with no album (their song not
-  // found, those still being looked up aside); in artists mode, songs with
-  // no artist credited
+  // services/playlists.summary: in albums mode no album, in artists mode
+  // no main artist), by reason: uploads; in albums mode, videos with no
+  // album (their song not found, those still being looked up aside); in
+  // artists mode, songs with no artist credited (a video with no album
+  // still brings its artist in)
   const uploads = tracks.filter(isUpload);
   const artistsMode = saved?.mode === 'artists';
   const songsLeft = tracks.filter((track) => !isUpload(track) && !songsPending.has(track.id));
-  const noAlbum = songsLeft.filter((track) => !track.album?.id);
-  const noArtist = artistsMode ? songsLeft.filter((track) => track.album?.id && !track.artists[0]?.id) : [];
+  const noAlbum = artistsMode ? [] : songsLeft.filter((track) => !track.album?.id);
+  const noArtist = artistsMode ? songsLeft.filter((track) => !track.artists[0]?.id) : [];
   const skippedCount = uploads.length + noAlbum.length + noArtist.length;
 
   const linkClass = 'hover:text-accent-600 dark:hover:text-accent-400 hover:underline transition-colors text-left';
