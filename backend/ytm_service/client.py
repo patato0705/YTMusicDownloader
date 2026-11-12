@@ -65,6 +65,17 @@ _ytm_lock = threading.Lock()
 _ytm_client: Optional[YTMusic] = None
 _ytm_sem = threading.BoundedSemaphore(YTM_MAX_CONC)
 
+# The client's language, and when the setting was last read. Every process
+# (web, workers, scheduler) has its own client, and only the web process
+# hears about a change made in the admin panel (reset_client): the others
+# re-read the setting this often and rebuild their client when it changed.
+_ytm_language: Optional[str] = None
+_ytm_language_checked_at = 0.0
+LANGUAGE_RECHECK_SECONDS = 60
+
+# YouTube Music errors can quote the whole page they couldn't parse (2 KB+)
+_MAX_LOGGED_ERROR = 300
+
 
 def _get_language() -> str:
     """The ytmusic.language setting, 'en' if it can't be read."""
@@ -82,12 +93,21 @@ def get_client() -> YTMusic:
     """
     The YTMusic instance, created on first use. HEADERS_AUTH, when set, is
     the path of a headers_auth.json to reuse an authenticated session;
-    otherwise the client is anonymous.
+    otherwise the client is anonymous. Rebuilt when the ytmusic.language
+    setting changes (checked every LANGUAGE_RECHECK_SECONDS).
     """
-    global _ytm_client
+    global _ytm_client, _ytm_language, _ytm_language_checked_at
     with _ytm_lock:
+        now = time.monotonic()
+        if _ytm_client is not None and now - _ytm_language_checked_at >= LANGUAGE_RECHECK_SECONDS:
+            _ytm_language_checked_at = now
+            language = _get_language()
+            if language != _ytm_language:
+                logger.info("ytmusic.language changed from %s to %s", _ytm_language, language)
+                _ytm_client = None
         if _ytm_client is None:
             language = _get_language()
+            _ytm_language, _ytm_language_checked_at = language, now
             if HEADERS_AUTH:
                 logger.info("Initializing YTMusic with headers file: %s (language=%s)", HEADERS_AUTH, language)
                 _ytm_client = _YTMusic(auth=HEADERS_AUTH, language=language)
@@ -126,5 +146,5 @@ def call(method_name: str, *args: Any, max_retries: int = 4, **kwargs: Any) -> A
                 raise
             backoff = min(YTM_BACKOFF_MAX, YTM_BACKOFF_BASE * (2 ** (attempt - 1)))
             logger.warning("YTMusic call %s failed (attempt %s/%s): %s, retrying in %.2fs",
-                           method_name, attempt, max_retries, e, backoff)
+                           method_name, attempt, max_retries, str(e)[:_MAX_LOGGED_ERROR], backoff)
             time.sleep(backoff)

@@ -103,10 +103,13 @@ def mark_artist_synced(
     error: Optional[str] = None,
 ) -> None:
     """Record a sync of the artist (and its error, if it failed). Does not commit."""
+    from .tracks import truncate_error
+
     subscription = get_artist_subscription(session, artist_id)
     if subscription:
         subscription.last_synced_at = now_utc()
-        subscription.last_error = error
+        # YouTube Music errors can quote the whole page they couldn't parse
+        subscription.last_error = truncate_error(error)
 
 
 def get_monitored_artists_needing_sync(session: Session, cutoff: datetime) -> list[Artist]:

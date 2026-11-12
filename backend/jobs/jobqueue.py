@@ -327,6 +327,7 @@ def mark_job_done(
     session: Session,
     job_id: int,
     result: Optional[dict] = None,
+    worker_name: Optional[str] = None,
 ) -> None:
     """
     Mark job as successfully completed. Commits.
@@ -335,10 +336,22 @@ def mark_job_done(
         session: SQLAlchemy session
         job_id: Job ID
         result: Optional result data to store (dict)
+        worker_name: The worker reporting the success. When given, the
+            outcome is ignored unless that worker still holds the job, like
+            mark_job_failed: a cancelled job stays cancelled, and a job
+            reclaimed from a stalled worker is the new holder's to finish.
     """
     job = session.get(Job, job_id)
     if not job:
         logger.warning("Cannot mark job %s as done: not found", job_id)
+        return
+
+    if job.status != "reserved" or (worker_name and job.reserved_by != worker_name):
+        logger.info(
+            "Ignoring success of job %s reported by %s: job is now %s (held by %s)",
+            job_id, worker_name or "caller", job.status, job.reserved_by or "nobody",
+        )
+        session.commit()  # what the task left pending, as on the normal path
         return
 
     job.status = "done"

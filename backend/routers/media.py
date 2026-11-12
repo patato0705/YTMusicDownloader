@@ -15,12 +15,15 @@ THUMBNAIL_CACHE_MAX_BYTES by deleting the oldest files (see _trim_disk_cache).
 from __future__ import annotations
 import hashlib
 import logging
+import threading
 import time
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response, FileResponse
 
 from ..config import (
@@ -45,6 +48,8 @@ router = APIRouter(prefix="/api/media", tags=["Media"])
 # a write replacing an expired file of the same name), and an overestimate
 # just triggers a rescan that corrects it.
 _disk_cache_bytes: int | None = None
+# Cache writes run in worker threads (off the event loop), several at once
+_disk_cache_lock = threading.Lock()
 
 # A trim deletes down to this fraction of the cap, so the next few writes
 # don't each trigger a rescan.
@@ -140,12 +145,31 @@ def _trim_disk_cache() -> None:
 
 def _record_disk_cache_write(size: int) -> None:
     global _disk_cache_bytes
-    if _disk_cache_bytes is None:
-        _trim_disk_cache()  # the scan counts the file just written
-        return
-    _disk_cache_bytes += size
-    if _disk_cache_bytes > THUMBNAIL_CACHE_MAX_BYTES:
-        _trim_disk_cache()
+    with _disk_cache_lock:
+        if _disk_cache_bytes is None:
+            _trim_disk_cache()  # the scan counts the file just written
+            return
+        _disk_cache_bytes += size
+        if _disk_cache_bytes > THUMBNAIL_CACHE_MAX_BYTES:
+            _trim_disk_cache()
+
+
+def _read_cached(cache_path: Path) -> Optional[bytes]:
+    """The cached image if it's still fresh, else None. Blocking: run off the event loop."""
+    try:
+        return cache_path.read_bytes() if _is_cache_valid(cache_path) else None
+    except FileNotFoundError:
+        return None  # expired and deleted by the scheduler or a trim meanwhile
+
+
+def _write_cached(cache_path: Path, content: bytes) -> None:
+    """Store a fetched image and keep the cache under its cap. Blocking: run off the event loop."""
+    try:
+        THUMBNAIL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(content)
+        _record_disk_cache_write(len(content))
+    except OSError as e:
+        logger.warning("Failed to cache thumbnail: %s", e)
 
 
 # Resolved once at import time; every request is checked against these real,
@@ -212,9 +236,12 @@ async def get_thumbnail(
         if not _is_allowed_thumbnail_url(url):
             raise HTTPException(status_code=400, detail="URL host not allowed")
 
+        # Disk work in a thread: this handler is async, and a slow disk (or
+        # a trim scanning the whole cache) would hold up every other request
         cache_path = _get_cache_path(url)
-        if _is_cache_valid(cache_path):
-            return _image_response(cache_path.read_bytes(), "HIT")
+        cached = await run_in_threadpool(_read_cached, cache_path)
+        if cached is not None:
+            return _image_response(cached, "HIT")
 
         logger.debug("Cache miss, fetching: %s", url[:80])
 
@@ -253,13 +280,7 @@ async def get_thumbnail(
                 logger.warning("Thumbnail source answered %s for %s", e.response.status_code, url[:120])
                 raise HTTPException(status_code=502, detail=f"Thumbnail source answered {e.response.status_code}")
 
-        try:
-            THUMBNAIL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            cache_path.write_bytes(content)
-            _record_disk_cache_write(len(content))
-        except OSError as e:
-            logger.warning("Failed to cache thumbnail: %s", e)
-
+        await run_in_threadpool(_write_cached, cache_path, content)
         return _image_response(content, "MISS")
 
     except httpx.TimeoutException:

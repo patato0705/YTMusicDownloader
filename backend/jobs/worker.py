@@ -244,7 +244,7 @@ class Worker:
             result = run_job_task(session, job)
             _discard_failed_transaction(session)
             if result.get("ok"):
-                mark_job_done(session, job_id)
+                mark_job_done(session, job_id, worker_name=self.worker_name)
             else:
                 # The task may ask for a retry later and for the attempt not
                 # to count (a rate limit says nothing about the job)

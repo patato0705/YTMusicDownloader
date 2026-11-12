@@ -38,7 +38,7 @@ from sqlalchemy.orm import Session
 
 from .. import config, settings as settings_module
 from ..config import YDL_COOKIEFILE, YDL_USER_COOKIEFILE
-from ..downloader import embed as embed_mod, nfo as nfo_mod
+from ..downloader import cover as cover_mod, embed as embed_mod, nfo as nfo_mod
 from ..downloader.core import download_track_by_videoid
 from ..models import Job, Track, Album, Artist
 from ..services import albums as albums_svc
@@ -309,8 +309,7 @@ def _download_track(session: Session, track_id: str, *, origin: str) -> Dict[str
     session.expire_all()
     track = session.get(Track, track_id)
     if track is None:
-        logger.info("Track %s was removed during its download, deleting %s", track_id, file_path)
-        Path(file_path).unlink(missing_ok=True)
+        _discard_orphan_download(session, track_id, file_path, moved_cover, dest_dir, album_id)
         return {"ok": True, "skipped": "track removed during the download"}
     track.status = "done"
     track.last_error = None
@@ -379,6 +378,44 @@ def _download_track(session: Session, track_id: str, *, origin: str) -> Dict[str
             session.rollback()
 
     return {"ok": True, "file_path": file_path}
+
+
+def _discard_orphan_download(
+    session: Session,
+    track_id: str,
+    file_path: str,
+    moved_cover: Optional[str],
+    dest_dir: Path,
+    album_id: Optional[str],
+) -> None:
+    """
+    The track was deleted while it downloaded: its album or artist was
+    deleted from the library (the only ways a track row goes). Take back
+    what the download put on disk after the deletion cleaned up:
+    - the audio file;
+    - the cover, when this download moved it into the album folder: back
+      to COVERS_DIR if the album row is still there (a deleted album stays
+      as metadata, and shows its cover), deleted with the artist otherwise;
+    - the album folder, then the artist folder, which the download
+      recreated, if nothing else is left in them.
+    """
+    logger.info("Track %s was removed during its download, deleting %s", track_id, file_path)
+    Path(file_path).unlink(missing_ok=True)
+    if moved_cover:
+        album = session.get(Album, album_id) if album_id else None
+        if album is None:
+            Path(moved_cover).unlink(missing_ok=True)
+        else:
+            back = cover_mod.move_file(Path(moved_cover), config.COVERS_DIR / f"{album.id}.jpg")
+            album.image_local = str(back) if back else None
+            session.commit()
+    for folder in (dest_dir, dest_dir.parent):
+        if folder == config.MUSIC_DIR:
+            break
+        try:
+            folder.rmdir()
+        except OSError:
+            break  # not empty (the album's other files, the artist's own) or already gone
 
 
 def _pause_downloads(session: Session, track_id: str, error: Exception) -> None:
@@ -704,8 +741,12 @@ def _download_lyrics(session: Session, track_id: str, mode: str) -> Dict[str, An
     artist_name = (track.artists[0].get("name") or "") if track.artists else ""
     album_name = track.album.title if track.album else ""
     duration = track.duration or 0
+    synced_lyrics_only = bool(settings_module.get_setting(session, "features.synced_lyrics_only"))
     if not track_name or not artist_name:
         return {"ok": False, "error": "Missing track name or artist name"}
+    # Nothing held while LRCLIB answers: a Retry-After can stretch the
+    # lookup to minutes, and an open read keeps SQLite from checkpointing
+    session.rollback()
 
     logger.info("Fetching lyrics for: %s - %s (mode=%s)", artist_name, track_name, mode)
     try:
@@ -713,6 +754,10 @@ def _download_lyrics(session: Session, track_id: str, mode: str) -> Dict[str, An
     except LrclibUnavailable as e:
         logger.warning("LRCLIB unavailable for track %s: %s", track_id, e)
         return {"ok": False, "error": f"LRCLIB unavailable: {e}", "retry_delay_seconds": 3600}
+
+    track = session.get(Track, track_id)
+    if track is None:
+        return {"ok": True, "skipped": "track removed during the lookup"}
 
     if not found["found"]:
         logger.info("No lyrics found for track %s", track_id)
@@ -732,7 +777,7 @@ def _download_lyrics(session: Session, track_id: str, mode: str) -> Dict[str, An
         session.commit()
         logger.info("Track %s is instrumental per LRCLIB (%s)", track_id, found["source"])
         return {"ok": True, "lyrics_type": "instrumental"}
-    elif settings_module.get_setting(session, "features.synced_lyrics_only") or not found["plain"]:
+    elif synced_lyrics_only or not found["plain"]:
         logger.info("Only plain lyrics available for track %s, will retry later", track_id)
         return {
             "ok": False,
