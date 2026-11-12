@@ -79,6 +79,11 @@ export default function Browse(): JSX.Element {
   const [results, setResults] = useState<SearchResults>(
     () => resultsCache.get(query.trim()) ?? EMPTY_RESULTS
   );
+  // The query the results (or error) on screen answer: "No results" waits
+  // for the one typed, not the debounce in between
+  const [resultsFor, setResultsFor] = useState<string | null>(
+    () => (resultsCache.get(query.trim()) ? query.trim() : null)
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { t } = useI18n();
@@ -108,13 +113,17 @@ export default function Browse(): JSX.Element {
 
     if (!trimmed) {
       setResults(EMPTY_RESULTS);
+      setResultsFor('');
       setLoading(false);
       return;
     }
 
     // Shown right away, then refreshed quietly: who's followed may have changed since
     const cached = resultsCache.get(trimmed);
-    if (cached) setResults(cached);
+    if (cached) {
+      setResults(cached);
+      setResultsFor(trimmed);
+    }
 
     let cancelled = false;
     setLoading(!cached);
@@ -122,7 +131,10 @@ export default function Browse(): JSX.Element {
     search(trimmed, 20)
       .then((response) => {
         resultsCache.set(trimmed, response);
-        if (!cancelled) setResults(response);
+        if (!cancelled) {
+          setResults(response);
+          setResultsFor(trimmed);
+        }
       })
       .catch((err) => {
         console.error('Search error:', err);
@@ -130,6 +142,7 @@ export default function Browse(): JSX.Element {
         if (!cancelled && !cached) {
           setError(apiErrorMessage(err, t, t('common.error')));
           setResults(EMPTY_RESULTS);
+          setResultsFor(trimmed);
         }
       })
       .finally(() => {
@@ -151,7 +164,10 @@ export default function Browse(): JSX.Element {
   };
 
   const hasResults = results.artists.length + results.albums.length + results.songs.length > 0;
-  const shows = (filter: FilterType) => activeFilter === 'all' || activeFilter === filter;
+  // A tab kept in the URL from an earlier search that the new results don't
+  // have (no songs this time): show everything rather than nothing
+  const shownFilter: FilterType = activeFilter !== 'all' && results[activeFilter].length === 0 ? 'all' : activeFilter;
+  const shows = (filter: FilterType) => shownFilter === 'all' || shownFilter === filter;
 
   const tabs: FilterTab<FilterType>[] = [
     { id: 'all', label: t('common.all') },
@@ -205,7 +221,7 @@ export default function Browse(): JSX.Element {
         />
       )}
 
-      {query.trim() && !hasResults && !loading && !error && (
+      {query.trim() && resultsFor === query.trim() && !hasResults && !loading && !error && (
         <EmptyState icon="search" title={t('browse.noResults')}>
           <p>{t('browse.noResultsFor', { query: query.trim() })}</p>
           <p className="text-sm">{t('browse.tryDifferentKeywords')}</p>
@@ -214,7 +230,7 @@ export default function Browse(): JSX.Element {
 
       {hasResults && (
         <>
-          <FilterTabs tabs={tabs} active={activeFilter} onChange={setActiveFilter} />
+          <FilterTabs tabs={tabs} active={shownFilter} onChange={setActiveFilter} />
 
           <div className="space-y-8">
             {shows('artists') && results.artists.length > 0 && (

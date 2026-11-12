@@ -114,7 +114,9 @@ export function downloadJson(doc: unknown, filename: string): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Not at once: WebKit (iPhone Safari) starts the download asynchronously
+  // and fails it if the URL is already gone
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 /**

@@ -315,7 +315,8 @@ export default function Library(): JSX.Element {
   // Filter content based on active tab and search query. Name matches are
   // done locally; an item whose name doesn't match still shows up when one of
   // its tracks does, with a hint saying which one.
-  const query = searchQuery.toLowerCase();
+  // Trimmed like the track search: an iPhone keyboard suggestion ends with a space
+  const query = searchQuery.trim().toLowerCase();
 
   const searchedArtists = useMemo(
     () => activeTab === 'albums' || activeTab === 'playlists' ? [] : artists.filter(artist =>
@@ -681,14 +682,14 @@ export default function Library(): JSX.Element {
               <EmptyState icon="filter" title={t('library.filters.noMatchesTitle')}>
                 <p>
                   {searchQuery
-                    ? t('library.filters.noMatchesWithSearch', { query: searchQuery })
+                    ? t('library.filters.noMatchesWithSearch', { query: searchQuery.trim() })
                     : t('library.filters.noMatchesDescription')}
                 </p>
                 <Button variant="primary" onClick={clearFilters}>{t('library.filters.clear')}</Button>
               </EmptyState>
             ) : (
               <EmptyState icon="search" title={t('library.noMatches')}>
-                <p>{t('library.noMatchesDescription', { query: searchQuery })}</p>
+                <p>{t('library.noMatchesDescription', { query: searchQuery.trim() })}</p>
               </EmptyState>
             )
           )}

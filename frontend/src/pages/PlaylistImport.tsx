@@ -504,6 +504,9 @@ export default function PlaylistImport(): JSX.Element {
     ...(albums.length > 0 ? [{ id: 'albums' as const, label: `${t('playlist.albums')} (${albums.length})` }] : []),
     { id: 'tracks', label: `${t('playlist.trackView')} (${tracks.length})` },
   ];
+  // The tab in the URL may be one this playlist doesn't have (no artists):
+  // the first it has instead of none
+  const shownFilter: PlaylistFilterType = tabs.some((tab) => tab.id === activeFilter) ? activeFilter : tabs[0].id;
 
   const listClass = 'glass rounded-2xl overflow-hidden shadow-sm';
 
@@ -625,21 +628,21 @@ export default function PlaylistImport(): JSX.Element {
 
           {/* Filter tabs and bulk actions */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <FilterTabs tabs={tabs} active={activeFilter} onChange={setActiveFilter} />
+            <FilterTabs tabs={tabs} active={shownFilter} onChange={setActiveFilter} />
 
-            {canModify && ((activeFilter === 'artists' && artists.length > 0) || (activeFilter === 'albums' && albums.length > 0)) && (
+            {canModify && ((shownFilter === 'artists' && artists.length > 0) || (shownFilter === 'albums' && albums.length > 0)) && (
               <div className="flex items-center gap-2">
-                {bulkProgress?.type === (activeFilter === 'artists' ? 'artists' : 'albums') ? (
+                {bulkProgress?.type === (shownFilter === 'artists' ? 'artists' : 'albums') ? (
                   <div className="flex items-center gap-3 px-4 py-2 rounded-xl glass">
                     <Spinner size="sm" className="text-accent-600 dark:text-accent-500" />
                     <span className="text-sm font-medium text-foreground">
-                      {t(activeFilter === 'artists' ? 'playlist.followingProgress' : 'playlist.downloadingProgress', {
+                      {t(shownFilter === 'artists' ? 'playlist.followingProgress' : 'playlist.downloadingProgress', {
                         current: bulkProgress.current,
                         total: bulkProgress.total,
                       })}
                     </span>
                   </div>
-                ) : activeFilter === 'artists' ? (
+                ) : shownFilter === 'artists' ? (
                   <>
                     {bulkButton(t('playlist.followAll'), unfollowedArtists.length, () =>
                       runBulkAction(unfollowedArtists, 'artists', follow, markFollowed, 'playlist.followComplete'), 'secondary')}
@@ -654,7 +657,7 @@ export default function PlaylistImport(): JSX.Element {
             )}
           </div>
 
-          {activeFilter === 'artists' && (
+          {shownFilter === 'artists' && (
             artists.length > 0 ? (
               <div className={listClass}>
                 <div className="divide-y divide-slate-200 dark:divide-white/10">
@@ -701,7 +704,7 @@ export default function PlaylistImport(): JSX.Element {
             )
           )}
 
-          {activeFilter === 'albums' && (
+          {shownFilter === 'albums' && (
             albums.length > 0 ? (
               <div className={listClass}>
                 <div className="divide-y divide-slate-200 dark:divide-white/10">
@@ -743,7 +746,7 @@ export default function PlaylistImport(): JSX.Element {
             )
           )}
 
-          {activeFilter === 'tracks' && (
+          {shownFilter === 'tracks' && (
             <div className={listClass}>
               <div className="hidden sm:flex items-center gap-3 px-4 md:px-6 py-3 bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs font-semibold text-muted-foreground">
                 <span className="w-8" />

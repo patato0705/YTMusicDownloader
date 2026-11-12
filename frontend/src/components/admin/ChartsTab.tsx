@@ -4,7 +4,7 @@
  * (top-N, enable/disable, sync, unfollow). Every mutation goes through a
  * ConfirmDialog first.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from '../ui/Button';
 import { Spinner } from '../ui/Spinner';
@@ -71,23 +71,31 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
     return () => { cancelled = true; };
   }, []);
 
+  // The country asked for last: a slow answer for one picked before it must
+  // not replace its preview (Follow would then follow the wrong chart)
+  const requestedCountry = useRef('');
+
   const handleCountrySelect = async (countryCode: string) => {
     setSelectedCountry(countryCode);
+    requestedCountry.current = countryCode;
     if (!countryCode) {
       setSelectedChartData(null);
+      setLoadingChart(false);
       return;
     }
 
     setLoadingChart(true);
     try {
       const chart = await chartsApi.getChart(countryCode);
+      if (requestedCountry.current !== countryCode) return;
       setSelectedChartData(chart);
     } catch (err: any) {
+      if (requestedCountry.current !== countryCode) return;
       console.error('Failed to load chart:', err);
       onToast(errorMessage(err), 'error');
       setSelectedChartData(null);
     } finally {
-      setLoadingChart(false);
+      if (requestedCountry.current === countryCode) setLoadingChart(false);
     }
   };
 

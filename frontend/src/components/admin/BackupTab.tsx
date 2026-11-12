@@ -63,6 +63,9 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    // Cleared at once (the File stays readable): picking the same file again,
+    // after a failed preview, must fire onChange again
+    event.target.value = '';
 
     setFileName(file.name);
     setDoc(null);

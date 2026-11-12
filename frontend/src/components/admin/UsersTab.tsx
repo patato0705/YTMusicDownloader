@@ -38,6 +38,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
   const [deleteConfirm, setDeleteConfirm] = useState<{ userId: number; username: string } | null>(null);
   const [resetConfirm, setResetConfirm] = useState<{ userId: number; username: string } | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState<{ username: string; password: string } | null>(null);
 
   // Filters
@@ -111,7 +112,8 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
   };
 
   const confirmDelete = async () => {
-    if (!deleteConfirm) return;
+    if (!deleteConfirm || deleteLoading) return;
+    setDeleteLoading(true);
     try {
       await adminApi.deleteUser(deleteConfirm.userId);
       await loadUsers();
@@ -119,6 +121,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
     } catch (err: any) {
       onToast(apiErrorMessage(err, t, t('common.error')), 'error');
     } finally {
+      setDeleteLoading(false);
       setDeleteConfirm(null);
     }
   };
@@ -173,6 +176,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirm(null)}
         variant="danger"
+        isLoading={deleteLoading}
       />
 
       <ConfirmDialog

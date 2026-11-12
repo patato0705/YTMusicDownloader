@@ -26,10 +26,12 @@ export default function AdminPanel(): JSX.Element {
 
   const chartsEnabled = !!features?.charts_enabled;
 
-  // Don't leave the user on a tab that just got switched off
+  // Don't leave the user on a tab that just got switched off. Not while the
+  // features are still loading: /admin?tab=charts would always land on Users
+  const chartsDisabled = features != null && !features.charts_enabled;
   useEffect(() => {
-    if (activeTab === 'charts' && !chartsEnabled) setActiveTab('users');
-  }, [activeTab, chartsEnabled]);
+    if (activeTab === 'charts' && chartsDisabled) setActiveTab('users');
+  }, [activeTab, chartsDisabled]);
 
   const showToast = (message: string, type: 'success' | 'error') => setToast({ message, type });
 

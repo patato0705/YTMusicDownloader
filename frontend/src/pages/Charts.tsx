@@ -17,6 +17,8 @@ export default function Charts(): JSX.Element {
   const isAdmin = user?.role === 'administrator';
   const [subscriptions, setSubscriptions] = useState<ChartSubscription[]>([]);
   const [charts, setCharts] = useState<Record<string, Chart>>({});
+  // Followed charts that couldn't be loaded (YouTube Music not answering)
+  const [failed, setFailed] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { t, formatLocale } = useI18n();
@@ -40,6 +42,7 @@ export default function Charts(): JSX.Element {
         if (cancelled) return;
         setSubscriptions(subs);
         setCharts(Object.fromEntries(loaded.filter((entry) => entry !== null)));
+        setFailed(subs.filter((_, i) => loaded[i] === null).map((sub) => sub.country_code));
       } catch (err: any) {
         console.error('Failed to load charts:', err);
         if (!cancelled) {
@@ -78,35 +81,42 @@ export default function Charts(): JSX.Element {
     }
 
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {subscriptions.map((subscription) => {
-          const country = getCountry(subscription.country_code);
-          const chart = charts[subscription.country_code];
-          if (!chart || !country) return null;
+      <>
+        {failed.length > 0 && (
+          <ErrorBanner title={t('charts.unavailableTitle', { countries: failed.map((code) => countryName(code)).join(', ') })}>
+            {t('common.ytmusicUnavailable')}
+          </ErrorBanner>
+        )}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {subscriptions.map((subscription) => {
+            const country = getCountry(subscription.country_code);
+            const chart = charts[subscription.country_code];
+            if (!chart || !country) return null;
 
-          return (
-            <div key={subscription.country_code} className="glass rounded-3xl p-6 border-gradient">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-4xl" aria-hidden="true">{country.flag}</span>
-                <div>
-                  <h3 className="text-xl font-bold text-foreground">{countryName(country.code)}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {t('charts.followingTopN', { n: subscription.top_n_artists, total: chart.artists.length })}
-                  </p>
+            return (
+              <div key={subscription.country_code} className="glass rounded-3xl p-6 border-gradient">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-4xl" aria-hidden="true">{country.flag}</span>
+                  <div>
+                    <h3 className="text-xl font-bold text-foreground">{countryName(country.code)}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {t('charts.followingTopN', { n: subscription.top_n_artists, total: chart.artists.length })}
+                    </p>
+                  </div>
                 </div>
+
+                <ChartArtistGrid artists={chart.artists} maxHeight="280px" />
+
+                {subscription.last_synced_at && (
+                  <p className="text-xs text-muted-foreground mt-4 text-center">
+                    {t('charts.lastUpdated', { date: new Date(subscription.last_synced_at).toLocaleString(formatLocale) })}
+                  </p>
+                )}
               </div>
-
-              <ChartArtistGrid artists={chart.artists} maxHeight="280px" />
-
-              {subscription.last_synced_at && (
-                <p className="text-xs text-muted-foreground mt-4 text-center">
-                  {t('charts.lastUpdated', { date: new Date(subscription.last_synced_at).toLocaleString(formatLocale) })}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      </>
     );
   };
 

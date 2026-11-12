@@ -450,6 +450,7 @@
   "charts": {
     "heroSubtitle": "Découvrez les artistes tendance du monde entier",
     "errorTitle": "Erreur de chargement des charts",
+    "unavailableTitle": "Impossible de charger : {countries}",
     "noCharts": "Aucun chart suivi",
     "noChartsDescription": "Aucun chart musical n'est actuellement suivi. Contactez un administrateur pour suivre les charts de différents pays.",
     "noChartsAdminDescription": "Choisissez un pays dans l'administration : ses artistes du moment apparaîtront ici.",

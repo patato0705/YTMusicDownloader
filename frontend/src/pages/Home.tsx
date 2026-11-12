@@ -13,10 +13,10 @@ import type { LibraryAlbum, LibraryStats } from '../api/library';
 import { getImageUrl } from '../api/media';
 import { MEDIA_GRID, MediaCard } from '../components/MediaCard';
 import { MediaList, MediaRow } from '../components/MediaList';
-import { EmptyState, LoadingState } from '../components/ui/PageStatus';
+import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
 import { LibraryStatCards } from '../components/LibraryStatCards';
 import { Icon } from '../components/ui/icons';
-import { albumPath, exceptionalStatus, getAlbumStatus } from '../utils';
+import { albumPath, apiErrorMessage, exceptionalStatus, getAlbumStatus } from '../utils';
 import type { MediaStatus } from '../types';
 
 /** Albums still being fetched (or stuck): the reason to open Home */
@@ -42,6 +42,9 @@ export default function Home(): JSX.Element {
   const [recentAlbums, setRecentAlbums] = useState<LibraryAlbum[]>([]);
   const [inProgress, setInProgress] = useState<LibraryAlbum[]>([]);
   const [loading, setLoading] = useState(true);
+  // Only when nothing could be shown yet: a failed refresh keeps what's on screen
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const loadedRef = useRef(false);
 
   const { revision, downloadsPausedUntil } = useJobActivity();
   const downloadsPaused = downloadsPausedUntil !== null;
@@ -72,8 +75,12 @@ export default function Home(): JSX.Element {
         // Ranked without the rate-limit pause: the albums that had started stay first while it lasts
         const rank = (album: LibraryAlbum) => PROGRESS_ORDER.indexOf(getAlbumStatus(album));
         setInProgress([...unfinished].sort((a, b) => rank(a) - rank(b)).slice(0, IN_PROGRESS_SHOWN));
+        setLoadError(null);
+        loadedRef.current = true;
       } catch (err) {
         console.error('Failed to load home data:', err);
+        // Not the empty-library state: that would say there's nothing here
+        if (id === last.id && !loadedRef.current) setLoadError(err);
       } finally {
         if (id === last.id) setLoading(false);
       }
@@ -134,6 +141,8 @@ export default function Home(): JSX.Element {
         <SectionHeader>{t('home.recentlyAdded')}</SectionHeader>
         {loading ? (
           <LoadingState message={t('home.loadingActivity')} className="py-16" />
+        ) : loadError ? (
+          <ErrorBanner title={t('common.error')}>{apiErrorMessage(loadError, t, t('common.error'))}</ErrorBanner>
         ) : recentAlbums.length > 0 ? (
           <div className={MEDIA_GRID}>
             {recentAlbums.map((album, index) => (

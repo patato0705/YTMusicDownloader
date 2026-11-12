@@ -175,20 +175,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
     setError(null);
 
     try {
-      // Update each changed setting
-      const updatePromises = Object.entries(editedSettings).map(([key, value]) => {
+      const changed = Object.entries(editedSettings).filter(([key, value]) => {
         const originalSetting = settings.find(s => s.key === key);
-        if (originalSetting && JSON.stringify(originalSetting.value) !== JSON.stringify(value)) {
-          return adminApi.updateSetting(key, value);
-        }
-        return Promise.resolve();
+        return originalSetting && JSON.stringify(originalSetting.value) !== JSON.stringify(value);
       });
-
-      await Promise.all(updatePromises);
+      // Each saved on its own: one refused doesn't undo the others, which
+      // are on the server whatever happens here
+      const results = await Promise.allSettled(changed.map(([key, value]) => adminApi.updateSetting(key, value)));
+      const failed = changed.filter((_, i) => results[i].status === 'rejected');
+      const firstError = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')?.reason;
 
       await loadSettings();
-      onSaved();
-      onToast(t('admin.settings.saved'), 'success');
+      // The refused ones stay edited, to fix and save again
+      if (failed.length > 0) setEditedSettings((current) => ({ ...current, ...Object.fromEntries(failed) }));
+      if (failed.length < changed.length) onSaved();
+      if (firstError) {
+        onToast(apiErrorMessage(firstError, t, t('admin.settings.saveFailed')), 'error');
+      } else {
+        onToast(t('admin.settings.saved'), 'success');
+      }
     } catch (err: any) {
       onToast(apiErrorMessage(err, t, t('admin.settings.saveFailed')), 'error');
     } finally {

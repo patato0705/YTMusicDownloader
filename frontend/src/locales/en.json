@@ -449,6 +449,7 @@
   "charts": {
     "heroSubtitle": "Discover trending artists from around the world",
     "errorTitle": "Error Loading Charts",
+    "unavailableTitle": "Couldn't load {countries}",
     "noCharts": "No Charts Followed",
     "noChartsDescription": "No music charts are currently being tracked. Contact an administrator to follow charts from different countries.",
     "noChartsAdminDescription": "Pick a country in the admin panel: its trending artists will show up here.",
