@@ -1,61 +1,12 @@
 services:
   ytmusicdownloader:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ytmusicdownloader:latest
+    build: .
     ports:
       - "8000:8000"
     volumes:
       - ./config:/config
       - ./data:/data
-    restart: unless-stopped
     environment:
       - TZ=Europe/Paris
-      # Set to "true" only if this is reached over HTTPS (e.g. behind a
-      # TLS-terminating reverse proxy). Leave unset/false for plain HTTP.
-      # - COOKIE_SECURE=true
-      # Behind a reverse proxy: its address or subnet (comma-separated),
-      # so the app sees real client IPs in X-Forwarded-For. Without it all
-      # users share the proxy's IP for the failed sign-in limit. Never "*"
-      # while port 8000 is reachable without going through the proxy.
-      # - FORWARDED_ALLOW_IPS=172.18.0.0/16
-      # UID/GID the app runs as -- files it writes to ./config and ./data
-      # are owned by this user on the host. Defaults to 1000:1000 (the
-      # first regular user on most Linux installs); override if `id -u`
-      # / `id -g` on your host gives different numbers.
-      # - PUID=1000
-      # - PGID=1000
-      # Ceiling on parallel YouTube downloads: how many download worker
-      # processes exist (default 3). How many actually run at once is the
-      # "Max concurrent downloads" setting in the admin panel (default 1,
-      # capped at this value, changeable without a restart). Only raise
-      # this if you want to be able to set that above 3 -- every extra
-      # parallel stream from one IP raises the odds of YouTube rate-limiting
-      # or bot-checking you.
-      # - DOWNLOAD_WORKERS=3
-      # yt-dlp is updated at every start (releases at least a day old) so a
-      # restart picks up fixes for YouTube changes. "false" keeps the
-      # version the image was built with.
-      # - YTDLP_AUTO_UPDATE=true
-      # Single sign-on (OpenID Connect: Authelia, Authentik, Pocket ID,
-      # Keycloak...). Enabled when issuer, client id and secret are all set.
-      # Register PUBLIC_URL/api/auth/oidc/callback as the redirect URI at
-      # your provider. See README "Single sign-on".
-      # - PUBLIC_URL=https://music.example.com
-      # - OIDC_ISSUER_URL=https://auth.example.com
-      # - OIDC_CLIENT_ID=ytmusicdownloader
-      # - OIDC_CLIENT_SECRET_FILE=/run/secrets/oidc_client_secret  # or OIDC_CLIENT_SECRET=...
-      # - OIDC_PROVIDER_NAME=Authelia
-      # Optional: roles from provider groups (add "groups" to the scopes)
-      # - OIDC_SCOPES=openid profile groups
-      # - OIDC_ADMIN_GROUP=ytmd-admins
-      # - OIDC_MEMBER_GROUP=ytmd-members
-      # Optional: single sign-on only (no password sign-in at all)
-      # - PASSWORD_LOGIN_ENABLED=false
-    healthcheck:
-      # urlopen raises on the 503 /api/health returns when unhealthy
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=4)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      # More options: see README "Configuration"
+    restart: unless-stopped

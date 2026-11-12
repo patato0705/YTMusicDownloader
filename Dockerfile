@@ -18,7 +18,7 @@ RUN npm run build
 FROM python:3.14-slim
 
 # tzdata for TZ. Nothing else from apt: ffmpeg and uv come in as static
-# binaries below, and the compose healthcheck uses python rather than curl.
+# binaries below, and the HEALTHCHECK uses python rather than curl.
 # No compiler: every Python dependency ships a prebuilt wheel.
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
@@ -66,5 +66,9 @@ RUN mkdir -p /data /config
 ENV PYTHONPATH=/app
 
 EXPOSE 8000
+
+# urlopen raises on the 503 /api/health returns when unhealthy
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=4)"]
 
 ENTRYPOINT ["/entrypoint.sh"]

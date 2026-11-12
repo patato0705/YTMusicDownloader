@@ -286,6 +286,23 @@ Most providers only accept HTTPS redirect URIs, so this goes with a [reverse pro
 | `OIDC_ADMIN_GROUP` / `OIDC_MEMBER_GROUP` | – | Provider groups mapped to *administrator* / *member*. Setting either hands roles over to the provider (below). |
 | `PASSWORD_LOGIN_ENABLED` | `true` | `false` for single sign-on only |
 
+For example, in `docker-compose.yml`:
+
+```yaml
+    environment:
+      - TZ=Europe/Paris
+      - COOKIE_SECURE=true
+      - PUBLIC_URL=https://music.example.com
+      - OIDC_ISSUER_URL=https://auth.example.com
+      - OIDC_CLIENT_ID=ytmusicdownloader
+      - OIDC_CLIENT_SECRET_FILE=/run/secrets/oidc_client_secret
+      - OIDC_PROVIDER_NAME=Authelia
+      # Optional: roles from provider groups
+      - OIDC_SCOPES=openid profile groups
+      - OIDC_ADMIN_GROUP=ytmd-admins
+      - OIDC_MEMBER_GROUP=ytmd-members
+```
+
 Single sign-on is on when issuer, client ID and secret are all set. The web process refuses to start on a configuration that can't work (partly configured, no `PUBLIC_URL`, password sign-in off without single sign-on…) and logs why. If the provider is unreachable, the app still starts; the button reports the provider as unavailable.
 
 **Accounts.** An account is tied to the provider's identity (issuer + subject), never to a name, so nobody can take over an account by picking its username at the provider. The first sign-in creates the account (see the *New single sign-on accounts* and *Role* settings), named after the provider's username: if that name is taken here, a suffix is added (`admin-2`), the two accounts are never merged. Deactivated accounts can't sign in. Single sign-on accounts have no password here, so *Change password* and *Reset password* don't apply to them.
