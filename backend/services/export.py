@@ -163,6 +163,10 @@ def build_library_section(session: Session) -> Dict[str, Any]:
             {
                 "id": p.id,
                 "title": p.title,
+                # A one-time playlist is never fetched again: its cover and
+                # author come back from here only
+                "author": p.author,
+                "thumbnail": p.thumbnail,
                 "mode": p.mode,
                 "followed": bool(p.followed),
                 "m3u": bool(p.m3u),
@@ -405,6 +409,10 @@ def _create_user(session: Session, item: ExportedUser) -> User:
         is_active=item.is_active,
         must_change_password=item.must_change_password,
         onboarding_seen_at=now_utc() if item.onboarding_seen else None,
+        # Not the exported date: tokens issued before an account's creation
+        # are refused (auth.token_revoked), which is what keeps a token of the
+        # old instance (same signing key copied over, ids reassigned here)
+        # from opening another user's account
         created_at=now_utc(),
     )
     session.add(user)
@@ -412,7 +420,7 @@ def _create_user(session: Session, item: ExportedUser) -> User:
     return user
 
 
-def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int], warnings: List[ImportWarning]) -> CatalogImportResult:
+def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int]) -> CatalogImportResult:
     result = CatalogImportResult()
     catalog = doc.catalog
     assert catalog is not None
@@ -492,6 +500,11 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
         result.tracks += 1
 
         if on_disk:
+            # Disk usage sums these; only a download sets them otherwise
+            try:
+                obj.file_size = audio.stat().st_size
+            except OSError:
+                obj.file_size = None
             result.tracks_on_disk += 1
             continue
 
@@ -618,7 +631,7 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
             select(Playlist.id).where(Playlist.m3u_name == item.m3u_name)
         ).first()
         playlist = Playlist(
-            id=item.id, title=item.title, mode=item.mode,
+            id=item.id, title=item.title, author=item.author, thumbnail=item.thumbnail, mode=item.mode,
             followed=item.followed, m3u=item.m3u, created_by=user_id,
             m3u_name=item.m3u_name if item.m3u and item.m3u_name and not name_taken
                 and not item.m3u_name.startswith(".") else None,
@@ -658,7 +671,7 @@ def run_import(
         if doc.users is not None:
             result.users, likes = _import_users(session, doc, warnings)
         if doc.catalog is not None:
-            result.catalog = _import_catalog(session, doc, user_id, warnings)
+            result.catalog = _import_catalog(session, doc, user_id)
         if doc.library is not None:
             result.library = _import_library(session, doc, user_id, warnings)
         if result.users is not None:

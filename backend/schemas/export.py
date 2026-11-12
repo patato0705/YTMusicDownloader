@@ -32,6 +32,12 @@ MAX_CHARTS = 300
 MAX_PLAYLISTS = 1_000
 MAX_PLAYLIST_ENTRIES = 50_000
 
+# Names and titles as YouTube Music gave them. Never required non-empty and
+# never capped below what the database may hold (SQLite doesn't enforce the
+# column sizes, and titles are stored as given): a backup must always import
+# back. The cap is only there against a malicious document.
+NAME_MAX = 1024
+
 
 # ============================================================================
 # LIBRARY SECTION - what you follow
@@ -39,16 +45,16 @@ MAX_PLAYLIST_ENTRIES = 50_000
 
 class LibraryArtist(BaseModel):
     id: str = Field(..., min_length=1, max_length=64)
-    name: Optional[str] = Field(None, max_length=255)
+    name: Optional[str] = Field(None, max_length=NAME_MAX)
     mode: Literal["light", "full"] = "full"
 
 
 class LibraryAlbum(BaseModel):
     """An album explicitly in download mode."""
     id: str = Field(..., min_length=1, max_length=64)
-    title: Optional[str] = Field(None, max_length=255)
+    title: Optional[str] = Field(None, max_length=NAME_MAX)
     artist_id: Optional[str] = Field(None, max_length=64)
-    artist_name: Optional[str] = Field(None, max_length=255)
+    artist_name: Optional[str] = Field(None, max_length=NAME_MAX)
 
 
 class LibraryChart(BaseModel):
@@ -59,18 +65,20 @@ class LibraryChart(BaseModel):
 
 class LibraryPlaylistEntry(BaseModel):
     video_id: Optional[str] = Field(None, max_length=64)
-    title: str = Field(..., min_length=1, max_length=1024)
+    title: str = Field(..., max_length=NAME_MAX)
     artist_id: Optional[str] = Field(None, max_length=64)
-    artist_name: Optional[str] = Field(None, max_length=255)
+    artist_name: Optional[str] = Field(None, max_length=NAME_MAX)
     album_id: Optional[str] = Field(None, max_length=64)
-    album_title: Optional[str] = Field(None, max_length=255)
+    album_title: Optional[str] = Field(None, max_length=NAME_MAX)
     duration: Optional[int] = Field(None, ge=0)
 
 
 class LibraryPlaylist(BaseModel):
     """A playlist added to the library, with its songs (a one-time playlist is never fetched again)."""
     id: str = Field(..., min_length=1, max_length=64)
-    title: str = Field(..., min_length=1, max_length=255)
+    title: str = Field(..., max_length=NAME_MAX)
+    author: Optional[str] = Field(None, max_length=NAME_MAX)
+    thumbnail: Optional[str] = Field(None, max_length=1024)
     mode: Literal["albums", "artists"] = "albums"
     followed: bool = True
     m3u: bool = False
@@ -93,7 +101,7 @@ class LibrarySection(BaseModel):
 
 class CatalogArtist(BaseModel):
     id: str = Field(..., min_length=1, max_length=64)
-    name: Optional[str] = Field(None, max_length=255)
+    name: Optional[str] = Field(None, max_length=NAME_MAX)
     folder: Optional[str] = Field(None, max_length=255)
     image_local: Optional[str] = Field(None, max_length=1024)
     banner_local: Optional[str] = Field(None, max_length=1024)
@@ -102,7 +110,7 @@ class CatalogArtist(BaseModel):
 
 class CatalogAlbum(BaseModel):
     id: str = Field(..., min_length=1, max_length=64)
-    title: Optional[str] = Field(None, max_length=255)
+    title: Optional[str] = Field(None, max_length=NAME_MAX)
     folder: Optional[str] = Field(None, max_length=255)
     type: Optional[str] = Field(None, max_length=32)
     artist_id: Optional[str] = Field(None, max_length=64)
@@ -116,7 +124,7 @@ class CatalogAlbum(BaseModel):
 class CatalogTrack(BaseModel):
     # A YouTube video id: what tracks are downloaded by
     id: str = Field(..., pattern=VIDEO_ID_PATTERN)
-    title: Optional[str] = Field(None, max_length=1024)
+    title: Optional[str] = Field(None, max_length=NAME_MAX)
     duration: Optional[int] = Field(None, ge=0)
     artists: Optional[List[Dict[str, Optional[str]]]] = None
     album_id: Optional[str] = Field(None, max_length=64)
@@ -141,7 +149,7 @@ class CatalogSection(BaseModel):
 class DismissedArtist(BaseModel):
     """An artist a user marked "not interested" in recommendations."""
     id: str = Field(..., min_length=1, max_length=64)
-    name: str = Field(..., min_length=1, max_length=255)
+    name: str = Field(..., max_length=NAME_MAX)
     thumbnail: Optional[str] = Field(None, max_length=1024)
 
 
