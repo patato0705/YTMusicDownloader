@@ -621,6 +621,7 @@
         "noDays": "Pick at least one day.",
         "timezone": "Fixed times are in {timezone}, the container's time zone (TZ). A run the app isn't up for is skipped, not caught up.",
         "invalid": "{name}: the schedule is incomplete",
+        "intervalRange": "{name}: the interval must be between {min} and {max}",
         "timeLabel": "Time",
         "daysLabel": "Days of the week",
         "modeInterval_hours": "Every",

@@ -371,7 +371,11 @@ def _count_netscape_cookies(content: str) -> int:
     youtube = 0
     for raw in content.splitlines():
         line = raw.strip()
-        if not line or line.startswith("#"):
+        # "#HttpOnly_" marks an HttpOnly cookie, not a comment (yt-dlp reads
+        # them): YouTube's sign-in cookies are usually written that way
+        if line.startswith("#HttpOnly_"):
+            line = line[len("#HttpOnly_"):]
+        elif not line or line.startswith("#"):
             continue
         fields = line.split("\t")
         if len(fields) != 7:

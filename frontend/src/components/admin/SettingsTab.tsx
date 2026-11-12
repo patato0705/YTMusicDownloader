@@ -145,7 +145,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
   };
 
   const invalidScheduleSetting = (setting: Setting): boolean =>
-    setting.type === 'schedule' && !isValidSchedule(editedSettings[setting.key], setting.min ?? 1);
+    setting.type === 'schedule' && !isValidSchedule(editedSettings[setting.key], setting.min ?? 1, setting.max);
 
   const dirty = settings.some((setting) => JSON.stringify(editedSettings[setting.key]) !== JSON.stringify(setting.value));
   const discardChanges = () =>
@@ -154,7 +154,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
   const saveSettings = async () => {
     const invalidSchedule = settings.find(invalidScheduleSetting);
     if (invalidSchedule) {
-      onToast(t('admin.settings.schedule.invalid', { name: settingLabel(invalidSchedule) }), 'error');
+      const value = editedSettings[invalidSchedule.key];
+      // A whole number of hours/days, but out of bounds: say which bounds
+      const outOfRange = value?.mode === 'interval' && Number.isInteger(value.every) && invalidSchedule.max != null;
+      const params = { name: settingLabel(invalidSchedule), min: invalidSchedule.min ?? 1, max: invalidSchedule.max ?? 0 };
+      onToast(t(outOfRange ? 'admin.settings.schedule.intervalRange' : 'admin.settings.schedule.invalid', params), 'error');
       return;
     }
     const invalid = settings.find(invalidIntSetting);
@@ -282,6 +286,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                           onChange={(value) => handleSettingChange(setting.key, value, setting.type)}
                           unit={setting.unit === 'days' ? 'days' : 'hours'}
                           min={setting.min ?? 1}
+                          max={setting.max}
                         />
                       )
                     ) : setting.type === 'bool' ? (

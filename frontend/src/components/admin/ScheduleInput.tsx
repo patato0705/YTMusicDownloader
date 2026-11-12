@@ -16,9 +16,11 @@ export const WEEKDAYS: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 's
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Whether a schedule can be saved (mirrors backend validation). */
-export const isValidSchedule = (value: any, min = 1): boolean => {
+export const isValidSchedule = (value: any, min = 1, max?: number | null): boolean => {
   if (!value || typeof value !== 'object') return false;
-  if (value.mode === 'interval') return Number.isInteger(value.every) && value.every >= min;
+  if (value.mode === 'interval') {
+    return Number.isInteger(value.every) && value.every >= min && (max == null || value.every <= max);
+  }
   if (value.mode === 'fixed') {
     return TIME.test(value.time ?? '') && Array.isArray(value.days) && value.days.length > 0;
   }
@@ -64,9 +66,10 @@ interface ScheduleControlsProps {
   onChange: (value: Schedule) => void;
   unit: 'hours' | 'days';
   min?: number;
+  max?: number | null;
 }
 
-export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onChange, unit, min = 1 }) => {
+export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onChange, unit, min = 1, max }) => {
   const { t } = useI18n();
   const dayNames = useWeekdayNames();
   const longDayNames = useWeekdayNames('long');
@@ -108,13 +111,14 @@ export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onCha
             <input
               type="number"
               min={min}
+              max={max ?? undefined}
               step={1}
               value={Number.isFinite(value.every) ? value.every : ''}
               onChange={(e) =>
                 onChange({ mode: 'interval', every: e.target.value === '' ? NaN : Number(e.target.value) })
               }
               aria-label={t(`admin.settings.schedule.unit_${unit}`)}
-              className={`w-20 text-center ${inputClass} ${borderClass(!isValidSchedule(value, min))}`}
+              className={`w-20 text-center ${inputClass} ${borderClass(!isValidSchedule(value, min, max))}`}
             />
             <span className="w-14 text-sm text-muted-foreground">{t(`admin.settings.schedule.unit_${unit}`, { count: value.every })}</span>
           </>

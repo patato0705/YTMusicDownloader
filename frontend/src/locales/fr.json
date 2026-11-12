@@ -622,6 +622,7 @@
         "noDays": "Choisissez au moins un jour.",
         "timezone": "Les heures fixes sont dans le fuseau {timezone}, celui du conteneur (TZ). Une exécution manquée parce que l'application était arrêtée est sautée, pas rattrapée.",
         "invalid": "{name} : la planification est incomplète",
+        "intervalRange": "{name} : l'intervalle doit être compris entre {min} et {max}",
         "timeLabel": "Heure",
         "daysLabel": "Jours de la semaine",
         "modeInterval_hours": "Toutes les",

@@ -12,13 +12,13 @@ import os
 import time
 from typing import Any, Dict
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from .. import config
 from ..db import engine
-from ..ytm_service.client import get_client, call
+from ..ytm_service.client import get_client
 
 logger = logging.getLogger("routers.health")
 router = APIRouter(prefix="/api/health", tags=["Health"])
@@ -60,46 +60,27 @@ def _check_fs() -> Dict[str, Any]:
     }
 
 
-def _check_ytmusic(deep: bool = False) -> Dict[str, Any]:
+def _check_ytmusic() -> Dict[str, Any]:
     """
-    Initialize YTMusic client and optionally perform a small call.
-    deep=True will call get_charts (may take longer).
+    Whether the YTMusic client can be initialized. No call to YouTube Music:
+    this endpoint is public and polled, and every request from this IP
+    counts toward YouTube's rate limiting.
     """
-    out: Dict[str, Any] = {"ok": False, "detail": None}
     try:
         get_client()
-        out["ok"] = True
-        out["detail"] = "client_initialized"
+        return {"ok": True, "detail": "client_initialized"}
     except Exception as e:
         logger.debug("YTMusic client init failed", exc_info=True)
-        out["ok"] = False
-        out["detail"] = f"init_error: {e}"
-        return out
-
-    if deep:
-        try:
-            res = call("get_charts", country="US", max_retries=2)
-            # simple heuristics for success: expect dict with 'artists' or 'songs'
-            if isinstance(res, dict) and ("artists" in res or "songs" in res):
-                out["ok"] = True
-                out["detail"] = "deep_call_ok"
-            else:
-                out["ok"] = False
-                out["detail"] = f"deep_call_unexpected_response_type:{type(res)}"
-        except Exception as e:
-            logger.debug("YTMusic deep call failed", exc_info=True)
-            out["ok"] = False
-            out["detail"] = f"deep_call_error: {e}"
-    return out
+        return {"ok": False, "detail": f"init_error: {e}"}
 
 
 @router.get("", status_code=status.HTTP_200_OK)
-def health_check(deep: bool = Query(False, description="If true, perform deeper checks (YTMusic network call)")) -> JSONResponse:
+def health_check() -> JSONResponse:
     """
     Health endpoint returning a JSON summary.
 
-    - shallow checks (default): DB connectivity, presence of required binaries, FS permissions, YTMusic client init.
-    - deep checks (deep=true): attempt a lightweight YTMusic call.
+    DB connectivity, presence of required binaries, FS permissions, YTMusic
+    client init. 503 when any of them fails.
     """
     overall_ok = True
     result: Dict[str, Any] = {"ok": True, "checks": {}, "timestamp": int(time.time())}
@@ -122,7 +103,7 @@ def health_check(deep: bool = Query(False, description="If true, perform deeper 
         overall_ok = False
 
     # ytmusic
-    ytm_chk = _check_ytmusic(deep=deep)
+    ytm_chk = _check_ytmusic()
     result["checks"]["ytmusic"] = ytm_chk
     if not ytm_chk.get("ok"):
         overall_ok = False

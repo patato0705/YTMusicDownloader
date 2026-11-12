@@ -30,6 +30,9 @@ DEFAULT_SETTINGS = {
         "type": "schedule",
         "unit": "hours",
         "min": 1,
+        # A year at most, here and on the other schedules: a far larger value
+        # overflows the scheduler's date math on every tick
+        "max": 8760,
         "description": "When followed artists are checked for new releases",
     },
     "scheduler.artist_sync_last_run": {
@@ -45,6 +48,7 @@ DEFAULT_SETTINGS = {
         "type": "schedule",
         "unit": "days",
         "min": 1,
+        "max": 365,
         "description": "When followed charts are re-fetched (YouTube Music updates its charts weekly)",
     },
     "scheduler.chart_sync_last_run": {
@@ -60,6 +64,7 @@ DEFAULT_SETTINGS = {
         "type": "schedule",
         "unit": "hours",
         "min": 1,
+        "max": 8760,
         "description": "When followed playlists are rescanned for new songs",
     },
     "scheduler.playlist_sync_last_run": {
@@ -73,6 +78,7 @@ DEFAULT_SETTINGS = {
         "type": "schedule",
         "unit": "hours",
         "min": 1,
+        "max": 8760,
         "description": "When tracks with missing or plain lyrics are retried",
     },
     "scheduler.lyrics_retry_last_run": {
@@ -85,6 +91,7 @@ DEFAULT_SETTINGS = {
         "value": 3,
         "type": "int",
         "min": 1,
+        "max": 3650,
         "description": "Days to keep finished jobs (done, failed, cancelled)",
     },
 
@@ -176,6 +183,9 @@ DEFAULT_SETTINGS = {
         "value": 10,
         "type": "int",
         "min": 1,
+        # A day; escalation (jobs.gate) stretches it up to 16 times. A far
+        # larger value overflows the resume time, and no pause is set at all
+        "max": 1440,
         "description": "Minutes to pause all downloads after hitting YouTube's rate limit",
     },
     "download.pause_streak": {

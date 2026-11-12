@@ -29,7 +29,7 @@ export interface Setting {
   description: string | null;
   allowed_values: SettingOption[] | null;
   min: number | null; // lower bound for int settings (and schedule intervals)
-  max: number | null; // upper bound for int settings
+  max: number | null; // upper bound for int settings (and schedule intervals)
   default: any; // built-in default value; null for keys without one
   unit?: 'hours' | 'days' | null; // schedule settings: unit of the interval
   next_run?: string | null; // schedule settings in fixed mode: ISO time of the next run
