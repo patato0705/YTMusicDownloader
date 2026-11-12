@@ -73,10 +73,8 @@ class Album(Base):
     playlist_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     year: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
-    # Up to 3 genres and where they came from (services/genres.py): e.g.
-    # "musicbrainz-album", or "musicbrainz-artist" when the album itself had none
+    # Up to 3 genres (services/genres.py): the album's own, else its artist's
     genres: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
-    genres_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     genres_checked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # What the library does with it, and its download progress (see services/subscriptions.py)
@@ -271,7 +269,6 @@ class UserChannel(Base):
     __tablename__ = "user_channels"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    seen_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
 
 class VideoSong(Base):

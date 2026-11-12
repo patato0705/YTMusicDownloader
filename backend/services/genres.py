@@ -357,7 +357,6 @@ def _dz_find_artist(
 @dataclass
 class AlbumGenres:
     genres: List[str]
-    source: Optional[str]  # e.g. "musicbrainz-album"; None when nothing was found
 
 
 @dataclass
@@ -391,9 +390,9 @@ def lookup_artist(
     for album_id, title, year in albums:
         release = _match(title, year, mb_releases)
         if release and release.genres:
-            picked[album_id] = AlbumGenres(release.genres, "musicbrainz-album")
+            picked[album_id] = AlbumGenres(release.genres)
         elif mb_artist:
-            picked[album_id] = AlbumGenres(mb_artist, "musicbrainz-artist")
+            picked[album_id] = AlbumGenres(mb_artist)
 
     # Deezer only for what MusicBrainz had nothing at all for
     dz_id, dz_artist = deezer_id, []
@@ -407,12 +406,12 @@ def lookup_artist(
                 continue
             release = _match(title, year, dz_releases)
             if release and release.genres:
-                picked[album_id] = AlbumGenres(release.genres, "deezer-album")
+                picked[album_id] = AlbumGenres(release.genres)
             elif dz_artist:
-                picked[album_id] = AlbumGenres(dz_artist, "deezer-artist")
+                picked[album_id] = AlbumGenres(dz_artist)
 
     for album_id, _, _ in albums:
-        picked.setdefault(album_id, AlbumGenres([], None))
+        picked.setdefault(album_id, AlbumGenres([]))
 
     logger.info(
         "Genres for %s: MusicBrainz %s, Deezer %s, %d/%d albums with genres",

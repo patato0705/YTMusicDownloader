@@ -8,7 +8,7 @@ import { Modal } from './Modal';
 import { ErrorBanner } from './PageStatus';
 import { getTrackLyrics, updateTrackLyrics } from '../../api/tracks';
 import { apiErrorMessage, primaryArtistName } from '../../utils';
-import type { LyricsKind, Track } from '../../types';
+import type { Track } from '../../types';
 import { Icon } from './icons';
 
 // Same rule as backend/routers/tracks.py's _LRC_TIMESTAMP_RE: a line that

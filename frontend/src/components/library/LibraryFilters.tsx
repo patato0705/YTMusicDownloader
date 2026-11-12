@@ -450,7 +450,6 @@ interface LibraryFilterControlProps {
   onSortChange: (sort: LibrarySort) => void;
   /** The popover opens from the button's left edge and stays within this element's sides */
   boundsRef?: RefObject<HTMLElement>;
-  className?: string;
 }
 
 export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
@@ -466,7 +465,6 @@ export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
   sort,
   onSortChange,
   boundsRef,
-  className = '',
 }) => {
   const { t, formatLocale } = useI18n();
   const wide = useMediaQuery('(min-width: 768px)');
@@ -523,7 +521,7 @@ export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
           active > 0 || dropdown.open
             ? 'text-accent-700 dark:text-accent-300 !border-accent-500/50'
             : 'text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
-        } ${className}`}
+        }`}
       >
         <Icon name="filter" className="w-5 h-5 shrink-0" />
         <span className="hidden md:inline">{t('library.filters.button')}</span>

@@ -565,9 +565,9 @@ def delete_artist_from_library(
     Deletes everything:
     - All track files, lyrics files, album covers, artist pictures
     - Artist folder on disk
-    - All DB records: tracks, albums, artist
-    - All subscriptions: artist subscription + all album subscriptions
-      (including metadata-only subs that have no Album row in DB)
+    - All DB records: tracks, albums, artist, its subscription (and
+      everyone's like of it)
+    - Followed playlists that would bring it back become one-time ones
 
     Requires administrator role.
     """
@@ -671,12 +671,14 @@ def delete_album_from_library(
     Delete an album's downloaded content from the library.
 
     What happens:
-    - All track files, lyrics files, and album cover are deleted from disk
-    - Album and Track DB rows are deleted
-    - Album subscription is KEPT but downgraded to mode="metadata"
+    - All track files and lyrics files are deleted from disk, and their
+      Track rows; the album folder goes once empty
+    - The cover moves back to the covers folder, and the Album row stays
+      in mode="metadata" (it's still one of the artist's releases)
     - Artist subscription is downgraded to mode="light"
       (no more periodic sync; artist stays in library;
        re-following the artist will reimport and redownload this album)
+    - Followed playlists that would bring it back become one-time ones
 
     Requires administrator role.
     """

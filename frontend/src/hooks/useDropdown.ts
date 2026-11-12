@@ -1,5 +1,5 @@
 // src/hooks/useDropdown.ts
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, RefObject } from 'react';
 
 // Menus open right now, oldest first. A click inside a menu opened from

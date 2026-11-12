@@ -133,25 +133,6 @@ def get_monitored_artists_needing_sync(session: Session, cutoff: datetime) -> li
 # ALBUM MODE
 # ============================================================================
 
-def clear_album_download(session: Session, album_id: str) -> bool:
-    """
-    Downgrade an album back to metadata mode, cancel its pending downloads
-    and clear download status. Does not commit.
-
-    Returns:
-        True if album existed, False otherwise
-    """
-    album = session.get(Album, album_id)
-    if not album:
-        return False
-
-    album.mode = "metadata"
-    album.download_status = None
-    _stop_album_downloads(session, [album_id])
-    logger.info("Cleared album download for %s", album_id)
-    return True
-
-
 def upgrade_all_albums_to_download(
     session: Session,
     artist_id: str,

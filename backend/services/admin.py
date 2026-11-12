@@ -135,7 +135,7 @@ def deactivate_user(session: Session, user_id: int) -> User:
     return user
 
 
-def delete_user(session: Session, user_id: int) -> bool:
+def delete_user(session: Session, user_id: int) -> None:
     """
     Permanently delete a user and all associated data.
 
@@ -154,9 +154,6 @@ def delete_user(session: Session, user_id: int) -> bool:
         session: SQLAlchemy session
         user_id: User ID to delete
 
-    Returns:
-        True if deleted successfully
-
     Raises:
         ValueError: If user not found
     """
@@ -170,4 +167,3 @@ def delete_user(session: Session, user_id: int) -> bool:
     session.commit()
 
     logger.warning("PERMANENTLY DELETED user %s (%s)", user_id, username)
-    return True

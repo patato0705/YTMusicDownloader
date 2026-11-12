@@ -1122,7 +1122,6 @@ def fetch_genres(session: Session, artist_id: str, *, origin: str) -> Dict[str, 
         if (album.genres or []) != picked.genres:
             changed[album.id] = picked.genres
         album.genres = picked.genres
-        album.genres_source = picked.source
         album.genres_checked_at = now
     session.commit()
 
