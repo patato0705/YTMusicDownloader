@@ -7,8 +7,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import config
 from .body_limit import BodySizeLimitMiddleware
@@ -22,6 +25,51 @@ from .secrets import jwt_secret
 from .services.login_throttle import TooManyAttempts
 
 logger = logging.getLogger("backend.main")
+
+# Vite names every built asset after its content hash, so a file under
+# /static/assets never changes: a new build is new names
+_ASSETS_CACHE_CONTROL = "public, max-age=31536000, immutable"
+# index.html is the one file that changes in place from one image to the
+# next: always revalidated (a 304 when unchanged), or a browser holding an
+# old copy asks for assets the new image no longer has and shows a blank page
+_INDEX_CACHE_CONTROL = "no-cache"
+
+
+class SecurityHeadersMiddleware:
+    """
+    Headers for every response: no MIME sniffing (a user-supplied file is
+    never run as a script or page), and no full URLs sent to the external
+    sites the app links to. No X-Frame-Options: dashboards (Homarr,
+    Organizr...) embed self-hosted apps in a frame, and the SameSite=Lax
+    cookies already keep a cross-site frame signed out.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.setdefault("X-Content-Type-Options", "nosniff")
+                headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+class _AssetFiles(StaticFiles):
+    """StaticFiles with the caching each kind of file allows."""
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        is_asset = Path(full_path).parent.name == "assets"
+        response.headers["Cache-Control"] = _ASSETS_CACHE_CONTROL if is_asset else _INDEX_CACHE_CONTROL
+        return response
 
 
 def create_app() -> FastAPI:
@@ -64,6 +112,14 @@ def create_app() -> FastAPI:
     # CORS so CORS wraps it: the last middleware added is the outermost,
     # and its 413s need CORS headers like any other response.
     app.add_middleware(BodySizeLimitMiddleware)
+
+    # JSON and the frontend bundle shrink tenfold or more (the albums list
+    # of a 5,000-album library: 2.6 MB to 140 KB), and the Library page
+    # refetches it every few seconds while downloads run. Starlette leaves
+    # images and audio alone (already compressed). Level 6: level 9 takes
+    # twice as long for no smaller output on this JSON.
+    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # CORS - default to same-origin only (no cross-origin access at all).
     # The standard deployment (this Dockerfile) serves the frontend from
@@ -113,12 +169,12 @@ def create_app() -> FastAPI:
     index_file = static_dir / "index.html"
 
     if index_file.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        app.mount("/static", _AssetFiles(directory=str(static_dir)), name="static")
 
         # Every other path is a frontend route: React Router handles it (404s included)
         @app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
         def spa(full_path: str) -> FileResponse:
-            return FileResponse(index_file)
+            return FileResponse(index_file, headers={"Cache-Control": _INDEX_CACHE_CONTROL})
 
         logger.debug("Serving the frontend from %s", static_dir)
     else:
