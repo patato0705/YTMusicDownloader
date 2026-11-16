@@ -162,6 +162,16 @@ def _ydl_options(job_dir: Path, cookiefile: Union[str, Path]) -> Dict[str, Any]:
         # The YouTube extractor alone: a URL it doesn't take fails instead of
         # falling through to the generic one, which would fetch anything
         "allowed_extractors": ["youtube"],
+        # visionos first, then yt-dlp's own defaults. YouTube attaches a
+        # pre-roll ad to the default clients' (tv_samsung, web) responses,
+        # and yt-dlp then waits out the ad before downloading, since the
+        # stream is refused until then: 6 to 15 s per track for a ~0.3 s
+        # download. visionos gets no ad and serves the same m4a (itag 140),
+        # and yt-dlp keeps the first client's copy of a format, so it wins
+        # whenever it has one. The defaults stay behind it for whatever
+        # visionos can't serve, and with account cookies (age-gated tracks)
+        # yt-dlp drops visionos by itself since it takes no cookies.
+        "extractor_args": {"youtube": {"player_client": ["visionos", "default"]}},
         "postprocessors": [
             {"key": "FFmpegExtractAudio", "preferredcodec": YDL_PREFERRED_CODEC}
         ],
