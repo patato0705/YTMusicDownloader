@@ -214,7 +214,9 @@
     "channelNotice": "C'est une chaîne YouTube : une mise en ligne crédite la chaîne qui l'a publiée. Elle n'a aucune sortie à suivre.",
     "namesakes": "Artistes portant ce nom",
     "noNamesakes": "Aucun artiste de ce nom sur YouTube Music.",
-    "notAnArtist": "C'est une chaîne YouTube, pas un artiste : il n'y a rien à suivre."
+    "notAnArtist": "C'est une chaîne YouTube, pas un artiste : il n'y a rien à suivre.",
+    "chartFollow": "Suivi à cause des charts {charts}. Une fois sorti de ceux-ci depuis un moment, les charts ne suivent plus cet artiste (réglable dans Admin > Charts) ; aimer l'artiste le garde.",
+    "chartFollow_one": "Suivi à cause du chart {charts}. Une fois sorti de celui-ci depuis un moment, le chart ne suit plus cet artiste (réglable dans Admin > Charts) ; aimer l'artiste le garde."
   },
   "album": {
     "album": "Album",
@@ -397,7 +399,8 @@
         },
         "follow": {
           "full": "Suivi complet",
-          "light": "Suivi léger"
+          "light": "Suivi léger",
+          "chart": "Suivi par un chart"
         },
         "liked": {
           "liked": "Artistes aimés"
@@ -477,7 +480,15 @@
     "numberOfArtists": "Nombre d'artistes à suivre",
     "top": "Top",
     "storageWarning": "Des nombres plus élevés suivent plus d'artistes mais nécessitent plus de stockage et de temps de synchronisation",
-    "disabled": "La fonctionnalité Charts est actuellement désactivée. Un administrateur peut l'activer depuis le panneau d'administration."
+    "disabled": "La fonctionnalité Charts est actuellement désactivée. Un administrateur peut l'activer depuis le panneau d'administration.",
+    "keepWeeks": {
+      "column": "Ne plus suivre après",
+      "label": "Ne plus suivre ses artistes après",
+      "never": "Jamais",
+      "weeks": "{count} semaines hors du chart",
+      "weeks_one": "1 semaine hors du chart",
+      "help": "Un artiste suivi par ce chart n'est plus suivi une fois sorti du chart (et de tous les autres charts suivis) depuis aussi longtemps. Les fichiers déjà téléchargés restent, et un j'aime de n'importe qui garde l'artiste."
+    }
   },
   "admin": {
     "subtitle": "Gérer les paramètres de l'application et les utilisateurs",

@@ -2,30 +2,55 @@
 """
 Chart subscriptions: a country's YouTube Music top artists chart, whose top
 N artists are followed in full (re-checked on the scheduler.chart_sync schedule).
+
+The follows a chart makes are its own (ArtistSubscription.chart_followed),
+and each sync notes which artists its top N lists (ChartSighting). Once an
+artist a chart followed has been out of it for the chart's keep_weeks, it's
+unfollowed like the Unfollow button does (its files stay), unless:
+  - another chart still keeps it: lists it, saw it within its own
+    keep_weeks, never unfollows (keep_weeks None), or is disabled (no fresh
+    data, so no verdict)
+  - someone likes it
+  - a followed artists-mode playlist lists it: its follow becomes the
+    playlist's (the next rescan would follow it again anyway)
+Only a successful sync decides, so a YouTube Music outage doesn't age
+artists out. Re-entering the chart follows it again: an unfollow by a chart
+isn't an exclusion (services/exclusions.py), an unfollow by someone is.
 """
 from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 
 from ..jobs.jobqueue import enqueue_job, pending_jobs
 from ..jobs.priorities import Origin
-from ..models import ArtistSubscription, ChartSubscription, Job
-from ..time_utils import now_utc
+from ..models import (
+    Artist, ArtistLike, ArtistSubscription, ChartSighting, ChartSubscription, Job, Playlist, PlaylistEntry,
+)
+from ..time_utils import ensure_timezone_aware, now_utc
 from ..ytm_service import adapter as ytm_adapter
 from . import exclusions as exclusions_svc
 
 logger = logging.getLogger("services.charts")
 
 MAX_TOP_N = 40
+# Two years: anything longer is as good as never (keep_weeks None)
+MAX_KEEP_WEEKS = 104
+# Marks "leave keep_weeks as it is" in update_chart_subscription (None means never)
+UNCHANGED: Any = object()
 
 
 def _check_top_n(top_n_artists: int) -> None:
     if not 1 <= top_n_artists <= MAX_TOP_N:
         raise ValueError(f"top_n_artists must be between 1 and {MAX_TOP_N}")
+
+
+def _check_keep_weeks(keep_weeks: Optional[int]) -> None:
+    if keep_weeks is not None and not 1 <= keep_weeks <= MAX_KEEP_WEEKS:
+        raise ValueError(f"keep_weeks must be between 1 and {MAX_KEEP_WEEKS}, or none")
 
 
 # ============================================================================
@@ -51,15 +76,17 @@ def create_chart_subscription(
     country_code: str,
     top_n_artists: int,
     created_by: Optional[int] = None,
+    keep_weeks: Optional[int] = None,
 ) -> ChartSubscription:
     """
     Subscribe to a country's chart. Raises ValueError for a bad country
-    code or count, or when it's already followed. Does not commit.
+    code, count or keep_weeks, or when it's already followed. Does not commit.
     """
     country_code = country_code.upper().strip()
     if len(country_code) != 2:
         raise ValueError("Country code must be 2 letters")
     _check_top_n(top_n_artists)
+    _check_keep_weeks(keep_weeks)
     if get_chart_subscription(session, country_code):
         raise ValueError(f"Chart subscription for {country_code} already exists")
 
@@ -67,6 +94,7 @@ def create_chart_subscription(
         country_code=country_code,
         enabled=True,
         top_n_artists=top_n_artists,
+        keep_weeks=keep_weeks,
         created_at=now_utc(),
         created_by=created_by,
     )
@@ -81,14 +109,22 @@ def update_chart_subscription(
     country_code: str,
     top_n_artists: Optional[int] = None,
     enabled: Optional[bool] = None,
+    keep_weeks: Optional[int] = UNCHANGED,
 ) -> ChartSubscription:
-    """Change a chart subscription. Raises ValueError if it doesn't exist or for a bad count. Does not commit."""
+    """
+    Change a chart subscription (keep_weeks: None for never, UNCHANGED to
+    leave it). Raises ValueError if it doesn't exist or for a bad value.
+    Takes effect at its next sync. Does not commit.
+    """
     subscription = get_chart_subscription(session, country_code)
     if not subscription:
         raise ValueError(f"Chart subscription for {country_code} not found")
     if top_n_artists is not None:
         _check_top_n(top_n_artists)
         subscription.top_n_artists = top_n_artists
+    if keep_weeks is not UNCHANGED:
+        _check_keep_weeks(keep_weeks)
+        subscription.keep_weeks = keep_weeks
     if enabled is not None:
         subscription.enabled = enabled
     session.flush()
@@ -97,10 +133,22 @@ def update_chart_subscription(
 
 
 def delete_chart_subscription(session: Session, country_code: str) -> bool:
-    """Unfollow a chart (its artists stay followed). False if it wasn't followed. Does not commit."""
-    subscription = get_chart_subscription(session, country_code)
+    """
+    Unfollow a chart. Its artists stay followed: those no other chart has
+    listed become ordinary follows, which no chart unfollows. Its sightings
+    go with it (ON DELETE CASCADE). False if it wasn't followed. Does not commit.
+    """
+    subscription = get_chart_subscription(session, country_code.upper())
     if not subscription:
         return False
+    elsewhere = select(ChartSighting.artist_id).where(ChartSighting.country_code != subscription.country_code)
+    here = select(ChartSighting.artist_id).where(ChartSighting.country_code == subscription.country_code)
+    for sub in session.scalars(select(ArtistSubscription).where(
+        ArtistSubscription.chart_followed.is_(True),
+        ArtistSubscription.artist_id.in_(here),
+        ArtistSubscription.artist_id.not_in(elsewhere),
+    )):
+        sub.chart_followed = False
     session.delete(subscription)
     session.flush()
     logger.info("Deleted chart subscription: %s", country_code)
@@ -190,6 +238,7 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
         raise
 
     top = [a for a in artists[:subscription.top_n_artists] if a.get("id")]
+    _note_sightings(session, country_code, {a["id"] for a in top})
     followed_ids = get_followed_artist_ids(session)
     # Unfollowed or deleted from the library: not followed again
     # (services/exclusions.py)
@@ -215,4 +264,84 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
         "artists_to_follow": to_follow,
         "already_followed": len(top) - len(to_follow) - excluded,
         "excluded": excluded,
+        "top_ids": [a["id"] for a in top],
     }
+
+
+def _note_sightings(session: Session, country_code: str, artist_ids: set[str]) -> None:
+    """The chart lists these artists in its top N now. Does not commit."""
+    now = now_utc()
+    known = {
+        s.artist_id: s for s in session.scalars(
+            select(ChartSighting).where(ChartSighting.country_code == country_code, ChartSighting.artist_id.in_(artist_ids))
+        )
+    }
+    for artist_id in artist_ids:
+        sighting = known.get(artist_id)
+        if sighting is None:
+            session.add(ChartSighting(country_code=country_code, artist_id=artist_id, last_seen_at=now))
+        else:
+            sighting.last_seen_at = now
+
+
+def _keeps(chart: ChartSubscription, last_seen_at: datetime, now: datetime) -> bool:
+    """Whether a chart that once listed an artist still keeps it followed."""
+    if not chart.enabled or chart.keep_weeks is None:
+        return True
+    return ensure_timezone_aware(last_seen_at) >= now - timedelta(weeks=chart.keep_weeks)
+
+
+def unfollow_dropped_artists(session: Session, country_code: str, top_ids: List[str]) -> List[Dict[str, str]]:
+    """
+    After a successful sync of this chart: unfollow the artists the charts
+    followed that it no longer lists, once no chart keeps them (see the top
+    of this file). Commits. Returns them, as [{"id", "name"}].
+    """
+    from . import subscriptions as subs_svc
+
+    country_code = country_code.upper()
+    now = now_utc()
+    candidates = session.scalars(
+        select(ArtistSubscription)
+        .join(ChartSighting, ChartSighting.artist_id == ArtistSubscription.artist_id)
+        .where(
+            ChartSighting.country_code == country_code,
+            ChartSighting.artist_id.not_in(top_ids),
+            ArtistSubscription.chart_followed.is_(True),
+            ArtistSubscription.mode == "full",
+        )
+    ).all()
+    if not candidates:
+        return []
+
+    ids = [sub.artist_id for sub in candidates]
+    charts = {c.country_code: c for c in session.scalars(select(ChartSubscription))}
+    sightings: Dict[str, List[ChartSighting]] = {}
+    for s in session.scalars(select(ChartSighting).where(ChartSighting.artist_id.in_(ids))):
+        sightings.setdefault(s.artist_id, []).append(s)
+    liked = set(session.scalars(select(ArtistLike.artist_id).where(ArtistLike.artist_id.in_(ids))))
+    in_playlists = set(session.scalars(
+        select(PlaylistEntry.artist_id)
+        .join(Playlist, Playlist.id == PlaylistEntry.playlist_id)
+        .where(Playlist.followed.is_(True), Playlist.mode == "artists", PlaylistEntry.artist_id.in_(ids))
+    ))
+
+    unfollowed = []
+    for sub in candidates:
+        artist_id = sub.artist_id
+        if any(_keeps(charts[s.country_code], s.last_seen_at, now) for s in sightings.get(artist_id, []) if s.country_code in charts):
+            continue
+        if artist_id in liked:
+            continue
+        if artist_id in in_playlists:
+            sub.chart_followed = False
+            logger.info("Artist %s left chart %s, but an artists-mode playlist follows it now", artist_id, country_code)
+            continue
+        subs_svc.downgrade_all_albums_to_metadata(session, artist_id)
+        sub.mode = "light"
+        sub.chart_followed = False
+        artist = session.get(Artist, artist_id)
+        unfollowed.append({"id": artist_id, "name": artist.name if artist else ""})
+        logger.info("Artist %s (%s) unfollowed: out of chart %s for too long", artist_id, artist.name if artist else "", country_code)
+    session.commit()
+    return unfollowed

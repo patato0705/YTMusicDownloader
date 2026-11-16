@@ -10,7 +10,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Follow artists**: all existing releases are downloaded, and new ones are picked up automatically.
 - **Download single albums** without following the artist.
 - **Playlists**: paste a YouTube Music playlist URL, then follow every artist in it or download every album it contains in bulk, or add the playlist to the library: followed (new songs bring in their albums or artists), and/or written as an M3U file that Jellyfin picks up as a playlist.
-- **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly).
+- **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly), optionally unfollowing them once they've been out of it for a few weeks.
 - **Synced lyrics** from [LRCLIB](https://lrclib.net), saved as `.lrc` sidecar files. Missing lyrics are retried daily (instrumental tracks are recognised and left alone); plain lyrics are upgraded to synced when they become available. Lyrics can also be viewed and edited by hand in the UI.
 - **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
 - **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year, genres and embedded cover art.
@@ -205,7 +205,9 @@ Fixed times are in the container's time zone (`TZ` in `docker-compose.yml`). A f
 
 ### Charts
 
-Admins follow a country chart from **Admin Panel → Charts** and choose how many of its top artists to follow (1–40). Those artists are followed in full mode. The chart is re-synced on the chart sync schedule, following any new entrants. The Charts page shows the current chart for every followed country.
+Admins follow a country chart from **Admin Panel → Charts** and choose how many of its top artists to follow (1–40). Those artists are followed in full mode. The chart is re-synced on the chart sync schedule, following any new entrants.
+
+Each chart also has an *Unfollow after* setting (in the follow dialog and in **Admin Panel → Charts**; *Never* by default). An artist a chart followed is unfollowed, like the Unfollow button (files stay, new releases stop), once it has been out of that chart, and of every other followed chart, for that many weeks. It's kept if anyone likes it, if a followed playlist in artists mode lists it, or while a chart that listed it is disabled. Only successful syncs count, so a YouTube Music outage never unfollows anyone, and an artist that comes back into the chart is followed again. Artists you followed yourself are never touched, and unfollowing a chart leaves its artists followed. The artist page says when an artist was followed by a chart, and the Library's *Artist follow* filter lists them. The Charts page shows the current chart for every followed country.
 
 ### Lyrics
 

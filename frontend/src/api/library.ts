@@ -18,6 +18,8 @@ export interface LibraryArtist {
   /** Genres were looked up (an empty list then means none were found) */
   genres_checked: boolean;
   mode: SubscriptionMode;
+  /** Followed by a chart, which may unfollow it */
+  chart_followed: boolean;
   /** Whether you like it */
   liked: boolean;
   followed_at: string | null;

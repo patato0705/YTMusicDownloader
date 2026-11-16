@@ -120,6 +120,7 @@ def follow_chart(
             country_code=country_code,
             top_n_artists=data.top_n_artists,
             created_by=current_user.id,
+            keep_weeks=data.keep_weeks,
         )
 
         session.commit()
@@ -161,7 +162,8 @@ def unfollow_chart(
     """
     Unfollow a chart (admin only).
 
-    Removes the chart subscription but keeps followed artists.
+    Removes the chart subscription but keeps followed artists, as ordinary
+    follows unless another chart listed them (services/charts.py).
     """
     country_code = country_code.upper()
 
@@ -204,11 +206,13 @@ def update_chart(
     """
     Update chart subscription settings (admin only).
 
-    If top_n_artists is increased, a sync job is queued to follow additional artists.
+    If top_n_artists is increased, a sync job is queued to follow additional
+    artists. keep_weeks (null: never) applies from the next sync.
     """
     country_code = country_code.upper()
+    keep_weeks = data.keep_weeks if "keep_weeks" in data.model_fields_set else charts_svc.UNCHANGED
 
-    if data.top_n_artists is None and data.enabled is None:
+    if data.top_n_artists is None and data.enabled is None and keep_weeks is charts_svc.UNCHANGED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one field must be provided",
@@ -231,6 +235,7 @@ def update_chart(
             country_code=country_code,
             top_n_artists=data.top_n_artists,
             enabled=data.enabled,
+            keep_weeks=keep_weeks,
         )
 
         session.commit()

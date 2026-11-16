@@ -20,7 +20,7 @@ from .. import config
 from .. import settings as settings_module
 from ..models import (
     Artist, Album, Track, ArtistSubscription, User, Setting,
-    ArtistLike, DismissedRecommendation, Playlist, PlaylistEntry,
+    ArtistLike, ChartSighting, DismissedRecommendation, Playlist, PlaylistEntry,
 )
 from ..schemas.export import (
     FORMAT_VERSION,
@@ -140,7 +140,7 @@ def build_library_section(session: Session) -> Dict[str, Any]:
 
     return {
         "artists": [
-            {"id": artist.id, "name": artist.name, "mode": sub.mode}
+            {"id": artist.id, "name": artist.name, "mode": sub.mode, "chart_followed": bool(sub.chart_followed)}
             for artist, sub in artists
         ],
         "albums": [
@@ -157,6 +157,13 @@ def build_library_section(session: Session) -> Dict[str, Any]:
                 "country_code": sub.country_code,
                 "top_n_artists": sub.top_n_artists,
                 "enabled": bool(sub.enabled),
+                "keep_weeks": sub.keep_weeks,
+                "sightings": [
+                    {"artist_id": s.artist_id, "last_seen_at": s.last_seen_at.isoformat()}
+                    for s in session.scalars(
+                        select(ChartSighting).where(ChartSighting.country_code == sub.country_code).order_by(ChartSighting.artist_id)
+                    )
+                ],
             }
             for sub in charts
         ],
@@ -575,7 +582,9 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
 
         if item.mode == "full":
             # A light one upgraded: its sync switches the albums to download
-            subs_svc.follow_artist(session, item.id, item.name, user_id=user_id, origin=Origin.BULK)
+            subs_svc.follow_artist(
+                session, item.id, item.name, user_id=user_id, origin=Origin.BULK, by_chart=item.chart_followed,
+            )
             full_artists.add(item.id)
         else:
             artists_svc.upsert_artist(session, artist_id=item.id, name=item.name)
@@ -626,11 +635,15 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
                 try:
                     sub = charts_svc.create_chart_subscription(
                         session, country_code=code, top_n_artists=item.top_n_artists, created_by=user_id,
+                        keep_weeks=item.keep_weeks,
                     )
                 except ValueError as e:
                     result.charts_skipped += 1
                     warnings.append(ImportWarning(code="invalid_chart", detail=f"{code}: {e}"))
                     continue
+                # What it listed, so the artists it followed age out on time
+                for s in item.sightings:
+                    session.add(ChartSighting(country_code=code, artist_id=s.artist_id, last_seen_at=s.last_seen_at))
                 if item.enabled:
                     charts_svc.enqueue_chart_sync(session, code, user_id=user_id)
                 else:

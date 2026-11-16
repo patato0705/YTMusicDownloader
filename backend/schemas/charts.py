@@ -13,15 +13,21 @@ from pydantic import BaseModel, Field
 # REQUEST SCHEMAS
 # ============================================================================
 
+_KEEP_WEEKS = "Weeks out of the chart after which the artists it followed are unfollowed (1-104); null: never"
+
+
 class FollowChartRequest(BaseModel):
     """Request to follow a chart"""
     top_n_artists: int = Field(default=40, ge=1, le=40, description="Number of top artists to auto-follow (1-40)")
+    keep_weeks: Optional[int] = Field(None, ge=1, le=104, description=_KEEP_WEEKS)
 
 
 class UpdateChartRequest(BaseModel):
     """Request to update chart subscription settings"""
     top_n_artists: Optional[int] = Field(None, ge=1, le=40, description="Number of top artists to auto-follow (1-40)")
     enabled: Optional[bool] = Field(None, description="Enable/disable chart sync")
+    # Left out: unchanged; null: never (see model_fields_set)
+    keep_weeks: Optional[int] = Field(None, ge=1, le=104, description=_KEEP_WEEKS)
 
 
 # ============================================================================
@@ -46,6 +52,7 @@ class ChartSubscriptionResponse(BaseModel):
     country_code: str
     enabled: bool
     top_n_artists: int
+    keep_weeks: Optional[int] = None
     created_at: datetime
     created_by: Optional[int] = None
     last_synced_at: Optional[datetime] = None

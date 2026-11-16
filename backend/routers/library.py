@@ -135,6 +135,8 @@ def list_followed_artists(
                 # Looked up and none found, as opposed to not looked up yet
                 "genres_checked": artist.genres_checked_at is not None,
                 "mode": subscription.mode,
+                # Followed by a chart, which may unfollow it (services/charts.py)
+                "chart_followed": bool(subscription.chart_followed),
                 "liked": artist.id in liked,
                 "followed_at": subscription.created_at.isoformat() if subscription.created_at else None,
                 "albums_count": albums_count,

@@ -19,6 +19,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { GenreChips } from '../components/ui/GenreChips';
 import { ExclusionNote } from '../components/ui/ExclusionNote';
+import { useCountryName } from '../config/charts';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
 import { categorizeAlbums, getAlbumStatus, apiErrorMessage, albumPath, artistPath } from '../utils';
 import { Icon } from '../components/ui/icons';
@@ -34,7 +35,8 @@ export default function Artist(): JSX.Element {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const countryName = useCountryName();
   const { user } = useAuth();
   const { revision, refresh: refreshJobs, downloadsPausedUntil } = useJobActivity();
   // The queue revision the artist on screen is up to date with
@@ -287,6 +289,15 @@ export default function Artist(): JSX.Element {
                 {/* Last and quiet: it opens a confirmation, the dialog carries the red */}
                 {deleteButton}
               </div>
+              {followed && page.chart_follow && (
+                <ExclusionNote
+                  text={t('artist.chartFollow', {
+                    charts: new Intl.ListFormat(locale, { type: 'conjunction' }).format(page.chart_follow.map((code) => countryName(code))),
+                    count: page.chart_follow.length,
+                  })}
+                  className="mt-4 max-w-xl mx-auto md:mx-0 text-left"
+                />
+              )}
               {page.excluded && !followed && (
                 <ExclusionNote
                   text={t(page.excluded === 'deleted' ? 'exclusion.artistDeleted' : 'exclusion.artistUnfollowed')}

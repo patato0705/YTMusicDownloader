@@ -196,6 +196,9 @@ class ArtistSubscription(Base):
     artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), nullable=False, index=True)
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="full")  # "light" or "full"
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Followed in full by a chart sync rather than by someone: the charts
+    # unfollow it once it's been out of them long enough (services/charts.py)
+    chart_followed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -390,6 +393,9 @@ class ChartSubscription(Base):
     country_code: Mapped[str] = mapped_column(String(2), unique=True, nullable=False, index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     top_n_artists: Mapped[int] = mapped_column(Integer, nullable=False, default=10)  # 1-40
+    # The artists it followed are unfollowed once out of its top N for this
+    # many weeks (services/charts.py); None: never
+    keep_weeks: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     created_by: Mapped[Optional[int]] = mapped_column(
         Integer,
@@ -401,6 +407,21 @@ class ChartSubscription(Base):
 
     def __repr__(self) -> str:
         return f"<ChartSubscription country={self.country_code} top_n={self.top_n_artists} enabled={self.enabled}>"
+
+
+class ChartSighting(Base):
+    """
+    When a chart last listed an artist in its top N: what decides whether
+    the artists the charts followed are still in them. Deleted with the
+    chart by the database.
+    """
+    __tablename__ = "chart_sightings"
+
+    country_code: Mapped[str] = mapped_column(
+        String(2), ForeignKey("chart_subscriptions.country_code", ondelete="CASCADE"), primary_key=True,
+    )
+    artist_id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    last_seen_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 # Authentication

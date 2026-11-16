@@ -80,11 +80,15 @@ def follow_artist(
     *,
     origin: Origin,
     explicit: bool = False,
+    by_chart: bool = False,
 ) -> bool:
     """
     Follow an artist in full: its row (named `name` if it's new), a full
     subscription (a light one upgraded), and a sync job, which fetches the
     artist and brings in every release. No network here. Does not commit.
+
+    `by_chart`: a chart sync follows it, so the charts may unfollow it again
+    (ArtistSubscription.chart_followed, services/charts.py).
 
     `explicit`: someone asked for this artist (the Follow button), which
     lifts its exclusion (services/exclusions.py). Otherwise (a chart, a
@@ -104,7 +108,7 @@ def follow_artist(
         return False
     if session.get(Artist, artist_id) is None:
         session.add(Artist(id=artist_id, name=name or ""))
-    subscribe_to_artist(session, artist_id, mode="full")
+    subscribe_to_artist(session, artist_id, mode="full").chart_followed = by_chart
     queue_artist_sync(session, artist_id, user_id=user_id, origin=origin)
     return True
 

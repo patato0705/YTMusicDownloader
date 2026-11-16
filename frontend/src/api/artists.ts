@@ -26,6 +26,12 @@ export interface ArtistPage {
   /** "database" for an artist followed in full (refreshed with the job queue), "ytmusic" otherwise */
   source: 'database' | 'ytmusic';
   subscription_mode: SubscriptionMode | null;
+  /**
+   * Followed by a chart (which unfollows it once out of the charts for a
+   * while, unless someone likes it): the followed charts that list or
+   * listed it, by country code. Null for any other follow.
+   */
+  chart_follow: string[] | null;
   /** Unfollowed or deleted: no chart or playlist follows it (Follow lifts that) */
   excluded: ExclusionReason | null;
   /** Whether you like it (only artists of the library, subscription_mode set, can be) */

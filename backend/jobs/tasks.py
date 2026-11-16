@@ -1045,7 +1045,9 @@ def sync_chart(
     """
     Fetch a country chart and follow its top N artists not followed in full
     yet. Following needs no network: each artist's sync job fetches it
-    (and its pictures) like any other follow.
+    (and its pictures) like any other follow. Then unfollow the artists the
+    charts followed that have been out of them long enough
+    (charts_svc.unfollow_dropped_artists).
     """
     try:
         result = charts_svc.sync_chart(session, country_code)
@@ -1058,12 +1060,13 @@ def sync_chart(
     followed = 0
     for artist in result["artists_to_follow"]:
         # One short transaction per artist (single SQLite writer)
-        if subs_svc.follow_artist(session, artist["id"], artist["name"], origin=Origin.BULK):
+        if subs_svc.follow_artist(session, artist["id"], artist["name"], origin=Origin.BULK, by_chart=True):
             followed += 1
         session.commit()
 
-    logger.info("Chart sync for %s: %s artists followed", country_code, followed)
-    return {**result, "ok": True, "artists_followed": followed}
+    unfollowed = charts_svc.unfollow_dropped_artists(session, country_code, result.pop("top_ids"))
+    logger.info("Chart sync for %s: %s artists followed, %s unfollowed", country_code, followed, len(unfollowed))
+    return {**result, "ok": True, "artists_followed": followed, "artists_unfollowed": unfollowed}
 
 
 # ============================================================================

@@ -31,6 +31,8 @@ export interface ChartSubscription {
   country_code: string;
   enabled: boolean;
   top_n_artists: number;
+  /** Weeks out of the chart after which the artists it followed are unfollowed; null: never */
+  keep_weeks: number | null;
   created_at: string;
   created_by: number;
   last_synced_at: string | null;
@@ -40,6 +42,8 @@ export interface ChartSubscription {
 export interface UpdateChartRequest {
   top_n_artists?: number;
   enabled?: boolean;
+  /** null: never unfollow */
+  keep_weeks?: number | null;
 }
 
 // ============================================================================
@@ -63,8 +67,8 @@ export async function listChartSubscriptions(includeDisabled = false): Promise<C
 /**
  * Follow a chart (admin only)
  */
-export async function followChart(countryCode: string, topNArtists: number): Promise<ChartSubscription> {
-  return api.post<ChartSubscription>(`/charts/${countryCode}/follow`, { top_n_artists: topNArtists });
+export async function followChart(countryCode: string, topNArtists: number, keepWeeks: number | null): Promise<ChartSubscription> {
+  return api.post<ChartSubscription>(`/charts/${countryCode}/follow`, { top_n_artists: topNArtists, keep_weeks: keepWeeks });
 }
 
 /**

@@ -35,7 +35,7 @@ export const FIXED_OPTIONS: Partial<Record<FilterGroup, readonly string[]>> = {
   metadata: ['artwork', 'genre'],
   type: ['album', 'single', 'ep'],
   source: ['artist', 'playlist', 'own'],
-  follow: ['full', 'light'],
+  follow: ['full', 'light', 'chart'],
   liked: ['liked'],
   excluded: ['excluded'],
 };
@@ -111,7 +111,8 @@ function albumTest(group: FilterGroup, value: string, album: LibraryAlbum, ctx: 
 }
 
 function artistTest(group: FilterGroup, value: string, artist: LibraryArtist): boolean {
-  return group === 'liked' ? artist.liked : artist.mode === value;
+  if (group === 'liked') return artist.liked;
+  return value === 'chart' ? artist.chart_followed : artist.mode === value;
 }
 
 function metadataTest(value: string, item: { thumbnail: string | null; genres: string[]; genres_checked: boolean }): boolean {

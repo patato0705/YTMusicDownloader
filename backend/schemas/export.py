@@ -48,6 +48,8 @@ class LibraryArtist(BaseModel):
     id: str = Field(..., min_length=1, max_length=64)
     name: Optional[str] = Field(None, max_length=NAME_MAX)
     mode: Literal["light", "full"] = "full"
+    # Followed by a chart, which may unfollow it (services/charts.py)
+    chart_followed: bool = False
 
 
 class LibraryAlbum(BaseModel):
@@ -58,10 +60,18 @@ class LibraryAlbum(BaseModel):
     artist_name: Optional[str] = Field(None, max_length=NAME_MAX)
 
 
+class ChartSightingItem(BaseModel):
+    """When the chart last listed an artist in its top N."""
+    artist_id: str = Field(..., min_length=1, max_length=64)
+    last_seen_at: datetime
+
+
 class LibraryChart(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
     top_n_artists: int = Field(10, ge=1, le=40)
     enabled: bool = True
+    keep_weeks: Optional[int] = Field(None, ge=1, le=104)
+    sightings: List[ChartSightingItem] = Field(default_factory=list, max_length=MAX_ARTISTS)
 
 
 class LibraryPlaylistEntry(BaseModel):

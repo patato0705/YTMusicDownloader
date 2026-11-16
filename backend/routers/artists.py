@@ -14,12 +14,13 @@ import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..dependencies import require_auth, require_member_or_admin
 from ..jobs.priorities import Origin
-from ..models import Artist, User, UserChannel
+from ..models import Artist, ChartSighting, User, UserChannel
 from ..services import albums as albums_svc
 from ..services import artists as artists_svc
 from ..services import exclusions as exclusions_svc
@@ -49,7 +50,9 @@ def get_artist(
     page points instead. "in_library": it has a row (one an admin can
     delete), followed or not. "excluded": "unfollowed" or "deleted" when
     nothing automatic follows it (services/exclusions.py), and each
-    release's "excluded" the same for albums.
+    release's "excluded" the same for albums. "chart_follow": for an artist
+    a chart followed (which may unfollow it, services/charts.py), the
+    followed charts that list or listed it, by country code; else null.
     """
     subscription = subs_svc.get_artist_subscription(session, artist_id)
     artist = session.get(Artist, artist_id)
@@ -60,9 +63,13 @@ def get_artist(
 
     if subscription and subscription.mode == "full":
         blocked = exclusions_svc.blocked_album_ids(session, {a["id"]: artist_id for a in db_albums})
+        chart_follow = sorted(session.scalars(
+            select(ChartSighting.country_code).where(ChartSighting.artist_id == artist_id)
+        )) if subscription.chart_followed else None
         return {
             "source": "database",
             "subscription_mode": "full",
+            "chart_follow": chart_follow,
             "excluded": excluded,
             "liked": liked,
             "channel": False,
@@ -114,6 +121,7 @@ def get_artist(
     return {
         "source": "ytmusic",
         "subscription_mode": subscription.mode if subscription else None,
+        "chart_follow": None,
         "excluded": excluded,
         "liked": liked,
         "channel": artist_data["channel"],
@@ -178,6 +186,7 @@ def unfollow_artist(
 
     downgraded = subs_svc.downgrade_all_albums_to_metadata(session, artist_id)
     subscription.mode = "light"
+    subscription.chart_followed = False
     artist = session.get(Artist, artist_id)
     exclusions_svc.exclude_artist(session, artist_id, artist.name if artist else None, exclusions_svc.UNFOLLOWED)
     session.commit()

@@ -214,7 +214,9 @@
     "channelNotice": "This is a YouTube channel: what an upload credits is the channel that posted it. It has no releases to follow.",
     "namesakes": "Artists with this name",
     "noNamesakes": "No artist with this name on YouTube Music.",
-    "notAnArtist": "This is a YouTube channel, not an artist: there's nothing to follow."
+    "notAnArtist": "This is a YouTube channel, not an artist: there's nothing to follow.",
+    "chartFollow": "Followed because of the {charts} charts. Once out of them for a while, the charts unfollow this artist again (set in Admin > Charts); liking the artist keeps it.",
+    "chartFollow_one": "Followed because of the {charts} chart. Once out of it for a while, the chart unfollows this artist again (set in Admin > Charts); liking the artist keeps it."
   },
   "album": {
     "album": "Album",
@@ -397,7 +399,8 @@
         },
         "follow": {
           "full": "Full follow",
-          "light": "Light follow"
+          "light": "Light follow",
+          "chart": "Followed by a chart"
         },
         "liked": {
           "liked": "Liked artists"
@@ -476,7 +479,15 @@
     "numberOfArtists": "Number of Artists to Track",
     "top": "Top",
     "storageWarning": "Higher numbers track more artists but require more storage and sync time",
-    "disabled": "The charts feature is currently disabled. An administrator can turn it on in the admin panel."
+    "disabled": "The charts feature is currently disabled. An administrator can turn it on in the admin panel.",
+    "keepWeeks": {
+      "column": "Unfollow after",
+      "label": "Unfollow its artists after",
+      "never": "Never",
+      "weeks": "{count} weeks out of the chart",
+      "weeks_one": "1 week out of the chart",
+      "help": "An artist this chart followed is unfollowed once it has been out of the chart (and of every other followed chart) this long. Files already downloaded stay, and a like from anyone keeps the artist."
+    }
   },
   "admin": {
     "subtitle": "Manage application settings and users",

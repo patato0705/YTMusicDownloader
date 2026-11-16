@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Button } from './Button';
 import { Modal } from './Modal';
+import { KeepWeeksSelect } from './KeepWeeksSelect';
 import { ErrorBanner } from './PageStatus';
 import * as chartsApi from '../../api/charts';
 import { CHART_MAX_ARTISTS, useCountryName } from '../../config/charts';
@@ -19,6 +20,8 @@ interface FollowChartModalProps {
 
 export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onClose, onSuccess }) => {
   const [topNArtists, setTopNArtists] = useState(CHART_MAX_ARTISTS);
+  // Never by default: nothing is unfollowed unless an admin asks for it
+  const [keepWeeks, setKeepWeeks] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { t } = useI18n();
@@ -32,7 +35,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
     setLoading(true);
 
     try {
-      await chartsApi.followChart(country.code, topNArtists);
+      await chartsApi.followChart(country.code, topNArtists, keepWeeks);
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -103,6 +106,15 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
               </button>
             ))}
           </div>
+        </div>
+
+        {/* When the artists it followed are unfollowed again */}
+        <div className="glass rounded-2xl p-5 space-y-3">
+          <label htmlFor="chart-keep-weeks" className="block text-sm font-semibold text-foreground">
+            {t('charts.keepWeeks.label')}
+          </label>
+          <KeepWeeksSelect id="chart-keep-weeks" value={keepWeeks} onChange={setKeepWeeks} disabled={loading} className="w-full" />
+          <p className="text-xs text-muted-foreground">{t('charts.keepWeeks.help')}</p>
         </div>
 
         <p className="text-xs text-muted-foreground px-1">{t('charts.storageWarning')}</p>

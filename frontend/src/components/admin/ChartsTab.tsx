@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Select } from '../ui/Select';
 import { FollowChartModal } from '../ui/FollowChartModal';
 import { ChartArtistGrid } from '../ui/ChartArtistGrid';
+import { KeepWeeksSelect } from '../ui/KeepWeeksSelect';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import * as chartsApi from '../../api/charts';
 import type { ChartSubscription, Chart } from '../../api/charts';
@@ -157,6 +158,21 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
       return;
     }
     setChartAction({ kind: 'topN', sub, value });
+  };
+
+  // Saved right away: it changes nothing until the chart's next sync
+  const [keepWeeksSaving, setKeepWeeksSaving] = useState<string | null>(null);
+  const changeKeepWeeks = async (sub: ChartSubscription, keepWeeks: number | null) => {
+    setKeepWeeksSaving(sub.country_code);
+    try {
+      await chartsApi.updateChart(sub.country_code, { keep_weeks: keepWeeks });
+      await loadChartSubscriptions();
+      onToast(t('admin.charts.updated'), 'success');
+    } catch (err: any) {
+      onToast(errorMessage(err), 'error');
+    } finally {
+      setKeepWeeksSaving(null);
+    }
   };
 
   const runChartAction = async () => {
@@ -354,6 +370,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                   <tr>
                     <th className={`${thClass} text-left`}>{t('admin.charts.country')}</th>
                     <th className={`${thClass} text-left`}>{t('admin.charts.topArtists')}</th>
+                    <th className={`${thClass} text-left`}>{t('charts.keepWeeks.column')}</th>
                     <th className={`${thClass} text-left`}>{t('admin.charts.status')}</th>
                     <th className={`${thClass} text-left`}>{t('admin.charts.lastSynced')}</th>
                     <th className={`${thClass} text-right`}>{t('admin.charts.actions')}</th>
@@ -362,7 +379,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                 <tbody className="divide-y divide-slate-200 dark:divide-white/10">
                   {chartSubscriptions.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center">
+                      <td colSpan={6} className="px-6 py-12 text-center">
                         <div className="text-muted-foreground">
                           <Icon name="chart" className="w-8 h-8 mx-auto mb-2" />
                           <p>{t('admin.charts.noSubscriptions')}</p>
@@ -431,6 +448,15 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                             </div>
                           </td>
                           <td className="px-6 py-4">
+                            <KeepWeeksSelect
+                              ariaLabel={t('charts.keepWeeks.label')}
+                              value={sub.keep_weeks}
+                              onChange={(keepWeeks) => changeKeepWeeks(sub, keepWeeks)}
+                              disabled={busy || keepWeeksSaving === sub.country_code}
+                              className="py-2 pr-9 text-sm"
+                            />
+                          </td>
+                          <td className="px-6 py-4">
                             <ToggleSwitch
                               checked={sub.enabled}
                               onChange={() => setChartAction({ kind: 'toggle', sub })}
@@ -481,7 +507,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                         </tr>
                         {expanded?.chart && (
                           <tr className="bg-slate-50/60 dark:bg-white/[0.03]">
-                            <td colSpan={5} className="px-6 py-4">
+                            <td colSpan={6} className="px-6 py-4">
                               <p className="text-sm text-muted-foreground mb-3">
                                 {t('admin.charts.previewFollowing', {
                                   n: sub.top_n_artists,
