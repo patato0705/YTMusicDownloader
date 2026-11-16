@@ -155,6 +155,26 @@ def set_tags(
     return _edit(file_path, "tags", edit)
 
 
+def set_cover(file_path: str, cover_path: Path) -> bool:
+    """Replace a library file's embedded cover (as embed_tags writes it). Returns whether it was written."""
+    try:
+        cover = cover_path.read_bytes()
+    except OSError:
+        logger.exception("Reading cover %s failed", cover_path)
+        return False
+    is_png = cover_path.suffix.lower() == ".png"
+
+    def edit(tags) -> None:
+        if isinstance(tags, MP4):
+            fmt = MP4Cover.FORMAT_PNG if is_png else MP4Cover.FORMAT_JPEG
+            tags["covr"] = [MP4Cover(cover, imageformat=fmt)]
+        else:
+            mime = "image/png" if is_png else "image/jpeg"
+            tags.setall("APIC", [APIC(encoding=3, mime=mime, type=3, desc="cover", data=cover)])
+
+    return _edit(file_path, "the cover", edit)
+
+
 def set_artist(file_path: str, artist: str) -> bool:
     """Replace a library file's artist and album artist tags (one name, as embed_tags writes them). Returns whether it was written."""
     def edit(tags) -> None:

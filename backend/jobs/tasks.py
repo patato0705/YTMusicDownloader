@@ -830,6 +830,8 @@ def import_album(
         session.commit()
         for path, tags in result["retag"]:
             embed_mod.set_tags(path, **tags)
+        if result["cover_changed"]:
+            albums_svc.embed_album_cover(session, result["album_id"])
         queued = albums_svc.complete_import(session, result["album_id"], origin=Origin(origin))
     except albums_svc.ArtistDeleted:
         session.rollback()
@@ -930,7 +932,9 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
     # album, which is left to the sync that created it -- the same outcome
     # as if it had already existed when this sync looked.
     album_mode = "download" if sync_mode == "full" else "metadata"
-    new_releases = [r for r in albums_svc.list_artist_releases(artist_data) if session.get(Album, r["id"]) is None]
+    releases = albums_svc.list_artist_releases(artist_data)
+    new_releases = [r for r in releases if session.get(Album, r["id"]) is None]
+    covers_changed = _follow_cover_changes(session, [r for r in releases if r not in new_releases])
     # Deleted from the library before (its artist deleted with it, since
     # followed again): stays metadata-only (services/exclusions.py)
     excluded = exclusions_svc.blocked_album_ids(session, {r["id"]: artist_id for r in new_releases})
@@ -991,8 +995,8 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
     session.commit()
 
     logger.info(
-        "Synced artist %s (%s mode): %s new releases, %s albums created, %s imports queued",
-        artist_id, sync_mode, len(new_releases), albums_created, imports_queued,
+        "Synced artist %s (%s mode): %s new releases, %s albums created, %s imports queued, %s covers changed",
+        artist_id, sync_mode, len(new_releases), albums_created, imports_queued, covers_changed,
     )
     return {
         "ok": True,
@@ -1001,6 +1005,29 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
         "albums_created": albums_created,
         "jobs_queued": imports_queued,
     }
+
+
+def _follow_cover_changes(session: Session, releases: List[Dict[str, Any]]) -> int:
+    """
+    The artist page's cards show each release's current cover: one that
+    changed since it was saved replaces it, on disk and in the album's
+    files (albums_svc.ensure_album_cover). Only a changed cover is
+    downloaded. Errors are logged, not raised. Returns how many changed.
+    """
+    changed = 0
+    for release in releases:
+        try:
+            album = session.get(Album, release["id"])
+            if album is None or not albums_svc.ensure_album_cover(session, album, release["thumbnails"]):
+                continue
+            session.commit()
+            albums_svc.embed_album_cover(session, album.id)
+            changed += 1
+        except Exception:
+            session.rollback()
+            logger.exception("Failed to follow the cover of album %s", release["id"])
+    session.commit()  # the pictures recorded the first time round
+    return changed
 
 
 def _follow_artist_rename(session: Session, artist: Artist, old_name: str) -> None:

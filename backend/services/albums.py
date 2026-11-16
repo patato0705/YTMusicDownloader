@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config
-from ..downloader import cover as cover_mod, nfo as nfo_mod
+from ..downloader import cover as cover_mod, embed as embed_mod, nfo as nfo_mod
 from ..jobs.jobqueue import cancel_download_jobs
 from ..jobs.priorities import Origin
 from ..models import Album, Artist, Track
@@ -110,25 +110,55 @@ def list_albums_for_artist_from_db(session: Session, artist_id: str) -> List[Dic
     ]
 
 
-def ensure_album_cover(session: Session, album: Album, thumbnails: Optional[List[Any]]) -> Optional[str]:
-    """
-    Make sure the album has a cover on disk: the one it has, or the best of
-    `thumbnails` (raw, from the API) saved as COVERS_DIR/<album id>.jpg.
-    Returns its path, or None when there's none. Does not commit.
-    """
-    if album.image_local and Path(album.image_local).exists():
-        return album.image_local
+# Covers are saved at the size of YouTube Music's album pages, whether their
+# thumbnails come from one (an import) or from an artist page's cards (a sync)
+ALBUM_COVER_SIZE = N.CARD_THUMBNAIL_SIZE
 
+
+def ensure_album_cover(session: Session, album: Album, thumbnails: Optional[List[Any]]) -> bool:
+    """
+    Keep the album's cover on disk the picture YouTube Music shows, given
+    its raw `thumbnails` (from the album's page or an artist page's card:
+    the same picture, normalizers.image_id):
+      - none on disk: saved as COVERS_DIR/<album id>.jpg (it moves into the
+        album's folder as cover.jpg with its first track, downloader/core.py)
+      - another picture than the one saved (Album.cover_id): it replaces
+        the file where it is, folder or not
+      - one saved before its picture was recorded: taken as the current one
+    Returns whether a picture was saved: the album's files then embed it
+    (embed_album_cover, once committed). Does not commit.
+    """
     url = N.best_thumbnail(thumbnails)
+    picture = N.image_id(url)
+    on_disk = bool(album.image_local) and Path(album.image_local).exists()
+    if on_disk and (not url or album.cover_id in (None, picture)):
+        album.cover_id = album.cover_id or picture
+        return False
     if not url:
         logger.warning("No thumbnail URL found for album %s", album.id)
-        return None
-    dest = config.COVERS_DIR / f"{album.id}.jpg"
-    if not cover_mod.download_image(url, dest, timeout=15):
-        return None
+        return False
+
+    dest = Path(album.image_local) if on_disk else config.COVERS_DIR / f"{album.id}.jpg"
+    if not cover_mod.download_image(N.resize_thumbnail_url(url, ALBUM_COVER_SIZE), dest, timeout=15):
+        return False
     album.image_local = str(dest)
-    logger.info("Saved cover for album %s: %s", album.id, dest)
-    return str(dest)
+    album.cover_id = picture
+    logger.info("%s cover of album %s: %s", "Replaced the" if on_disk else "Saved the", album.id, dest)
+    return True
+
+
+def embed_album_cover(session: Session, album_id: str) -> int:
+    """Write the album's cover into the tags of its tracks on disk. Returns how many were written."""
+    album = session.get(Album, album_id)
+    if album is None or not album.image_local or not Path(album.image_local).is_file():
+        return 0
+    paths = session.scalars(
+        select(Track.file_path).where(Track.album_id == album_id, Track.status == "done", Track.file_path.is_not(None))
+    ).all()
+    written = sum(embed_mod.set_cover(path, Path(album.image_local)) for path in paths)
+    if written:
+        logger.info("Embedded the new cover of album %s in %s files", album_id, written)
+    return written
 
 
 def list_artist_releases(artist_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -168,9 +198,10 @@ def fetch_and_upsert_album(
     removed_at (their files stay).
 
     Returns {album_id, inserted_tracks, updated_tracks, removed_tracks,
-    replaced_ids, retag}: retag lists (file path, {tag: value}) for the
-    files on disk whose title, number, album title or year changed, for
-    embed.set_tags once this is committed.
+    replaced_ids, retag, cover_changed}: retag lists (file path,
+    {tag: value}) for the files on disk whose title, number, album title or
+    year changed, for embed.set_tags once this is committed; cover_changed
+    calls for embed_album_cover then.
     """
     from .artists import upsert_artist
     from .tracks import upsert_track
@@ -210,8 +241,9 @@ def fetch_and_upsert_album(
     )
     album.last_synced_at = now_utc()
     album.last_error = None
+    cover_changed = False
     try:
-        ensure_album_cover(session, album, album_data["thumbnails"])
+        cover_changed = ensure_album_cover(session, album, album_data["thumbnails"])
     except Exception:
         logger.exception("ensure_album_cover failed for %s", album_id)
 
@@ -323,6 +355,7 @@ def fetch_and_upsert_album(
         "removed_tracks": removed,
         "replaced_ids": replaced,
         "retag": retag,
+        "cover_changed": cover_changed,
     }
 
 

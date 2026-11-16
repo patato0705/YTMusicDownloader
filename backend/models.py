@@ -73,6 +73,9 @@ class Album(Base):
     playlist_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     year: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+    # The picture image_local holds (normalizers.image_id): a cover YouTube
+    # Music changed is told by it (albums.ensure_album_cover)
+    cover_id: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     # Up to 3 genres (services/genres.py): the album's own, else its artist's
     genres: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     genres_checked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

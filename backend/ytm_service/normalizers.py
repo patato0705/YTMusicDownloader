@@ -84,6 +84,19 @@ def resize_thumbnail_url(url: Optional[str], size: int, crop: bool = False) -> O
     return f"{base}={'-'.join(wanted + kept)}"
 
 
+def image_id(url: Optional[str]) -> Optional[str]:
+    """
+    What identifies a picture whatever its size: Google's URL without its
+    "=w544-h544-..." options, the same for one picture on an album's page
+    and on its cards. A URL of another host as it is.
+    """
+    if not url:
+        return None
+    if not any(host in url for host in _RESIZABLE_HOSTS):
+        return url
+    return url.partition("=")[0]
+
+
 def normalize_artist_entry(raw: Any) -> Dict[str, Optional[str]]:
     """
     An artist reference as {"id", "name"}, from a dict (browseId/id/channelId,

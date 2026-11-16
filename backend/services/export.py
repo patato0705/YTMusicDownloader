@@ -234,6 +234,7 @@ def build_catalog_section(session: Session) -> Dict[str, Any]:
                 "playlist_id": al.playlist_id,
                 "year": al.year,
                 "image_local": relativize_path(al.image_local),
+                "cover_id": al.cover_id,
                 "mode": al.mode,
                 "download_status": al.download_status,
             }
@@ -475,6 +476,10 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             playlist_id=al.playlist_id,
         )
         obj.mode = "download"
+        # The picture that cover is: one YouTube Music changed since is
+        # told apart at the next sync (albums_svc.ensure_album_cover)
+        if cover_on_disk:
+            obj.cover_id = al.cover_id
         if al.folder:
             folders_svc.restore_folder(session, obj, al.folder)
         download_albums[al.id] = artist_id
