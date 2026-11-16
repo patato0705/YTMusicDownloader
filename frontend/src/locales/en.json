@@ -379,7 +379,9 @@
         },
         "lyrics": {
           "missing": "Missing lyrics",
-          "plain": "Unsynced lyrics"
+          "synced": "Synced lyrics",
+          "plain": "Unsynced lyrics",
+          "instrumental": "Instrumental"
         },
         "metadata": {
           "artwork": "Missing artwork",
@@ -419,6 +421,10 @@
         "missingLyrics_one": "1 track without lyrics",
         "plainLyrics": "{count} tracks with unsynced lyrics",
         "plainLyrics_one": "1 track with unsynced lyrics",
+        "syncedLyrics": "{count} tracks with synced lyrics",
+        "syncedLyrics_one": "1 track with synced lyrics",
+        "instrumental": "{count} instrumental tracks",
+        "instrumental_one": "1 instrumental track",
         "noArtwork": "No artwork",
         "noGenre": "No genre found"
       }

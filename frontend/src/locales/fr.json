@@ -379,7 +379,9 @@
         },
         "lyrics": {
           "missing": "Paroles manquantes",
-          "plain": "Paroles non synchronisées"
+          "synced": "Paroles synchronisées",
+          "plain": "Paroles non synchronisées",
+          "instrumental": "Instrumental"
         },
         "metadata": {
           "artwork": "Pochette manquante",
@@ -420,6 +422,10 @@
         "missingLyrics_one": "1 titre sans paroles",
         "plainLyrics": "{count} titres aux paroles non synchronisées",
         "plainLyrics_one": "1 titre aux paroles non synchronisées",
+        "syncedLyrics": "{count} titres aux paroles synchronisées",
+        "syncedLyrics_one": "1 titre aux paroles synchronisées",
+        "instrumental": "{count} titres instrumentaux",
+        "instrumental_one": "1 titre instrumental",
         "noArtwork": "Pas de pochette",
         "noGenre": "Aucun genre trouvé"
       }

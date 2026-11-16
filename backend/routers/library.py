@@ -225,7 +225,9 @@ def list_followed_albums(
                 func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
                 # Lyrics are fetched with the audio, so only downloaded tracks count
                 func.sum(case(((Track.status == "done") & Track.lyrics.is_(None), 1), else_=0)).label("missing_lyrics"),
+                func.sum(case(((Track.status == "done") & (Track.lyrics == "synced"), 1), else_=0)).label("synced_lyrics"),
                 func.sum(case(((Track.status == "done") & (Track.lyrics == "plain"), 1), else_=0)).label("plain_lyrics"),
+                func.sum(case(((Track.status == "done") & (Track.lyrics == "instrumental"), 1), else_=0)).label("instrumental"),
             )
             .filter(tracks_svc.counted())
             .group_by(Track.album_id)
@@ -251,7 +253,9 @@ def list_followed_albums(
                 tracks_counts.c.downloaded,
                 tracks_counts.c.failed,
                 tracks_counts.c.missing_lyrics,
+                tracks_counts.c.synced_lyrics,
                 tracks_counts.c.plain_lyrics,
+                tracks_counts.c.instrumental,
                 from_playlist.label("from_playlist"),
             )
             .outerjoin(Artist, Artist.id == Album.artist_id)
@@ -269,7 +273,10 @@ def list_followed_albums(
             return {"albums": [], "total": 0}
 
         result = []
-        for album, artist_db_id, artist_name, total, downloaded, failed, missing_lyrics, plain_lyrics, in_playlist in rows:
+        for (
+            album, artist_db_id, artist_name, total, downloaded, failed,
+            missing_lyrics, synced_lyrics, plain_lyrics, instrumental, in_playlist,
+        ) in rows:
             tracks_total = int(total or 0)
             tracks_downloaded = int(downloaded or 0)
             tracks_failed = int(failed or 0)
@@ -302,7 +309,9 @@ def list_followed_albums(
                 "tracks_downloaded": tracks_downloaded,
                 "tracks_failed": tracks_failed,
                 "tracks_missing_lyrics": int(missing_lyrics or 0),
+                "tracks_synced_lyrics": int(synced_lyrics or 0),
                 "tracks_plain_lyrics": int(plain_lyrics or 0),
+                "tracks_instrumental": int(instrumental or 0),
                 "genres": album.genres or [],
                 # Looked up and none found, as opposed to not looked up yet
                 "genres_checked": album.genres_checked_at is not None,

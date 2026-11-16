@@ -47,8 +47,12 @@ export interface LibraryAlbum {
   tracks_failed: number;
   /** Downloaded tracks without lyrics */
   tracks_missing_lyrics: number;
+  /** Downloaded tracks with time-synced lyrics */
+  tracks_synced_lyrics: number;
   /** Downloaded tracks whose lyrics aren't synced */
   tracks_plain_lyrics: number;
+  /** Downloaded tracks LRCLIB lists as instrumental */
+  tracks_instrumental: number;
   genres: string[];
   /** Genres were looked up (an empty list then means none were found) */
   genres_checked: boolean;

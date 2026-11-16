@@ -31,7 +31,7 @@ export type LibraryFilters = Partial<Record<FilterGroup, string[]>>;
 /** The values of the groups that don't depend on what the library holds */
 export const FIXED_OPTIONS: Partial<Record<FilterGroup, readonly string[]>> = {
   downloads: ['missing', 'failed', 'active'],
-  lyrics: ['missing', 'plain'],
+  lyrics: ['missing', 'synced', 'plain', 'instrumental'],
   metadata: ['artwork', 'genre'],
   type: ['album', 'single', 'ep'],
   source: ['artist', 'playlist', 'own'],
@@ -39,6 +39,16 @@ export const FIXED_OPTIONS: Partial<Record<FilterGroup, readonly string[]>> = {
   liked: ['liked'],
   excluded: ['excluded'],
 };
+
+type LyricsValue = 'missing' | 'synced' | 'plain' | 'instrumental';
+
+/** The album's count of downloaded tracks each lyrics option looks for */
+const LYRICS_COUNT = {
+  missing: 'tracks_missing_lyrics',
+  synced: 'tracks_synced_lyrics',
+  plain: 'tracks_plain_lyrics',
+  instrumental: 'tracks_instrumental',
+} as const satisfies Record<LyricsValue, keyof LibraryAlbum>;
 
 const ALBUM_GROUPS: readonly FilterGroup[] = ['downloads', 'lyrics', 'type', 'decade', 'genre', 'source'];
 const ARTIST_GROUPS: readonly FilterGroup[] = ['follow', 'liked'];
@@ -92,7 +102,7 @@ function albumTest(group: FilterGroup, value: string, album: LibraryAlbum, ctx: 
       return status === 'downloading' || status === 'queued' || status === 'paused';
     }
     case 'lyrics':
-      return value === 'missing' ? album.tracks_missing_lyrics > 0 : album.tracks_plain_lyrics > 0;
+      return album[LYRICS_COUNT[value as LyricsValue]] > 0;
     case 'type':
       return releaseKind(album.type) === value;
     case 'decade':
@@ -331,26 +341,48 @@ export type FilterHint =
   | { key: 'missingTracks'; count: number; total: number }
   | { key: 'failedTracks'; count: number }
   | { key: 'missingLyrics'; count: number }
+  | { key: 'syncedLyrics'; count: number }
   | { key: 'plainLyrics'; count: number }
+  | { key: 'instrumental'; count: number }
   | { key: 'noArtwork' }
   | { key: 'noGenre' };
+
+/** Each lyrics option's hint, in the order the options are listed */
+const LYRICS_HINTS = [
+  ['missing', 'missingLyrics'],
+  ['synced', 'syncedLyrics'],
+  ['plain', 'plainLyrics'],
+  ['instrumental', 'instrumental'],
+] as const satisfies readonly (readonly [LyricsValue, FilterHint['key']])[];
 
 interface TrackCounts {
   tracks_total: number;
   tracks_downloaded: number;
   tracks_failed: number;
   tracks_missing_lyrics: number;
+  tracks_synced_lyrics: number;
   tracks_plain_lyrics: number;
+  tracks_instrumental: number;
 }
 
 function sumCounts(albums: LibraryAlbum[]): TrackCounts {
-  const sum: TrackCounts = { tracks_total: 0, tracks_downloaded: 0, tracks_failed: 0, tracks_missing_lyrics: 0, tracks_plain_lyrics: 0 };
+  const sum: TrackCounts = {
+    tracks_total: 0,
+    tracks_downloaded: 0,
+    tracks_failed: 0,
+    tracks_missing_lyrics: 0,
+    tracks_synced_lyrics: 0,
+    tracks_plain_lyrics: 0,
+    tracks_instrumental: 0,
+  };
   for (const album of albums) {
     sum.tracks_total += album.tracks_total;
     sum.tracks_downloaded += album.tracks_downloaded;
     sum.tracks_failed += album.tracks_failed;
     sum.tracks_missing_lyrics += album.tracks_missing_lyrics;
+    sum.tracks_synced_lyrics += album.tracks_synced_lyrics;
     sum.tracks_plain_lyrics += album.tracks_plain_lyrics;
+    sum.tracks_instrumental += album.tracks_instrumental;
   }
   return sum;
 }
@@ -370,10 +402,10 @@ function hints(
     result.push({ key: 'missingTracks', count: missing, total: counts.tracks_total });
   }
   if (downloads.includes('failed') && counts.tracks_failed > 0) result.push({ key: 'failedTracks', count: counts.tracks_failed });
-  if (lyrics.includes('missing') && counts.tracks_missing_lyrics > 0) {
-    result.push({ key: 'missingLyrics', count: counts.tracks_missing_lyrics });
+  for (const [value, key] of LYRICS_HINTS) {
+    const count = counts[LYRICS_COUNT[value]];
+    if (lyrics.includes(value) && count > 0) result.push({ key, count });
   }
-  if (lyrics.includes('plain') && counts.tracks_plain_lyrics > 0) result.push({ key: 'plainLyrics', count: counts.tracks_plain_lyrics });
   if (metadata.includes('artwork') && metadataTest('artwork', item)) result.push({ key: 'noArtwork' });
   if (metadata.includes('genre') && metadataTest('genre', item)) result.push({ key: 'noGenre' });
   return result;
