@@ -26,6 +26,16 @@ export const TrackStatusBadge: React.FC<TrackStatusBadgeProps> = ({ track, downl
   const { t, formatLocale } = useI18n();
 
   const badge = ((): Badge | null => {
+    // Gone from YouTube Music: says so whatever its download state
+    if (track.removed_at) {
+      const date = new Date(track.removed_at).toLocaleDateString(formatLocale);
+      return {
+        tone: 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-400/40 dark:border-slate-500/40 border-dashed',
+        icon: ICON_PATHS.info,
+        label: t('album.trackStatus.removed'),
+        title: t(track.status === 'done' ? 'album.removedKept' : 'album.removedNotDownloaded', { date }),
+      };
+    }
     switch (track.status) {
       // Only drawn when the album has exceptions to show: the column is hidden otherwise
       case 'done':

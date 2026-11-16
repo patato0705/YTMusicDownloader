@@ -7,7 +7,7 @@ only; "full": every release downloaded) and each album's mode
 from __future__ import annotations
 import logging
 from typing import Collection, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select, func, case
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from ..jobs.jobqueue import cancel_download_jobs, enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
 from ..models import Artist, Album, ArtistSubscription, Track, UserChannel
 from ..time_utils import now_utc
+from . import tracks as tracks_svc
 
 logger = logging.getLogger("services.subscriptions")
 
@@ -103,13 +104,11 @@ def mark_artist_synced(
     error: Optional[str] = None,
 ) -> None:
     """Record a sync of the artist (and its error, if it failed). Does not commit."""
-    from .tracks import truncate_error
-
     subscription = get_artist_subscription(session, artist_id)
     if subscription:
         subscription.last_synced_at = now_utc()
         # YouTube Music errors can quote the whole page they couldn't parse
-        subscription.last_error = truncate_error(error)
+        subscription.last_error = tracks_svc.truncate_error(error)
 
 
 def get_monitored_artists_needing_sync(session: Session, cutoff: datetime) -> list[Artist]:
@@ -170,6 +169,34 @@ def upgrade_all_albums_to_download(
         user_id=user_id,
         origin=origin,
     )
+
+
+# How long an album's stored tracklist is trusted before its artist's sync
+# reads it again: about a dozen albums a day for a library of a few hundred
+ALBUM_REFRESH_INTERVAL = timedelta(days=30)
+
+
+def queue_album_refreshes(
+    session: Session,
+    artist_id: str,
+    *,
+    origin: Origin,
+) -> int:
+    """
+    Queue an import_album for each of the artist's download-mode albums not
+    read from YouTube Music in ALBUM_REFRESH_INTERVAL (or ever), which
+    brings its tracklist up to date (albums.fetch_and_upsert_album). Does
+    not commit. Returns the imports queued.
+    """
+    cutoff = now_utc() - ALBUM_REFRESH_INTERVAL
+    due = session.execute(
+        select(Album.id).where(
+            Album.artist_id == artist_id,
+            Album.mode == "download",
+            Album.last_synced_at.is_(None) | (Album.last_synced_at < cutoff),
+        )
+    ).scalars().all()
+    return queue_album_imports(session, due, artist_id=artist_id, origin=origin)
 
 
 def queue_album_imports(
@@ -312,7 +339,8 @@ def check_and_update_album_download_status(session: Session, album_id: str) -> s
     """
     Recompute Album.download_status from its tracks' statuses. Does not commit.
 
-    Status logic, first match wins:
+    Over the tracks that count (tracks_svc.counted: not those YouTube Music
+    no longer lists, unless on disk). Status logic, first match wins:
     - "completed": all tracks are "done"
     - "downloading": at least one track is "downloading"
     - "pending": at least one track is "queued"
@@ -341,7 +369,7 @@ def check_and_update_album_download_status(session: Session, album_id: str) -> s
             func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
             func.sum(case((Track.status == "queued", 1), else_=0)).label("queued"),
         )
-        .filter(Track.album_id == album_id)
+        .filter(Track.album_id == album_id, tracks_svc.counted())
         .one()
     )
 

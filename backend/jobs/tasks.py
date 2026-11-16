@@ -815,7 +815,9 @@ def import_album(
     """
     Fetch a download-mode album's tracklist from YTMusic and store it, then
     write its album.nfo and queue the download of every track not on disk
-    (albums_svc.complete_import).
+    (albums_svc.complete_import). Also how an album in the library is
+    refreshed (subs_svc.queue_album_refreshes): what changed on YouTube
+    Music since is stored, and written to the tags of its files.
     """
     album = session.get(Album, browse_id)
     # Unfollowed (or deleted) since it was queued
@@ -825,6 +827,8 @@ def import_album(
     try:
         result = albums_svc.fetch_and_upsert_album(session, browse_id=browse_id, artist_id=artist_id)
         session.commit()
+        for path, tags in result["retag"]:
+            embed_mod.set_tags(path, **tags)
         queued = albums_svc.complete_import(session, result["album_id"], origin=Origin(origin))
     except albums_svc.ArtistDeleted:
         session.rollback()
@@ -833,17 +837,27 @@ def import_album(
     except Exception as e:
         session.rollback()
         logger.exception("import_album failed for %s", browse_id)
+        # Recorded, so its artist's syncs don't queue its refresh again
+        # before ALBUM_REFRESH_INTERVAL (the job retries it meanwhile)
+        album = session.get(Album, browse_id)
+        if album is not None:
+            album.last_synced_at = now_utc()
+            album.last_error = tracks_svc.truncate_error(e)
+            session.commit()
         return {"ok": False, "error": str(e), "retry_delay_seconds": 120}
 
     logger.info(
-        "Imported album %s: %s new tracks, %s updated, %s downloads queued",
-        browse_id, result["inserted_tracks"], result["updated_tracks"], queued,
+        "Imported album %s: %s new tracks, %s updated, %s no longer listed, %s files re-tagged, %s downloads queued",
+        browse_id, result["inserted_tracks"], result["updated_tracks"], result["removed_tracks"],
+        len(result["retag"]), queued,
     )
     return {
         "ok": True,
         "album_id": result["album_id"],
         "tracks_inserted": result["inserted_tracks"],
         "tracks_updated": result["updated_tracks"],
+        "tracks_removed": result["removed_tracks"],
+        "files_retagged": len(result["retag"]),
         "downloads_queued": queued,
     }
 
@@ -860,6 +874,10 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
     - "light" subscription: the albums stay metadata-only
     - "full" subscription: every album is in download mode, and those
       without tracks yet get an import (which queues their downloads)
+
+    Either way, its download-mode albums not read since
+    ALBUM_REFRESH_INTERVAL get an import too, which brings their tracklist
+    up to date (subs_svc.queue_album_refreshes).
     """
     subscription = subs_svc.get_artist_subscription(session, artist_id)
     if subscription is None:
@@ -946,6 +964,17 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
         except Exception:
             session.rollback()
             logger.exception("Failed to queue album imports for artist %s", artist_id)
+
+    # Either mode: its albums in the library get their tracklist read again
+    # once in a while (YouTube Music adds, removes and renames tracks of
+    # albums long out). After the commit above: queue_album_refreshes then
+    # sees the imports just queued, and doesn't queue them twice.
+    try:
+        imports_queued += subs_svc.queue_album_refreshes(session, artist_id, origin=Origin(origin))
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception("Failed to queue album refreshes for artist %s", artist_id)
 
     try:
         genres_svc.queue_lookup(session, artist_id, origin=Origin(origin), from_sync=True)

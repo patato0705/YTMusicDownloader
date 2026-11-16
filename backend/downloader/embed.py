@@ -121,6 +121,40 @@ def set_genres(file_path: str, genres: List[str]) -> bool:
     return _edit(file_path, "genres", edit)
 
 
+def set_tags(
+    file_path: str,
+    title: Optional[str] = None,
+    track_number: Optional[int] = None,
+    album: Optional[str] = None,
+    year: Optional[str] = None,
+) -> bool:
+    """
+    Replace the given tags of a library file (as embed_tags writes them),
+    after YouTube Music changed them. Returns whether it was written.
+    """
+    def edit(tags) -> None:
+        if isinstance(tags, MP4):
+            if title is not None:
+                tags["\xa9nam"] = [title]
+            if album is not None:
+                tags["\xa9alb"] = [album]
+            if track_number:
+                tags["trkn"] = [(int(track_number), 0)]
+            if year:
+                tags["\xa9day"] = [str(year)]
+        else:
+            if title is not None:
+                tags.setall("TIT2", [TIT2(encoding=3, text=[title])])
+            if album is not None:
+                tags.setall("TALB", [TALB(encoding=3, text=[album])])
+            if track_number:
+                tags.setall("TRCK", [TRCK(encoding=3, text=[str(track_number)])])
+            if year:
+                tags.setall("TDRC", [TDRC(encoding=3, text=[str(year)])])
+
+    return _edit(file_path, "tags", edit)
+
+
 def set_artist(file_path: str, artist: str) -> bool:
     """Replace a library file's artist and album artist tags (one name, as embed_tags writes them). Returns whether it was written."""
     def edit(tags) -> None:

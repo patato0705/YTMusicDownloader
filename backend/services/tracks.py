@@ -75,6 +75,15 @@ def upsert_track(
     return track
 
 
+def counted():
+    """
+    SQL condition: the track counts in its album's totals. A track YouTube
+    Music no longer lists (Track.removed_at) only does while its file is
+    in the library: it will never be downloaded otherwise.
+    """
+    return Track.removed_at.is_(None) | (Track.status == "done")
+
+
 # yt-dlp messages can run for pages; keep enough for debugging, not the whole trace.
 MAX_ERROR_LENGTH = 2000
 
@@ -111,8 +120,9 @@ def queue_track_downloads(
     "queued" and roll the affected albums up. Does not commit: the job and
     the status have to land in the same transaction.
 
-    Tracks on disk, being downloaded, or already waiting on a job are
-    skipped, so this is safe to call on a whole album any number of times.
+    Tracks on disk, being downloaded, already waiting on a job, or no
+    longer on YouTube Music (removed_at) are skipped, so this is safe to
+    call on a whole album any number of times.
     A waiting job is moved up to `origin`'s class if that's higher (see
     jobs/priorities.py): a user downloading an album a chart already queued
     shouldn't wait behind the rest of the chart.
@@ -131,7 +141,7 @@ def queue_track_downloads(
     queued = 0
 
     for track in tracks:
-        if track.status in _NOT_QUEUEABLE or track.id in active:
+        if track.status in _NOT_QUEUEABLE or track.id in active or track.removed_at is not None:
             continue
         enqueue_job(
             session,

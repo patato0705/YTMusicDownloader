@@ -241,8 +241,11 @@
       "queued": "Queued",
       "paused": "Paused",
       "downloading": "Downloading",
-      "failed": "Failed"
+      "failed": "Failed",
+      "removed": "Removed"
     },
+    "removedKept": "No longer on YouTube Music since {date}. Its file stays in the library.",
+    "removedNotDownloaded": "No longer on YouTube Music since {date}. It can no longer be downloaded.",
     "retryingAfter": "Waiting to retry after: {error}",
     "pausedUntil": "Downloads paused until {time} (YouTube rate limit)",
     "retry": "Retry missing tracks",

@@ -243,6 +243,7 @@ def build_catalog_section(session: Session) -> Dict[str, Any]:
                 "file_path": relativize_path(t.file_path),
                 "status": t.status,
                 "artist_valid": bool(t.artist_valid),
+                "removed_at": t.removed_at.isoformat() if t.removed_at else None,
             }
             for t in tracks
         ],
@@ -497,6 +498,7 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
             lyrics=t.lyrics if lrc_on_disk or instrumental else None,
             lyrics_local=str(lrc) if lrc_on_disk else None,
         )
+        obj.removed_at = t.removed_at
         result.tracks += 1
 
         if on_disk:
@@ -520,6 +522,8 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
         obj.lyrics = None
         obj.lyrics_local = None
         obj.status = "available"
+        if obj.removed_at is not None:
+            continue  # no longer on YouTube Music: nothing to download
         result.tracks_to_download += 1
         albums_needing_import.add(t.album_id)
     session.flush()

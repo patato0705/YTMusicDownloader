@@ -107,9 +107,12 @@ export default function Album(): JSX.Element {
   // Lyrics and download state only exist for tracks in our DB
   const showTrackState = page.source === 'database';
   // On disk is the norm: the status column only appears for the exceptions
-  const showStatus = showTrackState && tracks.some((tr) => tr.status && tr.status !== 'done');
+  const showStatus = showTrackState && tracks.some((tr) => (tr.status && tr.status !== 'done') || tr.removed_at);
   // Tracks a retry would queue: failed ones, and any left without a job
-  const retryableCount = tracks.filter((tr) => tr.status === 'failed' || tr.status === 'available').length;
+  // (not those gone from YouTube Music)
+  const retryableCount = tracks.filter(
+    (tr) => !tr.removed_at && (tr.status === 'failed' || tr.status === 'available'),
+  ).length;
   const totalDuration = tracks.reduce((sum, track) => sum + (track.duration || 0), 0);
 
   const handleDownload = async () => {
@@ -339,7 +342,9 @@ export default function Album(): JSX.Element {
                           {track.track_number || index + 1}
                         </td>
                         <td className="px-3 md:px-6 py-4">
-                          <div className="font-semibold text-foreground group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">
+                          <div className={`font-semibold group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors ${
+                            track.removed_at ? 'text-muted-foreground' : 'text-foreground'
+                          }`}>
                             {track.title}
                           </div>
                           <div className="sm:hidden text-xs text-muted-foreground font-mono mt-0.5">

@@ -80,6 +80,8 @@ class Album(Base):
     # What the library does with it, and its download progress (see services/subscriptions.py)
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="metadata")  # "metadata" or "download"
     download_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default=None)
+    # When its tracklist was last read from YouTube Music (import_album),
+    # successfully or not (last_error); read again once ALBUM_REFRESH_INTERVAL old
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
@@ -128,6 +130,10 @@ class Track(Base):
     # cleaned up; this one stays with the track until a later attempt clears it.
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     artist_valid: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # When YouTube Music stopped listing it in its album (an album refresh,
+    # services/albums.py). Its file stays; it's never downloaded again, and
+    # only counts in its album when on disk. None again if it comes back.
+    removed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
     album: Mapped[Optional[Album]] = relationship("Album", back_populates="tracks")
@@ -144,6 +150,7 @@ class Track(Base):
             "last_error": self.last_error,
             "lyrics": self.lyrics,
             "lyrics_local": self.lyrics_local,
+            "removed_at": self.removed_at.isoformat() if self.removed_at else None,
         }
 
     def __repr__(self) -> str:

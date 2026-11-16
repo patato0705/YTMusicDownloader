@@ -49,6 +49,9 @@ export interface Track {
   last_error?: string | null;
   lyrics?: LyricsKind;
   lyrics_local?: string | null;
+  /** When YouTube Music stopped listing it in its album (ISO). Its file, if
+   *  any, stays; it's never downloaded again */
+  removed_at?: string | null;
   /** No lyrics yet, but an LRCLIB lookup is queued or the audio is still
    *  downloading (album page only) */
   lyrics_pending?: boolean;

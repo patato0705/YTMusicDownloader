@@ -12,6 +12,7 @@ setting key) so a document is portable between instances and database
 backends. File paths are relative to the music directory.
 """
 from __future__ import annotations
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, computed_field, model_validator
@@ -134,6 +135,8 @@ class CatalogTrack(BaseModel):
     file_path: Optional[str] = Field(None, max_length=2048)
     status: str = Field("available", max_length=64)
     artist_valid: bool = True
+    # No longer on YouTube Music: kept for its file, never downloaded again
+    removed_at: Optional[datetime] = None
 
 
 class CatalogSection(BaseModel):

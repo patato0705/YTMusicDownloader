@@ -32,6 +32,7 @@ from ..services import folders as folders_svc
 from ..services import playlists as playlists_svc
 from ..services import recommendations as recommendations_svc
 from ..services import subscriptions as subs_svc
+from ..services import tracks as tracks_svc
 
 logger = logging.getLogger("routers.library")
 
@@ -82,7 +83,7 @@ def list_followed_artists(
             )
             .select_from(Track)
             .join(Album, Track.album_id == Album.id)
-            .filter(Album.mode == "download")
+            .filter(Album.mode == "download", tracks_svc.counted())
             .group_by(Album.artist_id)
             .subquery()
         )
@@ -223,6 +224,7 @@ def list_followed_albums(
                 func.sum(case(((Track.status == "done") & Track.lyrics.is_(None), 1), else_=0)).label("missing_lyrics"),
                 func.sum(case(((Track.status == "done") & (Track.lyrics == "plain"), 1), else_=0)).label("plain_lyrics"),
             )
+            .filter(tracks_svc.counted())
             .group_by(Track.album_id)
             .subquery()
         )
@@ -460,7 +462,7 @@ def get_library_stats(
             count_where(Track.lyrics == "plain").label("with_plain_lyrics"),
             count_where(Track.lyrics == "instrumental").label("instrumental"),
             func.sum(case((Track.status == "done", Track.file_size), else_=0)).label("storage_bytes"),
-        ).one()
+        ).filter(tracks_svc.counted()).one()
 
         album_fields = ["total", "downloaded", "completed", "downloading", "pending", "failed"]
         track_fields = [

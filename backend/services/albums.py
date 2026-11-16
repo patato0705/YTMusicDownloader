@@ -6,15 +6,18 @@ included), its cover, and what follows an import.
 from __future__ import annotations
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config
 from ..downloader import cover as cover_mod, nfo as nfo_mod
+from ..jobs.jobqueue import cancel_download_jobs
 from ..jobs.priorities import Origin
 from ..models import Album, Artist, Track
+from ..text_utils import fold
+from ..time_utils import now_utc
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
 from . import folders
@@ -159,7 +162,15 @@ def fetch_and_upsert_album(
     versions of the tracks, which the album page itself sometimes lists as
     music videos.
 
-    Returns {album_id, inserted_tracks, updated_tracks, replaced_ids}.
+    Read again (an album refresh, subscriptions.queue_album_refreshes), the
+    stored tracklist follows YouTube Music's: new tracks come in, changed
+    ids are matched (_match_changed_ids), and tracks no longer listed get
+    removed_at (their files stay).
+
+    Returns {album_id, inserted_tracks, updated_tracks, removed_tracks,
+    replaced_ids, retag}: retag lists (file path, {tag: value}) for the
+    files on disk whose title, number, album title or year changed, for
+    embed.set_tags once this is committed.
     """
     from .artists import upsert_artist
     from .tracks import upsert_track
@@ -184,6 +195,10 @@ def fetch_and_upsert_album(
             upsert_artist(session, artist_id=artist_id, name=first.get("name"))
 
     logger.info("Fetched album %s: %s (%s tracks)", album_id, album_data["title"], len(tracks))
+    # Its tags as the files have them, if it's already stored: a change is
+    # written to the files after the commit (fetch_and_upsert_album's "retag")
+    known = session.get(Album, album_id)
+    tagged_album = (known.title, known.year) if known else None
     album = upsert_album(
         session,
         album_id=album_id,
@@ -193,6 +208,8 @@ def fetch_and_upsert_album(
         album_type=album_data["type"],
         playlist_id=album_data["playlistId"],
     )
+    album.last_synced_at = now_utc()
+    album.last_error = None
     try:
         ensure_album_cover(session, album, album_data["thumbnails"])
     except Exception:
@@ -209,7 +226,9 @@ def fetch_and_upsert_album(
         except Exception as e:
             logger.warning("Failed to fetch playlist %s: %s", album_data["playlistId"], e)
 
-    inserted = updated = replaced = 0
+    # The tracklist as YouTube Music lists it now: (id, number, track data, title)
+    listed: List[Tuple[str, int, Dict[str, Any], str]] = []
+    replaced = 0
     for idx, track_data in enumerate(tracks):
         video_id = track_data.get("id")
         if not video_id:
@@ -231,33 +250,121 @@ def fetch_and_upsert_album(
                 logger.info("Using audio ID for '%s': %s -> %s", title, video_id, audio["id"])
                 track_id = audio["id"]
                 replaced += 1
+        listed.append((track_id, track_data.get("track_number") or idx + 1, track_data, title))
 
+    stored = {t.id: t for t in session.query(Track).filter(Track.album_id == album_id).all()}
+    unlisted = _match_changed_ids(session, listed, stored)
+
+    # Stored tracks it no longer lists: kept (a file stays in the library)
+    # but never downloaded again. An empty tracklist is YouTube Music
+    # failing to list it, not every track gone.
+    removed = 0
+    if listed:
+        now = now_utc()
+        gone = [t for t in unlisted if t.removed_at is None]
+        cancel_download_jobs(session, [t.id for t in gone if t.status == "queued"], reason="no longer on YouTube Music")
+        for t in gone:
+            t.removed_at = now
+            if t.status in ("queued", "failed"):
+                t.status = "available"
+                t.last_error = None
+            logger.info("Track %s (%s) of album %s is no longer on YouTube Music", t.id, t.title, album_id)
+        removed = len(gone)
+
+    inserted = updated = 0
+    tag_changes: Dict[str, Dict[str, Any]] = {}
+    for track_id, number, track_data, title in listed:
         # A known track keeps its status and file: a re-import mustn't reset
         # one that's queued or mid-download
-        is_new = session.get(Track, track_id) is None
-        upsert_track(
+        track = session.get(Track, track_id)
+        is_new = track is None
+        tagged = None if is_new else (track.title, track.track_number)
+        track = upsert_track(
             session,
             track_id=track_id,
-            track_number=track_data.get("track_number") or idx + 1,
+            track_number=number,
             title=title,
             duration_seconds=track_data.get("duration_seconds"),
             artists_list=[{"id": a.get("id"), "name": a.get("name")} for a in track_data.get("artists") or []],
             album_id=album_id,
             status="available" if is_new else None,
         )
+        if track.removed_at is not None:
+            logger.info("Track %s (%s) of album %s is back on YouTube Music", track_id, title, album_id)
+            track.removed_at = None
         if is_new:
             inserted += 1
-        else:
-            updated += 1
+            continue
+        updated += 1
+        if tagged != (track.title, track.track_number):
+            tag_changes[track_id] = {"title": track.title, "track_number": track.track_number}
+
+    # The files' tags follow: the album's title and year on all of them,
+    # a track's own title and number on its own
+    if tagged_album is not None and tagged_album != (album.title, album.year):
+        album_tags = {"album": album.title, "year": album.year}
+        for track_id in stored:
+            tag_changes[track_id] = {**album_tags, **tag_changes.get(track_id, {})}
+    retag = [
+        (t.file_path, tag_changes[t.id])
+        for t in stored.values()
+        if t.id in tag_changes and t.status == "done" and t.file_path
+    ]
 
     session.flush()
-    logger.info("Album %s upserted: %s new, %s updated, %s IDs replaced", album_id, inserted, updated, replaced)
+    logger.info(
+        "Album %s upserted: %s new, %s updated, %s no longer listed, %s IDs replaced",
+        album_id, inserted, updated, removed, replaced,
+    )
     return {
         "album_id": album_id,
         "inserted_tracks": inserted,
         "updated_tracks": updated,
+        "removed_tracks": removed,
         "replaced_ids": replaced,
+        "retag": retag,
     }
+
+
+def _match_changed_ids(
+    session: Session,
+    listed: List[Tuple[str, int, Dict[str, Any], str]],
+    stored: Dict[str, Track],
+) -> List[Track]:
+    """
+    YouTube Music sometimes gives a song of an album a new id: listed under
+    an id the library doesn't know, while the stored track of the same
+    title isn't listed any more. Such a pair is one track, not a removal
+    and an addition:
+      - on disk (or being downloaded): the stored track stays, under its
+        id (`listed` is updated in place), its file being that song
+      - otherwise: the stored track is deleted (its download cancelled) and
+        the new id comes in as a new track, downloaded like any other
+
+    Several stored tracks of the same title ("Interlude"): the one whose
+    number is closest. Does not commit. Returns the stored tracks still not
+    listed: those YouTube Music no longer has.
+    """
+    listed_ids = {track_id for track_id, *_ in listed}
+    unlisted = [t for t in stored.values() if t.id not in listed_ids]
+    for i, (track_id, number, track_data, title) in enumerate(listed):
+        if not unlisted:
+            break
+        if track_id in stored or session.get(Track, track_id) is not None:
+            continue
+        same = [t for t in unlisted if fold(t.title) == fold(title)]
+        if not same:
+            continue
+        old = min(same, key=lambda t: abs((t.track_number or 0) - number))
+        unlisted.remove(old)
+        if old.status in ("done", "downloading"):
+            logger.info("Track %s of album %s is now listed as %s: kept under its id", old.id, old.album_id, track_id)
+            listed[i] = (old.id, number, track_data, title)
+        else:
+            logger.info("Track %s of album %s is now listed as %s: replaced", old.id, old.album_id, track_id)
+            cancel_download_jobs(session, [old.id], reason="YouTube Music changed the track's id")
+            session.delete(old)
+    return unlisted
 
 
 def complete_import(session: Session, album_id: str, *, origin: Origin) -> int:
