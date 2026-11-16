@@ -14,8 +14,9 @@ from sqlalchemy.orm import Session
 
 from ..jobs.jobqueue import cancel_download_jobs, enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
-from ..models import Artist, Album, ArtistSubscription, Track, UserChannel
+from ..models import Artist, Album, ArtistSubscription, Exclusion, Track, UserChannel
 from ..time_utils import now_utc
+from . import exclusions as exclusions_svc
 from . import tracks as tracks_svc
 
 logger = logging.getLogger("services.subscriptions")
@@ -78,15 +79,25 @@ def follow_artist(
     user_id: Optional[int] = None,
     *,
     origin: Origin,
+    explicit: bool = False,
 ) -> bool:
     """
     Follow an artist in full: its row (named `name` if it's new), a full
     subscription (a light one upgraded), and a sync job, which fetches the
     artist and brings in every release. No network here. Does not commit.
-    Returns False when it was already followed in full, or is a YouTube
-    user's channel (UserChannel), which isn't followed.
+
+    `explicit`: someone asked for this artist (the Follow button), which
+    lifts its exclusion (services/exclusions.py). Otherwise (a chart, a
+    playlist, a backup) an excluded artist isn't followed.
+
+    Returns False when it was already followed in full, is excluded, or is
+    a YouTube user's channel (UserChannel), which isn't followed.
     """
     if session.get(UserChannel, artist_id) is not None:
+        return False
+    if explicit:
+        exclusions_svc.lift_artist(session, artist_id)
+    elif exclusions_svc.get(session, exclusions_svc.ARTIST, artist_id) is not None:
         return False
     subscription = get_artist_subscription(session, artist_id)
     if subscription is not None and subscription.mode == "full":
@@ -152,10 +163,12 @@ def upgrade_all_albums_to_download(
     import_album for each, so their tracks get (re)listed and downloaded;
     the download-mode albums that still have no tracks get one too (just
     created by a sync, or an earlier import that never landed: nothing
-    else would ever import them). Does not commit. Returns the imports queued.
+    else would ever import them). Excluded albums stay metadata-only
+    (services/exclusions.py). Does not commit. Returns the imports queued.
     """
+    excluded = select(Exclusion.item_id).where(Exclusion.kind == exclusions_svc.ALBUM)
     albums = session.execute(
-        select(Album).where(Album.artist_id == artist_id, Album.mode == "metadata")
+        select(Album).where(Album.artist_id == artist_id, Album.mode == "metadata", Album.id.not_in(excluded))
     ).scalars().all()
     for album in albums:
         album.mode = "download"
@@ -291,10 +304,18 @@ def start_album_download(
     *,
     origin: Origin,
     user_id: Optional[int] = None,
+    explicit: bool = False,
 ) -> dict:
     """
     Download an album: set it to download mode, write its album.nfo and
     queue a download for every track not on disk.
+
+    `explicit`: someone asked for this album (the Download button), which
+    lifts its exclusion, and turns its artist's from "deleted" (its albums
+    kept out too) to "unfollowed": the artist is back in the library, just
+    not followed. Otherwise (a playlist scan) an excluded album isn't
+    downloaded; callers leave out the albums of a deleted artist
+    (exclusions.blocked_album_ids), as only they may know its artist.
 
     An album not in the DB yet is fetched here (raises
     ytm_adapter.YTMusicUnavailable when it can't be), so it shows up with
@@ -307,9 +328,14 @@ def start_album_download(
 
     Commits. Returns {"album": Album, "started": bool,
     "artist_subscription_created": bool}; started is False for an album
-    already in download mode.
+    already in download mode, or excluded.
     """
     from . import albums as albums_svc
+
+    if explicit:
+        exclusions_svc.lift(session, exclusions_svc.ALBUM, album_id)
+    elif exclusions_svc.get(session, exclusions_svc.ALBUM, album_id) is not None:
+        return {"album": session.get(Album, album_id), "started": False, "artist_subscription_created": False}
 
     album = session.get(Album, album_id)
     fetched = album is None
@@ -322,6 +348,9 @@ def start_album_download(
         return {"album": album, "started": False, "artist_subscription_created": False}
 
     album.mode = "download"
+    artist_exclusion = exclusions_svc.get(session, exclusions_svc.ARTIST, album.artist_id)
+    if explicit and artist_exclusion is not None and artist_exclusion.reason == exclusions_svc.DELETED:
+        artist_exclusion.reason = exclusions_svc.UNFOLLOWED
     artist_sub_created = False
     if album.artist_id and not get_artist_subscription(session, album.artist_id):
         subscribe_to_artist(session, artist_id=album.artist_id, mode="light")

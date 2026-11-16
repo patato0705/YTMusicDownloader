@@ -100,12 +100,36 @@ export interface GetLibraryAlbumsParams {
   statuses?: Array<'completed' | 'downloading' | 'pending' | 'failed'>;
 }
 
-/** What deleting an album or artist also changes, for its confirmation dialog */
-export interface DeletionEffects {
-  /** The album's followed artist, switched to light so the album isn't downloaded again */
-  artist_unfollowed?: { id: string; name: string | null } | null;
-  /** Followed playlists that would bring it back, unfollowed */
-  playlists_unfollowed: { id: string; title: string }[];
+/**
+ * Why nothing automatic (charts, playlists, artist syncs, backups) brings
+ * an artist or album back: deleted from the library, or (an artist)
+ * unfollowed. Following or downloading it by hand lifts that.
+ */
+export type ExclusionReason = 'deleted' | 'unfollowed' | 'artist_deleted';
+
+export interface ExcludedArtist {
+  id: string;
+  name: string;
+  /** Its picture, while it's still in the library (an unfollowed one) */
+  thumbnail: string | null;
+  reason: ExclusionReason;
+  excluded_at: string;
+}
+
+export interface ExcludedAlbum {
+  id: string;
+  title: string;
+  artist: { id: string; name: string | null } | null;
+  thumbnail: string | null;
+  year: string | null;
+  type: string;
+  reason: ExclusionReason;
+  excluded_at: string;
+}
+
+export interface Exclusions {
+  artists: ExcludedArtist[];
+  albums: ExcludedAlbum[];
 }
 
 /**
@@ -151,10 +175,12 @@ export async function deleteLibraryAlbum(albumId: string): Promise<void> {
   await api.delete(`/library/albums/${encodeURIComponent(albumId)}`);
 }
 
-export async function getAlbumDeletionEffects(albumId: string): Promise<DeletionEffects> {
-  return api.get(`/library/albums/${encodeURIComponent(albumId)}/deletion`);
+/** The artists and albums kept out of the library, newest first */
+export async function getExclusions(): Promise<Exclusions> {
+  return api.get<Exclusions>('/library/exclusions');
 }
 
-export async function getArtistDeletionEffects(artistId: string): Promise<DeletionEffects> {
-  return api.get(`/library/artists/${encodeURIComponent(artistId)}/deletion`);
+/** Let charts, playlists and syncs bring it in again (nothing is followed or downloaded here) */
+export async function restoreExclusion(kind: 'artist' | 'album', id: string): Promise<void> {
+  await api.delete(`/library/exclusions/${kind}/${encodeURIComponent(id)}`);
 }

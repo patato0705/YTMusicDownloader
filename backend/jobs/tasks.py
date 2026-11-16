@@ -44,6 +44,7 @@ from ..models import Job, Track, Album, Artist
 from ..services import albums as albums_svc
 from ..services import artists as artists_svc
 from ..services import charts as charts_svc
+from ..services import exclusions as exclusions_svc
 from ..services import folders as folders_svc
 from ..services import genres as genres_svc
 from ..services import playlists as playlists_svc
@@ -930,6 +931,9 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
     # as if it had already existed when this sync looked.
     album_mode = "download" if sync_mode == "full" else "metadata"
     new_releases = [r for r in albums_svc.list_artist_releases(artist_data) if session.get(Album, r["id"]) is None]
+    # Deleted from the library before (its artist deleted with it, since
+    # followed again): stays metadata-only (services/exclusions.py)
+    excluded = exclusions_svc.blocked_album_ids(session, {r["id"]: artist_id for r in new_releases})
     albums_created = 0
     for release in new_releases:
         try:
@@ -941,7 +945,7 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
                 year=release["year"],
                 album_type=release["type"],
             )
-            album.mode = album_mode
+            album.mode = "metadata" if release["id"] in excluded else album_mode
             albums_svc.ensure_album_cover(session, album, thumbnails=release["thumbnails"])
             session.commit()
             albums_created += 1

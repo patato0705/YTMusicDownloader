@@ -39,6 +39,7 @@ from ..time_utils import now_utc
 # library's worth of work, which shouldn't hold up what users ask for while
 # it runs. Users and settings are written directly, never queued.
 from ..jobs.priorities import Origin
+from . import exclusions as exclusions_svc
 from . import subscriptions as subs_svc
 from . import artists as artists_svc
 from . import folders as folders_svc
@@ -110,8 +111,8 @@ def _document_shell() -> Dict[str, Any]:
 def build_library_section(session: Session) -> Dict[str, Any]:
     """
     What this instance follows: artists, explicitly downloaded albums, charts
-    and playlists. Nothing personal: likes and dismissed recommendations go
-    with the users (build_users_section).
+    and playlists, and what it keeps out (exclusions). Nothing personal:
+    likes and dismissed recommendations go with the users (build_users_section).
     """
     artists = session.execute(
         select(Artist, ArtistSubscription)
@@ -183,6 +184,7 @@ def build_library_section(session: Session) -> Dict[str, Any]:
             }
             for p in playlists
         ],
+        "exclusions": exclusions_svc.export_rows(session),
     }
 
 
@@ -551,9 +553,18 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
     library = doc.library
     assert library is not None
 
+    # --- Exclusions first: what they keep out is skipped below ---
+    result.exclusions_added = exclusions_svc.import_rows(session, library.exclusions)
+    session.flush()
+    excluded_artists = exclusions_svc.excluded_artist_ids(session)
+    blocked_albums = exclusions_svc.blocked_album_ids(session, {a.id: a.artist_id for a in library.albums})
+
     # --- Artists: replay follow ---
     full_artists: set[str] = set()
     for item in library.artists:
+        if item.id in excluded_artists:
+            result.artists_excluded += 1
+            continue
         existing = subs_svc.get_artist_subscription(session, item.id)
         old_mode = existing.mode if existing else None
         if old_mode == "full" or old_mode == item.mode:
@@ -575,6 +586,9 @@ def _import_library(session: Session, doc: ExportDocument, user_id: Optional[int
 
     # --- Albums: replay download ---
     for item in library.albums:
+        if item.id in blocked_albums:
+            result.albums_excluded += 1
+            continue
         album = session.get(Album, item.id)
         if album and album.mode == "download":
             result.albums_existing += 1

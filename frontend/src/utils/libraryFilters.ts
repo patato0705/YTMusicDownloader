@@ -13,11 +13,16 @@
  * - artist groups (liked, follow) test an artist; an album matches them
  *   through its artist
  * - item groups (metadata) test each artist and album on its own data
+ *
+ * "excluded" is a view of its own rather than a test: the artists and
+ * albums kept out of the library (api/library getExclusions), which the
+ * page lists instead. Picking it drops every other filter, and picking any
+ * other filter drops it.
  */
 import type { LibraryAlbum, LibraryArtist, SortOrder } from '../api/library';
 import type { MediaStatus } from '../types';
 
-export const FILTER_GROUPS = ['downloads', 'lyrics', 'metadata', 'type', 'decade', 'genre', 'source', 'follow', 'liked'] as const;
+export const FILTER_GROUPS = ['downloads', 'lyrics', 'metadata', 'type', 'decade', 'genre', 'source', 'follow', 'liked', 'excluded'] as const;
 export type FilterGroup = typeof FILTER_GROUPS[number];
 
 /** Picked values by group; a group left out (or empty) lets everything through */
@@ -32,6 +37,7 @@ export const FIXED_OPTIONS: Partial<Record<FilterGroup, readonly string[]>> = {
   source: ['artist', 'playlist', 'own'],
   follow: ['full', 'light'],
   liked: ['liked'],
+  excluded: ['excluded'],
 };
 
 const ALBUM_GROUPS: readonly FilterGroup[] = ['downloads', 'lyrics', 'type', 'decade', 'genre', 'source'];
@@ -157,8 +163,13 @@ export function activeFilterCount(filters: LibraryFilters): number {
   return FILTER_GROUPS.reduce((sum, group) => sum + picked(filters, group).length, 0);
 }
 
-/** Picks or unpicks one value */
+/** Whether the page lists what's kept out of the library instead (see the top of this file) */
+export const showsExcluded = (filters: LibraryFilters): boolean => picked(filters, 'excluded').length > 0;
+
+/** Picks or unpicks one value. "excluded" and the other groups don't go together. */
 export function toggleFilter(filters: LibraryFilters, group: FilterGroup, value: string): LibraryFilters {
+  if (group === 'excluded') return showsExcluded(filters) ? {} : { excluded: [value] };
+  if (showsExcluded(filters)) filters = {};
   const values = picked(filters, group);
   const next = values.includes(value) ? values.filter((v) => v !== value) : [...values, value];
   const { [group]: _removed, ...rest } = filters;
@@ -258,6 +269,8 @@ export interface OfferedFilters {
   groups: readonly FilterGroup[];
   /** Genres are looked up, so "No genre found" means something */
   genresLookedUp: boolean;
+  /** Artists and albums kept out of the library: the "excluded" option's count */
+  excludedCount: number;
 }
 
 export function libraryOptionCounts(
@@ -267,6 +280,7 @@ export function libraryOptionCounts(
   collator: Intl.Collator,
 ): LibraryOptionCounts {
   return new Map(offered.groups.map((group) => {
+    if (group === 'excluded') return [group, new Map([['excluded', offered.excludedCount]])];
     let values: readonly string[] = group === 'genre'
       ? genreValues(library.albums, collator)
       : group === 'decade'
@@ -294,6 +308,10 @@ export function filterCounts(
     // Picked values the library doesn't have (an old link) stay, so they can be removed
     for (const value of picked(filters, group)) if (!values.includes(value)) values.push(value);
 
+    // Not a test on the items: what it lists is counted already
+    if (group === 'excluded') {
+      return { group, options: values.map((value) => ({ value, count: libraryCounts.get(value) ?? 0, libraryCount: libraryCounts.get(value) ?? 0 })) };
+    }
     const counts = countGroupValues(shown, filters, ctx, group, values);
     const options = values.map((value) => ({
       value,

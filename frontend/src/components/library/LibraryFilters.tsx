@@ -48,6 +48,7 @@ const CLUSTERS: FilterGroup[][] = [
   ['downloads', 'lyrics', 'metadata'],
   ['type', 'decade', 'genre'],
   ['source', 'follow', 'liked'],
+  ['excluded'],
 ];
 
 /** Genres listed before "Show all"; more than this also brings a search box */

@@ -55,6 +55,10 @@ export interface ImportResult {
     charts_skipped: number;
     playlists_added: number;
     playlists_existing: number;
+    /** Kept out of the library (on this instance or in the file): not followed or downloaded */
+    exclusions_added: number;
+    artists_excluded: number;
+    albums_excluded: number;
   } | null;
   catalog: {
     artists: number;

@@ -266,6 +266,35 @@ class PlaylistEntry(Base):
     duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
+class Exclusion(Base):
+    """
+    An artist or album kept out of the library: nothing automatic (charts,
+    playlist scans, artist syncs, backup imports) brings it back. Following
+    the artist or downloading the album by hand lifts it, and so does
+    Restore in the library (see services/exclusions.py).
+
+    reason, for an artist:
+      - "deleted": deleted from the library, its albums included (a playlist
+        scan doesn't download them either)
+      - "unfollowed": unfollowed, so not followed again by a chart or a
+        playlist; its albums can still come in on their own
+    and for an album (its row stays, metadata-only, unless its artist went
+    too): "deleted" on its own, or "artist_deleted" with its artist.
+
+    The name (and an album's artist) is kept to list it: a deleted artist
+    has no row left.
+    """
+    __tablename__ = "exclusions"
+
+    kind: Mapped[str] = mapped_column(String(8), primary_key=True)  # "artist" or "album"
+    item_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    reason: Mapped[str] = mapped_column(String(16), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    artist_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    artist_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
 class UserChannel(Base):
     """
     A YouTube user's channel met where an artist was expected (what an

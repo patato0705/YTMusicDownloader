@@ -10,7 +10,7 @@ Endpoints :
 """
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, or_, select
@@ -24,6 +24,7 @@ from ..models import Album, Job, Track, User
 from ..settings import feature_enabled
 from ..time_utils import now_utc
 from ..services import albums as albums_svc
+from ..services import exclusions as exclusions_svc
 from ..services import subscriptions as subs_svc
 from ..services import tracks as tracks_svc
 from ..ytm_service import adapter as ytm_adapter
@@ -77,6 +78,11 @@ def _mark_lyrics_pending(session: Session, tracks: List[Dict[str, Any]]) -> None
         )
 
 
+def _excluded(session: Session, album_id: str, artist: Optional[Dict[str, Any]]) -> bool:
+    artist_id = (artist or {}).get("id")
+    return album_id in exclusions_svc.blocked_album_ids(session, {album_id: artist_id})
+
+
 @router.get("/{album_id}", status_code=status.HTTP_200_OK)
 def get_album(
     album_id: str,
@@ -91,13 +97,19 @@ def get_album(
     the job queue: always for a download-mode album, even one whose tracks
     still come from YTMusic because its import hasn't landed. "needs_import"
     marks a download-mode album without tracks and with no import waiting:
-    Retry has to import it again.
+    Retry has to import it again. "excluded": nothing automatic downloads
+    it, deleted from the library itself or with its artist
+    (services/exclusions.py); Download lifts that.
     """
     album = albums_svc.get_album_from_db(session, album_id)
     db_tracks = album.pop("tracks") if album else []
     if db_tracks:
         _mark_lyrics_pending(session, db_tracks)
-        return {"source": "database", "mode": album["mode"], "needs_import": False, "album": album, "tracks": db_tracks}
+        return {
+            "source": "database", "mode": album["mode"], "needs_import": False,
+            "excluded": _excluded(session, album_id, album["artist"]),
+            "album": album, "tracks": db_tracks,
+        }
 
     try:
         album_data = ytm_adapter.get_album(browse_id=album_id)
@@ -112,6 +124,7 @@ def get_album(
             "source": "database" if downloading else "ytmusic",
             "mode": album["mode"],
             "needs_import": downloading and not pending_jobs(session, "import_album", browse_id=album_id),
+            "excluded": _excluded(session, album_id, album["artist"] or artist),
             "album": {**album, "artist": album["artist"] or artist},
             "tracks": tracks,
         }
@@ -119,6 +132,7 @@ def get_album(
         "source": "ytmusic",
         "mode": None,
         "needs_import": False,
+        "excluded": _excluded(session, album_id, artist),
         "album": {
             "id": album_data["id"],
             "title": album_data["title"],
@@ -138,9 +152,11 @@ def download_album(
     current_user: User = Depends(require_member_or_admin),
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    """Download an album (see subscriptions.start_album_download)."""
+    """Download an album (see subscriptions.start_album_download), lifting its exclusion."""
     try:
-        result = subs_svc.start_album_download(session, album_id, origin=Origin.USER, user_id=current_user.id)
+        result = subs_svc.start_album_download(
+            session, album_id, origin=Origin.USER, user_id=current_user.id, explicit=True,
+        )
     except ytm_adapter.YTMusicUnavailable:
         session.rollback()
         raise ytmusic_unavailable()

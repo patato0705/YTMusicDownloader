@@ -160,10 +160,11 @@ Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**,
 ### Following vs. downloading
 
 - **Follow an artist** (artist page → *Follow*): downloads every release and keeps watching for new ones.
-- **Unfollow**: stops watching for new releases and cancels downloads that haven't started yet (one already in progress is allowed to finish). Nothing is deleted; the artist stays in your library in "light" (metadata-only) mode.
+- **Unfollow**: stops watching for new releases and cancels downloads that haven't started yet (one already in progress is allowed to finish). Nothing is deleted; the artist stays in your library in "light" (metadata-only) mode. Followed charts and artists-mode playlists won't follow it again (see *Excluded* below); a playlist in albums mode can still bring in its albums.
 - **Download an album** (album page → *Download Album*): grabs just that album. The artist is added to the library in light mode so the album has somewhere to live.
 - **Retry missing tracks** (album page): shown on a downloaded album when some tracks failed or have no download queued. Requeues every track that isn't on disk and isn't already waiting.
-- **Delete artist / album** (admin only): removes the database entries *and* the files on disk. Whatever would download it again is unfollowed, and the confirmation says so: deleting an album switches its followed artist to light mode, and a followed playlist that would bring the album or artist back on its next scan becomes a one-time playlist.
+- **Delete artist / album** (admin only): removes the database entries *and* the files on disk. Deleting an album leaves its artist followed: only that album stays out.
+- **Excluded**: a deleted artist or album, or an unfollowed artist, is kept out of the library. Nothing automatic brings it back: not charts, playlist rescans, artist syncs or backup imports, and the bulk buttons on a playlist page skip it. Following the artist or downloading the album by hand brings it back. The Library page lists everything excluded under the *Deleted or unfollowed* filter, each with a restore button that lets charts, playlists and syncs bring it back again (nothing is downloaded right away). Exclusions are part of backups.
 
 Albums in the library keep following YouTube Music. Every artist sync (followed artists, and light-mode artists with an album in the library) also re-reads that artist's downloaded albums once a month: tracks added on YouTube Music are downloaded, changed titles, track numbers, album titles and years are written to the files' tags, and a track YouTube Music no longer lists is marked *Removed* on the album page. Its file stays in the library; it's just never downloaded again. Renamed artists get their files re-tagged at their next sync. File and folder names are kept as first written.
 
@@ -183,7 +184,7 @@ Only public and unlisted playlists can be read (the app isn't signed in to YouTu
 
 A playlist's song isn't always the very track that's downloaded for it (YouTube Music has several ids for one song), so each song is looked up by its id, then by title in its album, then by title and artist anywhere in the library. **Library → Playlists** shows how many songs are found, and how many are skipped.
 
-The options can be changed later. Switching from albums to artists follows the main artist of every song in the playlist; switching back keeps those artists followed, and new songs bring in their albums again. Unfollowing stops the rescans and keeps the M3U as last written. Deleting an album or artist that a followed playlist would bring back unfollows that playlist. *Remove* deletes the playlist and its M3U, never the music. What a playlist brings in when it's added (or switched to artists) runs at low priority, like a chart, so it doesn't hold up what you ask for meanwhile.
+The options can be changed later. Switching from albums to artists follows the main artist of every song in the playlist; switching back keeps those artists followed, and new songs bring in their albums again. Unfollowing stops the rescans and keeps the M3U as last written. A rescan skips excluded artists and albums (see *Excluded* above), so deleting something a playlist lists doesn't bring it back. *Remove* deletes the playlist and its M3U, never the music. What a playlist brings in when it's added (or switched to artists) runs at low priority, like a chart, so it doesn't hold up what you ask for meanwhile.
 
 ### Recommendations
 
@@ -239,7 +240,7 @@ Keeping *Max concurrent downloads* at 1 is the best way to avoid this in the fir
 
 **Admin Panel → Backup** exports a JSON document with any of:
 
-- **Library**: followed artists, standalone albums, playlists (with their songs). On import, the new instance follows them again and downloads their music.
+- **Library**: followed artists, standalone albums, playlists (with their songs), and what's excluded. On import, the new instance follows them again and downloads their music, leaving out whatever is excluded (in the file or on the new instance).
 - **Charts**: chart subscriptions.
 - **Catalog**: every artist/album/track row with relative file paths. Only useful if you also copy the `data/` folder: the import then recognises files already on disk instead of re-downloading.
 - **Users**: accounts, roles and password hashes (keep this file private), with each one's liked artists and dismissed recommendations.

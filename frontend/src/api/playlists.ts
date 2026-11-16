@@ -68,6 +68,13 @@ export interface Playlist {
   /** Its artists already followed, and its albums already downloaded */
   followed_artists: string[];
   downloaded_albums: string[];
+  /**
+   * Its artists unfollowed or deleted, and its albums deleted (or by a
+   * deleted artist): the bulk buttons leave them out, following or
+   * downloading one by hand brings it back
+   */
+  excluded_artists: string[];
+  excluded_albums: string[];
   /** Music videos whose song a job is looking for: the page asks again once the queue moves */
   songs_pending: string[];
 }

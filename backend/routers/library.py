@@ -7,10 +7,10 @@ Endpoints:
 - GET /api/library/albums - List followed albums with download status
 - GET /api/library/tracks - List downloaded tracks (with filters)
 - GET /api/library/stats - Overall library statistics
-- GET /api/library/artists/{artist_id}/deletion - What deleting an artist also changes
-- GET /api/library/albums/{album_id}/deletion - What deleting an album also changes
-- DELETE /api/library/artists/{artist_id} - Delete artist from library (admin)
-- DELETE /api/library/albums/{album_id} - Delete album from library (admin)
+- DELETE /api/library/artists/{artist_id} - Delete artist from library (admin), excluding it
+- DELETE /api/library/albums/{album_id} - Delete album from library (admin), excluding it
+- GET /api/library/exclusions - Artists and albums kept out of the library
+- DELETE /api/library/exclusions/{kind}/{item_id} - Restore one (member+)
 """
 from __future__ import annotations
 import logging
@@ -24,10 +24,11 @@ from sqlalchemy import func, case, exists
 
 from .. import config
 from ..db import get_session
-from ..dependencies import require_auth, require_admin
+from ..dependencies import require_auth, require_admin, require_member_or_admin
 from ..downloader.cover import move_file
 from ..jobs.jobqueue import cancel_download_jobs
 from ..models import Artist, Album, Track, ArtistSubscription, Job, Playlist, PlaylistEntry, User
+from ..services import exclusions as exclusions_svc
 from ..services import folders as folders_svc
 from ..services import playlists as playlists_svc
 from ..services import recommendations as recommendations_svc
@@ -515,46 +516,6 @@ def _remove_album_folder(folder: Path) -> None:
         pass  # not empty (files someone else put there) or already gone
 
 
-def _playlist_refs(playlists) -> List[Dict[str, str]]:
-    return [{"id": p.id, "title": p.title} for p in playlists]
-
-
-@router.get("/artists/{artist_id}/deletion", status_code=status.HTTP_200_OK)
-def artist_deletion_effects(
-    artist_id: str,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_session),
-) -> Dict[str, Any]:
-    """What deleting this artist also changes, for the confirmation dialog."""
-    album_ids = [a for (a,) in db.query(Album.id).filter(Album.artist_id == artist_id).all()]
-    playlists = playlists_svc.playlists_bringing_back(db, album_ids=album_ids, artist_ids=[artist_id])
-    return {"playlists_unfollowed": _playlist_refs(playlists)}
-
-
-@router.get("/albums/{album_id}/deletion", status_code=status.HTTP_200_OK)
-def album_deletion_effects(
-    album_id: str,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_session),
-) -> Dict[str, Any]:
-    """
-    What deleting this album also changes, for the confirmation dialog: its
-    followed artist is switched to light (see delete_album_from_library), and
-    the followed playlists that would bring it back are unfollowed.
-    """
-    album = db.get(Album, album_id)
-    if not album:
-        raise HTTPException(status_code=404, detail="Album not found in library")
-    artist = None
-    if album.artist_id:
-        sub = subs_svc.get_artist_subscription(db, album.artist_id)
-        if sub and sub.mode == "full":
-            artist_obj = db.get(Artist, album.artist_id)
-            artist = {"id": album.artist_id, "name": artist_obj.name if artist_obj else None}
-    playlists = playlists_svc.playlists_bringing_back(db, album_ids=[album_id], artist_ids=[album.artist_id])
-    return {"artist_unfollowed": artist, "playlists_unfollowed": _playlist_refs(playlists)}
-
-
 @router.delete("/artists/{artist_id}", status_code=status.HTTP_200_OK)
 def delete_artist_from_library(
     artist_id: str,
@@ -569,7 +530,9 @@ def delete_artist_from_library(
     - Artist folder on disk
     - All DB records: tracks, albums, artist, its subscription (and
       everyone's like of it)
-    - Followed playlists that would bring it back become one-time ones
+
+    It's then excluded ("deleted"): no chart, playlist or backup brings it
+    or its albums back (services/exclusions.py); following it again does.
 
     Requires administrator role.
     """
@@ -590,12 +553,11 @@ def delete_artist_from_library(
         tracks_deleted = 0
         albums_deleted = 0
 
-        # 0. Followed playlists that would bring the artist or its albums
-        # back on their next scan stop being followed
-        album_ids = [a for (a,) in db.query(Album.id).filter(Album.artist_id == artist_id).all()]
-        playlists_unfollowed = playlists_svc.unfollow_for_deletion(
-            db, playlists_svc.playlists_bringing_back(db, album_ids=album_ids, artist_ids=[artist_id])
-        )
+        # 0. Nothing automatic brings it, or its albums, back
+        if artist:
+            exclusions_svc.exclude_deleted_artist(db, artist)
+        else:
+            exclusions_svc.exclude_artist(db, artist_id, None, exclusions_svc.DELETED)
 
         # 1. Delete all albums that exist in DB for this artist
         if artist:
@@ -651,7 +613,6 @@ def delete_artist_from_library(
             "albums_deleted": albums_deleted,
             "tracks_deleted": tracks_deleted,
             "files_deleted": files_deleted,
-            "playlists_unfollowed": playlists_unfollowed,
         }
 
     except HTTPException:
@@ -677,10 +638,9 @@ def delete_album_from_library(
       Track rows; the album folder goes once empty
     - The cover moves back to the covers folder, and the Album row stays
       in mode="metadata" (it's still one of the artist's releases)
-    - Artist subscription is downgraded to mode="light"
-      (no more periodic sync; artist stays in library;
-       re-following the artist will reimport and redownload this album)
-    - Followed playlists that would bring it back become one-time ones
+    - It's excluded: its artist's syncs, playlists and backups leave it
+      out (services/exclusions.py), the artist staying followed;
+      downloading it again lifts that
 
     Requires administrator role.
     """
@@ -728,22 +688,8 @@ def delete_album_from_library(
         album.download_status = None
         db.add(album)
 
-        artist_downgraded = False
-
-        # 4. Downgrade artist subscription to light mode (its new releases
-        # are no longer downloaded)
-        if artist_id:
-            artist_sub = subs_svc.get_artist_subscription(db, artist_id)
-            if artist_sub and artist_sub.mode == "full":
-                artist_sub.mode = "light"
-                db.add(artist_sub)
-                artist_downgraded = True
-                logger.info("Downgraded artist %s to light mode after album deletion", artist_id)
-
-        # 5. Same for the followed playlists that would bring it back
-        playlists_unfollowed = playlists_svc.unfollow_for_deletion(
-            db, playlists_svc.playlists_bringing_back(db, album_ids=[album_id], artist_ids=[artist_id])
-        )
+        # 4. Nothing automatic brings it back
+        exclusions_svc.exclude_album(db, album)
 
         db.commit()
 
@@ -760,12 +706,10 @@ def delete_album_from_library(
         )
 
         return {
-            "message": f"Album '{album_title}' deleted from library. Artist switched to light mode.",
+            "message": f"Album '{album_title}' deleted from library.",
             "album_id": album_id,
             "tracks_deleted": tracks_deleted,
             "files_deleted": files_deleted,
-            "artist_downgraded": artist_downgraded,
-            "playlists_unfollowed": playlists_unfollowed,
         }
 
     except HTTPException:
@@ -775,3 +719,37 @@ def delete_album_from_library(
         db.rollback()
         logger.exception("delete_album_from_library failed for %s", album_id)
         raise HTTPException(status_code=500, detail=f"Failed to delete album: {e}")
+
+
+@router.get("/exclusions", status_code=status.HTTP_200_OK)
+def list_exclusions(
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    """The artists and albums nothing automatic brings back (services/exclusions.py), newest first."""
+    return exclusions_svc.list_all(db)
+
+
+@router.delete("/exclusions/{kind}/{item_id}", status_code=status.HTTP_200_OK)
+def restore_exclusion(
+    kind: str,
+    item_id: str,
+    current_user: User = Depends(require_member_or_admin),
+    db: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    """
+    Lift an exclusion: charts, playlists and syncs may bring the artist or
+    album in again (an artist's albums deleted with it too). Nothing is
+    followed or downloaded here.
+    """
+    if kind not in (exclusions_svc.ARTIST, exclusions_svc.ALBUM):
+        raise HTTPException(status_code=400, detail="kind must be artist or album")
+    lifted = (
+        exclusions_svc.lift_artist(db, item_id) if kind == exclusions_svc.ARTIST
+        else exclusions_svc.lift(db, kind, item_id)
+    )
+    if not lifted:
+        raise HTTPException(status_code=404, detail="Not excluded")
+    db.commit()
+    logger.info("User %s restored %s %s", current_user.id, kind, item_id)
+    return {"kind": kind, "id": item_id}

@@ -89,11 +89,22 @@ class LibraryPlaylist(BaseModel):
     entries: List[LibraryPlaylistEntry] = Field(default_factory=list, max_length=MAX_PLAYLIST_ENTRIES)
 
 
+class LibraryExclusion(BaseModel):
+    """An artist or album kept out of the library (models.Exclusion)."""
+    kind: Literal["artist", "album"]
+    id: str = Field(..., min_length=1, max_length=64)
+    reason: Literal["deleted", "unfollowed", "artist_deleted"] = "deleted"
+    name: Optional[str] = Field(None, max_length=NAME_MAX)
+    artist_id: Optional[str] = Field(None, max_length=64)
+    artist_name: Optional[str] = Field(None, max_length=NAME_MAX)
+
+
 class LibrarySection(BaseModel):
     artists: List[LibraryArtist] = Field(default_factory=list, max_length=MAX_ARTISTS)
     albums: List[LibraryAlbum] = Field(default_factory=list, max_length=MAX_ALBUMS)
     charts: List[LibraryChart] = Field(default_factory=list, max_length=MAX_CHARTS)
     playlists: List[LibraryPlaylist] = Field(default_factory=list, max_length=MAX_PLAYLISTS)
+    exclusions: List[LibraryExclusion] = Field(default_factory=list, max_length=MAX_ARTISTS + MAX_ALBUMS)
 
 
 # ============================================================================
@@ -225,6 +236,11 @@ class LibraryImportResult(BaseModel):
     charts_skipped: int = 0
     playlists_added: int = 0
     playlists_existing: int = 0
+    # Kept out of the library (on this instance, or in the file): not
+    # followed or downloaded
+    exclusions_added: int = 0
+    artists_excluded: int = 0
+    albums_excluded: int = 0
 
 
 class CatalogImportResult(BaseModel):

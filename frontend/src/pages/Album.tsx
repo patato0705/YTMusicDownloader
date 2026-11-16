@@ -6,10 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import { getAlbum, downloadAlbum, retryAlbum } from '../api/albums';
 import type { AlbumPage } from '../api/albums';
-import { deleteLibraryAlbum, getAlbumDeletionEffects } from '../api/library';
-import type { DeletionEffects } from '../api/library';
+import { deleteLibraryAlbum } from '../api/library';
 import { getImageUrl } from '../api/media';
-import { useDeletionNotes } from '../hooks/useDeletionNotes';
 import { albumTypeKey } from '../components/MediaCard';
 import { Artwork } from '../components/ui/Artwork';
 import { Button } from '../components/ui/Button';
@@ -22,6 +20,7 @@ import { LyricsModal } from '../components/ui/LyricsModal';
 import { GenreChips } from '../components/ui/GenreChips';
 import { TrackStatusBadge } from '../components/ui/TrackStatusBadge';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
+import { ExclusionNote } from '../components/ui/ExclusionNote';
 import { formatDuration, primaryArtistName, apiErrorMessage, artistPath } from '../utils';
 import type { Track } from '../types';
 import { Icon } from '../components/ui/icons';
@@ -36,9 +35,6 @@ export default function Album(): JSX.Element {
   const [retryLoading, setRetryLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
-  // What else the deletion changes, read when the confirmation opens
-  const [deleteEffects, setDeleteEffects] = useState<DeletionEffects | null>(null);
-  const deletionNotes = useDeletionNotes();
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [lyricsTrack, setLyricsTrack] = useState<Track | null>(null);
   const navigate = useNavigate();
@@ -124,7 +120,7 @@ export default function Album(): JSX.Element {
         type: 'success',
       });
       refreshJobs();
-      setPage((current) => current && { ...current, mode: 'download' });
+      setPage((current) => current && { ...current, mode: 'download', excluded: false });
       // In the DB now: reloaded once, then followed with the job queue. The
       // download is queued even if this reload fails.
       fetchAlbum(id)
@@ -160,16 +156,6 @@ export default function Album(): JSX.Element {
     }
   };
 
-  const openDeleteConfirm = async () => {
-    setDeleteEffects(null);
-    try {
-      setDeleteEffects(await getAlbumDeletionEffects(id));
-    } catch (err) {
-      console.error('Failed to read what the deletion changes:', err);
-    }
-    setDeleteConfirm(true);
-  };
-
   const handleDelete = async () => {
     setDeleteLoading(true);
     try {
@@ -196,7 +182,7 @@ export default function Album(): JSX.Element {
       <ConfirmDialog
         isOpen={deleteConfirm}
         title={t('album.deleteTitle')}
-        message={[t('album.deleteMessage'), deletionNotes(deleteEffects)].filter(Boolean).join('\n\n')}
+        message={t('album.deleteMessage')}
         confirmText={t('common.delete')}
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm(false)}
@@ -307,11 +293,14 @@ export default function Album(): JSX.Element {
 
                 {/* Last and quiet: it opens a confirmation, the dialog carries the red */}
                 {isAdmin && isFollowing && (
-                  <Button onClick={openDeleteConfirm} variant="subtleDanger" isLoading={deleteLoading} className="md:ml-auto">
+                  <Button onClick={() => setDeleteConfirm(true)} variant="subtleDanger" isLoading={deleteLoading} className="md:ml-auto">
                     {t('album.deleteAlbum')}
                   </Button>
                 )}
               </div>
+              {page.excluded && !isFollowing && (
+                <ExclusionNote text={t('exclusion.album')} className="mt-4 max-w-xl mx-auto md:mx-0 text-left" />
+              )}
             </div>
           </div>
         </div>

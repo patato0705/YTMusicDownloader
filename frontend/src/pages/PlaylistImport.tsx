@@ -236,6 +236,9 @@ export default function PlaylistImport(): JSX.Element {
   const [saved, setSaved] = useState<SavedPlaylist | null>(restored?.playlist.saved ?? null);
   const [followedArtists, setFollowedArtists] = useState<Set<string>>(() => new Set(restored?.playlist.followed_artists));
   const [downloadedAlbums, setDownloadedAlbums] = useState<Set<string>>(() => new Set(restored?.playlist.downloaded_albums));
+  // Kept out of the library: left out of the bulk actions (see api/playlists)
+  const [excludedArtists, setExcludedArtists] = useState<Set<string>>(() => new Set(restored?.playlist.excluded_artists));
+  const [excludedAlbums, setExcludedAlbums] = useState<Set<string>>(() => new Set(restored?.playlist.excluded_albums));
   // Music videos whose song a job is still looking for
   const [songsPending, setSongsPending] = useState<Set<string>>(() => new Set(restored?.playlist.songs_pending));
   const [loading, setLoading] = useState(false);
@@ -276,6 +279,8 @@ export default function PlaylistImport(): JSX.Element {
     setSaved(playlist.saved ?? null);
     setFollowedArtists(new Set(playlist.followed_artists));
     setDownloadedAlbums(new Set(playlist.downloaded_albums));
+    setExcludedArtists(new Set(playlist.excluded_artists));
+    setExcludedAlbums(new Set(playlist.excluded_albums));
     setSongsPending(new Set(playlist.songs_pending));
     // The lookup job just queued: the badge shows it, and its end bumps `revision`
     if (playlist.songs_pending.length > 0) refreshJobs();
@@ -338,8 +343,10 @@ export default function PlaylistImport(): JSX.Element {
       saved,
       followed_artists: [...followedArtists],
       downloaded_albums: [...downloadedAlbums],
+      excluded_artists: [...excludedArtists],
+      excluded_albums: [...excludedAlbums],
     });
-  }, [loadedId, saved, followedArtists, downloadedAlbums]);
+  }, [loadedId, saved, followedArtists, downloadedAlbums, excludedArtists, excludedAlbums]);
 
   // Music videos still being looked up: asked again whenever the queue moves,
   // until their songs (and so their albums) are in
@@ -348,8 +355,20 @@ export default function PlaylistImport(): JSX.Element {
     if (loadedId && lookingUp) fetchPlaylist(loadedId, true);
   }, [revision]);
 
-  const markFollowed = (id: string) => setFollowedArtists((prev) => new Set(prev).add(id));
-  const markDownloaded = (id: string) => setDownloadedAlbums((prev) => new Set(prev).add(id));
+  const without = (set: Set<string>, id: string) => {
+    const next = new Set(set);
+    next.delete(id);
+    return next;
+  };
+  // Following or downloading by hand also lifts an exclusion
+  const markFollowed = (id: string) => {
+    setFollowedArtists((prev) => new Set(prev).add(id));
+    setExcludedArtists((prev) => without(prev, id));
+  };
+  const markDownloaded = (id: string) => {
+    setDownloadedAlbums((prev) => new Set(prev).add(id));
+    setExcludedAlbums((prev) => without(prev, id));
+  };
   const follow = (artist: TrackGroup) => followArtist(artist.id, artist.name);
   const download = async (album: TrackGroup) => { await downloadAlbum(album.id); };
 
@@ -374,6 +393,8 @@ export default function PlaylistImport(): JSX.Element {
     action: (item: TrackGroup) => Promise<void>,
     markDone: (id: string) => void,
     successMessageKey: string,
+    /** Excluded items the action leaves out, said in the message */
+    excludedCount: number,
   ) => {
     if (items.length === 0) return;
 
@@ -391,8 +412,9 @@ export default function PlaylistImport(): JSX.Element {
 
     setBulkProgress(null);
     refreshJobs();
+    const leftOut = excludedCount > 0 ? ` ${t('playlist.excludedSkipped', { count: excludedCount })}` : '';
     setToast(failed === 0
-      ? { message: t(successMessageKey), type: 'success' }
+      ? { message: t(successMessageKey) + leftOut, type: 'success' }
       : {
           message: t('playlist.partialSuccess', { succeeded: items.length - failed, total: items.length, failed }),
           type: 'error',
@@ -403,9 +425,13 @@ export default function PlaylistImport(): JSX.Element {
   const artists = view?.artists ?? [];
   const albums = view?.albums ?? [];
   const mainArtists = artists.filter((a) => view?.mainArtistIds.has(a.id));
-  const unfollowedArtists = artists.filter((a) => !followedArtists.has(a.id));
-  const unfollowedMainArtists = mainArtists.filter((a) => !followedArtists.has(a.id));
-  const undownloadedAlbums = albums.filter((a) => !downloadedAlbums.has(a.id));
+  // What the bulk buttons act on: not done yet, and not kept out of the library
+  const unfollowed = artists.filter((a) => !followedArtists.has(a.id));
+  const unfollowedMain = mainArtists.filter((a) => !followedArtists.has(a.id));
+  const undownloaded = albums.filter((a) => !downloadedAlbums.has(a.id));
+  const unfollowedArtists = unfollowed.filter((a) => !excludedArtists.has(a.id));
+  const unfollowedMainArtists = unfollowedMain.filter((a) => !excludedArtists.has(a.id));
+  const undownloadedAlbums = undownloaded.filter((a) => !excludedAlbums.has(a.id));
   // What the playlist can't bring in, as its summary counts it (backend
   // services/playlists.summary: in albums mode no album, in artists mode
   // no main artist), by reason: uploads; in albums mode, videos with no
@@ -509,6 +535,12 @@ export default function PlaylistImport(): JSX.Element {
   const shownFilter: PlaylistFilterType = tabs.some((tab) => tab.id === activeFilter) ? activeFilter : tabs[0].id;
 
   const listClass = 'glass rounded-2xl overflow-hidden shadow-sm';
+  // Left out of the bulk buttons; its own button still brings it back
+  const excludedPill = (
+    <span className="flex-shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border border-dashed border-slate-400/50 dark:border-white/20 text-muted-foreground">
+      {t('exclusion.badge')}
+    </span>
+  );
 
   return (
     <div className="space-y-8 pb-12">
@@ -651,17 +683,27 @@ export default function PlaylistImport(): JSX.Element {
                 ) : shownFilter === 'artists' ? (
                   <>
                     {bulkButton(t('playlist.followAll'), unfollowedArtists.length, () =>
-                      runBulkAction(unfollowedArtists, 'artists', follow, markFollowed, 'playlist.followComplete'), 'secondary')}
+                      runBulkAction(unfollowedArtists, 'artists', follow, markFollowed, 'playlist.followComplete',
+                        unfollowed.length - unfollowedArtists.length), 'secondary')}
                     {bulkButton(t('playlist.followMainArtists'), unfollowedMainArtists.length, () =>
-                      runBulkAction(unfollowedMainArtists, 'artists', follow, markFollowed, 'playlist.followComplete'), 'primary')}
+                      runBulkAction(unfollowedMainArtists, 'artists', follow, markFollowed, 'playlist.followComplete',
+                        unfollowedMain.length - unfollowedMainArtists.length), 'primary')}
                   </>
                 ) : (
                   bulkButton(t('playlist.downloadAll'), undownloadedAlbums.length, () =>
-                    runBulkAction(undownloadedAlbums, 'albums', download, markDownloaded, 'playlist.downloadComplete'), 'primary')
+                    runBulkAction(undownloadedAlbums, 'albums', download, markDownloaded, 'playlist.downloadComplete',
+                      undownloaded.length - undownloadedAlbums.length), 'primary')
                 )}
               </div>
             )}
           </div>
+
+          {canModify && (
+            (shownFilter === 'artists' && unfollowed.length > unfollowedArtists.length)
+            || (shownFilter === 'albums' && undownloaded.length > undownloadedAlbums.length)
+          ) && (
+            <p className="text-sm text-muted-foreground -mt-4">{t('playlist.excludedNote')}</p>
+          )}
 
           {shownFilter === 'artists' && (
             artists.length > 0 ? (
@@ -698,6 +740,7 @@ export default function PlaylistImport(): JSX.Element {
                           >
                             {t(isMain ? 'playlist.mainArtist' : 'playlist.secondaryArtist')}
                           </span>
+                          {excludedArtists.has(artist.id) && !followedArtists.has(artist.id) && excludedPill}
                         </div>
                         <p className="text-sm text-muted-foreground">{t('playlist.trackCount', { count: artist.tracks.length })}</p>
                       </ExpandableRow>
@@ -725,13 +768,16 @@ export default function PlaylistImport(): JSX.Element {
                       )}
                       tracks={groupTrackList(album.id, album.tracks, (track) => artistLinks(track.artists))}
                     >
-                      <Link
-                        to={albumPath(album.id)}
-                        onClick={stopRowToggle}
-                        className={`font-semibold text-foreground truncate block max-w-full ${linkClass}`}
-                      >
-                        {album.name}
-                      </Link>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Link
+                          to={albumPath(album.id)}
+                          onClick={stopRowToggle}
+                          className={`font-semibold text-foreground truncate min-w-0 ${linkClass}`}
+                        >
+                          {album.name}
+                        </Link>
+                        {excludedAlbums.has(album.id) && !downloadedAlbums.has(album.id) && excludedPill}
+                      </div>
                       <p className="text-sm text-muted-foreground truncate">
                         {album.artistId ? (
                           <Link to={artistPath(album.artistId)} onClick={stopRowToggle} className={linkClass}>

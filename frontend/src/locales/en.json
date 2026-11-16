@@ -197,7 +197,7 @@
     "unfollow": "Unfollow",
     "followed": "Following",
     "unfollowTitle": "Unfollow Artist",
-    "unfollowMessage": "New albums will no longer be automatically followed. All already downloaded content will not be affected.",
+    "unfollowMessage": "Their new releases won't be downloaded anymore, and no chart or playlist will follow them again (following them by hand still does). What's already downloaded stays.",
     "like": "Like",
     "unlike": "Unlike",
     "likeError": "Couldn't update your liked artists",
@@ -208,7 +208,7 @@
     "notFound": "Artist not found",
     "delete": "Delete Artist",
     "deleteTitle": "Delete Artist",
-    "deleteMessage": "Are you sure you want to delete this artist and all associated albums, tracks, and files? This cannot be undone.",
+    "deleteMessage": "Are you sure you want to delete this artist and all associated albums, tracks, and files? This cannot be undone. Charts and playlists won't bring them back; following them again will.",
     "deleted": "Artist deleted successfully",
     "channelTitle": "Not an artist page",
     "channelNotice": "This is a YouTube channel: what an upload credits is the channel that posted it. It has no releases to follow.",
@@ -227,7 +227,7 @@
     "downloadFailed": "Download failed",
     "deleteAlbum": "Delete Album",
     "deleteTitle": "Delete Album",
-    "deleteMessage": "Are you sure you want to delete this album and all associated tracks and files? This cannot be undone.",
+    "deleteMessage": "Are you sure you want to delete this album and all associated tracks and files? This cannot be undone. Its artist stays followed, but no sync, chart or playlist will download this album again; downloading it by hand will.",
     "deleted": "Album deleted successfully",
     "following": "In Library",
     "trackList": "Track List",
@@ -336,12 +336,6 @@
     },
     "playlists": "Playlists",
     "noPlaylists": "No playlist matches.",
-    "deletion": {
-      "artistUnfollowed": "{name} will be unfollowed, so this album isn't downloaded again: their new releases won't be downloaded anymore.",
-      "playlistsUnfollowed": "These followed playlists will be unfollowed, so they don't download it again: {titles}. They stay in the library as one-time playlists.",
-      "playlistsUnfollowed_one": "The followed playlist {titles} will be unfollowed, so it doesn't download it again. It stays in the library as a one-time playlist.",
-      "quoted": "“{title}”"
-    },
     "filters": {
       "button": "Filters",
       "buttonActive": "Filters, {count} picked",
@@ -370,7 +364,8 @@
         "genre": "Genre",
         "source": "Brought in by",
         "follow": "Artist follow",
-        "liked": "Likes"
+        "liked": "Likes",
+        "excluded": "Kept out"
       },
       "options": {
         "downloads": {
@@ -406,6 +401,9 @@
         },
         "liked": {
           "liked": "Liked artists"
+        },
+        "excluded": {
+          "excluded": "Deleted or unfollowed"
         }
       },
       "hints": {
@@ -448,6 +446,19 @@
           "desc": "Most complete first"
         }
       }
+    },
+    "excluded": {
+      "artistDeleted": "Deleted on {date}",
+      "artistUnfollowed": "Unfollowed on {date}",
+      "albumDeleted": "Deleted on {date}",
+      "restore": "Restore {name}",
+      "restoreTitle": "Restore: charts, playlists and syncs can bring it back. Nothing is downloaded right away.",
+      "restored": "{name} restored: charts, playlists and syncs can bring it back",
+      "note": "Nothing automatic brings these back: not charts, playlists, artist syncs or backups. Following or downloading one by hand restores it, and so does its restore button.",
+      "empty": "Nothing is kept out of the library",
+      "emptyDescription": "Deleted artists and albums, and unfollowed artists, are listed here.",
+      "artists": "Excluded artists",
+      "albums": "Excluded albums"
     }
   },
   "charts": {
@@ -792,7 +803,10 @@
         "dismissedAdded": "Dismissed recommendations to add",
         "settingsApplied": "Settings to apply",
         "settingsIgnored": "Settings ignored (unknown)",
-        "albumsToImport": "Albums to re-fetch (missing tracks or cover)"
+        "albumsToImport": "Albums to re-fetch (missing tracks or cover)",
+        "exclusionsAdded": "Exclusions added",
+        "artistsExcluded": "Artists left out (excluded)",
+        "albumsExcluded": "Albums left out (excluded)"
       },
       "warnings": {
         "charts_disabled": "Charts are disabled on this instance; chart subscriptions were skipped.",
@@ -889,7 +903,10 @@
       "lastError": "Last scan failed: {error}",
       "syncNow": "Sync now",
       "syncQueued": "Scan queued"
-    }
+    },
+    "excludedSkipped": "{count} excluded artists or albums were left out.",
+    "excludedSkipped_one": "1 excluded artist or album was left out.",
+    "excludedNote": "Excluded: deleted or unfollowed from the library. The buttons above leave them out; an item's own button brings it back."
   },
   "onboarding": {
     "label": "Quick tour",
@@ -967,5 +984,11 @@
     "details": "Error details",
     "reload": "Reload page",
     "home": "Go to Home"
+  },
+  "exclusion": {
+    "badge": "Excluded",
+    "artistDeleted": "Deleted from the library: no chart or playlist brings this artist back. Following them does.",
+    "artistUnfollowed": "Unfollowed: no chart or playlist follows this artist again. Following them does.",
+    "album": "Deleted from the library: no sync, chart or playlist downloads it again. Downloading it does."
   }
 }

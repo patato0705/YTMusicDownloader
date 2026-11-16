@@ -5,6 +5,7 @@
 
 import { api } from './client';
 import type { AlbumDownloadStatus, AlbumMode, SubscriptionMode } from '../types';
+import type { ExclusionReason } from './library';
 
 export interface ArtistRelease {
   id: string;
@@ -17,12 +18,16 @@ export interface ArtistRelease {
   in_database: boolean;
   mode: AlbumMode | null;
   download_status: AlbumDownloadStatus;
+  /** Deleted from the library (itself or with its artist): nothing automatic downloads it */
+  excluded: boolean;
 }
 
 export interface ArtistPage {
   /** "database" for an artist followed in full (refreshed with the job queue), "ytmusic" otherwise */
   source: 'database' | 'ytmusic';
   subscription_mode: SubscriptionMode | null;
+  /** Unfollowed or deleted: no chart or playlist follows it (Follow lifts that) */
+  excluded: ExclusionReason | null;
   /** Whether you like it (only artists of the library, subscription_mode set, can be) */
   liked: boolean;
   /** A YouTube user's channel (what an upload credits), not an artist: nothing to follow */

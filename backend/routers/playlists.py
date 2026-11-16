@@ -24,6 +24,7 @@ from ..db import get_session
 from ..dependencies import require_auth, require_member_or_admin
 from ..jobs.priorities import Origin
 from ..models import Album, ArtistSubscription, Playlist, User
+from ..services import exclusions as exclusions_svc
 from ..services import playlists as playlists_svc
 from ..ytm_service.adapter import YTMusicUnavailable
 
@@ -83,6 +84,8 @@ def get_playlist(
     ("saved"). Its music videos stand for their songs where those were found
     already; the others are looked up by a job ("songs_pending": their
     video ids), and the page asks again once it's done.
+    "excluded_artists" / "excluded_albums": what the bulk buttons leave out
+    (services/exclusions.py); following or downloading one by hand lifts it.
     """
     playlist_id = _playlist_id(playlist_id)
     try:
@@ -107,11 +110,21 @@ def get_playlist(
     downloaded_albums = session.scalars(
         select(Album.id).where(Album.id.in_(album_ids), Album.mode == "download")
     ).all() if album_ids else []
+    excluded_artists = exclusions_svc.excluded_artist_ids(session) & artist_ids
+    album_artists = {
+        album["id"]: next((a.get("id") for a in t.get("artists") or [] if a.get("id")), None)
+        for t in tracks
+        for album in [t.get("album") or {}]
+        if album.get("id")
+    }
+    excluded_albums = exclusions_svc.blocked_album_ids(session, album_artists)
     return {
         **data,
         "saved": playlists_svc.summary(session, playlist) if playlist else None,
         "followed_artists": list(followed_artists),
         "downloaded_albums": list(downloaded_albums),
+        "excluded_artists": sorted(excluded_artists),
+        "excluded_albums": sorted(excluded_albums),
         "songs_pending": [v["id"] for v in to_look_up],
     }
 

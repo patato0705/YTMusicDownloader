@@ -6,10 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useJobActivity } from '../contexts/JobActivityContext';
 import { getArtist, followArtist, unfollowArtist } from '../api/artists';
 import type { ArtistPage, ArtistRelease } from '../api/artists';
-import { deleteLibraryArtist, getArtistDeletionEffects } from '../api/library';
-import type { DeletionEffects } from '../api/library';
+import { deleteLibraryArtist } from '../api/library';
 import { getImageUrl } from '../api/media';
-import { useDeletionNotes } from '../hooks/useDeletionNotes';
 import { useLikeSync } from '../hooks/useLikeSync';
 import { MEDIA_GRID, MediaCard } from '../components/MediaCard';
 import { Artwork } from '../components/ui/Artwork';
@@ -20,6 +18,7 @@ import { Toast } from '../components/ui/Toast';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { GenreChips } from '../components/ui/GenreChips';
+import { ExclusionNote } from '../components/ui/ExclusionNote';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
 import { categorizeAlbums, getAlbumStatus, apiErrorMessage, albumPath, artistPath } from '../utils';
 import { Icon } from '../components/ui/icons';
@@ -33,9 +32,6 @@ export default function Artist(): JSX.Element {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [unfollowConfirm, setUnfollowConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
-  // What else the deletion changes, read when the confirmation opens
-  const [deleteEffects, setDeleteEffects] = useState<DeletionEffects | null>(null);
-  const deletionNotes = useDeletionNotes();
   const [deleteLoading, setDeleteLoading] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -115,9 +111,6 @@ export default function Artist(): JSX.Element {
   const deletable = isAdmin && (inLibrary || page.in_library);
   const { albums, singles } = categorizeAlbums(releases);
 
-  const setSubscriptionMode = (mode: ArtistPage['subscription_mode']) =>
-    setPage((current) => current && { ...current, subscription_mode: mode });
-
   const handleFollow = async () => {
     if (followed) {
       setUnfollowConfirm(true);
@@ -127,8 +120,9 @@ export default function Artist(): JSX.Element {
     setActionLoading(true);
     try {
       await followArtist(id, artist.name);
-      // Following likes it too, which a heart click still waiting mustn't undo
-      setPage((current) => current && { ...current, subscription_mode: 'full', liked: true });
+      // Following likes it too, which a heart click still waiting mustn't
+      // undo; and lifts its exclusion
+      setPage((current) => current && { ...current, subscription_mode: 'full', liked: true, excluded: null });
       if (likeSync.unsaved().has(id)) likeSync.toggle(id, true);
       refreshJobs();
     } catch (err: any) {
@@ -143,7 +137,7 @@ export default function Artist(): JSX.Element {
     setActionLoading(true);
     try {
       await unfollowArtist(id);
-      setSubscriptionMode('light');
+      setPage((current) => current && { ...current, subscription_mode: 'light', excluded: 'unfollowed' });
       refreshJobs();
     } catch (err: any) {
       console.error('Unfollow failed:', err);
@@ -159,16 +153,6 @@ export default function Artist(): JSX.Element {
     const liked = !page.liked;
     setPage((current) => current && { ...current, liked });
     likeSync.toggle(id, liked);
-  };
-
-  const openDeleteConfirm = async () => {
-    setDeleteEffects(null);
-    try {
-      setDeleteEffects(await getArtistDeletionEffects(id));
-    } catch (err) {
-      console.error('Failed to read what the deletion changes:', err);
-    }
-    setDeleteConfirm(true);
   };
 
   const handleDelete = async () => {
@@ -187,7 +171,7 @@ export default function Artist(): JSX.Element {
   };
 
   const deleteButton = deletable && (
-    <Button onClick={openDeleteConfirm} variant="subtleDanger" isLoading={deleteLoading} className="md:ml-auto">
+    <Button onClick={() => setDeleteConfirm(true)} variant="subtleDanger" isLoading={deleteLoading} className="md:ml-auto">
       {t('artist.delete')}
     </Button>
   );
@@ -206,6 +190,8 @@ export default function Artist(): JSX.Element {
             albumType={album.type}
             year={album.year ?? undefined}
             mediaStatus={getAlbumStatus(album, downloadsPausedUntil !== null)}
+            // Deleted from the library: its page says what that means
+            matchHint={album.excluded ? t('exclusion.badge') : undefined}
             to={albumPath(album.id)}
           />
         ))}
@@ -233,7 +219,7 @@ export default function Artist(): JSX.Element {
       <ConfirmDialog
         isOpen={deleteConfirm}
         title={t('artist.deleteTitle')}
-        message={[t('artist.deleteMessage'), deletionNotes(deleteEffects)].filter(Boolean).join('\n\n')}
+        message={t('artist.deleteMessage')}
         confirmText={t('common.delete')}
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm(false)}
@@ -301,6 +287,12 @@ export default function Artist(): JSX.Element {
                 {/* Last and quiet: it opens a confirmation, the dialog carries the red */}
                 {deleteButton}
               </div>
+              {page.excluded && !followed && (
+                <ExclusionNote
+                  text={t(page.excluded === 'deleted' ? 'exclusion.artistDeleted' : 'exclusion.artistUnfollowed')}
+                  className="mt-4 max-w-xl mx-auto md:mx-0 text-left"
+                />
+              )}
               </>
               )}
             </div>

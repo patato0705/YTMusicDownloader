@@ -26,6 +26,8 @@ export interface AlbumPage {
   mode: AlbumMode | null;
   /** A download-mode album without tracks and with no import waiting: Retry imports it again */
   needs_import: boolean;
+  /** Deleted from the library (itself or with its artist): nothing automatic downloads it, Download lifts that */
+  excluded: boolean;
   album: AlbumDetails;
   tracks: Track[];
 }

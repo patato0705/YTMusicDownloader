@@ -5,8 +5,8 @@ import { useI18n } from '../contexts/I18nContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useFeatures } from '../contexts/FeaturesContext';
 import { useJobActivity } from '../contexts/JobActivityContext';
-import { getLibraryArtists, getLibraryAlbums, getLibraryStats, searchLibraryTracks } from '../api/library';
-import type { LibraryAlbum, LibraryArtist, LibraryStats, LibraryTrack } from '../api/library';
+import { getExclusions, getLibraryArtists, getLibraryAlbums, getLibraryStats, restoreExclusion, searchLibraryTracks } from '../api/library';
+import type { Exclusions, LibraryAlbum, LibraryArtist, LibraryStats, LibraryTrack } from '../api/library';
 import { exportLibrary, downloadJson, exportFilename } from '../api/export';
 import { listPlaylists } from '../api/playlists';
 import type { SavedPlaylist } from '../api/playlists';
@@ -30,6 +30,7 @@ import { useProgressiveList } from '../hooks/useProgressiveList';
 import { useHistoryState } from '../hooks/useHistoryState';
 import { useLikeSync } from '../hooks/useLikeSync';
 import { Icon } from '../components/ui/icons';
+import { Spinner } from '../components/ui/Spinner';
 import { ActiveFilters, LibraryFilterControl, SortControl, filterHintText } from '../components/library/LibraryFilters';
 import {
   FILTER_GROUPS,
@@ -41,6 +42,7 @@ import {
   filtersFromParams,
   sortAlbums,
   sortArtists,
+  showsExcluded,
   sortFromParams,
   toggleFilter,
   withFilterParams,
@@ -72,7 +74,11 @@ interface LibrarySnapshot {
   albums: LibraryAlbum[];
   stats: LibraryStats;
   playlists: SavedPlaylist[];
+  /** Kept out of the library: listed by the "excluded" filter */
+  exclusions: Exclusions;
 }
+
+const NO_EXCLUSIONS: Exclusions = { artists: [], albums: [] };
 
 const LIBRARY_CACHE_KEY = 'library';
 const libraryCache = createMemoryCache<LibrarySnapshot>(1);
@@ -98,6 +104,35 @@ function joinHints(...parts: Array<string | undefined>): string | undefined {
   return parts.filter(Boolean).join(' · ') || undefined;
 }
 
+/** Lifts an exclusion from its card or row: always shown, touch screens have no hover */
+function RestoreButton({ label, title, loading, onClick, compact = false }: {
+  label: string; title: string; loading: boolean; onClick: () => void;
+  /** Beside a list row's title, rather than on a card's artwork */
+  compact?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        // Inside the card's link: restoring mustn't open the page
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+      }}
+      disabled={loading}
+      aria-label={label}
+      title={title}
+      className={`flex items-center justify-center rounded-full transition-colors outline-none disabled:cursor-wait ${
+        compact
+          ? 'w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent-500/70'
+          : 'w-9 h-9 shadow-md ring-2 ring-white dark:ring-zinc-900 bg-white text-slate-700 hover:bg-accent-600 hover:text-white dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-accent-600 focus-visible:ring-accent-500/70'
+      }`}
+    >
+      {loading ? <Spinner size="sm" /> : <Icon name="undo" className="w-4 h-4" />}
+    </button>
+  );
+}
+
 function loadViewMode(): ViewMode {
   try {
     return localStorage.getItem(VIEW_STORAGE_KEY) === 'list' ? 'list' : 'grid';
@@ -115,11 +150,15 @@ export default function Library(): JSX.Element {
   // The first load's failure (a failed background refresh keeps what's on screen)
   const [loadError, setLoadError] = useState<unknown>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   // Bumped by every library refresh: the track search follows it
   const [libraryVersion, setLibraryVersion] = useState(0);
   // Tab and search come back with the back button, along with the scroll position
   const [activeTab, setActiveTab] = useHistoryState<LibraryTab>('tab', 'all');
   const [playlists, setPlaylists] = useState<SavedPlaylist[]>(cached?.playlists ?? []);
+  const [exclusions, setExclusions] = useState<Exclusions>(cached?.exclusions ?? NO_EXCLUSIONS);
+  // The exclusion a Restore click is lifting
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useHistoryState('search', '');
   const [trackMatches, setTrackMatches] = useState<TrackMatches>(
     () => trackMatchesCache.get(searchQuery.trim()) ?? NO_TRACK_MATCHES
@@ -137,6 +176,8 @@ export default function Library(): JSX.Element {
   const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
   const sort = useMemo(() => sortFromParams(searchParams), [searchParams]);
   const filtersActive = activeFilterCount(filters) > 0;
+  // The "excluded" filter: what's kept out of the library is listed instead
+  const excludedView = showsExcluded(filters);
   // The filter popover stays within the toolbar's width
   const toolbarRef = useRef<HTMLDivElement>(null);
   // Visitors are read-only: liking is a member+ action on the backend
@@ -185,13 +226,17 @@ export default function Library(): JSX.Element {
     state.lastStartedAt = Date.now();
 
     try {
-      const [artistsList, albumsList, statsResponse, playlistsResponse] = await Promise.all([
+      const [artistsList, albumsList, statsResponse, playlistsResponse, exclusionsResponse] = await Promise.all([
         getLibraryArtists(),
         getLibraryAlbums(),
         getLibraryStats(),
-        // The rest of the page doesn't depend on it
+        // The rest of the page doesn't depend on these two
         listPlaylists().catch((err) => {
           console.error('Failed to load playlists:', err);
+          return null;
+        }),
+        getExclusions().catch((err) => {
+          console.error('Failed to load exclusions:', err);
           return null;
         }),
       ]);
@@ -205,6 +250,7 @@ export default function Library(): JSX.Element {
         // A failed playlists fetch keeps the ones already shown (the
         // callback never changes, so state would be stale here)
         playlists: playlistsResponse ?? libraryCache.get(LIBRARY_CACHE_KEY)?.playlists ?? [],
+        exclusions: exclusionsResponse ?? libraryCache.get(LIBRARY_CACHE_KEY)?.exclusions ?? NO_EXCLUSIONS,
       };
       libraryCache.set(LIBRARY_CACHE_KEY, snapshot);
 
@@ -213,6 +259,7 @@ export default function Library(): JSX.Element {
       setAlbums(snapshot.albums);
       setStats(snapshot.stats);
       if (playlistsResponse) setPlaylists(playlistsResponse);
+      if (exclusionsResponse) setExclusions(exclusionsResponse);
       setLibraryVersion((version) => version + 1);
       setLoadError(null);
       state.loaded = true;
@@ -352,13 +399,31 @@ export default function Library(): JSX.Element {
     return sortAlbums(matching, sort, collator);
   }, [searchedAlbums, filters, filtersActive, sort, filterContext, collator]);
 
+  // The "excluded" view: what's kept out, by search and tab like the rest
+  const excludedArtists = useMemo(
+    () => !excludedView || activeTab === 'albums' || activeTab === 'playlists' ? [] : exclusions.artists.filter(
+      (artist) => artist.name.toLowerCase().includes(query)
+    ),
+    [excludedView, exclusions, activeTab, query]
+  );
+  const excludedAlbums = useMemo(
+    () => !excludedView || activeTab === 'artists' || activeTab === 'playlists' ? [] : exclusions.albums.filter(
+      (album) => album.title.toLowerCase().includes(query) || !!album.artist?.name?.toLowerCase().includes(query)
+    ),
+    [excludedView, exclusions, activeTab, query]
+  );
+  const resultCount = excludedView
+    ? excludedArtists.length + excludedAlbums.length
+    : filteredArtists.length + filteredAlbums.length;
+
   // Lyrics filters only when lyrics are fetched; "No genre found" only when genres are looked up
   const lyricsEnabled = !!features?.lyrics_enabled;
   const genresEnabled = !!features?.genres_enabled;
   const offeredFilters = useMemo<OfferedFilters>(() => ({
     groups: FILTER_GROUPS.filter((group) => group !== 'lyrics' || lyricsEnabled),
     genresLookedUp: genresEnabled,
-  }), [lyricsEnabled, genresEnabled]);
+    excludedCount: exclusions.artists.length + exclusions.albums.length,
+  }), [lyricsEnabled, genresEnabled, exclusions]);
   // For the filter panel's counts
   const libraryItems = useMemo<FilterItems>(() => ({ artists, albums }), [artists, albums]);
   const shownItems = useMemo<FilterItems>(
@@ -428,7 +493,39 @@ export default function Library(): JSX.Element {
   if (loading) return <LoadingState />;
   if (loadError) return <ErrorBanner title={t('common.error')}>{apiErrorMessage(loadError, t, t('common.error'))}</ErrorBanner>;
 
-  const hasContent = artists.length > 0 || albums.length > 0;
+  // Exclusions count: with everything deleted, the filter still lists them
+  const hasContent = artists.length > 0 || albums.length > 0 || exclusions.artists.length + exclusions.albums.length > 0;
+
+  // Charts, playlists and syncs may bring it back; nothing is downloaded here
+  const handleRestore = async (kind: 'artist' | 'album', id: string, name: string) => {
+    setRestoringId(id);
+    try {
+      await restoreExclusion(kind, id);
+      const next = kind === 'artist'
+        ? { ...exclusions, artists: exclusions.artists.filter((a) => a.id !== id) }
+        : { ...exclusions, albums: exclusions.albums.filter((a) => a.id !== id) };
+      setExclusions(next);
+      const snapshot = libraryCache.get(LIBRARY_CACHE_KEY);
+      if (snapshot) libraryCache.set(LIBRARY_CACHE_KEY, { ...snapshot, exclusions: next });
+      setNotice(t('library.excluded.restored', { name }));
+    } catch (err: any) {
+      console.error('Restore failed:', err);
+      setToast(apiErrorMessage(err, t, t('common.error')));
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  const formatDay = (iso: string) => new Date(iso).toLocaleDateString(formatLocale);
+  const restoreButton = (kind: 'artist' | 'album', id: string, name: string, compact = false) => canLike && (
+    <RestoreButton
+      compact={compact}
+      label={t('library.excluded.restore', { name })}
+      title={t('library.excluded.restoreTitle')}
+      loading={restoringId === id}
+      onClick={() => handleRestore(kind, id, name)}
+    />
+  );
 
   // Followed artists/albums/charts as a JSON file: shareable, and importable
   // by an admin on another instance (Admin panel > Backup).
@@ -446,8 +543,8 @@ export default function Library(): JSX.Element {
 
   const tabs = [
     { id: 'all' as const, label: t('common.all') },
-    { id: 'artists' as const, label: `${t('browse.sections.artists')} (${artists.length})` },
-    { id: 'albums' as const, label: `${t('browse.sections.albums')} (${albums.length})` },
+    { id: 'artists' as const, label: `${t('browse.sections.artists')} (${excludedView ? exclusions.artists.length : artists.length})` },
+    { id: 'albums' as const, label: `${t('browse.sections.albums')} (${excludedView ? exclusions.albums.length : albums.length})` },
     ...(playlists.length > 0 || activeTab === 'playlists'
       ? [{ id: 'playlists' as const, label: `${t('library.playlists')} (${playlists.length})` }]
       : []),
@@ -463,6 +560,7 @@ export default function Library(): JSX.Element {
   return (
     <div className="space-y-8 pb-12">
       {toast && <Toast message={toast} type="error" onClose={() => setToast(null)} />}
+      {notice && <Toast message={notice} type="success" onClose={() => setNotice(null)} />}
 
       <PageHeader
         icon="library"
@@ -523,7 +621,7 @@ export default function Library(): JSX.Element {
                       context={filterContext}
                       offered={offeredFilters}
                       collator={collator}
-                      resultCount={filteredArtists.length + filteredAlbums.length}
+                      resultCount={resultCount}
                       sort={sort}
                       onSortChange={setSort}
                       boundsRef={toolbarRef}
@@ -547,7 +645,7 @@ export default function Library(): JSX.Element {
                 filters={filters}
                 onToggle={onToggleFilter}
                 onClear={clearFilters}
-                resultCount={filteredArtists.length + filteredAlbums.length}
+                resultCount={resultCount}
               />
             )}
           </div>
@@ -559,7 +657,107 @@ export default function Library(): JSX.Element {
             />
           )}
 
-          {displayedArtists.length > 0 && (
+          {excludedView && activeTab !== 'playlists' && (
+            <>
+              <p className="text-sm text-muted-foreground max-w-3xl">{t('library.excluded.note')}</p>
+
+              {excludedArtists.length > 0 && (
+                <section>
+                  <SectionHeader>{t('library.excluded.artists')}</SectionHeader>
+                  {viewMode === 'grid' ? (
+                    <div className={MEDIA_GRID}>
+                      {excludedArtists.map((artist) => (
+                        <MediaCard
+                          key={artist.id}
+                          id={artist.id}
+                          title={artist.name}
+                          thumbnail={getImageUrl(artist.thumbnail)}
+                          type="artist"
+                          matchHint={t(artist.reason === 'deleted' ? 'library.excluded.artistDeleted' : 'library.excluded.artistUnfollowed', { date: formatDay(artist.excluded_at) })}
+                          to={artistPath(artist.id)}
+                          artworkAction={restoreButton('artist', artist.id, artist.name)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <MediaList kind="artist" showStatus={false}>
+                      {excludedArtists.map((artist) => (
+                        <MediaRow
+                          key={artist.id}
+                          id={artist.id}
+                          title={artist.name}
+                          thumbnail={getImageUrl(artist.thumbnail)}
+                          type="artist"
+                          matchHint={t(artist.reason === 'deleted' ? 'library.excluded.artistDeleted' : 'library.excluded.artistUnfollowed', { date: formatDay(artist.excluded_at) })}
+                          to={artistPath(artist.id)}
+                          titleAction={restoreButton('artist', artist.id, artist.name, true)}
+                        />
+                      ))}
+                    </MediaList>
+                  )}
+                </section>
+              )}
+
+              {excludedAlbums.length > 0 && (
+                <section>
+                  <SectionHeader>{t('library.excluded.albums')}</SectionHeader>
+                  {viewMode === 'grid' ? (
+                    <div className={MEDIA_GRID}>
+                      {excludedAlbums.map((album) => (
+                        <MediaCard
+                          key={album.id}
+                          id={album.id}
+                          title={album.title}
+                          subtitle={album.artist?.name ?? undefined}
+                          subtitleTo={album.artist?.id ? artistPath(album.artist.id) : undefined}
+                          thumbnail={getImageUrl(album.thumbnail)}
+                          type="album"
+                          albumType={album.type}
+                          year={album.year ?? undefined}
+                          matchHint={t('library.excluded.albumDeleted', { date: formatDay(album.excluded_at) })}
+                          to={albumPath(album.id)}
+                          artworkAction={restoreButton('album', album.id, album.title)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <MediaList kind="album" showStatus={false}>
+                      {excludedAlbums.map((album) => (
+                        <MediaRow
+                          key={album.id}
+                          id={album.id}
+                          title={album.title}
+                          subtitle={album.artist?.name ?? undefined}
+                          subtitleTo={album.artist?.id ? artistPath(album.artist.id) : undefined}
+                          thumbnail={getImageUrl(album.thumbnail)}
+                          type="album"
+                          albumType={album.type}
+                          year={album.year ?? undefined}
+                          matchHint={t('library.excluded.albumDeleted', { date: formatDay(album.excluded_at) })}
+                          to={albumPath(album.id)}
+                          titleAction={restoreButton('album', album.id, album.title, true)}
+                        />
+                      ))}
+                    </MediaList>
+                  )}
+                </section>
+              )}
+
+              {excludedArtists.length === 0 && excludedAlbums.length === 0 && (
+                searchQuery ? (
+                  <EmptyState icon="search" title={t('library.noMatches')}>
+                    <p>{t('library.noMatchesDescription', { query: searchQuery.trim() })}</p>
+                  </EmptyState>
+                ) : (
+                  <EmptyState icon="library" title={t('library.excluded.empty')}>
+                    <p>{t('library.excluded.emptyDescription')}</p>
+                  </EmptyState>
+                )
+              )}
+            </>
+          )}
+
+          {!excludedView && displayedArtists.length > 0 && (
             <section>
               <SectionHeader>{t('library.artists')}</SectionHeader>
               {viewMode === 'grid' ? (
@@ -627,7 +825,7 @@ export default function Library(): JSX.Element {
             </section>
           )}
 
-          {displayedAlbums.length > 0 && (
+          {!excludedView && displayedAlbums.length > 0 && (
             <section>
               <SectionHeader>{t('library.albums')}</SectionHeader>
               {viewMode === 'grid' ? (
@@ -677,7 +875,7 @@ export default function Library(): JSX.Element {
           )}
 
           {/* No results from search or filters; waits for the track lookup so it doesn't flash */}
-          {(searchQuery || filtersActive) && activeTab !== 'playlists' && trackMatchesReady && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
+          {!excludedView && (searchQuery || filtersActive) && activeTab !== 'playlists' && trackMatchesReady && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
             filtersActive ? (
               <EmptyState icon="filter" title={t('library.filters.noMatchesTitle')}>
                 <p>

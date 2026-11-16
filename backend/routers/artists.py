@@ -5,7 +5,7 @@ Artist endpoints.
 Endpoints :
 - GET /api/artists/{artist_id} - Get artist details
 - POST /api/artists/{artist_id}/follow - Follow artist (full mode)
-- DELETE /api/artists/{artist_id}/follow - Unfollow artist (back to light mode)
+- DELETE /api/artists/{artist_id}/follow - Unfollow artist (back to light mode, not followed again by charts or playlists)
 - PUT /api/artists/{artist_id}/like - Like an artist of the library (for your recommendations)
 - DELETE /api/artists/{artist_id}/like - Unlike it
 """
@@ -22,6 +22,7 @@ from ..jobs.priorities import Origin
 from ..models import Artist, User, UserChannel
 from ..services import albums as albums_svc
 from ..services import artists as artists_svc
+from ..services import exclusions as exclusions_svc
 from ..services import recommendations as recommendations_svc
 from ..services import subscriptions as subs_svc
 from ..ytm_service import adapter as ytm_adapter
@@ -46,17 +47,23 @@ def get_artist(
     "channel": a YouTube user's channel, not an artist (what an upload
     credits), with "namesakes": the artists of the same name, where the
     page points instead. "in_library": it has a row (one an admin can
-    delete), followed or not.
+    delete), followed or not. "excluded": "unfollowed" or "deleted" when
+    nothing automatic follows it (services/exclusions.py), and each
+    release's "excluded" the same for albums.
     """
     subscription = subs_svc.get_artist_subscription(session, artist_id)
     artist = session.get(Artist, artist_id)
     db_albums = albums_svc.list_albums_for_artist_from_db(session, artist_id) if artist else []
     liked = recommendations_svc.is_liked(session, current_user.id, artist_id)
+    exclusion = exclusions_svc.get(session, exclusions_svc.ARTIST, artist_id)
+    excluded = exclusion.reason if exclusion else None
 
     if subscription and subscription.mode == "full":
+        blocked = exclusions_svc.blocked_album_ids(session, {a["id"]: artist_id for a in db_albums})
         return {
             "source": "database",
             "subscription_mode": "full",
+            "excluded": excluded,
             "liked": liked,
             "channel": False,
             "namesakes": [],
@@ -67,7 +74,7 @@ def get_artist(
                 "thumbnail": artist.image_local,
                 "genres": artist.genres or [],
             },
-            "albums": [{**album, "in_database": True} for album in db_albums],
+            "albums": [{**album, "in_database": True, "excluded": album["id"] in blocked} for album in db_albums],
         }
 
     try:
@@ -81,6 +88,9 @@ def get_artist(
     session.commit()
 
     known = {album["id"]: album for album in db_albums}
+    blocked = exclusions_svc.blocked_album_ids(
+        session, {r["id"]: artist_id for r in artist_data["albums"] + artist_data["singles"]}
+    )
     albums = []
     for release in artist_data["albums"] + artist_data["singles"]:
         album = known.get(release["id"])
@@ -93,6 +103,7 @@ def get_artist(
             "in_database": album is not None,
             "mode": album["mode"] if album else None,
             "download_status": album["download_status"] if album else None,
+            "excluded": release["id"] in blocked,
         })
     namesakes = []
     if artist_data["channel"] and artist_data["name"]:
@@ -103,6 +114,7 @@ def get_artist(
     return {
         "source": "ytmusic",
         "subscription_mode": subscription.mode if subscription else None,
+        "excluded": excluded,
         "liked": liked,
         "channel": artist_data["channel"],
         "namesakes": namesakes,
@@ -130,12 +142,15 @@ def follow_artist(
     subscription, and like it (no longer "not interested" either):
     following is a choice of yours, unlike the follows of charts and
     playlists. `name` is the artist's name as the page shows it, for its
-    row until the sync job fetches the artist and its releases. A YouTube
-    user's channel isn't an artist: 400 not_an_artist.
+    row until the sync job fetches the artist and its releases. Lifts its
+    exclusion, if it was unfollowed or deleted (services/exclusions.py). A
+    YouTube user's channel isn't an artist: 400 not_an_artist.
     """
     if session.get(UserChannel, artist_id) is not None:
         raise HTTPException(status_code=400, detail="not_an_artist")
-    followed = subs_svc.follow_artist(session, artist_id, name, user_id=current_user.id, origin=Origin.USER)
+    followed = subs_svc.follow_artist(
+        session, artist_id, name, user_id=current_user.id, origin=Origin.USER, explicit=True,
+    )
     session.flush()  # autoflush=False: the like checks the new subscription
     recommendations_svc.like(session, current_user.id, artist_id)
     recommendations_svc.restore(session, current_user.id, artist_id)
@@ -153,7 +168,9 @@ def unfollow_artist(
 ) -> Dict[str, Any]:
     """
     Unfollow an artist: back to a light subscription, its albums to metadata
-    mode and their pending downloads cancelled. Files and rows stay.
+    mode and their pending downloads cancelled. Files and rows stay. It's
+    excluded ("unfollowed"), so a chart or a playlist doesn't follow it
+    again; Follow lifts that (services/exclusions.py).
     """
     subscription = subs_svc.get_artist_subscription(session, artist_id)
     if not subscription:
@@ -161,6 +178,8 @@ def unfollow_artist(
 
     downgraded = subs_svc.downgrade_all_albums_to_metadata(session, artist_id)
     subscription.mode = "light"
+    artist = session.get(Artist, artist_id)
+    exclusions_svc.exclude_artist(session, artist_id, artist.name if artist else None, exclusions_svc.UNFOLLOWED)
     session.commit()
 
     logger.info("Artist %s unfollowed: light mode, %s albums back to metadata", artist_id, downgraded)

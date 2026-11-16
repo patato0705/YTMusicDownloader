@@ -47,6 +47,7 @@ from ..models import Album, Job, Playlist, PlaylistEntry, Track, VideoSong
 from ..time_utils import ensure_timezone_aware, now_utc
 from ..ytm_service import adapter as ytm_adapter
 from ..ytm_service import normalizers as N
+from . import exclusions as exclusions_svc
 from . import subscriptions as subs_svc
 
 logger = logging.getLogger("services.playlists")
@@ -485,12 +486,19 @@ def refresh_all(session: Session) -> None:
 # ============================================================================
 
 def _download_albums(session: Session, entries: List[Dict[str, Any]], origin: Origin, user_id: Optional[int]) -> Tuple[int, int]:
-    """Start the download of each entry's album not downloaded yet. Returns (started, failed)."""
+    """
+    Start the download of each entry's album not downloaded yet, but those
+    excluded from the library, or by a deleted artist (services/exclusions.py).
+    Returns (started, failed).
+    """
     started = failed = 0
     seen = set()
+    blocked = exclusions_svc.blocked_album_ids(
+        session, {e["album_id"]: e["artist_id"] for e in entries if e["album_id"]}
+    )
     for e in entries:
         album_id = e["album_id"]
-        if not album_id or album_id in seen:
+        if not album_id or album_id in seen or album_id in blocked:
             continue
         seen.add(album_id)
         album = session.get(Album, album_id)
@@ -511,8 +519,9 @@ def _download_albums(session: Session, entries: List[Dict[str, Any]], origin: Or
 def _follow_artists(session: Session, entries: List[Dict[str, Any]], origin: Origin, user_id: Optional[int]) -> int:
     """
     Follow (full) each entry's main artist not followed yet, then sync it,
-    which downloads every release -- like the Follow button. No network
-    here: the sync fetches the artist. Returns how many were followed.
+    which downloads every release -- like the Follow button, but an
+    unfollowed or deleted artist isn't followed again (follow_artist). No
+    network here: the sync fetches the artist. Returns how many were followed.
     """
     followed = 0
     seen = set()
@@ -725,52 +734,6 @@ def remove_playlist(session: Session, playlist: Playlist) -> None:
     _delete_m3u(playlist)
     session.delete(playlist)
     session.commit()
-
-
-# ============================================================================
-# DELETIONS
-# ============================================================================
-
-def playlists_bringing_back(
-    session: Session,
-    *,
-    album_ids: Iterable[str] = (),
-    artist_ids: Iterable[str] = (),
-) -> List[Playlist]:
-    """
-    The followed playlists whose next scan would bring back what's being
-    deleted from the library: in albums mode, one listing a song of these
-    albums; in artists mode, one listing a song by these artists.
-    """
-    album_ids = {a for a in album_ids if a}
-    artist_ids = {a for a in artist_ids if a}
-    if not album_ids and not artist_ids:
-        return []
-    matches = []
-    if album_ids:
-        matches.append((Playlist.mode == "albums") & PlaylistEntry.album_id.in_(album_ids))
-    if artist_ids:
-        matches.append((Playlist.mode == "artists") & PlaylistEntry.artist_id.in_(artist_ids))
-    return list(session.execute(
-        select(Playlist)
-        .join(PlaylistEntry, PlaylistEntry.playlist_id == Playlist.id)
-        .where(Playlist.followed.is_(True), or_(*matches))
-        .distinct()
-        .order_by(func.lower(Playlist.title))
-    ).scalars())
-
-
-def unfollow_for_deletion(session: Session, playlists: Iterable[Playlist]) -> List[str]:
-    """
-    Unfollow playlists that would bring a deleted album or artist back: they
-    become one-time playlists (their M3U stays). Returns their titles. No commit.
-    """
-    titles = []
-    for playlist in playlists:
-        playlist.followed = False
-        titles.append(playlist.title)
-        logger.info("Unfollowed playlist %s: it would bring back what was deleted", playlist.id)
-    return titles
 
 
 # ============================================================================

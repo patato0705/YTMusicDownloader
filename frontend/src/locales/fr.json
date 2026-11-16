@@ -197,7 +197,7 @@
     "unfollow": "Ne plus suivre",
     "followed": "Suivi",
     "unfollowTitle": "Ne plus suivre l'artiste",
-    "unfollowMessage": "Les nouveaux albums ne seront plus automatiquement suivis. Le contenu déjà téléchargé ne sera pas affecté.",
+    "unfollowMessage": "Ses nouvelles sorties ne seront plus téléchargées, et aucun chart ni playlist ne le suivra à nouveau (le suivre à la main, si). Ce qui est déjà téléchargé reste.",
     "like": "J'aime",
     "unlike": "Je n'aime plus",
     "likeError": "Impossible de mettre à jour vos artistes aimés",
@@ -208,7 +208,7 @@
     "notFound": "Artiste introuvable",
     "delete": "Supprimer l'artiste",
     "deleteTitle": "Supprimer l'artiste",
-    "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet artiste et tous les albums, titres et fichiers associés ? Cette action est irréversible.",
+    "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet artiste et tous les albums, titres et fichiers associés ? Cette action est irréversible. Les charts et playlists ne le ramèneront pas ; le suivre à nouveau, si.",
     "deleted": "Artiste supprimé avec succès",
     "channelTitle": "Pas une page d'artiste",
     "channelNotice": "C'est une chaîne YouTube : une mise en ligne crédite la chaîne qui l'a publiée. Elle n'a aucune sortie à suivre.",
@@ -227,7 +227,7 @@
     "downloadFailed": "Échec du téléchargement",
     "deleteAlbum": "Supprimer l'album",
     "deleteTitle": "Supprimer l'album",
-    "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet album et tous les titres et fichiers associés ? Cette action est irréversible.",
+    "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet album et tous les titres et fichiers associés ? Cette action est irréversible. Son artiste reste suivi, mais aucune synchronisation, chart ou playlist ne retéléchargera cet album ; le télécharger à la main, si.",
     "deleted": "Album supprimé avec succès",
     "following": "Dans la bibliothèque",
     "trackList": "Liste des titres",
@@ -336,12 +336,6 @@
     },
     "playlists": "Playlists",
     "noPlaylists": "Aucune playlist ne correspond.",
-    "deletion": {
-      "artistUnfollowed": "{name} ne sera plus suivi, pour que cet album ne soit pas retéléchargé : ses nouvelles sorties ne seront plus téléchargées.",
-      "playlistsUnfollowed": "Ces playlists suivies ne seront plus suivies, pour qu'elles ne le retéléchargent pas : {titles}. Elles restent dans la bibliothèque, comme playlists ajoutées une fois.",
-      "playlistsUnfollowed_one": "La playlist suivie {titles} ne sera plus suivie, pour qu'elle ne le retélécharge pas. Elle reste dans la bibliothèque, comme playlist ajoutée une fois.",
-      "quoted": "« {title} »"
-    },
     "filters": {
       "button": "Filtres",
       "buttonActive": "Filtres, {count} choisis",
@@ -370,7 +364,8 @@
         "genre": "Genre",
         "source": "Ajouté par",
         "follow": "Suivi de l'artiste",
-        "liked": "J'aime"
+        "liked": "J'aime",
+        "excluded": "Exclus"
       },
       "options": {
         "downloads": {
@@ -406,6 +401,9 @@
         },
         "liked": {
           "liked": "Artistes aimés"
+        },
+        "excluded": {
+          "excluded": "Supprimés ou plus suivis"
         }
       },
       "hints": {
@@ -449,6 +447,19 @@
           "desc": "Plus complets d'abord"
         }
       }
+    },
+    "excluded": {
+      "artistDeleted": "Supprimé le {date}",
+      "artistUnfollowed": "Plus suivi depuis le {date}",
+      "albumDeleted": "Supprimé le {date}",
+      "restore": "Rétablir {name}",
+      "restoreTitle": "Rétablir : les charts, playlists et synchronisations peuvent le ramener. Rien n'est téléchargé tout de suite.",
+      "restored": "{name} rétabli : les charts, playlists et synchronisations peuvent le ramener",
+      "note": "Rien d'automatique ne les ramène : ni les charts, ni les playlists, ni les synchronisations d'artistes, ni les sauvegardes. Suivre ou télécharger l'un d'eux à la main le rétablit, tout comme son bouton Rétablir.",
+      "empty": "Rien n'est exclu de la bibliothèque",
+      "emptyDescription": "Les artistes et albums supprimés, et les artistes plus suivis, apparaissent ici.",
+      "artists": "Artistes exclus",
+      "albums": "Albums exclus"
     }
   },
   "charts": {
@@ -793,7 +804,10 @@
         "dismissedAdded": "Recommandations masquées à ajouter",
         "settingsApplied": "Paramètres à appliquer",
         "settingsIgnored": "Paramètres ignorés (inconnus)",
-        "albumsToImport": "Albums à récupérer (titres ou pochette manquants)"
+        "albumsToImport": "Albums à récupérer (titres ou pochette manquants)",
+        "exclusionsAdded": "Exclusions ajoutées",
+        "artistsExcluded": "Artistes laissés de côté (exclus)",
+        "albumsExcluded": "Albums laissés de côté (exclus)"
       },
       "warnings": {
         "charts_disabled": "Les charts sont désactivés sur cette instance ; les abonnements ont été ignorés.",
@@ -890,7 +904,10 @@
       "lastError": "Échec de la dernière analyse : {error}",
       "syncNow": "Synchroniser",
       "syncQueued": "Analyse programmée"
-    }
+    },
+    "excludedSkipped": "{count} artistes ou albums exclus ont été laissés de côté.",
+    "excludedSkipped_one": "1 artiste ou album exclu a été laissé de côté.",
+    "excludedNote": "Exclu : supprimé ou plus suivi dans la bibliothèque. Les boutons ci-dessus le laissent de côté ; son propre bouton le ramène."
   },
   "onboarding": {
     "label": "Visite rapide",
@@ -968,5 +985,11 @@
     "details": "Détails de l'erreur",
     "reload": "Recharger la page",
     "home": "Retour à l'accueil"
+  },
+  "exclusion": {
+    "badge": "Exclu",
+    "artistDeleted": "Supprimé de la bibliothèque : aucun chart ni playlist ne ramène cet artiste. Le suivre, si.",
+    "artistUnfollowed": "Plus suivi : aucun chart ni playlist ne suit à nouveau cet artiste. Le suivre, si.",
+    "album": "Supprimé de la bibliothèque : aucune synchronisation, chart ni playlist ne le retélécharge. Le télécharger, si."
   }
 }

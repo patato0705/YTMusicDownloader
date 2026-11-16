@@ -16,6 +16,7 @@ from ..jobs.priorities import Origin
 from ..models import ArtistSubscription, ChartSubscription, Job
 from ..time_utils import now_utc
 from ..ytm_service import adapter as ytm_adapter
+from . import exclusions as exclusions_svc
 
 logger = logging.getLogger("services.charts")
 
@@ -190,20 +191,28 @@ def sync_chart(session: Session, country_code: str) -> Dict[str, Any]:
 
     top = [a for a in artists[:subscription.top_n_artists] if a.get("id")]
     followed_ids = get_followed_artist_ids(session)
-    to_follow = [{"id": a["id"], "name": a.get("name")} for a in top if a["id"] not in followed_ids]
+    # Unfollowed or deleted from the library: not followed again
+    # (services/exclusions.py)
+    excluded_ids = exclusions_svc.excluded_artist_ids(session)
+    to_follow = [
+        {"id": a["id"], "name": a.get("name")}
+        for a in top if a["id"] not in followed_ids and a["id"] not in excluded_ids
+    ]
+    excluded = sum(1 for a in top if a["id"] in excluded_ids and a["id"] not in followed_ids)
 
     subscription.last_synced_at = now_utc()
     subscription.last_error = None
     session.commit()
 
     logger.info(
-        "Chart %s: %s new artists to follow, %s already followed",
-        country_code, len(to_follow), len(top) - len(to_follow),
+        "Chart %s: %s new artists to follow, %s already followed, %s excluded",
+        country_code, len(to_follow), len(top) - len(to_follow) - excluded, excluded,
     )
     return {
         "country_code": country_code,
         "total_artists": len(artists),
         "top_n": subscription.top_n_artists,
         "artists_to_follow": to_follow,
-        "already_followed": len(top) - len(to_follow),
+        "already_followed": len(top) - len(to_follow) - excluded,
+        "excluded": excluded,
     }

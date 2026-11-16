@@ -133,6 +133,15 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
       if (r.library.playlists_added) {
         rows.push({ label: t('admin.backup.summary.playlistsAdded'), value: r.library.playlists_added });
       }
+      if (r.library.exclusions_added) {
+        rows.push({ label: t('admin.backup.summary.exclusionsAdded'), value: r.library.exclusions_added });
+      }
+      if (r.library.artists_excluded) {
+        rows.push({ label: t('admin.backup.summary.artistsExcluded'), value: r.library.artists_excluded });
+      }
+      if (r.library.albums_excluded) {
+        rows.push({ label: t('admin.backup.summary.albumsExcluded'), value: r.library.albums_excluded });
+      }
     }
     if (r.catalog) {
       rows.push(
