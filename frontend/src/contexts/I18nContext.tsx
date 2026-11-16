@@ -61,23 +61,31 @@ function initialLocale(): Locale {
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [locale, setLocale] = useState<Locale>(initialLocale);
-  const [translations, setTranslations] = useState<Translations>({});
+  // null until the first locale has loaded; a later switch keeps the old
+  // strings on screen until the new ones arrive
+  const [translations, setTranslations] = useState<Translations | null>(null);
   const formatLocale = useMemo(() => regionalLocale(locale), [locale]);
   const pluralRules = useMemo(() => new Intl.PluralRules(locale), [locale]);
 
   // Load translations when locale changes
   useEffect(() => {
-    loadTranslations(locale).then(setTranslations);
+    let current = true;
+    loadTranslations(locale).then(loaded => {
+      // A quick second switch must not be overwritten by the first's late load
+      if (current) setTranslations(loaded);
+    });
     writeStorage('locale', locale);
     document.documentElement.lang = locale;
+    return () => { current = false; };
   }, [locale]);
 
   const tOr = useCallback((key: string, fallback: string, params?: Params): string => {
     const count = params?.count;
+    const strings = translations ?? {};
     const singular = typeof count === 'number' && pluralRules.select(count) === 'one'
-      ? lookup(translations, `${key}_one`)
+      ? lookup(strings, `${key}_one`)
       : undefined;
-    const value = singular ?? lookup(translations, key);
+    const value = singular ?? lookup(strings, key);
     if (value === undefined) return fallback;
     if (!params) return value;
     return value.replace(/\{(\w+)\}/g, (match, param) => (param in params ? String(params[param]) : match));
@@ -91,7 +99,13 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [locale, formatLocale, t, tOr],
   );
 
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+  // Nothing renders before the first strings load, or the app would race the
+  // translation chunk and sometimes paint raw keys ("common.loading")
+  return (
+    <I18nContext.Provider value={value}>
+      {translations && children}
+    </I18nContext.Provider>
+  );
 };
 
 export const useI18n = () => {
