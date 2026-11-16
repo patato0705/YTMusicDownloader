@@ -16,7 +16,9 @@ from ..jobs.jobqueue import cancel_download_jobs, enqueue_job, pending_jobs
 from ..jobs.priorities import Origin, promote
 from ..models import Artist, Album, ArtistSubscription, Exclusion, Track, UserChannel
 from ..time_utils import now_utc
+from ..ytm_service import adapter as ytm_adapter
 from . import exclusions as exclusions_svc
+from . import reissues as reissues_svc
 from . import tracks as tracks_svc
 
 logger = logging.getLogger("services.subscriptions")
@@ -322,7 +324,9 @@ def start_album_download(
     (exclusions.blocked_album_ids), as only they may know its artist.
 
     An album not in the DB yet is fetched here (raises
-    ytm_adapter.YTMusicUnavailable when it can't be), so it shows up with
+    ytm_adapter.YTMusicUnavailable when it can't be), unless it's the
+    reissue of one in the library, which moves to it (services/reissues.py),
+    so it shows up with
     its real title, artist and tracks right away, and its downloads are
     queued straight from that fetch. One already in the DB gets an
     import_album instead, which fetches the current tracklist first: the
@@ -343,12 +347,24 @@ def start_album_download(
 
     album = session.get(Album, album_id)
     fetched = album is None
+    adopted = False
     if fetched:
         logger.info("Album %s not in DB, fetching from YTMusic", album_id)
-        albums_svc.fetch_and_upsert_album(session, browse_id=album_id)
-        session.flush()  # autoflush=False: get can't see the new row before this
-        album = session.get(Album, album_id)
-    elif album.mode == "download":
+        album_data = ytm_adapter.get_album(browse_id=album_id)
+        # A reissue of an album in the library takes its place, files and all
+        replaced = reissues_svc.replaced_by(session, album_data)
+        if replaced is not None:
+            album = reissues_svc.adopt(session, replaced, album_id, album_data)
+            fetched, adopted = False, True
+        else:
+            albums_svc.fetch_and_upsert_album(session, browse_id=album_id, album_data=album_data)
+            session.flush()  # autoflush=False: get can't see the new row before this
+            album = session.get(Album, album_id)
+    if not fetched and album.mode == "download":
+        if adopted:
+            # Its import brings the moved album's tracklist up to date
+            queue_album_imports(session, [album_id], artist_id=album.artist_id, user_id=user_id, origin=origin)
+            session.commit()
         return {"album": album, "started": False, "artist_subscription_created": False}
 
     album.mode = "download"

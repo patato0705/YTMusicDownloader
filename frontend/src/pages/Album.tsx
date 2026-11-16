@@ -38,7 +38,7 @@ export default function Album(): JSX.Element {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [lyricsTrack, setLyricsTrack] = useState<Track | null>(null);
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, formatLocale } = useI18n();
   const { user } = useAuth();
   const { revision, refresh: refreshJobs, downloadsPausedUntil } = useJobActivity();
   // The queue revision the album on screen is up to date with
@@ -284,7 +284,8 @@ export default function Album(): JSX.Element {
                   </Button>
                 )}
 
-                {canModify && isFollowing && showTrackState && (retryableCount > 0 || page.needs_import) && (
+                {/* Nothing to retry on an album YouTube Music no longer serves */}
+                {canModify && isFollowing && showTrackState && !album.removed_at && (retryableCount > 0 || page.needs_import) && (
                   <Button onClick={handleRetry} variant="secondary" size="lg" isLoading={retryLoading}>
                     <Icon name="refresh" className="w-5 h-5 mr-2" />
                     {t('album.retry')}
@@ -298,6 +299,12 @@ export default function Album(): JSX.Element {
                   </Button>
                 )}
               </div>
+              {album.removed_at && (
+                <ExclusionNote
+                  text={t('album.removedNote', { date: new Date(album.removed_at).toLocaleDateString(formatLocale) })}
+                  className="mt-4 max-w-xl mx-auto md:mx-0 text-left"
+                />
+              )}
               {page.excluded && !isFollowing && (
                 <ExclusionNote text={t('exclusion.album')} className="mt-4 max-w-xl mx-auto md:mx-0 text-left" />
               )}

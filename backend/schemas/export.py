@@ -140,6 +140,8 @@ class CatalogAlbum(BaseModel):
     year: Optional[str] = Field(None, max_length=16)
     image_local: Optional[str] = Field(None, max_length=2048)
     cover_id: Optional[str] = Field(None, max_length=1024)
+    on_artist_page: bool = False
+    removed_at: Optional[datetime] = None
     mode: Literal["metadata", "download"] = "metadata"
     download_status: Optional[str] = Field(None, max_length=32)
 

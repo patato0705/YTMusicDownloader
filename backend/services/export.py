@@ -235,6 +235,8 @@ def build_catalog_section(session: Session) -> Dict[str, Any]:
                 "year": al.year,
                 "image_local": relativize_path(al.image_local),
                 "cover_id": al.cover_id,
+                "on_artist_page": bool(al.on_artist_page),
+                "removed_at": al.removed_at.isoformat() if al.removed_at else None,
                 "mode": al.mode,
                 "download_status": al.download_status,
             }
@@ -480,6 +482,9 @@ def _import_catalog(session: Session, doc: ExportDocument, user_id: Optional[int
         # told apart at the next sync (albums_svc.ensure_album_cover)
         if cover_on_disk:
             obj.cover_id = al.cover_id
+        # What tells a reissue or a removal at the next sync (services/reissues.py)
+        obj.on_artist_page = al.on_artist_page
+        obj.removed_at = al.removed_at
         if al.folder:
             folders_svc.restore_folder(session, obj, al.folder)
         download_albums[al.id] = artist_id

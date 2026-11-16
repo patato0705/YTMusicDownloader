@@ -121,7 +121,7 @@ def queue_track_downloads(
     the status have to land in the same transaction.
 
     Tracks on disk, being downloaded, already waiting on a job, or no
-    longer on YouTube Music (removed_at) are skipped, so this is safe to
+    longer on YouTube Music (theirs or their album's removed_at) are skipped, so this is safe to
     call on a whole album any number of times.
     A waiting job is moved up to `origin`'s class if that's higher (see
     jobs/priorities.py): a user downloading an album a chart already queued
@@ -143,6 +143,8 @@ def queue_track_downloads(
     for track in tracks:
         if track.status in _NOT_QUEUEABLE or track.id in active or track.removed_at is not None:
             continue
+        if track.album is not None and track.album.removed_at is not None:
+            continue  # YouTube Music no longer serves it
         enqueue_job(
             session,
             job_type="download_track",

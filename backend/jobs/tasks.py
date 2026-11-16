@@ -48,6 +48,7 @@ from ..services import exclusions as exclusions_svc
 from ..services import folders as folders_svc
 from ..services import genres as genres_svc
 from ..services import playlists as playlists_svc
+from ..services import reissues as reissues_svc
 from ..services import subscriptions as subs_svc
 from ..services import tracks as tracks_svc
 from ..text_utils import fold
@@ -933,6 +934,15 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
     # as if it had already existed when this sync looked.
     album_mode = "download" if sync_mode == "full" else "metadata"
     releases = albums_svc.list_artist_releases(artist_data)
+    # Albums no longer listed: reissued under a new id (moved to it, so not
+    # new below) or gone from YouTube Music (services/reissues.py)
+    listing = {"replaced": 0, "removed": 0}
+    try:
+        listing = reissues_svc.follow_listing(session, artist_id, releases)
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception("Failed to follow the releases listed for artist %s", artist_id)
     new_releases = [r for r in releases if session.get(Album, r["id"]) is None]
     covers_changed = _follow_cover_changes(session, [r for r in releases if r not in new_releases])
     # Deleted from the library before (its artist deleted with it, since
@@ -950,6 +960,7 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
                 album_type=release["type"],
             )
             album.mode = "metadata" if release["id"] in excluded else album_mode
+            album.on_artist_page = True
             albums_svc.ensure_album_cover(session, album, thumbnails=release["thumbnails"])
             session.commit()
             albums_created += 1
@@ -995,8 +1006,10 @@ def sync_artist(session: Session, artist_id: str, *, origin: str) -> Dict[str, A
     session.commit()
 
     logger.info(
-        "Synced artist %s (%s mode): %s new releases, %s albums created, %s imports queued, %s covers changed",
+        "Synced artist %s (%s mode): %s new releases, %s albums created, %s imports queued, %s covers changed, "
+        "%s albums reissued, %s removed from YouTube Music",
         artist_id, sync_mode, len(new_releases), albums_created, imports_queued, covers_changed,
+        listing["replaced"], listing["removed"],
     )
     return {
         "ok": True,

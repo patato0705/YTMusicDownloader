@@ -20,6 +20,8 @@ export interface ArtistRelease {
   download_status: AlbumDownloadStatus;
   /** Deleted from the library (itself or with its artist): nothing automatic downloads it */
   excluded: boolean;
+  /** No longer on YouTube Music (an album of the library): its files stay */
+  removed_at?: string | null;
 }
 
 export interface ArtistPage {

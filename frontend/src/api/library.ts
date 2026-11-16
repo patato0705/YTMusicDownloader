@@ -34,6 +34,8 @@ export interface LibraryArtist {
 export interface LibraryAlbum {
   id: string;
   title: string;
+  /** When YouTube Music stopped serving it: its files stay, nothing more is downloaded */
+  removed_at: string | null;
   artist: { id: string; name: string } | null;
   year: string | null;
   type: string;

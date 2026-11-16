@@ -84,6 +84,7 @@ def get_album_from_db(session: Session, album_id: str) -> Optional[Dict[str, Any
         "thumbnail": album.image_local,
         "genres": album.genres or [],
         "mode": album.mode,
+        "removed_at": album.removed_at.isoformat() if album.removed_at else None,
         "tracks": [t.to_dict() for t in tracks],
     }
 
@@ -105,6 +106,7 @@ def list_albums_for_artist_from_db(session: Session, artist_id: str) -> List[Dic
             "type": album.type or "Album",
             "mode": album.mode,
             "download_status": album.download_status,
+            "removed_at": album.removed_at.isoformat() if album.removed_at else None,
         }
         for album in albums
     ]
@@ -181,10 +183,12 @@ def fetch_and_upsert_album(
     session: Session,
     browse_id: str,
     artist_id: Optional[str] = None,
+    album_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Fetch an album from YTMusic and store it with its tracks (and its cover,
-    if it has none yet). Raises ytm_adapter.YTMusicUnavailable when it can't
+    Fetch an album from YTMusic (or take `album_data`, adapter.get_album's,
+    fetched already) and store it with its tracks (and its cover, if it has
+    none yet). Raises ytm_adapter.YTMusicUnavailable when it can't
     be read, ArtistDeleted when `artist_id` was deleted from the library
     while it was being fetched. Does not commit.
 
@@ -206,7 +210,8 @@ def fetch_and_upsert_album(
     from .artists import upsert_artist
     from .tracks import upsert_track
 
-    album_data = ytm_adapter.get_album(browse_id=browse_id)
+    if album_data is None:
+        album_data = ytm_adapter.get_album(browse_id=browse_id)
     album_id = album_data["id"]
     tracks = album_data["tracks"]
 
@@ -241,6 +246,10 @@ def fetch_and_upsert_album(
     )
     album.last_synced_at = now_utc()
     album.last_error = None
+    if album.removed_at is not None:
+        # Its page opens again (services/reissues.py)
+        logger.info("Album %s is back on YouTube Music", album_id)
+        album.removed_at = None
     cover_changed = False
     try:
         cover_changed = ensure_album_cover(session, album, album_data["thumbnails"])

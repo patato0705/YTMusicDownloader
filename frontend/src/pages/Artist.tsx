@@ -193,7 +193,7 @@ export default function Artist(): JSX.Element {
             year={album.year ?? undefined}
             mediaStatus={getAlbumStatus(album, downloadsPausedUntil !== null)}
             // Deleted from the library: its page says what that means
-            matchHint={album.excluded ? t('exclusion.badge') : undefined}
+            matchHint={album.removed_at ? t('album.removedBadge') : album.excluded ? t('exclusion.badge') : undefined}
             to={albumPath(album.id)}
           />
         ))}

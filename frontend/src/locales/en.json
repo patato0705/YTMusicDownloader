@@ -260,7 +260,9 @@
     "notDownloadedNote": "Not downloaded: lyrics and download status appear once the album is downloaded.",
     "noTracks": "No Tracks",
     "noTracksDescription": "This album doesn't have any tracks available yet.",
-    "notFound": "Album not found"
+    "notFound": "Album not found",
+    "removedBadge": "Removed from YouTube Music",
+    "removedNote": "No longer on YouTube Music since {date}, and nothing replaced it. Its files stay in the library; nothing more is downloaded for it."
   },
   "lyrics": {
     "open": "View or edit lyrics",

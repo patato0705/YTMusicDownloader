@@ -464,7 +464,11 @@ export default function Library(): JSX.Element {
   } = useProgressiveList(filteredAlbums, PAGE_SIZE, listResetKey, 'albums');
 
   const albumHint = (album: LibraryAlbum): string | undefined =>
-    joinHints(albumMatchHint(album.id), filtersActive ? filterHint(albumHints(album, filters)) : undefined);
+    joinHints(
+      album.removed_at ? t('album.removedBadge') : undefined,
+      albumMatchHint(album.id),
+      filtersActive ? filterHint(albumHints(album, filters)) : undefined,
+    );
   const artistHint = (artist: LibraryArtist): string | undefined =>
     joinHints(artistMatchHint(artist.id), filtersActive ? filterHint(artistHints(artist, filters, filterContext)) : undefined);
 

@@ -76,6 +76,14 @@ class Album(Base):
     # The picture image_local holds (normalizers.image_id): a cover YouTube
     # Music changed is told by it (albums.ensure_album_cover)
     cover_id: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    # Whether its artist's page listed it at its last sync. One that was and
+    # no longer is was replaced (a reissue under a new id) or removed from
+    # YouTube Music, or neither (services/reissues.py)
+    on_artist_page: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # When YouTube Music stopped serving it, with nothing in its place. Its
+    # files stay; nothing more is downloaded for it. None again once its page
+    # opens (a refresh, albums.fetch_and_upsert_album)
+    removed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Up to 3 genres (services/genres.py): the album's own, else its artist's
     genres: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     genres_checked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

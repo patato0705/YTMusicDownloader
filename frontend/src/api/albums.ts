@@ -15,6 +15,8 @@ export interface AlbumDetails {
   /** Cover on disk, or YouTube Music's for an album not in the library */
   thumbnail: string | null;
   genres: string[];
+  /** When YouTube Music stopped serving it, nothing in its place (albums in the library only): its files stay */
+  removed_at?: string | null;
 }
 
 export interface AlbumPage {

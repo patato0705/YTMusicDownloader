@@ -260,7 +260,9 @@
     "notDownloadedNote": "Non téléchargé : les paroles et l'état du téléchargement apparaissent une fois l'album téléchargé.",
     "noTracks": "Aucun titre",
     "noTracksDescription": "Cet album n'a pas encore de titres disponibles.",
-    "notFound": "Album introuvable"
+    "notFound": "Album introuvable",
+    "removedBadge": "Retiré de YouTube Music",
+    "removedNote": "N'est plus sur YouTube Music depuis le {date}, et rien ne l'a remplacé. Ses fichiers restent dans la bibliothèque ; rien de plus n'est téléchargé pour lui."
   },
   "lyrics": {
     "open": "Voir ou modifier les paroles",

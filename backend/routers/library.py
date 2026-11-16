@@ -307,6 +307,8 @@ def list_followed_albums(
                 # Looked up and none found, as opposed to not looked up yet
                 "genres_checked": album.genres_checked_at is not None,
                 "from_playlist": bool(in_playlist),
+                # No longer on YouTube Music (services/reissues.py)
+                "removed_at": album.removed_at.isoformat() if album.removed_at else None,
                 "download_progress": download_progress,
                 "created_at": album.created_at.isoformat() if album.created_at else None,
             })
