@@ -33,7 +33,7 @@ DEFAULT_SETTINGS = {
         # A year at most, here and on the other schedules: a far larger value
         # overflows the scheduler's date math on every tick
         "max": 8760,
-        "description": "When followed artists are checked for new releases",
+        "description": "When followed artists are checked for new releases, and the albums in the library for changes",
     },
     "scheduler.artist_sync_last_run": {
         "value": "",

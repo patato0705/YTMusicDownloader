@@ -730,7 +730,8 @@ def delete_album_from_library(
 
         artist_downgraded = False
 
-        # 4. Downgrade artist subscription to light mode (stops periodic sync)
+        # 4. Downgrade artist subscription to light mode (its new releases
+        # are no longer downloaded)
         if artist_id:
             artist_sub = subs_svc.get_artist_subscription(db, artist_id)
             if artist_sub and artist_sub.mode == "full":

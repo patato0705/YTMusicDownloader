@@ -3,8 +3,9 @@
 Scheduler for periodic tasks, run as its own process (deploy/supervisord.conf).
 
 Responsibilities:
-1. Sync followed artists for new releases (`scheduler.artist_sync`), and
-   queue the genre lookups that are due (services/genres.py) along with them
+1. Sync followed artists for new releases, and the artists of albums in
+   the library for changes to them (`scheduler.artist_sync`), and queue
+   the genre lookups that are due (services/genres.py) along with them
 2. Re-sync followed charts (`scheduler.chart_sync`) and rescan followed
    playlists (`scheduler.playlist_sync`)
 3. Retry/upgrade missing lyrics (`scheduler.lyrics_retry`)
@@ -189,8 +190,9 @@ class Scheduler:
 
     def sync_monitored_artists(self, cutoff: datetime) -> None:
         """
-        Queue a sync_artist job (AUTO) for every artist followed in full and
-        last synced before `cutoff`. We look for due artists far more often
+        Queue a sync_artist job (AUTO) for every artist due
+        (subs_svc.get_monitored_artists_needing_sync): followed in full, or
+        light with albums in the library, and last synced before `cutoff`. We look for due artists far more often
         than they are synced, so artists whose sync is still waiting or
         running are skipped.
         """
@@ -238,9 +240,9 @@ class Scheduler:
     def queue_due_genre_lookups(self) -> None:
         """
         Queue a fetch_genres for subscribed artists whose genres are due
-        (services/genres.py): the monthly refresh, and artists a sync never
-        visits again -- light ones, whose albums were downloaded on their own
-        -- after lookups were switched off and on again. Syncs and imports
+        (services/genres.py): the monthly refresh, and artists the scheduled
+        syncs don't visit -- light ones with nothing downloaded -- after
+        lookups were switched off and on again. Syncs and imports
         queue lookups for new albums themselves; this is the catch-all.
         """
         with SessionLocal() as session:

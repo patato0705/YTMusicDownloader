@@ -564,7 +564,7 @@
         "scheduler": {
           "artist_sync": {
             "label": "Synchronisation des artistes",
-            "description": "Quand les artistes suivis sont vérifiés pour de nouvelles sorties.",
+            "description": "Quand les artistes suivis sont vérifiés pour de nouvelles sorties, et les albums de la bibliothèque pour des changements sur YouTube Music.",
             "intervalHint": "Chaque artiste est vérifié {count} heures après sa dernière vérification : les vérifications s'étalent sur la journée.",
             "intervalHint_one": "Chaque artiste est vérifié une heure après sa dernière vérification : les vérifications s'étalent sur la journée."
           },

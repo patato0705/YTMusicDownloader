@@ -131,7 +131,7 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Synced lyrics only | on | Reject plain lyrics; keep retrying for synced ones |
 | Genre lookup | on | Look up genres on MusicBrainz and Deezer. Off stops the lookups; genres already found stay in the files. |
 | Charts | on | Enable the Charts page and chart subscriptions |
-| Artist sync | Tue, Thu, Sat at 02:00 | When followed artists are checked for new releases (see [Schedules](#schedules)) |
+| Artist sync | Tue, Thu, Sat at 02:00 | When followed artists are checked for new releases, and the albums in the library for changes (see [Schedules](#schedules)) |
 | Chart sync | Mondays at 04:00 | When followed charts are re-fetched (YouTube Music updates its charts weekly) |
 | Playlist sync | every day at 03:00 | When followed playlists are rescanned for new songs |
 | Lyrics retry | every 24 h | When tracks with missing/plain lyrics are retried |
@@ -164,6 +164,8 @@ Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**,
 - **Download an album** (album page → *Download Album*): grabs just that album. The artist is added to the library in light mode so the album has somewhere to live.
 - **Retry missing tracks** (album page): shown on a downloaded album when some tracks failed or have no download queued. Requeues every track that isn't on disk and isn't already waiting.
 - **Delete artist / album** (admin only): removes the database entries *and* the files on disk. Whatever would download it again is unfollowed, and the confirmation says so: deleting an album switches its followed artist to light mode, and a followed playlist that would bring the album or artist back on its next scan becomes a one-time playlist.
+
+Albums in the library keep following YouTube Music. Every artist sync (followed artists, and light-mode artists with an album in the library) also re-reads that artist's downloaded albums once a month: tracks added on YouTube Music are downloaded, changed titles, track numbers, album titles and years are written to the files' tags, and a track YouTube Music no longer lists is marked *Removed* on the album page. Its file stays in the library; it's just never downloaded again. Renamed artists get their files re-tagged at their next sync. File and folder names are kept as first written.
 
 ### Playlist import
 

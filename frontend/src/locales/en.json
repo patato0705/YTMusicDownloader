@@ -563,7 +563,7 @@
         "scheduler": {
           "artist_sync": {
             "label": "Artist sync",
-            "description": "When followed artists are checked for new releases.",
+            "description": "When followed artists are checked for new releases, and the albums in the library for changes on YouTube Music.",
             "intervalHint": "Each artist is checked {count} hours after its last check, so checks spread over the day.",
             "intervalHint_one": "Each artist is checked an hour after its last check, so checks spread over the day."
           },

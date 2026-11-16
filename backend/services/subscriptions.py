@@ -113,15 +113,23 @@ def mark_artist_synced(
 
 def get_monitored_artists_needing_sync(session: Session, cutoff: datetime) -> list[Artist]:
     """
-    Artists followed in full (enabled subscription) not synced since
-    `cutoff`, or ever. Used by the scheduler.
+    Artists not synced since `cutoff` (or ever), of an enabled subscription:
+    followed in full (new releases), or light with an album in the library
+    (its renames and pictures, and the refresh of those albums: see
+    sync_artist). A light one with nothing downloaded (unfollowed) has
+    nothing a sync would keep up to date. Used by the scheduler.
     """
+    has_download_album = (
+        select(Album.id)
+        .where(Album.artist_id == Artist.id, Album.mode == "download")
+        .exists()
+    )
     stmt = (
         select(Artist)
         .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
         .where(
             ArtistSubscription.enabled.is_(True),
-            ArtistSubscription.mode == "full",
+            (ArtistSubscription.mode == "full") | has_download_album,
             ArtistSubscription.last_synced_at.is_(None) | (ArtistSubscription.last_synced_at < cutoff),
         )
     )
