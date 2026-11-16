@@ -14,7 +14,8 @@
     "or": "or",
     "all": "All",
     "searchPlaceholder": "Search...",
-    "ytmusicUnavailable": "YouTube Music isn't answering right now. Try again in a moment."
+    "ytmusicUnavailable": "YouTube Music isn't answering right now. Try again in a moment.",
+    "serverUnreachable": "Can't reach the server, it may be restarting. Try again in a moment."
   },
   "mediaCard": {
     "type": {

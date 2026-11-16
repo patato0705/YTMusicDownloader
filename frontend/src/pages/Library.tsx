@@ -24,7 +24,7 @@ import { FilterTabs } from '../components/ui/FilterTabs';
 import { Toast } from '../components/ui/Toast';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
 import { ViewToggle, type ViewMode } from '../components/ui/ViewToggle';
-import { apiErrorMessage, getAlbumStatus, getArtistStatus, createMemoryCache, artistPath, albumPath, exceptionalStatus } from '../utils';
+import { apiErrorMessage, isServerUnreachable, getAlbumStatus, getArtistStatus, createMemoryCache, artistPath, albumPath, exceptionalStatus } from '../utils';
 import { useDebounce } from '../hooks/useDebounce';
 import { useProgressiveList } from '../hooks/useProgressiveList';
 import { useHistoryState } from '../hooks/useHistoryState';
@@ -196,9 +196,9 @@ export default function Library(): JSX.Element {
     }
   };
   // Put back if the server says no
-  const likeSync = useLikeSync((artistId, liked) => {
+  const likeSync = useLikeSync((artistId, liked, err) => {
     setLiked(artistId, liked);
-    setToast(t('artist.likeError'));
+    setToast(t(isServerUnreachable(err) ? 'common.serverUnreachable' : 'artist.likeError'));
   });
   const { unsaved: unsavedLikes } = likeSync;
 

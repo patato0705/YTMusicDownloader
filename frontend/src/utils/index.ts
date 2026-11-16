@@ -23,7 +23,7 @@ export { formatNumber } from './formatting';
 export { usernameErrorKey, passwordErrorKey, confirmErrorKey } from './validation';
 
 // API error handling
-export { apiErrorMessage, invalidFields, retryAfterMinutes } from './apiError';
+export { apiErrorMessage, invalidFields, isServerUnreachable, retryAfterMinutes } from './apiError';
 
 // In-memory page caches
 export { createMemoryCache, clearMemoryCaches } from './memoryCache';

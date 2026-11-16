@@ -21,7 +21,7 @@ import { GenreChips } from '../components/ui/GenreChips';
 import { ExclusionNote } from '../components/ui/ExclusionNote';
 import { useCountryName } from '../config/charts';
 import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
-import { categorizeAlbums, getAlbumStatus, apiErrorMessage, albumPath, artistPath } from '../utils';
+import { categorizeAlbums, getAlbumStatus, apiErrorMessage, albumPath, artistPath, isServerUnreachable } from '../utils';
 import { Icon } from '../components/ui/icons';
 
 export default function Artist(): JSX.Element {
@@ -46,9 +46,9 @@ export default function Artist(): JSX.Element {
   const canFollow = isAdmin || user?.role === 'member';
 
   // Put back if the server says no
-  const likeSync = useLikeSync((_, liked) => {
+  const likeSync = useLikeSync((_, liked, err) => {
     setPage((current) => current && { ...current, liked });
-    setToast({ message: t('artist.likeError'), type: 'error' });
+    setToast({ message: t(isServerUnreachable(err) ? 'common.serverUnreachable' : 'artist.likeError'), type: 'error' });
   });
 
   const fetchArtist = async (id: string): Promise<ArtistPage> => {

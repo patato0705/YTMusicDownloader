@@ -9,7 +9,7 @@ import { FormField, inputClass } from '../../components/ui/FormField';
 import { PasswordInput } from '../../components/ui/PasswordInput';
 import { ErrorBanner, LoadingState } from '../../components/ui/PageStatus';
 import * as authApi from '../../api/auth';
-import { confirmErrorKey, invalidFields, passwordErrorKey, usernameErrorKey } from '../../utils';
+import { confirmErrorKey, invalidFields, isServerUnreachable, passwordErrorKey, usernameErrorKey } from '../../utils';
 import { Icon } from '../../components/ui/icons';
 
 export default function Register(): JSX.Element {
@@ -71,6 +71,8 @@ export default function Register(): JSX.Element {
         setError(t('auth.register.disabled.message'));
       } else if (err?.status === 409 && err.data?.detail === 'username_taken') {
         setUsernameError(t('auth.errors.usernameTaken'));
+      } else if (isServerUnreachable(err)) {
+        setError(t('common.serverUnreachable'));
       } else {
         setError(t('auth.errors.registrationFailed'));
       }

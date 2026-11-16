@@ -94,11 +94,35 @@ async function readBody(response: Response): Promise<any> {
   }
 }
 
-function send(url: string, options: RequestInit, headers: Headers): Promise<Response> {
+/**
+ * The `detail` of a request that never reached the app: no connection, or a
+ * reverse proxy answering for it because the container is down or restarting
+ */
+export const SERVER_UNREACHABLE = 'server_unreachable';
+
+function unreachable(status: number): ApiError {
+  return new ApiError(status, SERVER_UNREACHABLE, { detail: SERVER_UNREACHABLE });
+}
+
+/**
+ * A proxy's own error page (HTML or plain text, never a JSON object) for
+ * an app that doesn't answer. The app's own 502/503 always come as JSON,
+ * with a detail of their own (ytmusic_unavailable, the health check).
+ */
+function isProxyError(response: Response, data: any): boolean {
+  return [502, 503, 504].includes(response.status) && (data === null || typeof data !== 'object');
+}
+
+async function send(url: string, options: RequestInit, headers: Headers): Promise<Response> {
   if (accessToken) {
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
-  return fetch(url, { ...options, headers, credentials: 'include' });
+  try {
+    return await fetch(url, { ...options, headers, credentials: 'include' });
+  } catch {
+    // fetch only rejects when no response came at all
+    throw unreachable(0);
+  }
 }
 
 /**
@@ -132,6 +156,9 @@ async function apiFetch<T = any>(
     }
   }
 
+  if (isProxyError(response, data)) {
+    throw unreachable(response.status);
+  }
   if (!response.ok) {
     const message = data?.detail || data?.message || `HTTP ${response.status}`;
     throw new ApiError(response.status, message, data);

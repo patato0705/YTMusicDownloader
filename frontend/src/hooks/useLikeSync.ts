@@ -21,11 +21,11 @@ interface LikeState {
  * nothing if that's where it started. Whatever is still waiting is sent
  * when the page goes.
  *
- * `onFailed(artistId, liked)` puts a heart back to what the server has.
+ * `onFailed(artistId, liked, err)` puts a heart back to what the server has.
  * `unsaved()` gives the likes the server doesn't have yet, to lay over a
  * fresh fetch so a refresh never undoes a click.
  */
-export function useLikeSync(onFailed: (artistId: string, liked: boolean) => void) {
+export function useLikeSync(onFailed: (artistId: string, liked: boolean, err: unknown) => void) {
   const states = useRef(new Map<string, LikeState>());
   const onFailedRef = useRef(onFailed);
   onFailedRef.current = onFailed;
@@ -49,7 +49,7 @@ export function useLikeSync(onFailed: (artistId: string, liked: boolean) => void
         window.clearTimeout(state.timer);
         state.timer = undefined;
         state.wanted = state.saved;
-        if (mounted.current) onFailedRef.current(artistId, state.saved);
+        if (mounted.current) onFailedRef.current(artistId, state.saved, err);
       }
     });
     state.sending = sending;

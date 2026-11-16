@@ -9,7 +9,7 @@ import { FormField, inputClass } from '../../components/ui/FormField';
 import { PasswordInput } from '../../components/ui/PasswordInput';
 import { ErrorBanner } from '../../components/ui/PageStatus';
 import * as authApi from '../../api/auth';
-import { confirmErrorKey, passwordErrorKey, retryAfterMinutes } from '../../utils';
+import { confirmErrorKey, isServerUnreachable, passwordErrorKey, retryAfterMinutes } from '../../utils';
 import { Icon } from '../../components/ui/icons';
 
 export default function ChangePassword(): JSX.Element {
@@ -58,6 +58,8 @@ export default function ChangePassword(): JSX.Element {
         setCurrentPasswordError(t('auth.errors.currentPasswordIncorrect'));
       } else if (err?.status === 429) {
         setError(t('auth.errors.tooManyAttempts', { minutes: retryAfterMinutes(err) }));
+      } else if (isServerUnreachable(err)) {
+        setError(t('common.serverUnreachable'));
       } else {
         setError(t('auth.errors.changePasswordFailed'));
       }

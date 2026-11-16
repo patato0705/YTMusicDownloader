@@ -9,7 +9,7 @@ import { FormField, inputClass } from '../../components/ui/FormField';
 import { PasswordInput } from '../../components/ui/PasswordInput';
 import { ErrorBanner } from '../../components/ui/PageStatus';
 import { Spinner } from '../../components/ui/Spinner';
-import { retryAfterMinutes } from '../../utils';
+import { isServerUnreachable, retryAfterMinutes } from '../../utils';
 import * as authApi from '../../api/auth';
 import type { AuthConfig } from '../../api/auth';
 
@@ -70,6 +70,8 @@ export default function Login(): JSX.Element {
     } catch (err: any) {
       if (err?.status === 429) {
         setError(t('auth.errors.tooManyAttempts', { minutes: retryAfterMinutes(err) }));
+      } else if (isServerUnreachable(err)) {
+        setError(t('common.serverUnreachable'));
       } else {
         setError(t(err?.status === 401 ? 'auth.errors.invalidCredentials' : 'auth.errors.loginFailed'));
       }

@@ -32,7 +32,7 @@ import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
 import { SectionHeader } from './ui/SectionHeader';
 import { Toast } from './ui/Toast';
-import { createMemoryCache, artistPath } from '../utils';
+import { createMemoryCache, artistPath, isServerUnreachable } from '../utils';
 import { Icon } from './ui/icons';
 
 interface ToastState {
@@ -116,7 +116,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
       await restoreArtist(artistId);
     } catch (err) {
       console.error('Failed to restore artist:', err);
-      setToast({ message: t('browse.recommendations.error'), type: 'error' });
+      setToast({ message: t(isServerUnreachable(err) ? 'common.serverUnreachable' : 'browse.recommendations.error'), type: 'error' });
     }
     await load();
   };
@@ -134,7 +134,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
       });
     } catch (err) {
       console.error('Failed to dismiss artist:', err);
-      setToast({ message: t('browse.recommendations.error'), type: 'error' });
+      setToast({ message: t(isServerUnreachable(err) ? 'common.serverUnreachable' : 'browse.recommendations.error'), type: 'error' });
       await load();
     }
   };

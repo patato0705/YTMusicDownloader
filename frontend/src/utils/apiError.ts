@@ -1,4 +1,5 @@
 // src/utils/apiError.ts
+import { SERVER_UNREACHABLE } from '../api/client';
 import type { ApiError } from '../api/client';
 
 /** Error codes the backend sends as `detail`, with their translation keys */
@@ -11,7 +12,14 @@ const CODED_ERRORS: Record<string, string> = {
   playlist_invalid: 'playlist.invalidUrl',
   // A YouTube user's channel (what an upload credits): nothing to follow
   not_an_artist: 'artist.notAnArtist',
+  // No answer from the app: down or restarting (api/client.ts)
+  [SERVER_UNREACHABLE]: 'common.serverUnreachable',
 };
+
+/** The request never reached the app (api/client.ts): down or restarting */
+export function isServerUnreachable(err: unknown): boolean {
+  return (err as ApiError)?.data?.detail === SERVER_UNREACHABLE;
+}
 
 /**
  * A failed request's message for the user: a coded error translated, the
