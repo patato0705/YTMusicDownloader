@@ -43,9 +43,11 @@ export function Navbar(): JSX.Element {
   return (
     <>
       {/* Keeps the page clear of the floating navbar */}
-      <div className="h-20" />
+      <div className="h-[calc(5rem+env(safe-area-inset-top))]" />
 
-      <nav className={`fixed left-4 right-4 z-50 transition-all duration-300 ${scrolled ? 'top-2' : 'top-4'}`}>
+      <nav className={`fixed left-[calc(1rem+env(safe-area-inset-left))] right-[calc(1rem+env(safe-area-inset-right))] z-50 transition-all duration-300 ${
+        scrolled ? 'top-[calc(0.5rem+env(safe-area-inset-top))]' : 'top-[calc(1rem+env(safe-area-inset-top))]'
+      }`}>
         <div className="max-w-[1600px] mx-auto">
           <div
             className={`glass-chrome rounded-2xl shadow-xl transition-all duration-300 ${
@@ -96,7 +98,7 @@ export function Navbar(): JSX.Element {
       {isAuthenticated && (
         <nav
           aria-label={t('nav.main')}
-          className="md:hidden fixed inset-x-0 bottom-0 z-50 glass-chrome !border-x-0 !border-b-0 pb-[env(safe-area-inset-bottom)]"
+          className="md:hidden fixed inset-x-0 bottom-0 z-50 glass-chrome !border-x-0 !border-b-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
         >
           <div className="flex h-[var(--tab-bar-height)]">
             {navLinks.map((link) => {

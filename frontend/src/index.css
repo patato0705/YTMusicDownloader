@@ -35,8 +35,12 @@
     @apply bg-background;
   }
 
+  /* The landscape notch side (viewport-fit=cover in index.html); fixed
+     chrome adds the same insets itself */
   body {
     @apply bg-background text-foreground antialiased;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
