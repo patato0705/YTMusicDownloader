@@ -7,7 +7,7 @@ import { ICON_PATHS } from './icons';
 
 interface LyricsBadgeProps {
   kind: LyricsKind | undefined;
-  /** No lyrics yet because the LRCLIB lookup hasn't run: shown instead of "none" */
+  /** No lyrics yet because the lyrics lookup hasn't run: shown instead of "none" */
   pending?: boolean;
   /** Renders as a button when set; otherwise a static pill */
   onClick?: () => void;

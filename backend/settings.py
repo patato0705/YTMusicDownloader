@@ -222,7 +222,7 @@ DEFAULT_SETTINGS = {
     "features.lyrics_enabled": {
         "value": True,
         "type": "bool",
-        "description": "Enable automatic lyrics download with LRCLIB",
+        "description": "Enable automatic lyrics download (LRCLIB, then YouTube Music)",
     },
     "features.synced_lyrics_only": {
         "value": True,

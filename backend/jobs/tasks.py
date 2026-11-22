@@ -11,7 +11,7 @@ Each task function:
 
 Task types:
 - download_track: Download a single track using yt-dlp
-- download_lyrics: Download synced lyrics (backend/lyrics: LRCLIB)
+- download_lyrics: Download synced lyrics (backend/lyrics: LRCLIB, then YouTube Music)
 - import_album: Fetch an album's tracklist from YTMusic, then queue its downloads
 - sync_artist: Check artist for new releases
 - sync_chart: Follow a chart's top artists
@@ -36,8 +36,8 @@ from .. import config, settings as settings_module
 from ..config import YDL_COOKIEFILE, YDL_USER_COOKIEFILE
 from ..downloader import cover as cover_mod, embed as embed_mod, nfo as nfo_mod
 from ..downloader.core import download_track_by_videoid
-from ..lyrics import lrclib
-from ..lyrics.base import LyricsQuery, ProviderUnavailable
+from ..lyrics import lrclib, ytmusic
+from ..lyrics.base import Lyrics, LyricsQuery, ProviderUnavailable
 from ..models import Job, Track, Album, Artist
 from ..services import albums as albums_svc
 from ..services import artists as artists_svc
@@ -522,6 +522,16 @@ def _download_lyrics(session: Session, track_id: str, mode: str) -> Dict[str, An
     Modes:
     - "normal": Download lyrics, prefer synced, fall back to plain if allowed
     - "upgrade": Only replace existing lyrics if synced are found
+
+    The first of these wins:
+    1. LRCLIB's synced lyrics
+    2. LRCLIB's plain lyrics, when allowed (not in an upgrade, nor with
+       features.synced_lyrics_only)
+    3. LRCLIB's word that the track is instrumental (not in an upgrade)
+    4. YouTube Music's synced lyrics, then its plain ones when allowed. An
+       upgrade asks it only when LRCLIB has no record of the song.
+    Nothing found while a source was unavailable is retried in an hour,
+    otherwise in a day.
     """
     # Jobs queued before the feature was switched off: drop them quietly.
     # The scheduler's retry sweep picks the track up again once re-enabled.
@@ -552,44 +562,78 @@ def _download_lyrics(session: Session, track_id: str, mode: str) -> Dict[str, An
 
     logger.info("Fetching lyrics for: %s - %s (mode=%s)", artist_name, track_name, mode)
     query = LyricsQuery(video_id=track_id, title=track_name, artist=artist_name, album=album_name, duration=duration)
-    try:
-        found = lrclib.lookup(query)
-    except ProviderUnavailable as e:
-        logger.warning("%s unavailable for track %s: %s", lrclib.NAME, track_id, e)
-        return {"ok": False, "error": f"{lrclib.NAME} unavailable: {e}", "retry_delay_seconds": 3600}
+    upgrade = mode == "upgrade"
+    allow_plain = not synced_lyrics_only and not upgrade
+    unavailable: List[str] = []
+
+    def ask(provider: Any) -> Optional[Lyrics]:
+        try:
+            return provider.lookup(query)
+        except ProviderUnavailable as e:
+            logger.warning("%s unavailable for track %s: %s", provider.NAME, track_id, e)
+            unavailable.append(f"{provider.NAME} unavailable: {e}")
+            return None
+
+    # LRCLIB is the authority: its synced lyrics, else its plain ones (when
+    # allowed), else its word that the track is instrumental
+    chosen: Optional[Tuple[str, str, str]] = None  # (lyrics, kind, where from)
+    instrumental: Optional[str] = None  # where from
+    primary = ask(lrclib)
+    if primary and primary.synced:
+        chosen = (primary.synced, "synced", f"{lrclib.NAME} {primary.source}")
+    elif primary and allow_plain and primary.plain:
+        chosen = (primary.plain, "plain", f"{lrclib.NAME} {primary.source}")
+    elif primary and primary.instrumental and not upgrade:
+        instrumental = f"{lrclib.NAME} {primary.source}"
+
+    # YouTube Music only when LRCLIB has nothing usable: two YouTube
+    # requests each, from the downloads' IP. An upgrade asks it only when
+    # LRCLIB has no record of the song (one there, plain only, is LRCLIB's
+    # answer until a synced upload comes), so not while LRCLIB is down.
+    if chosen or instrumental:
+        ask_youtube = False
+    elif upgrade:
+        ask_youtube = primary is not None and not primary.found
+    else:
+        ask_youtube = True
+    fallback = ask(ytmusic) if ask_youtube else None
+    if fallback and fallback.synced:
+        chosen = (fallback.synced, "synced", f"{ytmusic.NAME} ({fallback.source})")
+    elif fallback and allow_plain and fallback.plain:
+        chosen = (fallback.plain, "plain", f"{ytmusic.NAME} ({fallback.source})")
 
     track = session.get(Track, track_id)
     if track is None:
         return {"ok": True, "skipped": "track removed during the lookup"}
 
-    if not found.found:
-        logger.info("No lyrics found for track %s", track_id)
-        return {"ok": False, "error": "Lyrics not found", "retry_delay_seconds": 86400}
-
-    if found.synced:
-        logger.info("Found synced lyrics for track %s via %s %s", track_id, lrclib.NAME, found.source)
-        lyrics_to_save, lyrics_kind = found.synced, "synced"
-    elif mode == "upgrade":
-        # Plain lyrics already on disk stay, even if LRCLIB calls it instrumental
-        return {"ok": True, "message": "No synced lyrics available yet, keeping plain"}
-    elif found.instrumental:
+    if instrumental:
         # No .lrc to write: the kind alone tells the UI and the retry sweep
         # (which only looks at tracks without lyrics) that there is none.
         track.lyrics = "instrumental"
         track.lyrics_local = None
         session.commit()
-        logger.info("Track %s is instrumental per %s (%s)", track_id, lrclib.NAME, found.source)
+        logger.info("Track %s is instrumental per %s", track_id, instrumental)
         return {"ok": True, "lyrics_type": "instrumental"}
-    elif synced_lyrics_only or not found.plain:
-        logger.info("Only plain lyrics available for track %s, will retry later", track_id)
-        return {
-            "ok": False,
-            "error": "Only plain lyrics available (synced lyrics required)",
-            "retry_delay_seconds": 86400,
-        }
-    else:
-        lyrics_to_save, lyrics_kind = found.plain, "plain"
 
+    if chosen is None:
+        # A source that couldn't answer may have them: sooner than the
+        # daily retry of a track nobody has lyrics for
+        if unavailable:
+            return {"ok": False, "error": "; ".join(unavailable), "retry_delay_seconds": 3600}
+        if upgrade:
+            return {"ok": True, "message": "No synced lyrics available yet, keeping plain"}
+        if any(answer and answer.plain for answer in (primary, fallback)):
+            logger.info("Only plain lyrics available for track %s, will retry later", track_id)
+            return {
+                "ok": False,
+                "error": "Only plain lyrics available (synced lyrics required)",
+                "retry_delay_seconds": 86400,
+            }
+        logger.info("No lyrics found for track %s", track_id)
+        return {"ok": False, "error": "Lyrics not found", "retry_delay_seconds": 86400}
+
+    lyrics_to_save, lyrics_kind, where = chosen
+    logger.info("Found %s lyrics for track %s via %s", lyrics_kind, track_id, where)
     lrc_path = audio_path.with_suffix(".lrc")
     try:
         lrc_path.write_text(lyrics_to_save, encoding="utf-8")

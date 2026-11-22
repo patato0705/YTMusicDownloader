@@ -281,7 +281,7 @@ class Scheduler:
 
             def due_tracks(*conditions, limit: int) -> list[Track]:
                 # Least recently retried first, never-retried before all:
-                # tracks LRCLIB never has lyrics for would otherwise come back
+                # tracks no source has lyrics for would otherwise come back
                 # in the same batch every sweep and starve all the others.
                 return list(session.execute(
                     select(Track)

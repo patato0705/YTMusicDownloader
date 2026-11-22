@@ -277,10 +277,10 @@
     "readOnly": "Seuls les membres et administrateurs peuvent modifier les paroles.",
     "formatHint": "Les lignes commençant par [mm:ss.xx] sont considérées comme synchronisées.",
     "willSaveAs": "Sera enregistré comme paroles {kind}.",
-    "willClear": "Enregistrer un texte vide supprime le fichier de paroles ; la prochaine vérification interrogera à nouveau LRCLIB.",
+    "willClear": "Enregistrer un texte vide supprime le fichier de paroles ; la prochaine vérification les recherchera à nouveau.",
     "instrumental": "LRCLIB indique que ce titre est instrumental : il n'a pas de paroles.",
     "instrumentalHint": "LRCLIB indique que ce titre est instrumental, il n'est donc pas revérifié. Collez des paroles pour passer outre.",
-    "pendingHint": "Pas encore recherchées sur LRCLIB : la recherche a lieu une fois l'audio téléchargé, quand la file des paroles y arrive.",
+    "pendingHint": "Pas encore recherchées : la recherche a lieu une fois l'audio téléchargé, quand la file des paroles y arrive.",
     "kind": {
       "synced": "Synchronisées",
       "plain": "Texte brut",
@@ -577,7 +577,7 @@
         "features": {
           "lyrics_enabled": {
             "label": "Téléchargement des paroles",
-            "description": "Récupérer automatiquement les paroles depuis LRCLIB pour chaque titre téléchargé."
+            "description": "Récupérer automatiquement les paroles de chaque titre téléchargé, depuis LRCLIB, ou YouTube Music quand LRCLIB n'en a pas."
           },
           "synced_lyrics_only": {
             "label": "Paroles synchronisées uniquement",

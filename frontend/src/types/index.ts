@@ -52,7 +52,7 @@ export interface Track {
   /** When YouTube Music stopped listing it in its album (ISO). Its file, if
    *  any, stays; it's never downloaded again */
   removed_at?: string | null;
-  /** No lyrics yet, but an LRCLIB lookup is queued or the audio is still
+  /** No lyrics yet, but a lyrics lookup is queued or the audio is still
    *  downloading (album page only) */
   lyrics_pending?: boolean;
 }

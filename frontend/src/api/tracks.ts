@@ -30,7 +30,7 @@ export async function getTrackLyrics(trackId: string): Promise<TrackLyrics> {
 
 /**
  * Overwrite the track's .lrc file. Empty content removes it and marks the
- * track as having no lyrics (the scheduler will retry LRCLIB later).
+ * track as having no lyrics (the scheduler will look them up again later).
  */
 export async function updateTrackLyrics(
   trackId: string,

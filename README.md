@@ -11,7 +11,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Download single albums** without following the artist.
 - **Playlists**: paste a YouTube Music playlist URL, then follow every artist in it or download every album it contains in bulk, or add the playlist to the library: followed (new songs bring in their albums or artists), and/or written as an M3U file that Jellyfin picks up as a playlist.
 - **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly), optionally unfollowing them once they've been out of it for a few weeks.
-- **Synced lyrics** from [LRCLIB](https://lrclib.net), saved as `.lrc` sidecar files. Missing lyrics are retried daily (instrumental tracks are recognised and left alone); plain lyrics are upgraded to synced when they become available. Lyrics can also be viewed and edited by hand in the UI.
+- **Synced lyrics** from [LRCLIB](https://lrclib.net), or from YouTube Music itself when LRCLIB has none, saved as `.lrc` sidecar files. Missing lyrics are retried daily (instrumental tracks are recognised and left alone); plain lyrics are upgraded to synced when they become available. Lyrics can also be viewed and edited by hand in the UI.
 - **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
 - **Tagged audio**: the best stream YouTube Music serves, saved as is with no re-encoding (Opus as `.opus`, or AAC as `.m4a` when that ranks higher, for instance with a Premium account's cookies), with title, album, artist, album artist, track number, year, genres and embedded cover art.
 - **Genres** from [MusicBrainz](https://musicbrainz.org) (specific, community-voted) with [Deezer](https://www.deezer.com) as a fallback, written to the tags and NFO files so Jellyfin can browse and mix by genre. No account or API key needed.
@@ -143,7 +143,7 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Single sign-on session length | 24 h | How long a single sign-on session lasts before going through the provider again (usually one click). Role changes and deactivations at the provider only apply from then, hence shorter than password sessions (7 days). Shown only when single sign-on is configured. |
 | Max concurrent downloads | 1 | Parallel YouTube downloads. Capped by `DOWNLOAD_WORKERS`. Every extra stream from one IP raises the odds of being rate-limited. |
 | Rate-limit pause | 10 min | How long all downloads stop after a rate limit. Doubles on each consecutive pause (up to 16×) until a download succeeds. |
-| Lyrics download | on | Fetch lyrics from LRCLIB for every downloaded track |
+| Lyrics download | on | Fetch lyrics for every downloaded track, from LRCLIB, or YouTube Music when LRCLIB has none |
 | Synced lyrics only | on | Reject plain lyrics; keep retrying for synced ones |
 | Genre lookup | on | Look up genres on MusicBrainz and Deezer. Off stops the lookups; genres already found stay in the files. |
 | Charts | on | Enable the Charts page and chart subscriptions |
@@ -229,7 +229,7 @@ Each chart also has an *Unfollow after* setting (in the follow dialog and in **A
 
 ### Lyrics
 
-After a track is downloaded, a `download_lyrics` job queries LRCLIB (cached lookup → exact lookup → fuzzy search with duration matching). Synced lyrics are saved as `<track>.lrc` next to the audio file. Tracks LRCLIB lists as instrumental are marked as such and not retried. Each track has a lyrics badge (synced / plain / instrumental / none); click it to view, paste or edit lyrics manually. Clearing the text deletes the `.lrc` and lets the next retry sweep query LRCLIB again.
+After a track is downloaded, a `download_lyrics` job looks up its lyrics and saves them as `<track>.lrc` next to the audio file. LRCLIB is asked first (exact lookup → fuzzy search with duration matching), and its answer wins: synced lyrics, else plain lyrics (unless *Synced lyrics only* is on), else its word that the track is instrumental (marked as such and not retried). Only when LRCLIB has nothing usable is YouTube Music asked for that very track's lyrics (licensed from LyricFind, Musixmatch…), which keeps requests to YouTube down. When one source can't be reached and the other has nothing, the lookup is retried an hour later instead of the next day. The daily upgrade of plain lyrics to synced asks YouTube Music only for songs LRCLIB has no record of. Each track has a lyrics badge (synced / plain / instrumental / none); click it to view, paste or edit lyrics manually. Clearing the text deletes the `.lrc` and lets the next retry sweep look them up again.
 
 ### Genres
 
@@ -405,7 +405,7 @@ Everything runs in a single Docker container managed by supervisord:
 | `web` | FastAPI backend + the built React frontend, on port 8000 |
 | `worker-download-N` | Downloads audio with yt-dlp (N processes, see `DOWNLOAD_WORKERS`) |
 | `worker-metadata-N` | Talks to YouTube Music: artist syncs, album imports, chart syncs (3 processes) |
-| `worker-lyrics` | Fetches lyrics from LRCLIB |
+| `worker-lyrics` | Fetches lyrics from LRCLIB and YouTube Music |
 | `worker-genres` | Looks up genres on MusicBrainz and Deezer |
 | `scheduler` | Periodic syncs, retries and clean-ups |
 

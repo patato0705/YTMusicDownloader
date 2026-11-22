@@ -332,3 +332,27 @@ def find_song(video_title: str, artist_id: str, artist_name: Optional[str]) -> O
         "title": str(song.get("title") or video_title),
         "album": {"id": str(song["album"]["id"]), "name": song["album"].get("name")},
     }
+
+
+def get_lyrics(video_id: str) -> Optional[Dict[str, Any]]:
+    """
+    A song's lyrics on YouTube Music (licensed from LyricFind, Musixmatch...),
+    timed when it has them: {"lines": [(start ms, text), ...] or None,
+    "plain": str or None, "source": "Source: LyricFind" or None}, or None
+    when the song has no lyrics there. Two requests: the song's "up next"
+    panel, which names its lyrics page, then that page.
+    """
+    watch = _call("get_watch_playlist", video_id, dict, videoId=video_id, limit=1)
+    browse_id = watch.get("lyrics")
+    if not browse_id:
+        return None
+    raw = _call("get_lyrics", video_id, (dict, type(None)), browse_id, timestamps=True)
+    if not raw or not raw.get("lyrics"):
+        return None
+    lyrics = raw["lyrics"]
+    if raw.get("hasTimestamps") and isinstance(lyrics, list):
+        lines = [(int(line.start_time), str(line.text or "")) for line in lyrics]
+        return {"lines": lines, "plain": None, "source": raw.get("source")}
+    if isinstance(lyrics, str) and lyrics.strip():
+        return {"lines": None, "plain": lyrics.replace("\r\n", "\n").strip(), "source": raw.get("source")}
+    return None

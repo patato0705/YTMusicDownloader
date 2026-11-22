@@ -103,7 +103,7 @@ def update_lyrics(
     Overwrite the track's .lrc file with body["content"] and re-classify it
     as synced/plain from its timestamps. Empty content deletes the file and
     resets the track to "no lyrics" (the scheduler's retry sweep will then
-    try LRCLIB again). Only the .lrc is touched: lyrics are not re-embedded
+    look them up again). Only the .lrc is touched: lyrics are not re-embedded
     into the audio file, matching what download_lyrics does.
     """
     content = body.get("content")
