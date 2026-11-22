@@ -13,7 +13,7 @@ Self-hosted music library manager that pulls songs from YouTube Music, fetches s
 - **Charts**: follow a country's music chart and automatically follow its top N artists (re-synced weekly), optionally unfollowing them once they've been out of it for a few weeks.
 - **Synced lyrics** from [LRCLIB](https://lrclib.net), saved as `.lrc` sidecar files. Missing lyrics are retried daily (instrumental tracks are recognised and left alone); plain lyrics are upgraded to synced when they become available. Lyrics can also be viewed and edited by hand in the UI.
 - **Library overview**: download progress for every followed artist and album, plus library stats, with disk usage summed from the actual sizes of the downloaded audio files.
-- **Tagged audio**: M4A/AAC files with title, album, artist, album artist, track number, year, genres and embedded cover art.
+- **Tagged audio**: the best stream YouTube Music serves, saved as is with no re-encoding (Opus as `.opus`, or AAC as `.m4a` when that ranks higher, for instance with a Premium account's cookies), with title, album, artist, album artist, track number, year, genres and embedded cover art.
 - **Genres** from [MusicBrainz](https://musicbrainz.org) (specific, community-voted) with [Deezer](https://www.deezer.com) as a fallback, written to the tags and NFO files so Jellyfin can browse and mix by genre. No account or API key needed.
 - **Recommendations**: artists similar to the ones you like, from YouTube Music's own "Fans might also like", ranked by how many of your artists point to them. Personal to each user.
 - **Jellyfin-friendly layout** with `artist.nfo`, `album.nfo`, `folder.jpg`, `backdrop.jpg` and `cover.jpg`.
@@ -98,9 +98,9 @@ data/
     └── Album Title/
         ├── album.nfo
         ├── cover.jpg
-        ├── 01 - Track Title.m4a
+        ├── 01 - Track Title.opus
         ├── 01 - Track Title.lrc
-        ├── 02 - Track Title.m4a
+        ├── 02 - Track Title.opus
         └── ...
 ```
 

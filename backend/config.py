@@ -138,8 +138,15 @@ ROLE_VISITOR = "visitor"
 VALID_ROLES = (ROLE_ADMINISTRATOR, ROLE_MEMBER, ROLE_VISITOR)
 
 # yt-dlp
-YDL_FORMAT = "m4a/bestaudio/best"
-YDL_PREFERRED_CODEC = "m4a"
+# The best audio stream YouTube serves, kept as it comes (no re-encoding),
+# among the two codecs downloader/embed.py can tag: Opus (251, ~135 kbps),
+# or AAC where it ranks higher (141, 256 kbps, for a Premium account's
+# cookies) or there is no Opus. A 5.1 AC-3/E-AC-3 stream, which yt-dlp would
+# rank first for having more channels, is left out. The AAC of a combined
+# audio+video format is the last resort.
+YDL_FORMAT = "bestaudio[acodec~='^(opus|mp4a)']/best[acodec~='^(opus|mp4a)']"
+# "best" keeps the stream's codec: Opus comes out as .opus (Ogg), AAC as .m4a
+YDL_PREFERRED_CODEC = "best"
 YDL_COOKIEFILE = Path("/config/ytcookies.txt")
 # Optional cookies exported from a signed-in YouTube account (uploaded via the
 # admin panel). Used ONLY as a fallback for age-restricted videos, never for
