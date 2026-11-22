@@ -4,15 +4,27 @@ import datetime
 import json
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import MetaData, String, Integer, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from .time_utils import now_utc, ensure_timezone_aware
 
 
+# Gives every constraint a predictable name, so a migration can drop or
+# change one by name (SQLite leaves unnamed ones nameless, and a migration
+# can't refer to those). "ix" is SQLAlchemy's default, kept as it was.
+NAMING_CONVENTION = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_N_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
+
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
 class Artist(Base):

@@ -7,11 +7,11 @@ import logging
 import time
 from typing import Generator
 
-from sqlalchemy import create_engine, event, inspect
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 
 from .config import DB_PATH
-from .models import Base
+from .migrations import runner as migrations
 
 logger = logging.getLogger("db")
 
@@ -58,11 +58,14 @@ SessionLocal = sessionmaker(
 
 
 def init_db() -> None:
-    """Create all tables, the first admin and the default settings."""
+    """
+    Create or upgrade the schema (backend/migrations/runner.py), then the
+    first admin and the default settings.
+    """
     from .services import auth as auth_svc
     from . import settings as settings_module
 
-    Base.metadata.create_all(bind=engine)
+    migrations.upgrade(DB_PATH)
     with SessionLocal() as session:
         auth_svc.ensure_first_admin(session)
         settings_module.ensure_defaults(session)
@@ -78,23 +81,24 @@ def get_session() -> Generator[Session, None, None]:
         db.close()
 
 
-def wait_for_db(max_retries: int = 30, delay: float = 1) -> None:
+def wait_for_db(max_retries: int = 300, delay: float = 1) -> None:
     """
-    Wait until the web process has created the tables (workers and the
-    scheduler start alongside it). Raises if they never appear.
+    Wait until the web process has created or upgraded the schema (workers
+    and the scheduler start alongside it), so none of them runs against
+    tables a migration is still changing. Raises if it never happens.
 
-    Logs at debug only: nine processes call this at once, and init_db
-    already says "Database is ready" in the web process.
+    Five minutes: an upgrade that copies a large table can take a while on
+    slow storage. Logs at debug only: nine processes call this at once,
+    and the web process already logs the upgrade.
     """
-    required = {"artists", "jobs", "refresh_tokens"}
     logger.debug("Waiting for database to be ready...")
     for attempt in range(1, max_retries + 1):
         try:
-            missing = required - set(inspect(engine).get_table_names())
-            if not missing:
-                logger.debug("Database is ready")
-                return
-            logger.debug("Database not ready, missing tables %s (attempt %s/%s)", sorted(missing), attempt, max_retries)
+            with engine.connect() as conn:
+                if migrations.is_up_to_date(conn):
+                    logger.debug("Database is ready")
+                    return
+            logger.debug("Database schema not up to date yet (attempt %s/%s)", attempt, max_retries)
         except Exception as e:
             logger.debug("Database not ready (attempt %s/%s): %s", attempt, max_retries, e)
         if attempt < max_retries:

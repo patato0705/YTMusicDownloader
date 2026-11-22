@@ -64,10 +64,26 @@ The first build takes a few minutes (frontend build + Python dependencies). Subs
 
 | Host path | Container path | Contents |
 |---|---|---|
-| `./config` | `/config` | SQLite database, `secrets.json` (JWT secret), logs, caches, temp downloads, YouTube cookie jars, artwork for artists and albums that aren't downloaded (`covers/`) |
+| `./config` | `/config` | SQLite database, copies of it from before the last upgrades (`db-backups/`), `secrets.json` (JWT secret), logs, caches, temp downloads, YouTube cookie jars, artwork for artists and albums that aren't downloaded (`covers/`) |
 | `./data` | `/data` | Your music library |
 
 Both are created on first start if missing. Back up `./config` together with `./data`. Losing `secrets.json` logs everyone out. Losing the database loses the library index (though the *Backup* tab in the admin panel gives you a portable alternative, see below).
+
+### Updating
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+On start, the app upgrades its database to the new version's schema by itself. Before changing anything, it copies the database to `config/db-backups/` (the copies from the last three upgrades are kept). An upgrade that fails changes nothing: the app stops with the reason in the log and the database is left as it was.
+
+To go back to an older version (an older version can't read a database a newer one has upgraded):
+
+1. Stop the container.
+2. Delete `config/db.sqlite-wal` and `config/db.sqlite-shm` if they exist: they belong to the upgraded database, and SQLite would apply them to the copy.
+3. Put the copy taken before the upgrade back as `config/db.sqlite`.
+4. Check out and start that version.
 
 ### Library layout
 
@@ -445,6 +461,18 @@ python -m backend.scheduler                  # the scheduler
 ```
 
 The frontend is built into `backend/static/` by the Dockerfile; the API serves it as an SPA with `/api/*` taking precedence.
+
+### Database schema changes
+
+The schema is managed with [Alembic](https://alembic.sqlalchemy.org): every change to `backend/models.py` needs a migration script in `backend/migrations/versions/`, which the app applies at startup. To generate one after changing the models (from the repository root, with the image built by `docker compose build`):
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/backend:/app/backend" \
+  --entrypoint python ytmusicdownloader-ytmusicdownloader \
+  -m backend.migrations.dev revision "add a rating to tracks"
+```
+
+Read the generated script before committing it: `backend/migrations/dev.py` lists what autogenerate gets wrong (a new NOT NULL column needs a `server_default`, renames come out as a drop plus an add). The same command with `check` instead of `revision "..."` fails if the models have changes no migration covers.
 
 Translations live in `frontend/src/locales/`; adding a language is a new JSON file plus one line in `frontend/src/config/i18n.ts`.
 
