@@ -10,8 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from starlette.datastructures import MutableHeaders
-from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import config
 from .body_limit import BodySizeLimitMiddleware
@@ -22,6 +20,7 @@ from .routers import (
     jobs, library, media, playlists, recommendations, search, tracks,
 )
 from .secrets import jwt_secret
+from .security_headers import SecurityHeadersMiddleware, content_security_policy
 from .services.login_throttle import TooManyAttempts
 
 logger = logging.getLogger("backend.main")
@@ -35,33 +34,6 @@ _ASSETS_CACHE_CONTROL = "public, max-age=31536000, immutable"
 _INDEX_CACHE_CONTROL = "no-cache"
 # Icons requested at the site root by convention (frontend/public)
 _ROOT_ICONS = frozenset({"favicon.ico", "apple-touch-icon.png"})
-
-
-class SecurityHeadersMiddleware:
-    """
-    Headers for every response: no MIME sniffing (a user-supplied file is
-    never run as a script or page), and no full URLs sent to the external
-    sites the app links to. No X-Frame-Options: dashboards (Homarr,
-    Organizr...) embed self-hosted apps in a frame, and the SameSite=Lax
-    cookies already keep a cross-site frame signed out.
-    """
-
-    def __init__(self, app: ASGIApp) -> None:
-        self.app = app
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        async def send_with_headers(message: Message) -> None:
-            if message["type"] == "http.response.start":
-                headers = MutableHeaders(scope=message)
-                headers.setdefault("X-Content-Type-Options", "nosniff")
-                headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-            await send(message)
-
-        await self.app(scope, receive, send_with_headers)
 
 
 class _AssetFiles(StaticFiles):
@@ -121,7 +93,12 @@ def create_app() -> FastAPI:
     # images and audio alone (already compressed). Level 6: level 9 takes
     # twice as long for no smaller output on this JSON.
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
-    app.add_middleware(SecurityHeadersMiddleware)
+    # Frontend build (copied in by the Dockerfile; absent in a dev checkout,
+    # where the Vite dev server serves it). Here for the pages' policy,
+    # served from the end of this function.
+    static_dir = Path(__file__).resolve().parent / "static"
+    index_file = static_dir / "index.html"
+    app.add_middleware(SecurityHeadersMiddleware, content_security_policy=content_security_policy(index_file))
 
     # CORS - default to same-origin only (no cross-origin access at all).
     # The standard deployment (this Dockerfile) serves the frontend from
@@ -165,11 +142,7 @@ def create_app() -> FastAPI:
     async def api_404_handler(path: str):
         return JSONResponse(status_code=404, content={"detail": f"API endpoint not found: /api/{path}"})
 
-    # Frontend build (copied in by the Dockerfile; absent in a dev checkout,
-    # where the Vite dev server serves it)
-    static_dir = Path(__file__).resolve().parent / "static"
-    index_file = static_dir / "index.html"
-
+    # The frontend build (static_dir, above)
     if index_file.exists():
         app.mount("/static", _AssetFiles(directory=str(static_dir)), name="static")
 

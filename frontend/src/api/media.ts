@@ -6,8 +6,9 @@
 
 import { API_BASE } from './client';
 
-// Hosts the backend's thumbnail proxy fetches from (routers/media.py)
-const PROXIED_HOSTS = ['googleusercontent.com', 'ytimg.com', 'ggpht.com'];
+// Hosts the backend's thumbnail proxy fetches from (routers/media.py).
+// Images from any other host are refused by the pages' Content-Security-Policy.
+const PROXIED_HOSTS = ['googleusercontent.com', 'ytimg.com', 'ggpht.com', 'gstatic.com'];
 
 /**
  * URL for an <img> showing an image: a file saved on disk ("/data/...",

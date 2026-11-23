@@ -59,8 +59,10 @@ _TRIM_TARGET_RATIO = 0.9
 # could reach internal services or a cloud metadata endpoint (e.g.
 # 169.254.169.254) from inside the container/host network. These are the
 # only hosts the frontend ever actually asks for (see
-# frontend/src/api/media.ts's getImageUrl).
-_ALLOWED_THUMBNAIL_HOSTS = ("googleusercontent.com", "ytimg.com", "ggpht.com")
+# frontend/src/api/media.ts's getImageUrl), all Google's: gstatic.com for
+# YouTube Music's default avatar of an artist without a picture. The pages'
+# Content-Security-Policy refuses images from any other host (security_headers.py).
+_ALLOWED_THUMBNAIL_HOSTS = ("googleusercontent.com", "ytimg.com", "ggpht.com", "gstatic.com")
 
 
 def _parse_thumbnail_url(url: Union[str, httpx.URL]) -> Optional[httpx.URL]:
