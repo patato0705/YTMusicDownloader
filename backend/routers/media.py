@@ -18,8 +18,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Optional
-from urllib.parse import urlparse
+from typing import Optional, Union
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Depends
@@ -64,15 +63,24 @@ _TRIM_TARGET_RATIO = 0.9
 _ALLOWED_THUMBNAIL_HOSTS = ("googleusercontent.com", "ytimg.com", "ggpht.com")
 
 
-def _is_allowed_thumbnail_url(url: str) -> bool:
+def _parse_thumbnail_url(url: Union[str, httpx.URL]) -> Optional[httpx.URL]:
+    """
+    The URL as httpx will fetch it, if it's on an allowed host; else None.
+
+    Parsed by httpx itself, the same parse the fetch then uses: checking
+    with another parser (urllib's) let the two disagree on what the host
+    is, since they treat tabs, backslashes and "@" differently.
+    """
     try:
-        parsed = urlparse(url)
-    except ValueError:
-        return False
-    if parsed.scheme != "https" or not parsed.hostname:
-        return False
-    host = parsed.hostname.lower()
-    return any(host == domain or host.endswith("." + domain) for domain in _ALLOWED_THUMBNAIL_HOSTS)
+        parsed = url if isinstance(url, httpx.URL) else httpx.URL(url)
+    except (httpx.InvalidURL, TypeError, ValueError):
+        return None
+    if parsed.scheme != "https" or not parsed.host:
+        return None
+    host = parsed.host.lower()
+    if not any(host == domain or host.endswith("." + domain) for domain in _ALLOWED_THUMBNAIL_HOSTS):
+        return None
+    return parsed
 
 
 async def _check_redirect_target(request: httpx.Request) -> None:
@@ -80,7 +88,7 @@ async def _check_redirect_target(request: httpx.Request) -> None:
     only the URL the client asked for isn't enough: an open redirect on any
     allowed host would otherwise hand the fetch, and its response, to an
     arbitrary internal address."""
-    if not _is_allowed_thumbnail_url(str(request.url)):
+    if _parse_thumbnail_url(request.url) is None:
         logger.warning("Thumbnail fetch redirected to a disallowed URL: %s", str(request.url)[:80])
         raise HTTPException(status_code=502, detail="Thumbnail redirected to a disallowed host")
 
@@ -198,7 +206,8 @@ def get_local_image(
     """
     try:
         resolved = (Path("/") / full_path).resolve()
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
+        # ValueError: a NUL character, which no file name can hold
         raise HTTPException(status_code=400, detail="Invalid path")
 
     if not any(resolved.is_relative_to(root) for root in _ALLOWED_IMAGE_ROOTS):
@@ -233,7 +242,8 @@ async def get_thumbnail(
     cache's size cap.
     """
     try:
-        if not _is_allowed_thumbnail_url(url):
+        target = _parse_thumbnail_url(url)
+        if target is None:
             raise HTTPException(status_code=400, detail="URL host not allowed")
 
         # Disk work in a thread: this handler is async, and a slow disk (or
@@ -252,7 +262,7 @@ async def get_thumbnail(
             try:
                 async with client.stream(
                     "GET",
-                    url,
+                    target,  # the URL as checked, not the string again
                     follow_redirects=True,
                     headers={
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -290,6 +300,7 @@ async def get_thumbnail(
         raise HTTPException(status_code=502, detail="Failed to fetch thumbnail")
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Unexpected error in thumbnail proxy")
-        raise HTTPException(status_code=500, detail=str(e))
+        # The reason is in the log (above); the response only says it failed
+        raise HTTPException(status_code=500, detail="Thumbnail proxy error")
