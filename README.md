@@ -697,6 +697,15 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/backend:/app/backend" \
 
 Read the generated script before committing it: `backend/migrations/dev.py` lists what autogenerate gets wrong (a new NOT NULL column needs a `server_default`, renames come out as a drop plus an add). The same command with `check` instead of `revision "..."` fails if the models have changes no migration covers.
 
+**Tests**: `backend/tests/` checks that the app starts on an empty database, that the models match the migrations, and who may call each API route (the `ACCESS` table in `test_access.py`: a new route goes in it, with the lowest role allowed to call it). They need neither Docker nor `/config`, and never call YouTube Music. From the repository root:
+
+```bash
+pip install -r backend/requirements.txt pytest
+python -m pytest backend/tests
+```
+
+GitHub runs them on every push and pull request, along with the frontend type check and build (`.github/workflows/ci.yml`).
+
 **Translations** live in `frontend/src/locales/`; adding a language is a new JSON file plus one line in `frontend/src/config/i18n.ts`.
 
 ## Troubleshooting

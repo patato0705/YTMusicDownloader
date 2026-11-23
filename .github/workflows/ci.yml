@@ -39,7 +39,7 @@ jobs:
       - run: npm run build
 
   backend:
-    name: Backend (lint and import)
+    name: Backend (lint, import and tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,7 +51,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       # --only-binary like the Dockerfile: the image has no compiler
-      - run: pip install --only-binary ':all:' -r backend/requirements.txt ruff==0.17.6
+      - run: pip install --only-binary ':all:' -r backend/requirements.txt ruff==0.17.6 pytest==9.2.0
       # Only rules that catch real breakage: syntax errors (E9) and the
       # pyflakes set (F): undefined names, unused imports and variables.
       # Style rules are left off on purpose.
@@ -59,6 +59,8 @@ jobs:
       # Imports every module the web process loads and builds the app, so a
       # broken import or route definition fails here
       - run: python -c "from backend.main import create_app; create_app()"
+      # backend/tests: startup on an empty database, migrations, route access
+      - run: python -m pytest backend/tests
 
   docker:
     name: Docker image builds
