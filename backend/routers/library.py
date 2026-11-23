@@ -672,7 +672,6 @@ def delete_album_from_library(
             )
 
         album_title = album.title
-        artist_id = album.artist_id
         files_deleted = 0
         tracks_deleted = 0
 

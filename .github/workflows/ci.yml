@@ -1,0 +1,76 @@
+name: CI
+
+# Every push and every pull request into main: the checks a change has to
+# pass before it is merged. Nothing is published from here.
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+# A newer push to the same branch makes the older run pointless
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only token: nothing in this workflow writes to the repo
+permissions:
+  contents: read
+
+# Actions are pinned by commit SHA (the tag a SHA stands for is in its
+# comment); a tag can be moved to other code, a commit cannot.
+jobs:
+  frontend:
+    name: Frontend (typecheck and build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --progress=false
+      # "build" runs tsc first, so a type error fails here
+      - run: npm run build
+
+  backend:
+    name: Backend (lint and import)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      # --only-binary like the Dockerfile: the image has no compiler
+      - run: pip install --only-binary ':all:' -r backend/requirements.txt ruff==0.17.6
+      # Only rules that catch real breakage: syntax errors (E9) and the
+      # pyflakes set (F): undefined names, unused imports and variables.
+      # Style rules are left off on purpose.
+      - run: ruff check --select E9,F --target-version py314 backend
+      # Imports every module the web process loads and builds the app, so a
+      # broken import or route definition fails here
+      - run: python -c "from backend.main import create_app; create_app()"
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
