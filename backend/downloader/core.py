@@ -25,9 +25,15 @@ def safe_name(s: Optional[str]) -> str:
     services/folders.py and services/playlists.py) rather than drifting copies.
     """
     name = "".join(c for c in s or "" if c.isalnum() or c in " .-_()").strip()
-    # Nothing left, or only dots: "." and ".." would point at the folder
-    # itself or its parent
-    return name if name.strip(".") else "Unknown"
+    return name if not _only_dots(name) else "Unknown"
+
+
+def _only_dots(name: str) -> bool:
+    """
+    Nothing, or only dots: "." and ".." would point at the folder itself or
+    its parent, and "..." is no better a name.
+    """
+    return not name.strip(".")
 
 
 # Longest file name most filesystems allow, in bytes
@@ -35,8 +41,15 @@ MAX_NAME_BYTES = 255
 
 
 def fit_name(name: str, reserve: int = 0) -> str:
-    """name cut to fit the filesystem's limit, leaving `reserve` bytes for a suffix."""
-    return name.encode()[: MAX_NAME_BYTES - reserve].decode(errors="ignore").rstrip()
+    """
+    name cut to fit the filesystem's limit, leaving `reserve` bytes for a
+    suffix. Security-relevant like safe_name: the cut can leave only dots of
+    a name safe_name let through (".." then 253 spaces then a letter is
+    ".." once cut), so such a result is "Unknown". An empty name stays
+    empty, for callers with their own fallback.
+    """
+    cut = name.encode()[: MAX_NAME_BYTES - reserve].decode(errors="ignore").rstrip()
+    return "Unknown" if cut and _only_dots(cut) else cut
 
 
 def _job_download_dir(video_id: str) -> Path:

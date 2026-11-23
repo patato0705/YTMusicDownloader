@@ -15,6 +15,7 @@ the tags and .nfo files, so the number only shows on disk. Names are compared
 ignoring case, as on a Windows or macOS share.
 """
 from __future__ import annotations
+import logging
 from pathlib import Path
 from typing import Optional, Set, Union
 
@@ -27,8 +28,19 @@ from ..downloader.core import fit_name, safe_name
 from ..models import Album, Artist
 from .playlists import M3U_DIR_NAME
 
+logger = logging.getLogger("services.folders")
+
 # The folder of albums without an artist
 NO_ARTIST = safe_name(None)
+
+
+def _is_plain_name(folder: str) -> bool:
+    """
+    One folder inside its parent: not ".", "..", or a path. Names are made
+    safe when they're picked, so a stored one that isn't comes from a row
+    named before fit_name checked its cut, or edited by hand.
+    """
+    return folder not in ("", ".", "..") and "/" not in folder and "\0" not in folder
 
 
 def _free_name(name: str, taken: Set[str]) -> str:
@@ -61,12 +73,15 @@ def _claim(session: Session, row: Union[Artist, Album], name: Optional[str]) -> 
     update: two workers writing an album's first files at once agree on its
     folder, and two namesakes never get the same one.
     """
-    if not row.folder:
+    if not row.folder or not _is_plain_name(row.folder):
         model = type(row)
         session.flush()  # a row just created must be in the DB for the updates to find it
         # A write that changes nothing, for the lock
         session.execute(update(model).where(model.id == row.id).values(folder=model.folder))
         folder = session.execute(select(model.folder).where(model.id == row.id)).scalar_one()
+        if folder is not None and not _is_plain_name(folder):
+            logger.warning("%s %s had an unusable folder name %r: naming it again", model.__name__, row.id, folder)
+            folder = None
         if folder is None:
             folder = _free_name(fit_name(safe_name(name)), _taken(session, row))
             session.execute(update(model).where(model.id == row.id).values(folder=folder))
@@ -100,13 +115,17 @@ def restore_folder(session: Session, row: Union[Artist, Album], folder: str) -> 
 
 
 def existing_artist_dir(artist: Artist) -> Optional[Path]:
-    """The artist's folder, or None when nothing of it was ever written (no folder named)."""
-    return config.MUSIC_DIR / artist.folder if artist.folder else None
+    """
+    The artist's folder, or None when nothing of it was ever written (no
+    folder named), or when its stored name isn't a plain one: deleting the
+    artist removes this folder recursively, and "/data/.." is everything.
+    """
+    return config.MUSIC_DIR / artist.folder if artist.folder and _is_plain_name(artist.folder) else None
 
 
 def existing_album_dir(album: Album) -> Optional[Path]:
-    """The album's folder, or None when nothing of it was ever written (no folder named)."""
-    if not album.folder:
+    """The album's folder, or None when nothing of it was ever written (no folder named) or its name isn't a plain one."""
+    if not album.folder or not _is_plain_name(album.folder):
         return None
     if album.artist is None:
         return config.MUSIC_DIR / NO_ARTIST / album.folder
