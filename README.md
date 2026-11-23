@@ -434,7 +434,7 @@ Fixed times are in the container's time zone (`TZ` in `docker-compose.yml`). A f
 
 ### Running behind a reverse proxy
 
-Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS (the app doesn't infer it from the proxy). The frontend and API share one origin, so no CORS configuration is required. The `/api/health` endpoint (no auth) can be used for uptime checks; it returns 503 if the database, ffmpeg/ffprobe or the data directories are unhealthy.
+Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS (the app doesn't infer it from the proxy). The frontend and API share one origin, so no CORS configuration is required. The `/api/health` endpoint (no auth) can be used for uptime checks; it returns 503 if the database, ffmpeg/ffprobe or the data directories are unhealthy. Being public, it only says which check fails: the reason is in the log (`docker compose logs`, "Health check failing").
 
 > [!WARNING]
 > **Set `FORWARDED_ALLOW_IPS` to your proxy's address.** Without it the app sees every request as coming from the proxy, so the per-IP sign-in limit is shared by all your users: one person guessing passwords blocks sign-in for everyone.

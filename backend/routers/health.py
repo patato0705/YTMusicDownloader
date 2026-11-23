@@ -4,13 +4,19 @@ Health endpoints.
 
 Endpoints:
 - GET /api/health - Get app state (the Docker healthcheck, so no auth)
+
+Public, so the response says which check fails but never why: paths and
+error messages are left out (_public). The reasons go to the log instead,
+once when a check starts failing or its reason changes, and once when all
+pass again (_log_changes): polled every 30 s, it would otherwise repeat.
 """
 from __future__ import annotations
 import logging
 import shutil
 import os
+import threading
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
@@ -74,13 +80,59 @@ def _check_ytmusic() -> Dict[str, Any]:
         return {"ok": False, "detail": f"init_error: {e}"}
 
 
+# Keys of a check's result that only the operator should see
+_PRIVATE_KEYS = frozenset({"path", "detail"})
+
+
+def _public(value: Any) -> Any:
+    """The checks without paths and error messages."""
+    if isinstance(value, dict):
+        return {k: _public(v) for k, v in value.items() if k not in _PRIVATE_KEYS}
+    return value
+
+
+def _failures(checks: Dict[str, Any]) -> List[str]:
+    """Each failing check, with its reason, for the log."""
+    failures = []
+    if not checks["db"]["ok"]:
+        failures.append(f"database: {checks['db']['detail']}")
+    failures += [f"{name} not found on PATH" for name, b in checks["binaries"].items() if not b["ok"]]
+    for name, d in checks["fs"].items():
+        if not d["exists"]:
+            failures.append(f"{name} ({d['path']}) does not exist")
+        elif not d["writable"]:
+            failures.append(f"{name} ({d['path']}) is not writable by the app's user")
+    if not checks["ytmusic"]["ok"]:
+        failures.append(f"YouTube Music client: {checks['ytmusic']['detail']}")
+    return failures
+
+
+# The failures last logged: None until the first check, [] while healthy
+_last_failures: Optional[List[str]] = None
+_last_failures_lock = threading.Lock()
+
+
+def _log_changes(failures: List[str]) -> None:
+    """Log the failures when they differ from the last ones, and the recovery."""
+    global _last_failures
+    with _last_failures_lock:
+        previous, _last_failures = _last_failures, failures
+    if failures == previous:
+        return
+    if failures:
+        logger.warning("Health check failing: %s", "; ".join(failures))
+    elif previous:
+        logger.info("Health checks pass again")
+
+
 @router.get("", status_code=status.HTTP_200_OK)
 def health_check() -> JSONResponse:
     """
     Health endpoint returning a JSON summary.
 
     DB connectivity, presence of required binaries, FS permissions, YTMusic
-    client init. 503 when any of them fails.
+    client init. 503 when any of them fails. Which one is in the response,
+    why in the log (see the module docstring).
     """
     overall_ok = True
     result: Dict[str, Any] = {"ok": True, "checks": {}, "timestamp": int(time.time())}
@@ -109,6 +161,7 @@ def health_check() -> JSONResponse:
         overall_ok = False
 
     result["ok"] = overall_ok
+    _log_changes(_failures(result["checks"]))
 
     status_code = 200 if overall_ok else 503
-    return JSONResponse(status_code=status_code, content=result)
+    return JSONResponse(status_code=status_code, content=_public(result))
