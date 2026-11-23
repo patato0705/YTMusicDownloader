@@ -312,7 +312,7 @@ Both are created on first start if missing.
 > [!IMPORTANT]
 > Back up `./config` together with `./data`. Losing `secrets.json` logs everyone out. Losing the database loses the library index (though the *Backup* tab in the admin panel gives you a [portable alternative](#backup-and-migration)).
 
-**File ownership**: the app runs as `PUID:PGID` inside the container (default `1000:1000`), so files it writes to `./config` and `./data` are owned by that user on the host. If `id -u` / `id -g` on your host give different numbers, set them in `docker-compose.yml`.
+**File ownership**: the app runs as `PUID:PGID` inside the container (default `1000:1000`), so files it writes to `./config` and `./data` are owned by that user on the host. If `id -u` / `id -g` on your host give different numbers, set them in `docker-compose.yml`. `./config` itself is made readable by that user only (`700`) at every start, since it holds password hashes and the logs: back it up as that user or as root.
 
 **Library layout**: files are written to `/data` (bind-mounted from `./data` by default). Names are sanitised for the filesystem. Point Jellyfin (or any media server that reads NFO files and folder art) at this directory.
 

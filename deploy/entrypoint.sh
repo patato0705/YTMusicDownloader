@@ -40,6 +40,14 @@ fi
 chown -R "$PUID:$PGID" /config 2>/dev/null || true
 chown "$PUID:$PGID" /data 2>/dev/null || true
 
+# /config holds the database (password hashes, everything), its backups and
+# logs (with the first admin's temporary password), made readable by anyone
+# under the default umask. Closing the folder itself covers all of it,
+# whatever each file's own mode: other users of the host get nothing.
+# Not a umask: that would also close the folders created in /data, which a
+# media server running as another user has to read.
+chmod 700 /config 2>/dev/null || true
+
 # Number of yt-dlp download worker processes supervisord starts (see the
 # worker-download program in supervisord.conf). This is only the ceiling:
 # how many of them actually take jobs is the download.max_concurrent
