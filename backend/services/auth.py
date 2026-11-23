@@ -70,12 +70,18 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    """Verify a password against its hash"""
+    """
+    Verify a password against its hash. Only its first 72 bytes count, as
+    bcrypt has always done: bcrypt 5 raises on longer ones instead, and
+    hashes made with bcrypt 4 (this app until September 2026) are of the
+    first 72 bytes of what was typed. New passwords can't be longer
+    (schemas.auth.NewPassword).
+    """
     if not password or not password_hash:
         return False
 
     try:
-        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+        return bcrypt.checkpw(password.encode("utf-8")[:72], password_hash.encode("utf-8"))
     except Exception as e:
         logger.exception("Password verification failed: %s", e)
         return False

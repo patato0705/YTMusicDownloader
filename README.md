@@ -391,7 +391,7 @@ Everything below is changed live from **Admin Panel → Settings**, no restart n
 | Setting | Default | Description |
 |---|---|---|
 | Public registration | off | Let anyone create an account (new accounts are *visitors*) |
-| Failed sign-ins per IP | 10 | Wrong passwords allowed from one IP within the window before it's blocked. 0 turns this check off. |
+| Failed sign-ins per IP | 10 | Wrong passwords allowed from one IP within the window before it's blocked. An IPv6 address counts by its /64 network, what a single connection is given. 0 turns this check off. |
 | Failed sign-ins per account | 5 | Wrong passwords allowed for one account within the window before *new* browsers are blocked from it. Browsers signed in to the account before (and not signed out since) get their own allowance, so hammering `admin` from elsewhere doesn't lock you out of your usual browser. Also applies to wrong current passwords on *Change password*. 0 turns this check off. |
 | Failed sign-in window | 15 min | How long failed sign-ins are remembered; blocks lift as they expire |
 | New single sign-on accounts | on | Create an account at someone's first single sign-on. When off, only existing accounts get in; with provider groups configured, only members of those groups (an existing account that has left them is refused too). |

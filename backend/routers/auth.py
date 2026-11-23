@@ -244,7 +244,7 @@ def login(
     else:
         device = None
         account_bucket = login_throttle.login_account_key(data.username)
-    buckets = [(f"login:ip:{_client_ip(request)}", ip_limit), (account_bucket, account_limit)]
+    buckets = [(f"login:ip:{login_throttle.ip_key(_client_ip(request))}", ip_limit), (account_bucket, account_limit)]
 
     login_throttle.check(buckets, window)
 

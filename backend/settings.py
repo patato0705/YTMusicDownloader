@@ -110,7 +110,7 @@ DEFAULT_SETTINGS = {
         "type": "int",
         "min": 0,
         "requires": "password_login",
-        "description": "Failed sign-ins allowed from one IP address per window before it is blocked (set to 0 to turn this check off)",
+        "description": "Failed sign-ins allowed from one IP address (for IPv6, one /64 network) per window before it is blocked (set to 0 to turn this check off)",
     },
     "auth.login_max_failures_per_account": {
         # Browsers that already signed in to the account get their own

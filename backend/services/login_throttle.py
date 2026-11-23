@@ -17,8 +17,11 @@ Functions:
 - record_failure() - Add a failure to buckets
 - clear() - Forget a bucket's failures
 - login_account_key() - Bucket of an account's failed sign-ins
+- ip_key() - What a per-IP bucket is keyed by (an IPv6 /64)
 """
 from __future__ import annotations
+import hashlib
+import ipaddress
 import math
 import threading
 import time
@@ -86,9 +89,29 @@ def login_account_key(username: str) -> str:
     """
     Bucket for failed sign-ins on an account from browsers it doesn't know.
     Keyed by the name as typed (lowercased), existing account or not, so a
-    429 doesn't reveal which accounts exist.
+    429 doesn't reveal which accounts exist. Hashed: the name is whatever
+    the request sent, up to the 2 MiB body limit, and buckets are kept for
+    the whole window.
     """
-    return f"login:user:{username.lower()}"
+    return "login:user:" + hashlib.sha256(username.lower().encode("utf-8")).hexdigest()
+
+
+def ip_key(host: str) -> str:
+    """
+    The address a per-IP bucket counts: an IPv6 address by its /64, which
+    is what one connection (a home, a server) is handed, so cycling through
+    it doesn't make a new bucket per attempt. An IPv4 address as is, also
+    when written IPv4-mapped (::ffff:a.b.c.d).
+    """
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return host  # "unknown", or a test client's name
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped:
+            return str(ip.ipv4_mapped)
+        return str(ipaddress.IPv6Network((ip, 64), strict=False))
+    return str(ip)
 
 
 def clear(key: str) -> None:

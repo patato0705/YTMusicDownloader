@@ -97,6 +97,7 @@
       "invalidCredentials": "Invalid username or password",
       "passwordMismatch": "Passwords do not match",
       "passwordTooShort": "Password must be at least 8 characters",
+      "passwordTooLong": "Password must be at most 72 characters (fewer with accents or emoji)",
       "usernameTooShort": "Username must be at least 3 characters",
       "usernameTooLong": "Username must be at most 64 characters",
       "usernameInvalidChars": "Username may only contain letters, numbers, hyphens, and underscores",
@@ -540,7 +541,7 @@
           },
           "login_max_failures_per_ip": {
             "label": "Failed sign-ins per IP",
-            "description": "Wrong passwords allowed from one IP address within the window before it is blocked. Set to 0 to turn this check off."
+            "description": "Wrong passwords allowed from one IP address within the window before it is blocked (for IPv6, from one /64 network, what a single connection is given). Set to 0 to turn this check off."
           },
           "login_max_failures_per_account": {
             "label": "Failed sign-ins per account",

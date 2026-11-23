@@ -27,14 +27,33 @@ def _check_username_characters(v: str) -> str:
 Username = Annotated[str, Field(min_length=3, max_length=64), AfterValidator(_check_username_characters)]
 
 
+# bcrypt reads at most 72 bytes of a password, and bcrypt 5 refuses longer
+# ones outright rather than ignoring the rest. In bytes: an accented letter
+# takes two, most emoji four.
+PASSWORD_MAX_BYTES = 72
+
+
+def _check_password_bytes(v: str) -> str:
+    if len(v.encode("utf-8")) > PASSWORD_MAX_BYTES:
+        raise ValueError(f"Password must be at most {PASSWORD_MAX_BYTES} bytes (fewer characters with accents or emoji)")
+    return v
+
+
+# A password being set, wherever (registration, admin panel, change password, CLI)
+NewPassword = Annotated[str, Field(min_length=8), AfterValidator(_check_password_bytes)]
+
+
 class LoginRequest(BaseModel):
+    # Unbounded on purpose: a name over 64 characters or a password over 72
+    # bytes is just a wrong one (a 422 would be the form's only odd error).
+    # Neither is kept: the throttle hashes the name (login_throttle).
     username: str
     password: str
 
 
 class RegisterRequest(BaseModel):
     username: Username
-    password: str = Field(..., min_length=8)
+    password: NewPassword
 
 
 class CreateUserRequest(RegisterRequest):
@@ -44,7 +63,7 @@ class CreateUserRequest(RegisterRequest):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(..., min_length=8)
+    new_password: NewPassword
 
 
 # ============================================================================

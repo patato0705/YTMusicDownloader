@@ -13,10 +13,15 @@ export function usernameErrorKey(username: string, requiredKey?: string): string
   return null;
 }
 
-/** A new password: at least 8 characters */
+// bcrypt's limit (backend schemas/auth.py), in UTF-8 bytes: an accented
+// letter takes two, most emoji four
+const PASSWORD_MAX_BYTES = 72;
+
+/** A new password: at least 8 characters, at most 72 bytes */
 export function passwordErrorKey(password: string, requiredKey?: string): string | null {
   if (!password) return requiredKey ?? null;
   if (password.length < 8) return 'auth.errors.passwordTooShort';
+  if (new TextEncoder().encode(password).length > PASSWORD_MAX_BYTES) return 'auth.errors.passwordTooLong';
   return null;
 }
 

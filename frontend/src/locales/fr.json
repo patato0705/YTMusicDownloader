@@ -97,6 +97,7 @@
       "invalidCredentials": "Nom d'utilisateur ou mot de passe invalide",
       "passwordMismatch": "Les mots de passe ne correspondent pas",
       "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
+      "passwordTooLong": "Le mot de passe doit contenir au plus 72 caractères (moins avec des accents ou des emoji)",
       "usernameTooShort": "Le nom d'utilisateur doit contenir au moins 3 caractères",
       "usernameTooLong": "Le nom d'utilisateur doit contenir au plus 64 caractères",
       "usernameInvalidChars": "Le nom d'utilisateur ne peut contenir que des lettres, chiffres, tirets et underscores",
@@ -541,7 +542,7 @@
           },
           "login_max_failures_per_ip": {
             "label": "Échecs de connexion par IP",
-            "description": "Mots de passe erronés autorisés depuis une même adresse IP pendant la fenêtre avant qu'elle soit bloquée. Mettre à 0 pour désactiver cette vérification."
+            "description": "Mots de passe erronés autorisés depuis une même adresse IP pendant la fenêtre avant qu'elle soit bloquée (en IPv6, depuis un même réseau /64, ce qu'une connexion reçoit). Mettre à 0 pour désactiver cette vérification."
           },
           "login_max_failures_per_account": {
             "label": "Échecs de connexion par compte",
