@@ -1,0 +1,70 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it. A security problem? Please report it privately instead: see [SECURITY.md](https://github.com/patato0705/YTMusicDownloader/blob/main/SECURITY.md).
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown on `http://<your-server>:8484/api/docs`, next to the title.
+      placeholder: "0.7.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it?
+      options:
+        - The published image (docker-compose.yml from the README)
+        - An image built from the source
+        - Something else (say below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: On what kind of machine?
+      options:
+        - 64-bit Intel or AMD (amd64)
+        - 64-bit ARM (arm64), like a Raspberry Pi or a NAS
+        - I don't know
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: And what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: The steps from a page or action to the problem.
+      placeholder: |
+        1. Open an artist's page
+        2. Click Follow
+        3. ...
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines
+      description: |
+        From around when it happened: `docker compose logs`, or the files in `config/logs/`. Remove anything private first (passwords, cookies, names you'd rather not share).
+      render: text
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      description: If it's about the web interface.
+      placeholder: Firefox on Windows, Safari on an iPhone...
