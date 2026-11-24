@@ -42,7 +42,10 @@ updates:
       backend:
         update-types: [minor, patch]
 
-  # frontend/package.json and package-lock.json
+  # frontend/package.json and package-lock.json. A package goes in the first
+  # group it matches: react and vite first, so the packages that only work
+  # at matching versions always move in one pull request, majors included
+  # (react 19 with react-dom 18 isn't a combination CI should test).
   - package-ecosystem: npm
     directory: /frontend
     schedule:
@@ -52,6 +55,10 @@ updates:
     commit-message:
       prefix: chore
     groups:
+      react:
+        patterns: [react, react-dom, "@types/react", "@types/react-dom"]
+      vite:
+        patterns: [vite, "@vitejs/plugin-react"]
       frontend:
         update-types: [minor, patch]
 
