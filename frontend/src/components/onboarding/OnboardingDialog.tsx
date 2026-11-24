@@ -160,7 +160,7 @@ const Tour: React.FC<TourProps> = ({ role, name, features, onClose }) => {
       <div className="flex items-center gap-2">
         {!last && <Button variant="ghost" onClick={close}>{t('onboarding.skip')}</Button>}
         <span className="flex-1" />
-        {index > 0 && <Button variant="secondary" onClick={() => go(index - 1)}>{t('common.back')}</Button>}
+        {index > 0 && <Button variant="secondary" onClick={() => go(index - 1)}>{t('onboarding.previous')}</Button>}
         <button ref={nextRef} type="button" className={buttonClass('primary')} onClick={() => (last ? close() : go(index + 1))}>
           {last ? t('onboarding.finish') : t('onboarding.next')}
         </button>

@@ -100,7 +100,7 @@
       "passwordTooLong": "Le mot de passe doit contenir au plus 72 caractères (moins avec des accents ou des emoji)",
       "usernameTooShort": "Le nom d'utilisateur doit contenir au moins 3 caractères",
       "usernameTooLong": "Le nom d'utilisateur doit contenir au plus 64 caractères",
-      "usernameInvalidChars": "Le nom d'utilisateur ne peut contenir que des lettres, chiffres, tirets et underscores",
+      "usernameInvalidChars": "Le nom d'utilisateur ne peut contenir que des lettres, chiffres, tirets (-) et tirets bas (_)",
       "usernameInvalid": "Nom d'utilisateur invalide",
       "passwordInvalid": "Mot de passe invalide",
       "registrationFailed": "Échec de l'inscription",
@@ -179,7 +179,7 @@
       "subtitle": "Des artistes proches de ceux que vous aimez",
       "similarTo": "Similaire à {names}",
       "similarToMany": "Similaire à {count} artistes que vous aimez",
-      "dismiss": "Pas intéressé",
+      "dismiss": "Ça ne m'intéresse pas",
       "dismissedToast": "{name} ne sera plus recommandé",
       "undo": "Annuler",
       "dismissedLink": "Masqués ({count})",
@@ -217,8 +217,8 @@
     "namesakes": "Artistes portant ce nom",
     "noNamesakes": "Aucun artiste de ce nom sur YouTube Music.",
     "notAnArtist": "C'est une chaîne YouTube, pas un artiste : il n'y a rien à suivre.",
-    "chartFollow": "Suivi à cause des charts {charts}. Une fois sorti de ceux-ci depuis un moment, les charts ne suivent plus cet artiste (réglable dans Admin > Charts) ; aimer l'artiste le garde.",
-    "chartFollow_one": "Suivi à cause du chart {charts}. Une fois sorti de celui-ci depuis un moment, le chart ne suit plus cet artiste (réglable dans Admin > Charts) ; aimer l'artiste le garde."
+    "chartFollow": "Suivi à cause des charts {charts}. Une fois sorti de ceux-ci depuis un moment, les charts ne suivent plus cet artiste (réglable dans Administration > Charts) ; aimer l'artiste le garde.",
+    "chartFollow_one": "Suivi à cause du chart {charts}. Une fois sorti de celui-ci depuis un moment, le chart ne suit plus cet artiste (réglable dans Administration > Charts) ; aimer l'artiste le garde."
   },
   "album": {
     "album": "Album",
@@ -277,7 +277,8 @@
     "notDownloaded": "Les paroles pourront être ajoutées une fois le fichier audio téléchargé.",
     "readOnly": "Seuls les membres et administrateurs peuvent modifier les paroles.",
     "formatHint": "Les lignes commençant par [mm:ss.xx] sont considérées comme synchronisées.",
-    "willSaveAs": "Sera enregistré comme paroles {kind}.",
+    "willSaveAsSynced": "Seront enregistrées comme paroles synchronisées.",
+    "willSaveAsPlain": "Seront enregistrées comme paroles non synchronisées.",
     "willClear": "Enregistrer un texte vide supprime le fichier de paroles ; la prochaine vérification les recherchera à nouveau.",
     "instrumental": "LRCLIB indique que ce titre est instrumental : il n'a pas de paroles.",
     "instrumentalHint": "LRCLIB indique que ce titre est instrumental, il n'est donc pas revérifié. Collez des paroles pour passer outre.",
@@ -320,12 +321,12 @@
     "noMatches": "Aucun résultat",
     "noMatchesDescription": "Aucun élément dans votre bibliothèque ne correspond à « {query} »",
     "trackMatch": {
-      "one": "Contient \"{title}\"",
-      "many": "Contient \"{title}\" et {count} autres titres correspondants",
-      "many_one": "Contient \"{title}\" et {count} autre titre correspondant",
-      "artistOne": "A \"{title}\" sur {album}",
-      "artistMany": "A \"{title}\" et {count} autres titres correspondants",
-      "artistMany_one": "A \"{title}\" et {count} autre titre correspondant"
+      "one": "Contient « {title} »",
+      "many": "Contient « {title} » et {count} autres titres correspondants",
+      "many_one": "Contient « {title} » et {count} autre titre correspondant",
+      "artistOne": "« {title} » sur {album}",
+      "artistMany": "« {title} » et {count} autres titres correspondants",
+      "artistMany_one": "« {title} » et {count} autre titre correspondant"
     },
     "stats": {
       "artists": "Artistes",
@@ -486,7 +487,7 @@
     "followedArtist": "Artiste suivi",
     "lastUpdated": "Dernière mise à jour : {date}",
     "followChart": "Suivre le chart",
-    "musicChart": "Chart Musical",
+    "musicChart": "Chart musical",
     "numberOfArtists": "Nombre d'artistes à suivre",
     "top": "Top",
     "storageWarning": "Des nombres plus élevés suivent plus d'artistes mais nécessitent plus de stockage et de temps de synchronisation",
@@ -515,7 +516,7 @@
       "saveFailed": "Échec de l'enregistrement des paramètres",
       "invalidNumber": "« {name} » doit être un nombre entier d'au moins {min}",
       "invalidNumberRange": "« {name} » doit être un nombre entier entre {min} et {max}",
-      "default": "Défaut",
+      "default": "Réinitialiser",
       "resetToDefault": "Rétablir la valeur par défaut ({value})",
       "on": "Activé",
       "off": "Désactivé",
@@ -568,7 +569,7 @@
         "download": {
           "max_concurrent": {
             "label": "Téléchargements simultanés max.",
-            "description": "Pistes téléchargées depuis YouTube en même temps. Les métadonnées et les paroles sont déjà traitées en parallèle ; ceci n'ajoute que des flux de téléchargement, et chaque flux supplémentaire depuis une même IP augmente le risque de limitation. Appliqué sans redémarrage ; le plafond est la variable d'environnement DOWNLOAD_WORKERS."
+            "description": "Titres téléchargés depuis YouTube en même temps. Les métadonnées et les paroles sont déjà traitées en parallèle ; ceci n'ajoute que des flux de téléchargement, et chaque flux supplémentaire depuis une même IP augmente le risque de limitation. Appliqué sans redémarrage ; le plafond est la variable d'environnement DOWNLOAD_WORKERS."
           },
           "rate_limit_pause_minutes": {
             "label": "Pause après limitation",
@@ -632,8 +633,8 @@
       },
       "cookies": {
         "label": "Cookies de compte YouTube",
-        "description": "Un fichier cookies.txt exporté depuis un navigateur connecté à un compte YouTube (utilisez un compte jetable, pas votre compte principal). Servi uniquement pour récupérer les pistes soumises à une limite d'âge ; jamais pour les téléchargements ordinaires ni pour contourner une limitation, le compte ne voit donc qu'une poignée de requêtes.",
-        "none": "Aucun cookie de compte importé : les pistes soumises à une limite d'âge échoueront.",
+        "description": "Un fichier cookies.txt exporté depuis un navigateur connecté à un compte YouTube (utilisez un compte jetable, pas votre compte principal). Servi uniquement pour récupérer les titres soumis à une limite d'âge ; jamais pour les téléchargements ordinaires ni pour contourner une limitation, le compte ne voit donc qu'une poignée de requêtes.",
+        "none": "Aucun cookie de compte importé : les titres soumis à une limite d'âge échoueront.",
         "present": "Importé : {count} cookies, {date}",
         "upload": "Importer cookies.txt",
         "replace": "Remplacer",
@@ -681,10 +682,10 @@
       "inactive": "Inactif",
       "delete": "Supprimer",
       "deleteTitle": "Supprimer l'utilisateur",
-      "confirmDelete": "Supprimer l'utilisateur \"{username}\" ? Cette action est irréversible.",
+      "confirmDelete": "Supprimer l'utilisateur « {username} » ? Cette action est irréversible.",
       "resetPassword": "Réinitialiser le mot de passe",
       "resetPasswordTitle": "Réinitialiser le mot de passe",
-      "confirmResetPassword": "Donner un mot de passe temporaire à \"{username}\" ? Ses sessions seront fermées partout et un nouveau mot de passe lui sera demandé à la prochaine connexion.",
+      "confirmResetPassword": "Donner un mot de passe temporaire à « {username} » ? Ses sessions seront fermées partout et un nouveau mot de passe lui sera demandé à la prochaine connexion.",
       "temporaryPasswordTitle": "Mot de passe temporaire",
       "temporaryPasswordMessage": "Transmettez ce mot de passe à {username}. Il n'est affiché qu'une fois ; un nouveau mot de passe lui sera demandé à la prochaine connexion.",
       "temporaryPasswordDone": "Terminé",
@@ -740,7 +741,7 @@
       "updated": "Chart mis à jour",
       "enabledToast": "Synchronisation du chart activée",
       "disabledToast": "Synchronisation du chart désactivée",
-      "syncQueued": "Synchronisation du chart planifiée",
+      "syncQueued": "Synchronisation du chart mise en file d'attente",
       "confirm": {
         "unfollowTitle": "Ne plus suivre le chart",
         "unfollow": "Ne plus suivre le chart {country} ? Les artistes déjà suivis grâce à ce chart restent suivis.",
@@ -920,11 +921,12 @@
       "once": "Une fois",
       "available": "{available} titres sur {songs} dans la bibliothèque",
       "skipped": "{count} ignorés",
+      "skipped_one": "{count} ignoré",
       "lastScan": "Dernière analyse : {when}",
       "scanning": "Analyse en cours…",
       "lastError": "Échec de la dernière analyse : {error}",
       "syncNow": "Synchroniser",
-      "syncQueued": "Analyse programmée"
+      "syncQueued": "Analyse mise en file d'attente"
     },
     "excludedSkipped": "{count} artistes ou albums exclus ont été laissés de côté.",
     "excludedSkipped_one": "{count} artiste ou album exclu a été laissé de côté.",
@@ -935,6 +937,7 @@
     "step": "{current} / {total}",
     "goTo": "Étape {current} sur {total}",
     "skip": "Passer",
+    "previous": "Précédent",
     "next": "Suivant",
     "finish": "C'est parti",
     "welcome": {

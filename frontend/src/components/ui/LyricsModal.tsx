@@ -144,7 +144,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
                   ? t('lyrics.readOnly')
                   : dirty
                     ? draftKind
-                      ? t('lyrics.willSaveAs', { kind: t(`lyrics.kind.${draftKind}`) })
+                      ? t(draftKind === 'synced' ? 'lyrics.willSaveAsSynced' : 'lyrics.willSaveAsPlain')
                       : t('lyrics.willClear')
                     : instrumental
                       ? t('lyrics.instrumentalHint')
