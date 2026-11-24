@@ -1,103 +1,57 @@
 # backend/schemas/__init__.py
 """
-Centralized schema imports for easy access throughout the application.
-
-Usage:
-    from backend.schemas import ArtistOut, AlbumSchema, UserResponse
-    from backend.schemas.auth import LoginRequest
-    from backend.schemas.ytmusic import TrackSchema
+Pydantic schemas:
+- auth.py: Authentication request/response schemas
+- charts.py: Chart endpoints
+- common.py: Shared schemas
+- export.py: The export/import document and its import report
+- settings.py: Settings management schemas
+- ytmusic.py: YouTube Music data (external API, not our database)
 """
-
-# Auth schemas
 from .auth import (
     LoginRequest,
     RegisterRequest,
-    RefreshTokenRequest,
+    CreateUserRequest,
     ChangePasswordRequest,
-    UpdateUserRequest,
     TokenResponse,
     UserResponse,
     LoginResponse,
-    MessageResponse as AuthMessageResponse,
+    TemporaryPasswordResponse,
 )
-
-# Job schemas
-from .jobs import (
-    EnqueueRequest,
-    EnqueueResponse,
-    JobOut,
-    CancelRequest,
-    RequeueRequest,
+from .common import MessageResponse
+from .settings import (
+    SettingResponse,
+    SettingUpdateRequest,
+    YoutubeCookiesStatus,
+    YoutubeCookiesUpload,
 )
-from .models import (
-    ArtistOut,
-    AlbumOut,
-    TrackOut,
-    TrackArtist,
-    JobOut,
-)
-
-# YTMusic API schemas
 from .ytmusic import (
     Thumbnail,
     ArtistRefSchema,
     AlbumRefSchema,
     TrackSchema,
     PlaylistSchema,
-    AlbumItemSchema,
     AlbumSchema,
-    ArtistSchema,
-    SongSchema,
-)
-
-# Common schemas
-from .common import (
-    MessageResponse,
-    ErrorResponse,
-    PaginationParams,
-    PaginatedResponse,
 )
 
 __all__ = [
-    # Auth
     "LoginRequest",
     "RegisterRequest",
-    "RefreshTokenRequest",
+    "CreateUserRequest",
     "ChangePasswordRequest",
-    "UpdateUserRequest",
     "TokenResponse",
     "UserResponse",
     "LoginResponse",
-    "AuthMessageResponse",
-    
-    # Job schemas
-    "EnqueueRequest",
-    "EnqueueResponse",
-    "JobOut",
-    "CancelRequest",
-    "RequeueRequest",
-    
-    # Database models
-    "ArtistOut",
-    "AlbumOut",
-    "TrackOut",
-    "TrackArtist",
-    "JobOut",
-    
-    # YTMusic
+    "TemporaryPasswordResponse",
+    "MessageResponse",
+    "SettingResponse",
+    "SettingUpdateRequest",
+    "YoutubeCookiesStatus",
+    "YoutubeCookiesUpload",
     "Thumbnail",
     "ArtistRefSchema",
     "AlbumRefSchema",
     "TrackSchema",
     "PlaylistSchema",
-    "AlbumItemSchema",
     "AlbumSchema",
-    "ArtistSchema",
-    "SongSchema",
-    
-    # Common
-    "MessageResponse",
-    "ErrorResponse",
-    "PaginationParams",
-    "PaginatedResponse",
 ]

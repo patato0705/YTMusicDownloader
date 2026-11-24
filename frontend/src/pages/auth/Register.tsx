@@ -3,169 +3,183 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
+import { AuthCard, AuthLayout } from '../../components/layout/AuthLayout';
+import { Button } from '../../components/ui/Button';
+import { FormField, inputClass } from '../../components/ui/FormField';
+import { PasswordInput } from '../../components/ui/PasswordInput';
+import { ErrorBanner, LoadingState } from '../../components/ui/PageStatus';
+import * as authApi from '../../api/auth';
+import { confirmErrorKey, invalidFields, isServerUnreachable, passwordErrorKey, usernameErrorKey } from '../../utils';
+import { Icon } from '../../components/ui/icons';
 
-export const Register: React.FC = () => {
+export default function Register(): JSX.Element {
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmError, setConfirmError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+  // null while checking whether public registration is on
+  const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
+
   const { login, isAuthenticated } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
+  const keyText = (key: string | null) => (key ? t(key) : '');
 
-  // Redirect if already logged in
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/');
-    }
+    if (isAuthenticated) navigate('/');
   }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    authApi.getAuthConfig()
+      .then((config) => setRegistrationEnabled(config.registration_enabled))
+      .catch((err) => {
+        console.error('Failed to check registration status:', err);
+        // Shown anyway: the backend refuses the submit if it's off
+        setRegistrationEnabled(true);
+      });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // Validation
-    if (password.length < 8) {
-      setError(t('auth.errors.passwordTooShort'));
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError(t('auth.errors.passwordMismatch'));
-      return;
-    }
+    const usernameProblem = keyText(usernameErrorKey(username, 'auth.errors.usernameRequired'));
+    const passwordProblem = keyText(passwordErrorKey(password, 'auth.errors.passwordRequired'));
+    const confirmProblem = keyText(confirmErrorKey(confirmPassword, password, 'auth.errors.confirmPasswordRequired'));
+    setUsernameError(usernameProblem);
+    setPasswordError(passwordProblem);
+    setConfirmError(confirmProblem);
+    if (usernameProblem || passwordProblem || confirmProblem) return;
 
     setIsLoading(true);
-
     try {
-      // Note: Register endpoint requires admin auth in production
-      // This might fail - handle accordingly
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Registration failed');
-      }
-
-      // Auto-login after registration
+      await authApi.register({ username, password });
       await login(username, password);
       navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Registration failed');
+      // The checks above mirror the backend's, so a 422 is only a safety
+      // net: a translated message rather than the validator's English one
+      const fields = invalidFields(err);
+      if (fields.has('username') || fields.has('password')) {
+        if (fields.has('username')) setUsernameError(t('auth.errors.usernameInvalid'));
+        if (fields.has('password')) setPasswordError(t('auth.errors.passwordInvalid'));
+      } else if (err?.status === 403) {
+        setError(t('auth.register.disabled.message'));
+      } else if (err?.status === 409 && err.data?.detail === 'username_taken') {
+        setUsernameError(t('auth.errors.usernameTaken'));
+      } else if (isServerUnreachable(err)) {
+        setError(t('common.serverUnreachable'));
+      } else {
+        setError(t('auth.errors.registrationFailed'));
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-secondary px-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h2 className="text-4xl font-bold text-foreground mb-2">
-            {t('auth.register.title')}
-          </h2>
-          <p className="text-muted-foreground">{t('auth.register.subtitle')}</p>
-        </div>
+  if (registrationEnabled === null) {
+    return (
+      <AuthLayout>
+        <LoadingState />
+      </AuthLayout>
+    );
+  }
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6 bg-card p-8 rounded-xl shadow-2xl border border-border">
-          {error && (
-            <div className="bg-red-500/10 border border-red-500 text-red-500 px-4 py-3 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-card-foreground mb-2">
-                {t('auth.register.username')}
-              </label>
-              <input
-                id="username"
-                type="text"
-                required
-                minLength={3}
-                maxLength={64}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-                placeholder={t('auth.register.username')}
-              />
-              <p className="text-xs text-muted-foreground mt-1">3-64 characters</p>
-            </div>
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-card-foreground mb-2">
-                {t('auth.register.email')}
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-                placeholder="your@email.com"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-card-foreground mb-2">
-                {t('auth.register.password')}
-              </label>
-              <input
-                id="password"
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-                placeholder={t('auth.register.password')}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {t('auth.errors.passwordTooShort')}
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-card-foreground mb-2">
-                {t('auth.register.confirmPassword')}
-              </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-                placeholder={t('auth.register.confirmPassword')}
-              />
-            </div>
+  if (!registrationEnabled) {
+    return (
+      <AuthLayout>
+        <AuthCard className="text-center">
+          <div className="w-20 h-20 mx-auto rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center mb-4">
+            <Icon name="lock" className="w-9 h-9" />
           </div>
+          <h1 className="text-3xl font-bold mb-3 text-foreground">
+            {t('auth.register.disabled.title')}
+          </h1>
+          <p className="text-muted-foreground mb-6">{t('auth.register.disabled.message')}</p>
+          <Button variant="primary" size="lg" className="w-full" onClick={() => navigate('/login')}>
+            {t('auth.register.disabled.goToLogin')}
+          </Button>
+        </AuthCard>
+      </AuthLayout>
+    );
+  }
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-3 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-          >
+  return (
+    <AuthLayout title={t('auth.register.title')} subtitle={t('auth.register.subtitle')}>
+      <AuthCard>
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          {error && <ErrorBanner>{error}</ErrorBanner>}
+
+          <FormField id="username" label={t('auth.register.username')} error={usernameError} hint={t('auth.register.usernameHint')}>
+            <input
+              id="username"
+              type="text"
+              autoComplete="username"
+              required
+              value={username}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                setUsernameError(keyText(usernameErrorKey(e.target.value)));
+              }}
+              className={inputClass(usernameError)}
+              placeholder={t('auth.register.username')}
+              disabled={isLoading}
+            />
+          </FormField>
+
+          <FormField id="password" label={t('auth.register.password')} error={passwordError} hint={t('auth.errors.passwordTooShort')}>
+            <PasswordInput
+              id="password"
+              autoComplete="new-password"
+              required
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setPasswordError(keyText(passwordErrorKey(e.target.value)));
+              }}
+              className={inputClass(passwordError)}
+              placeholder="••••••••"
+              disabled={isLoading}
+            />
+          </FormField>
+
+          <FormField id="confirmPassword" label={t('auth.register.confirmPassword')} error={confirmError}>
+            <PasswordInput
+              id="confirmPassword"
+              autoComplete="new-password"
+              required
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                setConfirmError(keyText(confirmErrorKey(e.target.value, password)));
+              }}
+              className={inputClass(confirmError)}
+              placeholder="••••••••"
+              disabled={isLoading}
+            />
+          </FormField>
+
+          <Button type="submit" variant="primary" size="lg" isLoading={isLoading} className="w-full mt-6">
             {isLoading ? t('auth.register.loading') : t('auth.register.button')}
-          </button>
+          </Button>
 
-          <div className="text-center text-sm text-muted-foreground">
-            {t('auth.register.hasAccount')}{' '}
-            <Link to="/login" className="text-primary hover:text-primary/80 font-medium">
-              {t('auth.register.login')}
-            </Link>
+          <div className="text-center pt-4 border-t border-slate-200 dark:border-white/10">
+            <p className="text-sm text-muted-foreground">
+              {t('auth.register.hasAccount')}{' '}
+              <Link
+                to="/login"
+                className="font-semibold text-accent-600 dark:text-accent-400 hover:text-accent-700 dark:hover:text-accent-300 transition-colors"
+              >
+                {t('auth.register.login')}
+              </Link>
+            </p>
           </div>
         </form>
-      </div>
-    </div>
+      </AuthCard>
+    </AuthLayout>
   );
-};
+}

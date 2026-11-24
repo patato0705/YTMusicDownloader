@@ -1,0 +1,77 @@
+# Dependabot: a weekly pull request per group of version updates, each
+# checked by CI (.github/workflows/ci.yml) before anything is merged.
+# Security updates aren't configured here: they come as soon as an advisory
+# is published, once enabled in the repository settings (Code security >
+# Dependabot security updates).
+#
+# - Minor and patch updates come grouped, one pull request per ecosystem.
+#   Majors each get their own: they're the ones that need reading.
+# - A release is only proposed once it's a week old (cooldown): broken or
+#   malicious releases are usually pulled within days. Security updates
+#   don't wait.
+version: 2
+
+updates:
+  # The actions in .github/workflows/, pinned by commit SHA: Dependabot
+  # moves the SHA and the "# vX.Y.Z" comment next to it together
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # backend/requirements.txt. Only the == pins move: yt-dlp is unpinned on
+  # purpose (the entrypoint updates it at startup), and urllib3's ">=" floor
+  # stays as written while new releases still meet it.
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    versioning-strategy: increase-if-necessary
+    commit-message:
+      prefix: chore
+    groups:
+      backend:
+        update-types: [minor, patch]
+
+  # frontend/package.json and package-lock.json
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+    groups:
+      frontend:
+        update-types: [minor, patch]
+
+  # The Dockerfile's images. Python and Node only get patch-level updates
+  # here: a new Python or Node version also means changing the versions CI
+  # tests with (python-version and node-version in ci.yml), so that's done by
+  # hand, in one commit.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+    ignore:
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: node
+        update-types: [version-update:semver-major, version-update:semver-minor]
+    groups:
+      docker:
+        patterns: ["*"]

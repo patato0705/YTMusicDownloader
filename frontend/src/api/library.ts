@@ -4,206 +4,191 @@
  */
 
 import { api } from './client';
+import type { AlbumDownloadStatus, AlbumMode, ArtistRef, LyricsKind, SubscriptionMode, TrackStatus } from '../types';
 
 export type SortOrder = 'asc' | 'desc';
-export type ArtistSortBy = 'name' | 'followed_at' | 'albums_count';
-export type AlbumSortBy = 'title' | 'year' | 'download_progress' | 'followed_at';
-export type AlbumStatus = 'completed' | 'downloading' | 'pending' | 'failed';
-export type TrackStatus = 'done' | 'failed' | 'downloading' | 'new';
+/** queue: the order the download worker will reach each album, those with nothing waiting last */
+export type AlbumSortBy = 'title' | 'year' | 'created_at' | 'download_progress' | 'queue';
 
 export interface LibraryArtist {
   id: string;
   name: string;
-  thumbnail?: string | null;
-  thumbnails?: any[];
-  image_local?: string;
-  followed_at?: string;
-  albums_count?: number;
-  tracks_total?: number;
-  tracks_downloaded?: number;
-  tracks_failed?: number;
-  download_progress?: number;
-  last_synced_at?: string;
-  [key: string]: any;
+  thumbnail: string | null;
+  genres: string[];
+  /** Genres were looked up (an empty list then means none were found) */
+  genres_checked: boolean;
+  mode: SubscriptionMode;
+  /** Followed by a chart, which may unfollow it */
+  chart_followed: boolean;
+  /** Whether you like it */
+  liked: boolean;
+  followed_at: string | null;
+  albums_count: number;
+  tracks_total: number;
+  tracks_downloaded: number;
+  tracks_failed: number;
+  download_progress: number;
+  last_synced_at: string | null;
 }
 
 export interface LibraryAlbum {
   id: string;
   title: string;
-  artist?: {
-    id: string;
-    name: string;
-  };
-  artist_id?: string;
-  artist_name?: string;
-  thumbnail?: string;
-  thumbnails?: any[];
-  year?: string;
-  type?: string;
-  image_local?: string;
-  download_status?: AlbumStatus;
-  download_progress?: number;
-  status?: AlbumStatus;
-  tracks_total?: number;
-  tracks_downloaded?: number;
-  tracks_failed?: number;
-  tracks_with_lyrics?: number;
-  followed_at?: string;
-  [key: string]: any;
+  /** When YouTube Music stopped serving it: its files stay, nothing more is downloaded */
+  removed_at: string | null;
+  artist: { id: string; name: string } | null;
+  year: string | null;
+  type: string;
+  mode: AlbumMode;
+  thumbnail: string | null;
+  download_status: AlbumDownloadStatus;
+  tracks_total: number;
+  tracks_downloaded: number;
+  tracks_failed: number;
+  /** Downloaded tracks without lyrics */
+  tracks_missing_lyrics: number;
+  /** Downloaded tracks with time-synced lyrics */
+  tracks_synced_lyrics: number;
+  /** Downloaded tracks whose lyrics aren't synced */
+  tracks_plain_lyrics: number;
+  /** Downloaded tracks LRCLIB lists as instrumental */
+  tracks_instrumental: number;
+  genres: string[];
+  /** Genres were looked up (an empty list then means none were found) */
+  genres_checked: boolean;
+  /** A playlist (in albums mode) lists one of its songs */
+  from_playlist: boolean;
+  download_progress: number;
+  created_at: string | null;
 }
 
 export interface LibraryTrack {
   id: string;
   title: string;
-  duration?: number;
-  artists?: any[];
-  album?: {
-    id: string;
-    title: string;
-    thumbnail?: string;
-  };
-  artist?: {
-    id: string;
-    name: string;
-  };
-  album_id?: string;
-  has_lyrics?: boolean;
-  lyrics_path?: string | null;
-  file_path?: string;
-  status?: TrackStatus;
-  created_at?: string;
-  [key: string]: any;
+  artists: ArtistRef[];
+  album: { id: string; title: string; thumbnail: string | null };
+  artist: { id: string; name: string } | null;
+  duration: number | null;
+  status: TrackStatus;
+  lyrics: LyricsKind;
+  created_at: string | null;
 }
 
 export interface LibraryStats {
-  artists?: {
+  artists: { total: number };
+  /** total: every album row (metadata ones included); downloaded: those in the library (download mode) */
+  albums: {
     total: number;
-  };
-  albums?: {
-    total: number;
+    downloaded: number;
     completed: number;
     downloading: number;
     pending: number;
     failed: number;
   };
-  tracks?: {
+  tracks: {
     total: number;
     downloaded: number;
     downloading: number;
     pending: number;
     failed: number;
     with_lyrics: number;
+    with_synced_lyrics: number;
+    with_plain_lyrics: number;
+    /** LRCLIB lists them as instrumental: no lyrics to fetch */
+    instrumental: number;
   };
-  storage?: {
-    estimated_mb: number;
-    estimated_gb: number;
-  };
-  [key: string]: any;
-}
-
-export interface AlbumProgress {
-  album: LibraryAlbum;
-  tracks: LibraryTrack[];
-  subscription?: {
-    status: string;
-    followed_at: string;
-  };
-  progress: {
-    percentage: number;
-    tracks_total: number;
-    tracks_downloaded: number;
-    tracks_downloading: number;
-    tracks_failed: number;
-    tracks_pending: number;
-    tracks_with_lyrics: number;
-  };
-}
-
-export interface ArtistsResponse {
-  artists: LibraryArtist[];
-  total: number;
-}
-
-export interface AlbumsResponse {
-  albums: LibraryAlbum[];
-  total: number;
-}
-
-export interface TracksResponse {
-  tracks: LibraryTrack[];
-  total: number;
-  limit: number;
-  offset: number;
+  storage: { bytes: number; gb: number };
 }
 
 export interface GetLibraryAlbumsParams {
-  artist_id?: string;
-  status_filter?: AlbumStatus;
   sort_by?: AlbumSortBy;
   order?: SortOrder;
   limit?: number;
-  offset?: number;
+  /** Only albums in one of these download states */
+  statuses?: Array<'completed' | 'downloading' | 'pending' | 'failed'>;
 }
 
 /**
- * List followed artists with statistics
+ * Why nothing automatic (charts, playlists, artist syncs, backups) brings
+ * an artist or album back: deleted from the library, or (an artist)
+ * unfollowed. Following or downloading it by hand lifts that.
  */
-export async function getLibraryArtists(
-  sortBy: ArtistSortBy = 'name',
-  order: SortOrder = 'asc'
-): Promise<ArtistsResponse> {
-  return api.get<ArtistsResponse>('/library/artists', { sort_by: sortBy, order });
+export type ExclusionReason = 'deleted' | 'unfollowed' | 'artist_deleted';
+
+export interface ExcludedArtist {
+  id: string;
+  name: string;
+  /** Its picture, while it's still in the library (an unfollowed one) */
+  thumbnail: string | null;
+  reason: ExclusionReason;
+  excluded_at: string;
+}
+
+export interface ExcludedAlbum {
+  id: string;
+  title: string;
+  artist: { id: string; name: string | null } | null;
+  thumbnail: string | null;
+  year: string | null;
+  type: string;
+  reason: ExclusionReason;
+  excluded_at: string;
+}
+
+export interface Exclusions {
+  artists: ExcludedArtist[];
+  albums: ExcludedAlbum[];
 }
 
 /**
- * List followed albums with download status
+ * Followed artists with their download counts, by name
  */
-export async function getLibraryAlbums(
-  params?: GetLibraryAlbumsParams
-): Promise<AlbumsResponse> {
-  const queryParams: Record<string, any> = {
-    sort_by: params?.sort_by || 'title',
-    order: params?.order || 'asc'
-  };
-  
-  if (params?.artist_id) queryParams.artist_id = params.artist_id;
-  if (params?.status_filter) queryParams.status_filter = params.status_filter;
-  if (params?.limit) queryParams.limit = params.limit;
-  if (params?.offset) queryParams.offset = params.offset;
-  
-  return api.get<AlbumsResponse>('/library/albums', queryParams);
+export async function getLibraryArtists(): Promise<LibraryArtist[]> {
+  return (await api.get<{ artists: LibraryArtist[] }>('/library/artists')).artists;
 }
 
 /**
- * List tracks with optional filters
+ * Albums in the library (download mode) with their download state
  */
-export async function getLibraryTracks(
-  artistId?: string,
-  albumId?: string,
-  statusFilter?: TrackStatus,
-  hasLyrics?: boolean,
-  limit = 100,
-  offset = 0
-): Promise<TracksResponse> {
-  const params: Record<string, any> = { limit, offset };
-  if (artistId) params.artist_id = artistId;
-  if (albumId) params.album_id = albumId;
-  if (statusFilter) params.status_filter = statusFilter;
-  if (hasLyrics !== undefined) params.has_lyrics = hasLyrics;
-  
-  return api.get<TracksResponse>('/library/tracks', params);
+export async function getLibraryAlbums({ statuses, ...params }: GetLibraryAlbumsParams = {}): Promise<LibraryAlbum[]> {
+  const query = statuses ? { ...params, status_filter: statuses.join(',') } : params;
+  return (await api.get<{ albums: LibraryAlbum[] }>('/library/albums', query)).albums;
 }
 
 /**
- * Get overall library statistics
+ * Library tracks whose title contains the query (case-insensitive)
+ */
+export async function searchLibraryTracks(query: string, limit = 200): Promise<LibraryTrack[]> {
+  return (await api.get<{ tracks: LibraryTrack[] }>('/library/tracks', { q: query, limit })).tracks;
+}
+
+/**
+ * Overall library statistics
  */
 export async function getLibraryStats(): Promise<LibraryStats> {
   return api.get<LibraryStats>('/library/stats');
 }
 
 /**
- * Get detailed download progress for a specific album
+ * Delete an artist and all associated albums, tracks, files, and subscriptions (admin only)
  */
-export async function getAlbumProgress(albumId: string): Promise<AlbumProgress> {
-  return api.get<AlbumProgress>(`/library/albums/${encodeURIComponent(albumId)}/progress`);
+export async function deleteLibraryArtist(artistId: string): Promise<void> {
+  await api.delete(`/library/artists/${encodeURIComponent(artistId)}`);
+}
+
+/**
+ * Delete an album and all associated tracks and files (admin only)
+ */
+export async function deleteLibraryAlbum(albumId: string): Promise<void> {
+  await api.delete(`/library/albums/${encodeURIComponent(albumId)}`);
+}
+
+/** The artists and albums kept out of the library, newest first */
+export async function getExclusions(): Promise<Exclusions> {
+  return api.get<Exclusions>('/library/exclusions');
+}
+
+/** Let charts, playlists and syncs bring it in again (nothing is followed or downloaded here) */
+export async function restoreExclusion(kind: 'artist' | 'album', id: string): Promise<void> {
+  await api.delete(`/library/exclusions/${kind}/${encodeURIComponent(id)}`);
 }

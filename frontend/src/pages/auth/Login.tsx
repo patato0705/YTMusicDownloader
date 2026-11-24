@@ -1,120 +1,173 @@
 // src/pages/auth/Login.tsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
+import { AuthCard, AuthLayout } from '../../components/layout/AuthLayout';
+import { Button } from '../../components/ui/Button';
+import { FormField, inputClass } from '../../components/ui/FormField';
+import { PasswordInput } from '../../components/ui/PasswordInput';
+import { ErrorBanner } from '../../components/ui/PageStatus';
+import { Spinner } from '../../components/ui/Spinner';
+import { isServerUnreachable, retryAfterMinutes } from '../../utils';
 import * as authApi from '../../api/auth';
+import type { AuthConfig } from '../../api/auth';
 
-export const Login: React.FC = () => {
+const SSO_ERRORS = ['denied', 'not_allowed', 'inactive', 'unavailable'];
+
+export default function Login(): JSX.Element {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const { login, isAuthenticated } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  // Redirect if already logged in
+  // Which sign-in methods to offer. If it can't be read, fall back to the
+  // password form: the server still enforces whatever is really enabled.
+  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/');
-    }
+    authApi.getAuthConfig()
+      .then(setAuthConfig)
+      .catch(() => setAuthConfig({
+        password_login_enabled: true,
+        registration_enabled: false,
+        oidc_enabled: false,
+        oidc_provider_name: null,
+        oidc_roles_from_groups: false,
+      }));
+  }, []);
+
+  // Single sign-on failures come back as /login?oidc_error=<reason>
+  const ssoErrorCode = searchParams.get('oidc_error');
+  const ssoError = ssoErrorCode
+    ? t(`auth.login.ssoErrors.${SSO_ERRORS.includes(ssoErrorCode) ? ssoErrorCode : 'failed'}`)
+    : '';
+  const shownError = error || ssoError;
+
+  useEffect(() => {
+    if (isAuthenticated) navigate('/');
   }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
+    setUsernameError(username ? '' : t('auth.errors.usernameRequired'));
+    setPasswordError(password ? '' : t('auth.errors.passwordRequired'));
+    if (!username || !password) return;
 
+    setIsLoading(true);
     try {
       await login(username, password);
-      
-      // Check if default admin with default password
-      const user = await authApi.getCurrentUser();
-      
-      if (user.id === 1 && password === 'default') {
-        navigate('/change-password', { 
-          state: { 
-            forced: true, 
-            message: t('auth.changePassword.defaultWarning') || 'Please change the default password'
-          } 
-        });
-      } else {
-        navigate('/');
-      }
+      // A temporary password (first admin, admin reset) is caught by
+      // ProtectedRoute, which sends the user to /change-password
+      navigate('/');
     } catch (err: any) {
-      setError(err.message || t('auth.errors.invalidCredentials'));
+      if (err?.status === 429) {
+        setError(t('auth.errors.tooManyAttempts', { minutes: retryAfterMinutes(err) }));
+      } else if (isServerUnreachable(err)) {
+        setError(t('common.serverUnreachable'));
+      } else {
+        setError(t(err?.status === 401 ? 'auth.errors.invalidCredentials' : 'auth.errors.loginFailed'));
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-secondary px-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h2 className="text-4xl font-bold text-foreground mb-2">
-            {t('auth.login.title')}
-          </h2>
-          <p className="text-muted-foreground">{t('auth.login.subtitle')}</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6 bg-card p-8 rounded-xl shadow-2xl border border-border">
-          {error && (
-            <div className="bg-red-500/10 border border-red-500 text-red-500 px-4 py-3 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-card-foreground mb-2">
-                {t('auth.login.username')}
-              </label>
-              <input
-                id="username"
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-                placeholder={t('auth.login.username')}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-card-foreground mb-2">
-                {t('auth.login.password')}
-              </label>
-              <input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-                placeholder={t('auth.login.password')}
-              />
-            </div>
+    <AuthLayout title={t('auth.login.title')} subtitle={t('auth.login.subtitle')}>
+      <AuthCard>
+        {!authConfig ? (
+          <div className="flex justify-center py-8">
+            <Spinner size="lg" className="text-accent-600 dark:text-accent-500" />
           </div>
+        ) : (
+          <div className="space-y-6">
+            {shownError && <ErrorBanner>{shownError}</ErrorBanner>}
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-3 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-          >
-            {isLoading ? t('auth.login.loading') : t('auth.login.button')}
-          </button>
+            {authConfig.oidc_enabled && (
+              <Button
+                type="button"
+                variant={authConfig.password_login_enabled ? 'outline' : 'primary'}
+                size="lg"
+                onClick={authApi.startSingleSignOn}
+                className="w-full"
+              >
+                {t('auth.login.sso', { name: authConfig.oidc_provider_name ?? 'SSO' })}
+              </Button>
+            )}
 
-          <div className="text-center text-sm text-muted-foreground">
-            {t('auth.login.noAccount')}{' '}
-            <Link to="/register" className="text-primary hover:text-primary/80 font-medium">
-              {t('auth.login.register')}
-            </Link>
+            {authConfig.oidc_enabled && authConfig.password_login_enabled && (
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                <span className="text-xs text-muted-foreground">{t('common.or')}</span>
+                <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+              </div>
+            )}
+
+            {authConfig.password_login_enabled && (
+              <form onSubmit={handleSubmit} noValidate className="space-y-6">
+                <FormField id="username" label={t('auth.login.username')} error={usernameError}>
+                  <input
+                    id="username"
+                    type="text"
+                    autoComplete="username"
+                    required
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setUsernameError('');
+                    }}
+                    className={inputClass(usernameError)}
+                    placeholder={t('auth.login.username')}
+                    disabled={isLoading}
+                  />
+                </FormField>
+
+                <FormField id="password" label={t('auth.login.password')} error={passwordError}>
+                  <PasswordInput
+                    id="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setPasswordError('');
+                    }}
+                    className={inputClass(passwordError)}
+                    placeholder="••••••••"
+                    disabled={isLoading}
+                  />
+                </FormField>
+
+                <Button type="submit" variant="primary" size="lg" isLoading={isLoading} className="w-full">
+                  {isLoading ? t('auth.login.loading') : t('auth.login.button')}
+                </Button>
+              </form>
+            )}
+
+            {authConfig.registration_enabled && (
+              <div className="text-center pt-4 border-t border-slate-200 dark:border-white/10">
+                <p className="text-sm text-muted-foreground">
+                  {t('auth.login.noAccount')}{' '}
+                  <Link
+                    to="/register"
+                    className="font-semibold text-accent-600 dark:text-accent-400 hover:text-accent-700 dark:hover:text-accent-300 transition-colors"
+                  >
+                    {t('auth.login.register')}
+                  </Link>
+                </p>
+              </div>
+            )}
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+      </AuthCard>
+    </AuthLayout>
   );
-};
+}

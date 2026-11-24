@@ -1,187 +1,901 @@
 // src/pages/Library.tsx
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
-import { getLibraryArtists, getLibraryAlbums, getLibraryStats } from '../api/library';
+import { useAuth } from '../contexts/AuthContext';
+import { useFeatures } from '../contexts/FeaturesContext';
+import { useJobActivity } from '../contexts/JobActivityContext';
+import { getExclusions, getLibraryArtists, getLibraryAlbums, getLibraryStats, restoreExclusion, searchLibraryTracks } from '../api/library';
+import type { Exclusions, LibraryAlbum, LibraryArtist, LibraryStats, LibraryTrack } from '../api/library';
+import { exportLibrary, downloadJson, exportFilename } from '../api/export';
+import { listPlaylists } from '../api/playlists';
+import type { SavedPlaylist } from '../api/playlists';
 import { getImageUrl } from '../api/media';
-import MediaCard from '../components/MediaCard';
+import { PlaylistsPanel } from '../components/playlists/PlaylistsPanel';
+import { LibraryStatCards } from '../components/LibraryStatCards';
+import { MEDIA_GRID, MediaCard } from '../components/MediaCard';
+import { MediaList, MediaRow } from '../components/MediaList';
+import { Button } from '../components/ui/Button';
+import { LikeButton } from '../components/ui/LikeButton';
+import { SectionHeader } from '../components/ui/SectionHeader';
+import { PageHeader } from '../components/ui/PageHeader';
+import { SearchInput } from '../components/ui/SearchInput';
+import { FilterTabs } from '../components/ui/FilterTabs';
+import { Toast } from '../components/ui/Toast';
+import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
+import { ViewToggle, type ViewMode } from '../components/ui/ViewToggle';
+import { apiErrorMessage, isServerUnreachable, getAlbumStatus, getArtistStatus, createMemoryCache, artistPath, albumPath, exceptionalStatus } from '../utils';
+import { useDebounce } from '../hooks/useDebounce';
+import { useProgressiveList } from '../hooks/useProgressiveList';
+import { useHistoryState } from '../hooks/useHistoryState';
+import { useLikeSync } from '../hooks/useLikeSync';
+import { Icon } from '../components/ui/icons';
 import { Spinner } from '../components/ui/Spinner';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
-import { formatNumber } from '../utils';
+import { ActiveFilters, LibraryFilterControl, SortControl, filterHintText } from '../components/library/LibraryFilters';
+import {
+  FILTER_GROUPS,
+  activeFilterCount,
+  albumHints,
+  albumMatches,
+  artistHints,
+  artistMatches,
+  filtersFromParams,
+  sortAlbums,
+  sortArtists,
+  showsExcluded,
+  sortFromParams,
+  toggleFilter,
+  withFilterParams,
+} from '../utils/libraryFilters';
+import type { FilterContext, FilterGroup, FilterHint, FilterItems, LibraryFilters, LibrarySort, OfferedFilters } from '../utils/libraryFilters';
+
+type LibraryTab = 'all' | 'artists' | 'albums' | 'playlists';
+
+const VIEW_STORAGE_KEY = 'library.view';
+const TRACK_SEARCH_DEBOUNCE_MS = 250;
+/** Shortest gap between two refreshes triggered by the job queue */
+const REFRESH_MIN_GAP_MS = 5000;
+/** Cards mounted per scroll step: a multiple of every grid column count (2 to 5) */
+const PAGE_SIZE = 60;
+
+/** Tracks matching the search, grouped by the album / artist they belong to */
+interface TrackMatches {
+  /** The query these results answer: lets the UI tell fresh results from stale ones */
+  query: string;
+  byAlbum: Map<string, LibraryTrack[]>;
+  byArtist: Map<string, LibraryTrack[]>;
+}
+
+const NO_TRACK_MATCHES: TrackMatches = { query: '', byAlbum: new Map(), byArtist: new Map() };
+
+/** What the page last loaded: shown right away when coming back, then refreshed */
+interface LibrarySnapshot {
+  artists: LibraryArtist[];
+  albums: LibraryAlbum[];
+  stats: LibraryStats;
+  playlists: SavedPlaylist[];
+  /** Kept out of the library: listed by the "excluded" filter */
+  exclusions: Exclusions;
+}
+
+const NO_EXCLUSIONS: Exclusions = { artists: [], albums: [] };
+
+const LIBRARY_CACHE_KEY = 'library';
+const libraryCache = createMemoryCache<LibrarySnapshot>(1);
+/** Track search results by query */
+const trackMatchesCache = createMemoryCache<TrackMatches>(20);
+
+function groupTrackMatches(query: string, tracks: LibraryTrack[]): TrackMatches {
+  const byAlbum = new Map<string, LibraryTrack[]>();
+  const byArtist = new Map<string, LibraryTrack[]>();
+
+  for (const track of tracks) {
+    const albumId = track.album?.id;
+    const artistId = track.artist?.id;
+    if (albumId) byAlbum.set(albumId, [...(byAlbum.get(albumId) || []), track]);
+    if (artistId) byArtist.set(artistId, [...(byArtist.get(artistId) || []), track]);
+  }
+
+  return { query, byAlbum, byArtist };
+}
+
+/** One line under a card or row: why it's listed, from the search and from the filters */
+function joinHints(...parts: Array<string | undefined>): string | undefined {
+  return parts.filter(Boolean).join(' · ') || undefined;
+}
+
+/** Lifts an exclusion from its card or row: always shown, touch screens have no hover */
+function RestoreButton({ label, title, loading, onClick, compact = false }: {
+  label: string; title: string; loading: boolean; onClick: () => void;
+  /** Beside a list row's title, rather than on a card's artwork */
+  compact?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        // Inside the card's link: restoring mustn't open the page
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+      }}
+      disabled={loading}
+      aria-label={label}
+      title={title}
+      className={`flex items-center justify-center rounded-full transition-colors outline-none disabled:cursor-wait ${
+        compact
+          ? 'w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent-500/70'
+          : 'w-9 h-9 shadow-md ring-2 ring-white dark:ring-zinc-900 bg-white text-slate-700 hover:bg-accent-600 hover:text-white dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-accent-600 focus-visible:ring-accent-500/70'
+      }`}
+    >
+      {loading ? <Spinner size="sm" /> : <Icon name="undo" className="w-4 h-4" />}
+    </button>
+  );
+}
+
+function loadViewMode(): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'list' ? 'list' : 'grid';
+  } catch {
+    return 'grid';
+  }
+}
 
 export default function Library(): JSX.Element {
-  const [artists, setArtists] = useState<any[]>([]);
-  const [albums, setAlbums] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [cached] = useState(() => libraryCache.get(LIBRARY_CACHE_KEY));
+  const [artists, setArtists] = useState<LibraryArtist[]>(cached?.artists ?? []);
+  const [albums, setAlbums] = useState<LibraryAlbum[]>(cached?.albums ?? []);
+  const [stats, setStats] = useState<LibraryStats | null>(cached?.stats ?? null);
+  const [loading, setLoading] = useState(!cached);
+  // The first load's failure (a failed background refresh keeps what's on screen)
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Bumped by every library refresh: the track search follows it
+  const [libraryVersion, setLibraryVersion] = useState(0);
+  // Tab and search come back with the back button, along with the scroll position
+  const [activeTab, setActiveTab] = useHistoryState<LibraryTab>('tab', 'all');
+  const [playlists, setPlaylists] = useState<SavedPlaylist[]>(cached?.playlists ?? []);
+  const [exclusions, setExclusions] = useState<Exclusions>(cached?.exclusions ?? NO_EXCLUSIONS);
+  // The exclusion a Restore click is lifting
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useHistoryState('search', '');
+  const [trackMatches, setTrackMatches] = useState<TrackMatches>(
+    () => trackMatchesCache.get(searchQuery.trim()) ?? NO_TRACK_MATCHES
+  );
+  const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
+  const [exporting, setExporting] = useState(false);
+  const debouncedQuery = useDebounce(searchQuery.trim(), TRACK_SEARCH_DEBOUNCE_MS);
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, formatLocale } = useI18n();
+  const { user } = useAuth();
+  const { features } = useFeatures();
+  // Filters and sort are in the URL: a link can open the library filtered,
+  // and the back button brings them back
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
+  const sort = useMemo(() => sortFromParams(searchParams), [searchParams]);
+  const filtersActive = activeFilterCount(filters) > 0;
+  // The "excluded" filter: what's kept out of the library is listed instead
+  const excludedView = showsExcluded(filters);
+  // The filter popover stays within the toolbar's width
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  // Visitors are read-only: liking is a member+ action on the backend
+  const canLike = user?.role === 'administrator' || user?.role === 'member';
+  const { revision, downloadsPausedUntil } = useJobActivity();
+  const downloadsPaused = downloadsPausedUntil !== null;
+  // On screen and in the cache, for coming back
+  const setLiked = (artistId: string, liked: boolean) => {
+    setArtists((current) => current.map((a) => (a.id === artistId ? { ...a, liked } : a)));
+    const snapshot = libraryCache.get(LIBRARY_CACHE_KEY);
+    if (snapshot) {
+      libraryCache.set(LIBRARY_CACHE_KEY, {
+        ...snapshot,
+        artists: snapshot.artists.map((a) => (a.id === artistId ? { ...a, liked } : a)),
+      });
+    }
+  };
+  // Put back if the server says no
+  const likeSync = useLikeSync((artistId, liked, err) => {
+    setLiked(artistId, liked);
+    setToast(t(isServerUnreachable(err) ? 'common.serverUnreachable' : 'artist.likeError'));
+  });
+  const { unsaved: unsavedLikes } = likeSync;
 
   useEffect(() => {
-    loadLibrary();
-  }, []);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, viewMode);
+    } catch {
+      // Storage unavailable - the choice just won't survive a reload
+    }
+  }, [viewMode]);
 
-  const loadLibrary = async () => {
-    setLoading(true);
-    setError(null);
+  // Kept in a ref so the effects below don't refire on it
+  const fetchRef = useRef({ loaded: !!cached, inFlight: false, queued: false, lastStartedAt: 0, unmounted: false });
+
+  const loadLibrary = useCallback(async () => {
+    const state = fetchRef.current;
+    if (state.unmounted) return;
+    if (state.inFlight) {
+      // Folded into one follow-up once the current fetch lands
+      state.queued = true;
+      return;
+    }
+
+    state.inFlight = true;
+    state.lastStartedAt = Date.now();
 
     try {
-      const [artistsResponse, albumsResponse, statsResponse] = await Promise.all([
+      const [artistsList, albumsList, statsResponse, playlistsResponse, exclusionsResponse] = await Promise.all([
         getLibraryArtists(),
         getLibraryAlbums(),
         getLibraryStats(),
+        // The rest of the page doesn't depend on these two
+        listPlaylists().catch((err) => {
+          console.error('Failed to load playlists:', err);
+          return null;
+        }),
+        getExclusions().catch((err) => {
+          console.error('Failed to load exclusions:', err);
+          return null;
+        }),
       ]);
 
-      setArtists((artistsResponse as any)?.artists || artistsResponse || []);
-      setAlbums((albumsResponse as any)?.albums || albumsResponse || []);
-      setStats(statsResponse || {});
+      // Hearts clicked but not saved yet keep what the screen shows
+      const likes = unsavedLikes();
+      const snapshot: LibrarySnapshot = {
+        artists: artistsList.map((a) => (likes.has(a.id) ? { ...a, liked: likes.get(a.id)! } : a)),
+        albums: albumsList,
+        stats: statsResponse,
+        // A failed playlists fetch keeps the ones already shown (the
+        // callback never changes, so state would be stale here)
+        playlists: playlistsResponse ?? libraryCache.get(LIBRARY_CACHE_KEY)?.playlists ?? [],
+        exclusions: exclusionsResponse ?? libraryCache.get(LIBRARY_CACHE_KEY)?.exclusions ?? NO_EXCLUSIONS,
+      };
+      libraryCache.set(LIBRARY_CACHE_KEY, snapshot);
+
+      if (state.unmounted) return;
+      setArtists(snapshot.artists);
+      setAlbums(snapshot.albums);
+      setStats(snapshot.stats);
+      if (playlistsResponse) setPlaylists(playlistsResponse);
+      if (exclusionsResponse) setExclusions(exclusionsResponse);
+      setLibraryVersion((version) => version + 1);
+      setLoadError(null);
+      state.loaded = true;
     } catch (err: any) {
       console.error('Failed to load library:', err);
-      setError(err.message || 'Failed to load library');
+      if (!state.unmounted && !state.loaded) setLoadError(err);
     } finally {
-      setLoading(false);
+      state.inFlight = false;
+      if (!state.unmounted) setLoading(false);
+      if (state.queued) {
+        state.queued = false;
+        window.setTimeout(loadLibrary, Math.max(0, state.lastStartedAt + REFRESH_MIN_GAP_MS - Date.now()));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const state = fetchRef.current;
+    state.unmounted = false;
+    return () => { state.unmounted = true; };
+  }, []);
+
+  // Load on mount, then refresh whenever the job queue moves, so status
+  // badges follow downloads started from anywhere, including ones this page
+  // hasn't heard of yet. Artists are refreshed too: their badge comes from
+  // their track counts.
+  // While downloads run the queue moves every few seconds, so refreshes are
+  // spaced at least REFRESH_MIN_GAP_MS apart and the bumps in between are
+  // batched into the next one.
+  useEffect(() => {
+    const { lastStartedAt } = fetchRef.current;
+    const delay = lastStartedAt ? Math.max(0, lastStartedAt + REFRESH_MIN_GAP_MS - Date.now()) : 0;
+    const timer = window.setTimeout(loadLibrary, delay);
+    return () => window.clearTimeout(timer);
+  }, [revision, loadLibrary]);
+
+  // Tracks aren't listed on this page, so a title-only search goes to the
+  // server and the matching albums / artists are surfaced instead. Searched
+  // again when the library is refreshed, with the tracks it now holds.
+  useEffect(() => {
+    if (!debouncedQuery) {
+      setTrackMatches(NO_TRACK_MATCHES);
+      return;
+    }
+
+    let cancelled = false;
+
+    searchLibraryTracks(debouncedQuery)
+      .then((tracks) => {
+        const matches = groupTrackMatches(debouncedQuery, tracks);
+        trackMatchesCache.set(debouncedQuery, matches);
+        if (!cancelled) setTrackMatches(matches);
+      })
+      .catch((err) => {
+        console.error('Failed to search library tracks:', err);
+        if (!cancelled) setTrackMatches({ ...NO_TRACK_MATCHES, query: debouncedQuery });
+      });
+
+    return () => { cancelled = true; };
+  }, [debouncedQuery, libraryVersion]);
+
+  // Results are only shown once they answer the current input, so a query the
+  // user has moved on from never leaks stale hints. A refetch triggered by a
+  // library refresh keeps the previous results on screen until the new ones land,
+  // instead of blanking them on every tick.
+  const trackMatchesReady = trackMatches.query === searchQuery.trim();
+  const albumTrackMatches = trackMatchesReady ? trackMatches.byAlbum : NO_TRACK_MATCHES.byAlbum;
+  const artistTrackMatches = trackMatchesReady ? trackMatches.byArtist : NO_TRACK_MATCHES.byArtist;
+
+  const albumTitleById = useMemo(
+    () => new Map<string, string>(albums.map((album) => [album.id, album.title])),
+    [albums]
+  );
+
+  // An artist's badge depends on its albums: grouped once instead of
+  // scanning every album for every artist card
+  const albumsByArtist = useMemo(() => {
+    const byArtist = new Map<string, LibraryAlbum[]>();
+    for (const album of albums) {
+      const artistId = album.artist?.id;
+      if (!artistId) continue;
+      const artistAlbums = byArtist.get(artistId);
+      if (artistAlbums) artistAlbums.push(album);
+      else byArtist.set(artistId, [album]);
+    }
+    return byArtist;
+  }, [albums]);
+
+  // The status of each item, worked out once. Cards badge only the exceptions;
+  // a list shows its status column when some row is one, and then fills every row
+  const artistStatus = useMemo(
+    () => new Map(artists.map((artist) => [artist.id, getArtistStatus(artist, albumsByArtist.get(artist.id), downloadsPaused)])),
+    [artists, albumsByArtist, downloadsPaused]
+  );
+  const albumStatus = useMemo(
+    () => new Map(albums.map((album) => [album.id, getAlbumStatus(album, downloadsPaused)])),
+    [albums, downloadsPaused]
+  );
+
+  // Filter content based on active tab and search query. Name matches are
+  // done locally; an item whose name doesn't match still shows up when one of
+  // its tracks does, with a hint saying which one.
+  // Trimmed like the track search: an iPhone keyboard suggestion ends with a space
+  const query = searchQuery.trim().toLowerCase();
+
+  const searchedArtists = useMemo(
+    () => activeTab === 'albums' || activeTab === 'playlists' ? [] : artists.filter(artist =>
+      artist.name.toLowerCase().includes(query) || artistTrackMatches.has(artist.id)
+    ),
+    [artists, activeTab, query, artistTrackMatches]
+  );
+
+  const searchedAlbums = useMemo(
+    () => activeTab === 'artists' || activeTab === 'playlists' ? [] : albums.filter(album =>
+      album.title.toLowerCase().includes(query) ||
+      album.artist?.name.toLowerCase().includes(query) ||
+      albumTrackMatches.has(album.id)
+    ),
+    [albums, activeTab, query, albumTrackMatches]
+  );
+
+  // Then the filters (see utils/libraryFilters.ts) and the sort
+  const artistById = useMemo(() => new Map(artists.map((artist) => [artist.id, artist])), [artists]);
+  const filterContext = useMemo<FilterContext>(
+    () => ({ artistById, albumsByArtist, albumStatus }),
+    [artistById, albumsByArtist, albumStatus]
+  );
+  const collator = useMemo(() => new Intl.Collator(formatLocale, { sensitivity: 'base', numeric: true }), [formatLocale]);
+
+  const filteredArtists = useMemo(() => {
+    const matching = filtersActive ? searchedArtists.filter((artist) => artistMatches(artist, filters, filterContext)) : searchedArtists;
+    return sortArtists(matching, sort, filterContext, collator);
+  }, [searchedArtists, filters, filtersActive, sort, filterContext, collator]);
+
+  const filteredAlbums = useMemo(() => {
+    const matching = filtersActive ? searchedAlbums.filter((album) => albumMatches(album, filters, filterContext)) : searchedAlbums;
+    return sortAlbums(matching, sort, collator);
+  }, [searchedAlbums, filters, filtersActive, sort, filterContext, collator]);
+
+  // The "excluded" view: what's kept out, by search and tab like the rest
+  const excludedArtists = useMemo(
+    () => !excludedView || activeTab === 'albums' || activeTab === 'playlists' ? [] : exclusions.artists.filter(
+      (artist) => artist.name.toLowerCase().includes(query)
+    ),
+    [excludedView, exclusions, activeTab, query]
+  );
+  const excludedAlbums = useMemo(
+    () => !excludedView || activeTab === 'artists' || activeTab === 'playlists' ? [] : exclusions.albums.filter(
+      (album) => album.title.toLowerCase().includes(query) || !!album.artist?.name?.toLowerCase().includes(query)
+    ),
+    [excludedView, exclusions, activeTab, query]
+  );
+  const resultCount = excludedView
+    ? excludedArtists.length + excludedAlbums.length
+    : filteredArtists.length + filteredAlbums.length;
+
+  // Lyrics filters only when lyrics are fetched; "No genre found" only when genres are looked up
+  const lyricsEnabled = !!features?.lyrics_enabled;
+  const genresEnabled = !!features?.genres_enabled;
+  const offeredFilters = useMemo<OfferedFilters>(() => ({
+    groups: FILTER_GROUPS.filter((group) => group !== 'lyrics' || lyricsEnabled),
+    genresLookedUp: genresEnabled,
+    excludedCount: exclusions.artists.length + exclusions.albums.length,
+  }), [lyricsEnabled, genresEnabled, exclusions]);
+  // For the filter panel's counts
+  const libraryItems = useMemo<FilterItems>(() => ({ artists, albums }), [artists, albums]);
+  const shownItems = useMemo<FilterItems>(
+    () => ({ artists: searchedArtists, albums: searchedAlbums }),
+    [searchedArtists, searchedAlbums]
+  );
+
+  // Written to the URL in place: picking filters adds no history entries
+  const updateFilters = useCallback(
+    (change: (current: LibraryFilters, sort: LibrarySort) => [LibraryFilters, LibrarySort]) => {
+      setSearchParams((prev) => {
+        const [nextFilters, nextSort] = change(filtersFromParams(prev), sortFromParams(prev));
+        return withFilterParams(prev, nextFilters, nextSort);
+      }, { replace: true });
+    },
+    [setSearchParams]
+  );
+  const onToggleFilter = (group: FilterGroup, value: string) =>
+    updateFilters((current, currentSort) => [toggleFilter(current, group, value), currentSort]);
+  const clearFilters = () => updateFilters((_current, currentSort) => [{}, currentSort]);
+  const setSort = (next: LibrarySort) => updateFilters((current) => [current, next]);
+
+  const filterHint = (found: FilterHint[]): string | undefined =>
+    found.length > 0 ? found.map((hint) => filterHintText(t, hint)).join(' · ') : undefined;
+
+  // Large libraries hold thousands of albums: mount the cards a page at a
+  // time as the user scrolls, starting over on a new search, tab, filter or sort
+  const listResetKey = `${activeTab}|${query}|${withFilterParams(new URLSearchParams(), filters, sort).toString()}`;
+  const {
+    visible: displayedArtists,
+    hasMore: moreArtists,
+    sentinelRef: artistsSentinelRef,
+  } = useProgressiveList(filteredArtists, PAGE_SIZE, listResetKey, 'artists');
+  const {
+    visible: displayedAlbums,
+    hasMore: moreAlbums,
+    sentinelRef: albumsSentinelRef,
+  } = useProgressiveList(filteredAlbums, PAGE_SIZE, listResetKey, 'albums');
+
+  const albumHint = (album: LibraryAlbum): string | undefined =>
+    joinHints(
+      album.removed_at ? t('album.removedBadge') : undefined,
+      albumMatchHint(album.id),
+      filtersActive ? filterHint(albumHints(album, filters)) : undefined,
+    );
+  const artistHint = (artist: LibraryArtist): string | undefined =>
+    joinHints(artistMatchHint(artist.id), filtersActive ? filterHint(artistHints(artist, filters, filterContext)) : undefined);
+
+  const albumMatchHint = (albumId: string): string | undefined => {
+    const matches = albumTrackMatches.get(albumId);
+    if (!matches?.length) return undefined;
+    return matches.length === 1
+      ? t('library.trackMatch.one', { title: matches[0].title })
+      : t('library.trackMatch.many', { title: matches[0].title, count: matches.length - 1 });
+  };
+
+  // An album's artist name links to the artist, when we know who it is
+  const albumArtistPath = (album: LibraryAlbum): string | undefined =>
+    album.artist?.id ? artistPath(album.artist.id) : undefined;
+
+  const artistMatchHint = (artistId: string): string | undefined => {
+    const matches = artistTrackMatches.get(artistId);
+    if (!matches?.length) return undefined;
+    const first = matches[0];
+    const albumTitle = first.album.title || albumTitleById.get(first.album.id) || '';
+    return matches.length === 1
+      ? t('library.trackMatch.artistOne', { title: first.title, album: albumTitle })
+      : t('library.trackMatch.artistMany', { title: first.title, count: matches.length - 1 });
+  };
+
+  if (loading) return <LoadingState />;
+  if (loadError) return <ErrorBanner title={t('common.error')}>{apiErrorMessage(loadError, t, t('common.error'))}</ErrorBanner>;
+
+  // Exclusions count: with everything deleted, the filter still lists them
+  const hasContent = artists.length > 0 || albums.length > 0 || exclusions.artists.length + exclusions.albums.length > 0;
+
+  // Charts, playlists and syncs may bring it back; nothing is downloaded here
+  const handleRestore = async (kind: 'artist' | 'album', id: string, name: string) => {
+    setRestoringId(id);
+    try {
+      await restoreExclusion(kind, id);
+      const next = kind === 'artist'
+        ? { ...exclusions, artists: exclusions.artists.filter((a) => a.id !== id) }
+        : { ...exclusions, albums: exclusions.albums.filter((a) => a.id !== id) };
+      setExclusions(next);
+      const snapshot = libraryCache.get(LIBRARY_CACHE_KEY);
+      if (snapshot) libraryCache.set(LIBRARY_CACHE_KEY, { ...snapshot, exclusions: next });
+      setNotice(t('library.excluded.restored', { name }));
+    } catch (err: any) {
+      console.error('Restore failed:', err);
+      setToast(apiErrorMessage(err, t, t('common.error')));
+    } finally {
+      setRestoringId(null);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <Spinner size="lg" className="mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">{t('common.loading')}</p>
-        </div>
-      </div>
-    );
-  }
+  const formatDay = (iso: string) => new Date(iso).toLocaleDateString(formatLocale);
+  const restoreButton = (kind: 'artist' | 'album', id: string, name: string, compact = false) => canLike && (
+    <RestoreButton
+      compact={compact}
+      label={t('library.excluded.restore', { name })}
+      title={t('library.excluded.restoreTitle')}
+      loading={restoringId === id}
+      onClick={() => handleRestore(kind, id, name)}
+    />
+  );
 
-  if (error) {
-    return (
-      <div className="p-4 bg-red-500/10 border border-red-500 text-red-600 dark:text-red-400 rounded-lg">
-        {t('common.error')}: {error}
-      </div>
-    );
-  }
+  // Followed artists/albums/charts as a JSON file: shareable, and importable
+  // by an admin on another instance (Admin panel > Backup).
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      downloadJson(await exportLibrary(), exportFilename('library'));
+    } catch (err: any) {
+      console.error('Failed to export library:', err);
+      setToast(apiErrorMessage(err, t, t('library.export.failed')));
+    } finally {
+      setExporting(false);
+    }
+  };
 
-  const hasContent = artists.length > 0 || albums.length > 0;
+  const tabs = [
+    { id: 'all' as const, label: t('common.all') },
+    { id: 'artists' as const, label: `${t('browse.sections.artists')} (${excludedView ? exclusions.artists.length : artists.length})` },
+    { id: 'albums' as const, label: `${t('browse.sections.albums')} (${excludedView ? exclusions.albums.length : albums.length})` },
+    ...(playlists.length > 0 || activeTab === 'playlists'
+      ? [{ id: 'playlists' as const, label: `${t('library.playlists')} (${playlists.length})` }]
+      : []),
+  ];
+
+  // Flipped right away; the server hears of it once the clicks stop (useLikeSync)
+  const toggleLike = (artist: LibraryArtist) => {
+    const liked = !artist.liked;
+    setLiked(artist.id, liked);
+    likeSync.toggle(artist.id, liked);
+  };
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">
-          {t('library.title')}
-        </h1>
-        <p className="text-muted-foreground">
-          Your followed artists and albums
-        </p>
-      </div>
+    <div className="space-y-8 pb-12">
+      {toast && <Toast message={toast} type="error" onClose={() => setToast(null)} />}
+      {notice && <Toast message={notice} type="success" onClose={() => setNotice(null)} />}
 
-      {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader>
-              <CardDescription>{t('library.stats.artists')}</CardDescription>
-              <CardTitle className="text-3xl">
-                {formatNumber(stats.followed_artists || 0)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
+      <PageHeader
+        icon="library"
+        title={t('nav.library')}
+        subtitle={t('library.heroSubtitle')}
+        actions={hasContent && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            isLoading={exporting}
+            className="gap-2"
+            title={t('library.export.description')}
+          >
+            <Icon name="download" className="w-4 h-4" />
+            {t('library.export.button')}
+          </Button>
+        )}
+      />
 
-          <Card>
-            <CardHeader>
-              <CardDescription>{t('library.stats.albums')}</CardDescription>
-              <CardTitle className="text-3xl">
-                {formatNumber(stats.followed_albums || 0)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
+      <LibraryStatCards stats={stats} />
 
-          <Card>
-            <CardHeader>
-              <CardDescription>{t('library.stats.tracks')}</CardDescription>
-              <CardTitle className="text-3xl">
-                {formatNumber(stats.total_tracks || 0)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardDescription>Downloaded</CardDescription>
-              <CardTitle className="text-3xl">
-                {formatNumber(stats.downloaded_tracks || 0)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!hasContent && (
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center">
-              <div className="text-6xl mb-4">📚</div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">
-                Your library is empty
-              </h3>
-              <p className="text-muted-foreground mb-6">
-                Start by browsing and following some artists!
-              </p>
-              <button
-                onClick={() => navigate('/browse')}
-                className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg transition"
-              >
-                {t('nav.browse')}
-              </button>
+      {!hasContent ? (
+        <EmptyState icon="library" title={t('library.emptyTitle')}>
+          <p>{t('library.emptyDescription')}</p>
+          <Button variant="primary" size="lg" onClick={() => navigate('/browse')} className="gap-2">
+            <Icon name="search" />
+            {t('nav.browse')}
+          </Button>
+        </EmptyState>
+      ) : (
+        <>
+          {/* Search, filters and sort on the left, tabs and view switch on the right.
+              Below xl they take a row each: search, filters and sort on top,
+              tabs and view switch under them; the tabs scroll sideways when
+              they don't fit beside the switch. Phones keep the sort in the
+              filter sheet. Everything stretches to the row's height.
+              The picked filters line up under it all. */}
+          <div ref={toolbarRef} className="space-y-3">
+            <div className="flex flex-wrap xl:flex-nowrap items-stretch gap-3 xl:gap-4">
+              <div className="flex items-stretch gap-2 md:gap-3 basis-full xl:basis-auto min-w-0">
+                <SearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder={t('library.searchPlaceholder')}
+                  size="md"
+                  className="flex-1 min-w-0 xl:flex-none xl:w-72 2xl:w-96"
+                  inputClassName="h-full"
+                />
+                {activeTab !== 'playlists' && (
+                  <>
+                    <LibraryFilterControl
+                      filters={filters}
+                      onToggle={onToggleFilter}
+                      onClear={clearFilters}
+                      shown={shownItems}
+                      library={libraryItems}
+                      context={filterContext}
+                      offered={offeredFilters}
+                      collator={collator}
+                      resultCount={resultCount}
+                      sort={sort}
+                      onSortChange={setSort}
+                      boundsRef={toolbarRef}
+                    />
+                    <SortControl sort={sort} onChange={setSort} className="hidden md:flex w-56" />
+                  </>
+                )}
+              </div>
+              <div className="flex-1 xl:flex-none xl:ml-auto min-w-0">
+                <FilterTabs
+                  tabs={tabs}
+                  active={activeTab}
+                  onChange={setActiveTab}
+                />
+              </div>
+              {activeTab !== 'playlists' && <ViewToggle value={viewMode} onChange={setViewMode} />}
             </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Followed Artists */}
-      {artists.length > 0 && (
-        <section>
-          <h2 className="text-2xl font-semibold text-foreground mb-4">
-            {t('library.artists')}
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {artists.map((artist) => (
-              <MediaCard
-                key={artist.id}
-                id={artist.id}
-                title={artist.name}
-                thumbnail={getImageUrl(artist.image_local || artist.thumbnail)}
-                type="artist"
-                onClick={() => navigate(`/artists/${encodeURIComponent(artist.id)}`)}
+            {activeTab !== 'playlists' && (
+              <ActiveFilters
+                filters={filters}
+                onToggle={onToggleFilter}
+                onClear={clearFilters}
+                resultCount={resultCount}
               />
-            ))}
+            )}
           </div>
-        </section>
-      )}
 
-      {/* Followed Albums */}
-      {albums.length > 0 && (
-        <section>
-          <h2 className="text-2xl font-semibold text-foreground mb-4">
-            {t('library.albums')}
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {albums.map((album) => (
-              <MediaCard
-                key={album.id}
-                id={album.id}
-                title={album.title}
-                subtitle={album.artist_name}
-                thumbnail={getImageUrl(album.image_local || album.thumbnail)}
-                type="album"
-                year={album.year}
-                onClick={() => navigate(`/albums/${encodeURIComponent(album.id)}`)}
-              />
-            ))}
-          </div>
-        </section>
+          {activeTab === 'playlists' && (
+            <PlaylistsPanel
+              playlists={playlists.filter((p) => p.title.toLowerCase().includes(query))}
+              onChanged={loadLibrary}
+            />
+          )}
+
+          {excludedView && activeTab !== 'playlists' && (
+            <>
+              <p className="text-sm text-muted-foreground max-w-3xl">{t('library.excluded.note')}</p>
+
+              {excludedArtists.length > 0 && (
+                <section>
+                  <SectionHeader>{t('library.excluded.artists')}</SectionHeader>
+                  {viewMode === 'grid' ? (
+                    <div className={MEDIA_GRID}>
+                      {excludedArtists.map((artist) => (
+                        <MediaCard
+                          key={artist.id}
+                          id={artist.id}
+                          title={artist.name}
+                          thumbnail={getImageUrl(artist.thumbnail)}
+                          type="artist"
+                          matchHint={t(artist.reason === 'deleted' ? 'library.excluded.artistDeleted' : 'library.excluded.artistUnfollowed', { date: formatDay(artist.excluded_at) })}
+                          to={artistPath(artist.id)}
+                          artworkAction={restoreButton('artist', artist.id, artist.name)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <MediaList kind="artist" showStatus={false}>
+                      {excludedArtists.map((artist) => (
+                        <MediaRow
+                          key={artist.id}
+                          id={artist.id}
+                          title={artist.name}
+                          thumbnail={getImageUrl(artist.thumbnail)}
+                          type="artist"
+                          matchHint={t(artist.reason === 'deleted' ? 'library.excluded.artistDeleted' : 'library.excluded.artistUnfollowed', { date: formatDay(artist.excluded_at) })}
+                          to={artistPath(artist.id)}
+                          titleAction={restoreButton('artist', artist.id, artist.name, true)}
+                        />
+                      ))}
+                    </MediaList>
+                  )}
+                </section>
+              )}
+
+              {excludedAlbums.length > 0 && (
+                <section>
+                  <SectionHeader>{t('library.excluded.albums')}</SectionHeader>
+                  {viewMode === 'grid' ? (
+                    <div className={MEDIA_GRID}>
+                      {excludedAlbums.map((album) => (
+                        <MediaCard
+                          key={album.id}
+                          id={album.id}
+                          title={album.title}
+                          subtitle={album.artist?.name ?? undefined}
+                          subtitleTo={album.artist?.id ? artistPath(album.artist.id) : undefined}
+                          thumbnail={getImageUrl(album.thumbnail)}
+                          type="album"
+                          albumType={album.type}
+                          year={album.year ?? undefined}
+                          matchHint={t('library.excluded.albumDeleted', { date: formatDay(album.excluded_at) })}
+                          to={albumPath(album.id)}
+                          artworkAction={restoreButton('album', album.id, album.title)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <MediaList kind="album" showStatus={false}>
+                      {excludedAlbums.map((album) => (
+                        <MediaRow
+                          key={album.id}
+                          id={album.id}
+                          title={album.title}
+                          subtitle={album.artist?.name ?? undefined}
+                          subtitleTo={album.artist?.id ? artistPath(album.artist.id) : undefined}
+                          thumbnail={getImageUrl(album.thumbnail)}
+                          type="album"
+                          albumType={album.type}
+                          year={album.year ?? undefined}
+                          matchHint={t('library.excluded.albumDeleted', { date: formatDay(album.excluded_at) })}
+                          to={albumPath(album.id)}
+                          titleAction={restoreButton('album', album.id, album.title, true)}
+                        />
+                      ))}
+                    </MediaList>
+                  )}
+                </section>
+              )}
+
+              {excludedArtists.length === 0 && excludedAlbums.length === 0 && (
+                searchQuery ? (
+                  <EmptyState icon="search" title={t('library.noMatches')}>
+                    <p>{t('library.noMatchesDescription', { query: searchQuery.trim() })}</p>
+                  </EmptyState>
+                ) : (
+                  <EmptyState icon="library" title={t('library.excluded.empty')}>
+                    <p>{t('library.excluded.emptyDescription')}</p>
+                  </EmptyState>
+                )
+              )}
+            </>
+          )}
+
+          {!excludedView && displayedArtists.length > 0 && (
+            <section>
+              <SectionHeader>{t('library.artists')}</SectionHeader>
+              {viewMode === 'grid' ? (
+                <div className={MEDIA_GRID}>
+                  {displayedArtists.map((artist) => (
+                    <MediaCard
+                      key={artist.id}
+                      id={artist.id}
+                      title={artist.name}
+                      subtitle={t('library.meta.albumCount', { count: artist.albums_count })}
+                      thumbnail={getImageUrl(artist.thumbnail)}
+                      type="artist"
+                      mediaStatus={exceptionalStatus(artistStatus.get(artist.id))}
+                      matchHint={artistHint(artist)}
+                      to={artistPath(artist.id)}
+                      titleAction={canLike && (
+                        // Next to the name, as in the list view; a liked artist always shows its heart, the others on hover
+                        <LikeButton
+                          liked={artist.liked}
+                          name={artist.name}
+                          onToggle={() => toggleLike(artist)}
+                          className={`w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all ${
+                            artist.liked ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100'
+                          }`}
+                        />
+                      )}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <MediaList
+                  kind="artist"
+                  showStatus={displayedArtists.some((artist) => exceptionalStatus(artistStatus.get(artist.id)))}
+                >
+                  {displayedArtists.map((artist) => (
+                    <MediaRow
+                      key={artist.id}
+                      id={artist.id}
+                      title={artist.name}
+                      thumbnail={getImageUrl(artist.thumbnail)}
+                      type="artist"
+                      mediaStatus={artistStatus.get(artist.id)}
+                      albumsCount={artist.albums_count}
+                      tracksTotal={artist.tracks_total}
+                      tracksDownloaded={artist.tracks_downloaded}
+                      date={artist.followed_at}
+                      matchHint={artistHint(artist)}
+                      to={artistPath(artist.id)}
+                      titleAction={canLike && (
+                        // A liked artist always shows its heart, the others on hover
+                        <LikeButton
+                          liked={artist.liked}
+                          name={artist.name}
+                          onToggle={() => toggleLike(artist)}
+                          className={`w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all ${
+                            artist.liked ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100'
+                          }`}
+                        />
+                      )}
+                    />
+                  ))}
+                </MediaList>
+              )}
+              {moreArtists && <div ref={artistsSentinelRef} aria-hidden="true" />}
+            </section>
+          )}
+
+          {!excludedView && displayedAlbums.length > 0 && (
+            <section>
+              <SectionHeader>{t('library.albums')}</SectionHeader>
+              {viewMode === 'grid' ? (
+                <div className={MEDIA_GRID}>
+                  {displayedAlbums.map((album) => (
+                    <MediaCard
+                      key={album.id}
+                      id={album.id}
+                      title={album.title}
+                      subtitle={album.artist?.name}
+                      subtitleTo={albumArtistPath(album)}
+                      thumbnail={getImageUrl(album.thumbnail)}
+                      type="album"
+                      albumType={album.type}
+                      year={album.year ?? undefined}
+                      mediaStatus={exceptionalStatus(albumStatus.get(album.id))}
+                      matchHint={albumHint(album)}
+                      to={albumPath(album.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <MediaList kind="album" showStatus={displayedAlbums.some((album) => exceptionalStatus(albumStatus.get(album.id)))}>
+                  {displayedAlbums.map((album) => (
+                    <MediaRow
+                      key={album.id}
+                      id={album.id}
+                      title={album.title}
+                      subtitle={album.artist?.name}
+                      subtitleTo={albumArtistPath(album)}
+                      thumbnail={getImageUrl(album.thumbnail)}
+                      type="album"
+                      albumType={album.type}
+                      year={album.year ?? undefined}
+                      mediaStatus={albumStatus.get(album.id)}
+                      tracksTotal={album.tracks_total}
+                      tracksDownloaded={album.tracks_downloaded}
+                      date={album.created_at}
+                      matchHint={albumHint(album)}
+                      to={albumPath(album.id)}
+                    />
+                  ))}
+                </MediaList>
+              )}
+              {moreAlbums && <div ref={albumsSentinelRef} aria-hidden="true" />}
+            </section>
+          )}
+
+          {/* No results from search or filters; waits for the track lookup so it doesn't flash */}
+          {!excludedView && (searchQuery || filtersActive) && activeTab !== 'playlists' && trackMatchesReady && displayedArtists.length === 0 && displayedAlbums.length === 0 && (
+            filtersActive ? (
+              <EmptyState icon="filter" title={t('library.filters.noMatchesTitle')}>
+                <p>
+                  {searchQuery
+                    ? t('library.filters.noMatchesWithSearch', { query: searchQuery.trim() })
+                    : t('library.filters.noMatchesDescription')}
+                </p>
+                <Button variant="primary" onClick={clearFilters}>{t('library.filters.clear')}</Button>
+              </EmptyState>
+            ) : (
+              <EmptyState icon="search" title={t('library.noMatches')}>
+                <p>{t('library.noMatchesDescription', { query: searchQuery.trim() })}</p>
+              </EmptyState>
+            )
+          )}
+        </>
       )}
     </div>
   );

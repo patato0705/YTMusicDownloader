@@ -1,191 +1,178 @@
 // src/pages/Home.tsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/I18nContext';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
+import { useJobActivity } from '../contexts/JobActivityContext';
+import { SectionHeader } from '../components/ui/SectionHeader';
+import { ActionCard } from '../components/ui/ActionCard';
+import { buttonClass } from '../components/ui/Button';
+import { PageHeader } from '../components/ui/PageHeader';
 import { getLibraryStats, getLibraryAlbums } from '../api/library';
+import type { LibraryAlbum, LibraryStats } from '../api/library';
 import { getImageUrl } from '../api/media';
-import { Spinner } from '../components/ui/Spinner';
-import { formatNumber } from '../utils';
+import { MEDIA_GRID, MediaCard } from '../components/MediaCard';
+import { MediaList, MediaRow } from '../components/MediaList';
+import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStatus';
+import { LibraryStatCards } from '../components/LibraryStatCards';
+import { Icon } from '../components/ui/icons';
+import { albumPath, apiErrorMessage, exceptionalStatus, getAlbumStatus } from '../utils';
+import type { MediaStatus } from '../types';
+
+/** Albums still being fetched (or stuck): the reason to open Home */
+const IN_PROGRESS_SHOWN = 5;
+// Moving first, then stuck, then waiting: a bulk import's queue can't hide the album being fetched
+const PROGRESS_ORDER: MediaStatus[] = ['downloading', 'failed', 'queued'];
+/**
+ * Recently added is one strip of 6 cards in the shared card grid, so the 5th and 6th
+ * are hidden wherever they would start a row of their own: 2x2 on phones,
+ * then rows of 3, 4, 5 and 6 as the grid widens
+ */
+const RECENT_HIDDEN: Record<number, string> = {
+  4: 'max-sm:hidden md:max-lg:hidden',
+  5: 'max-sm:hidden md:max-xl:hidden',
+};
+/** Shortest gap between two refreshes triggered by the job queue */
+const REFRESH_MIN_GAP_MS = 5000;
 
 export default function Home(): JSX.Element {
   const { user } = useAuth();
   const { t } = useI18n();
-  const [stats, setStats] = useState<any>(null);
-  const [recentAlbums, setRecentAlbums] = useState<any[]>([]);
+  const [stats, setStats] = useState<LibraryStats | null>(null);
+  const [recentAlbums, setRecentAlbums] = useState<LibraryAlbum[]>([]);
+  const [inProgress, setInProgress] = useState<LibraryAlbum[]>([]);
   const [loading, setLoading] = useState(true);
-  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
+  // Only when nothing could be shown yet: a failed refresh keeps what's on screen
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const loadedRef = useRef(false);
 
+  const { revision, downloadsPausedUntil } = useJobActivity();
+  const downloadsPaused = downloadsPausedUntil !== null;
+  // When the last load started, and which one is the latest (an older answer is dropped)
+  const lastLoadRef = useRef({ startedAt: 0, id: 0 });
+
+  // Load on mount, then again whenever the job queue moves, so the progress
+  // follows downloads. While they run the queue moves every few seconds, so
+  // loads are spaced at least REFRESH_MIN_GAP_MS apart.
   useEffect(() => {
-    loadHomeData();
+    const last = lastLoadRef.current;
+
+    // A load already under way still lands: only a newer one replaces it
+    const load = async () => {
+      last.startedAt = Date.now();
+      const id = ++last.id;
+      try {
+        const [statsData, albumsData, unfinished] = await Promise.all([
+          getLibraryStats(),
+          getLibraryAlbums({ limit: 6, sort_by: 'created_at', order: 'desc' }),
+          // Its own failure (e.g. a backend without multi-status filtering) only empties this section
+          // In queue order, so the queued rows are the next ones to start and move up as they do
+          getLibraryAlbums({ statuses: ['downloading', 'pending', 'failed'], sort_by: 'queue' }).catch(() => [] as LibraryAlbum[]),
+        ]);
+        if (id !== last.id) return;
+        setStats(statsData);
+        setRecentAlbums(albumsData);
+        // Ranked without the rate-limit pause: the albums that had started stay first while it lasts
+        const rank = (album: LibraryAlbum) => PROGRESS_ORDER.indexOf(getAlbumStatus(album));
+        setInProgress([...unfinished].sort((a, b) => rank(a) - rank(b)).slice(0, IN_PROGRESS_SHOWN));
+        setLoadError(null);
+        loadedRef.current = true;
+      } catch (err) {
+        console.error('Failed to load home data:', err);
+        // Not the empty-library state: that would say there's nothing here
+        if (id === last.id && !loadedRef.current) setLoadError(err);
+      } finally {
+        if (id === last.id) setLoading(false);
+      }
+    };
+
+    const timer = window.setTimeout(load, last.startedAt ? Math.max(0, last.startedAt + REFRESH_MIN_GAP_MS - Date.now()) : 0);
+    return () => window.clearTimeout(timer);
+  }, [revision]);
+
+  // Leaving the page: whatever is still loading is dropped
+  useEffect(() => {
+    const last = lastLoadRef.current;
+    return () => { last.id += 1; };
   }, []);
 
-  const loadHomeData = async () => {
-    setLoading(true);
-    try {
-      const [statsData, albumsData] = await Promise.all([
-        getLibraryStats(),
-        getLibraryAlbums({ limit: 5, sort_by: 'followed_at', order: 'desc' }),
-      ]);
-      setStats(statsData);
-      setRecentAlbums(albumsData?.albums || []);
-    } catch (err) {
-      console.error('Failed to load home data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleImageError = (albumId: string) => {
-    setImageErrors(prev => new Set(prev).add(albumId));
-  };
-
   return (
-    <div className="space-y-8">
-      {/* Welcome section */}
-      <div>
-        <h1 className="text-4xl font-bold text-foreground mb-2">
-          Welcome {user?.username}! 👋
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          Welcome to your music library
-        </p>
-      </div>
+    <div className="space-y-8 pb-12">
+      <PageHeader icon="home" title={<>{t('home.welcomeBack')} {user?.username}</>} />
 
-      {/* Quick actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card className="hover:border-primary transition-colors cursor-pointer">
-          <Link to="/browse">
-            <CardHeader>
-              <div className="text-4xl mb-2">🔍</div>
-              <CardTitle>{t('nav.browse')}</CardTitle>
-              <CardDescription>
-                Search for artists, albums, and tracks
-              </CardDescription>
-            </CardHeader>
-          </Link>
-        </Card>
+      <LibraryStatCards stats={stats} loading={loading} />
 
-        <Card className="hover:border-primary transition-colors cursor-pointer">
-          <Link to="/library">
-            <CardHeader>
-              <div className="text-4xl mb-2">📚</div>
-              <CardTitle>{t('nav.library')}</CardTitle>
-              <CardDescription>
-                View your followed artists and albums
-              </CardDescription>
-            </CardHeader>
-          </Link>
-        </Card>
+      {/* Where to start: the ways music gets into the library */}
+      <section>
+        <SectionHeader>{t('home.quickActions')}</SectionHeader>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+          <ActionCard to="/browse" icon="search" title={t('nav.browse')} description={t('home.browseDescription')} />
+          <ActionCard to="/playlist-import" icon="link" title={t('playlist.title')} description={t('home.playlistDescription')} />
+          <ActionCard to="/library" icon="library" title={t('nav.library')} description={t('home.libraryDescription')} />
+        </div>
+      </section>
 
-        <Card className="hover:border-primary transition-colors cursor-pointer">
-          <Link to="/settings">
-            <CardHeader>
-              <div className="text-4xl mb-2">⚙️</div>
-              <CardTitle>{t('nav.settings')}</CardTitle>
-              <CardDescription>
-                Manage your account and preferences
-              </CardDescription>
-            </CardHeader>
-          </Link>
-        </Card>
-      </div>
+      {inProgress.length > 0 && (
+        <section>
+          <SectionHeader>{t('home.inProgress')}</SectionHeader>
+          <MediaList kind="album">
+            {inProgress.map((album) => (
+              <MediaRow
+                key={album.id}
+                id={album.id}
+                title={album.title}
+                subtitle={album.artist?.name}
+                thumbnail={getImageUrl(album.thumbnail)}
+                type="album"
+                albumType={album.type}
+                year={album.year ?? undefined}
+                mediaStatus={getAlbumStatus(album, downloadsPaused)}
+                tracksTotal={album.tracks_total}
+                tracksDownloaded={album.tracks_downloaded}
+                date={album.created_at}
+                to={albumPath(album.id)}
+              />
+            ))}
+          </MediaList>
+        </section>
+      )}
 
-      {/* Recent activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Your latest downloads and follows</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Spinner className="text-primary" />
-            </div>
-          ) : recentAlbums.length > 0 ? (
-            <div className="space-y-3">
-              {recentAlbums.map((album) => {
-                const thumbnailUrl = getImageUrl(album.image_local || album.thumbnail);
-                const showImage = thumbnailUrl && !imageErrors.has(album.id);
-                
-                return (
-                  <Link
-                    key={album.id}
-                    to={`/albums/${encodeURIComponent(album.id)}`}
-                    className="flex items-center gap-4 p-3 rounded-lg hover:bg-accent transition-colors"
-                  >
-                    {showImage ? (
-                      <img
-                        src={thumbnailUrl}
-                        alt={album.title}
-                        className="w-12 h-12 rounded object-cover"
-                        onError={() => handleImageError(album.id)}
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded bg-secondary flex items-center justify-center text-muted-foreground">
-                        🎵
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-foreground truncate">{album.title}</p>
-                      <p className="text-sm text-muted-foreground truncate">{album.artist?.name}</p>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {album.tracks_downloaded}/{album.tracks_total} tracks
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <div className="text-5xl mb-4">🎵</div>
-              <p>No recent activity yet</p>
-              <p className="text-sm mt-2">Start by browsing and following artists!</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader>
-            <CardDescription>Followed Artists</CardDescription>
-            <CardTitle className="text-3xl">
-              {loading ? <Spinner size="sm" /> : formatNumber(stats?.artists?.total || 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardDescription>Followed Albums</CardDescription>
-            <CardTitle className="text-3xl">
-              {loading ? <Spinner size="sm" /> : formatNumber(stats?.albums?.total || 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardDescription>Downloaded Tracks</CardDescription>
-            <CardTitle className="text-3xl">
-              {loading ? <Spinner size="sm" /> : formatNumber(stats?.tracks?.downloaded || 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardDescription>Disk Usage</CardDescription>
-            <CardTitle className="text-3xl">
-              {loading ? <Spinner size="sm" /> : `${stats?.storage?.estimated_gb?.toFixed(2) || 0} GB`}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      <section>
+        <SectionHeader>{t('home.recentlyAdded')}</SectionHeader>
+        {loading ? (
+          <LoadingState message={t('home.loadingActivity')} className="py-16" />
+        ) : loadError ? (
+          <ErrorBanner title={t('common.error')}>{apiErrorMessage(loadError, t, t('common.error'))}</ErrorBanner>
+        ) : recentAlbums.length > 0 ? (
+          <div className={MEDIA_GRID}>
+            {recentAlbums.map((album, index) => (
+              <MediaCard
+                key={album.id}
+                className={RECENT_HIDDEN[index] ?? ''}
+                id={album.id}
+                title={album.title}
+                subtitle={album.artist?.name}
+                thumbnail={getImageUrl(album.thumbnail)}
+                type="album"
+                albumType={album.type}
+                mediaStatus={exceptionalStatus(getAlbumStatus(album, downloadsPaused))}
+                to={albumPath(album.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon="music" title={t('home.noActivity')}>
+            <p>{t('home.noActivityDescription')}</p>
+            <Link
+              to="/browse"
+              className={`${buttonClass('primary', 'lg')} gap-2`}
+            >
+              <Icon name="search" />
+              {t('home.browseMusic')}
+            </Link>
+          </EmptyState>
+        )}
+      </section>
     </div>
   );
 }

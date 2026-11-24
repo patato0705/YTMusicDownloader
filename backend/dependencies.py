@@ -1,12 +1,11 @@
 # backend/dependencies.py
 """
-FastAPI dependency functions for authentication and authorization.
+FastAPI dependency functions for authentication, authorization and feature flags.
 """
 from __future__ import annotations
-import logging
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -14,95 +13,89 @@ from .db import get_session
 from .services import auth as auth_svc
 from .models import User
 from . import config
-
-logger = logging.getLogger("dependencies")
+from . import settings as settings_module
 
 security = HTTPBearer()
+# auto_error=False: missing/malformed Authorization header falls through to
+# the access_token cookie check in require_auth_flexible() instead of
+# raising immediately.
+security_optional = HTTPBearer(auto_error=False)
 
 
-def get_current_user(
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _resolve_user_from_token(token: str, session: Session, allow_temporary_password: bool = False) -> User:
+    """
+    Shared validation: decode/verify a JWT access token and load its user.
+
+    A user whose password is a temporary one (generated first admin, admin
+    reset) gets 403 password_change_required: someone else has seen that
+    password, so it's only good for choosing a new one (see
+    require_auth_allow_temporary_password).
+    """
+    payload = auth_svc.verify_access_token(token)
+    if not payload:
+        raise _unauthorized("Invalid or expired token")
+
+    user = session.get(User, payload["user_id"])
+    if not user or not user.is_active:
+        raise _unauthorized("User not found or inactive")
+
+    # Signed out by a password change since this token was issued
+    if auth_svc.token_revoked(user, payload["issued_at"]):
+        raise _unauthorized("Session revoked")
+
+    if user.must_change_password and not allow_temporary_password:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_change_required")
+
+    return user
+
+
+def require_auth(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    session: Session = Depends(get_session),
+) -> User:
+    """The user of the access token in the Authorization header, or 401."""
+    return _resolve_user_from_token(credentials.credentials, session)
+
+
+def require_auth_allow_temporary_password(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     session: Session = Depends(get_session),
 ) -> User:
     """
-    Extract and validate JWT token from Authorization header.
-    Returns current user or raises 401.
+    Like require_auth, but also lets in a user who still has to replace a
+    temporary password: only for what the change-password page needs.
     """
-    token = credentials.credentials
-    
-    # Verify token
-    payload = auth_svc.verify_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # Get user from database
-    user_id = payload.get("user_id")
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    try:
-        user_id_int = int(user_id)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID in token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    user = auth_svc.get_user_by_id(session, user_id_int)
-    
-    if not user or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    return user
+    return _resolve_user_from_token(credentials.credentials, session, allow_temporary_password=True)
 
 
-def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+def require_auth_flexible(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
     session: Session = Depends(get_session),
-) -> Optional[User]:
+) -> User:
     """
-    Optional authentication - returns user if token provided, None otherwise.
+    Like require_auth, but also accepts the access_token cookie.
+
+    For routes loaded via a plain <img src="..."> tag (browsers won't attach
+    an Authorization header to those) rather than JS-driven fetch calls. The
+    cookie carries the identical JWT the header would, just via a channel
+    the browser sends automatically.
     """
-    if not credentials:
-        return None
-    
-    try:
-        return get_current_user(credentials, session)
-    except HTTPException:
-        return None
+    token = credentials.credentials if credentials else request.cookies.get("access_token")
+    if not token:
+        raise _unauthorized("Not authenticated")
+    return _resolve_user_from_token(token, session)
 
 
-# Alias for consistency
-require_auth = get_current_user
-
-
-def require_role(required_role: str):
-    """Factory function to create role-based dependencies."""
-    def role_checker(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != required_role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Requires {required_role} role",
-            )
-        return current_user
-    
-    return role_checker
-
-
-def require_admin(current_user: User = Depends(get_current_user)) -> User:
+def require_admin(current_user: User = Depends(require_auth)) -> User:
     """Require administrator role"""
     if current_user.role != config.ROLE_ADMINISTRATOR:
         raise HTTPException(
@@ -112,9 +105,9 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-def require_member_or_admin(current_user: User = Depends(get_current_user)) -> User:
+def require_member_or_admin(current_user: User = Depends(require_auth)) -> User:
     """Require member or administrator role (blocks visitors)"""
-    if current_user.role not in [config.ROLE_MEMBER, config.ROLE_ADMINISTRATOR]:
+    if current_user.role not in (config.ROLE_MEMBER, config.ROLE_ADMINISTRATOR):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Member or Administrator access required",
@@ -122,20 +115,10 @@ def require_member_or_admin(current_user: User = Depends(get_current_user)) -> U
     return current_user
 
 
-def can_modify_user(current_user: User, target_user_id: int) -> bool:
-    """Check if current user can modify target user."""
-    if current_user.role == config.ROLE_ADMINISTRATOR:
-        return True
-    return current_user.id == target_user_id
-
-
-def check_user_modification_permission(
-    current_user: User,
-    target_user_id: int,
-) -> None:
-    """Raise 403 if current user cannot modify target user."""
-    if not can_modify_user(current_user, target_user_id):
+def require_charts_enabled(session: Session = Depends(get_session)) -> None:
+    """Reject the request when the charts feature is switched off."""
+    if not settings_module.feature_enabled(session, "charts"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only modify your own account",
+            detail="Charts feature is disabled",
         )

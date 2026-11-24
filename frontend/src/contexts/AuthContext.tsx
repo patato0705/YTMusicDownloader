@@ -1,25 +1,21 @@
 // src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as authApi from '../api/auth';
-import { clearAuthTokens } from '../api/client';
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  role: 'administrator' | 'member' | 'visitor';
-  is_active: boolean;
-  created_at: string;
-  last_login_at: string | null;
-}
+import type { User } from '../api/auth';
+import { clearAccessToken, refreshAccessToken } from '../api/client';
+import { clearMemoryCaches } from '../utils';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  /** Signed in and free to use the app: no temporary password left to replace (the API refuses the rest until then) */
+  hasFullAccess: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /** The welcome tour was closed: hidden at once, remembered by the server in the background */
+  markOnboardingSeen: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,11 +24,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load user on mount
+  // On mount there's no access token in memory yet (it's never persisted
+  // across reloads by design): try to silently re-acquire one via the
+  // httpOnly refresh_token cookie before deciding the user is logged out.
   useEffect(() => {
     const loadUser = async () => {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
+      const restored = await refreshAccessToken();
+      if (!restored) {
         setIsLoading(false);
         return;
       }
@@ -42,7 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(currentUser);
       } catch (error) {
         console.error('Failed to load user:', error);
-        clearAuthTokens();
+        clearAccessToken();
       } finally {
         setIsLoading(false);
       }
@@ -53,11 +51,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (username: string, password: string) => {
     const response = await authApi.login(username, password);
+    clearMemoryCaches();
     setUser(response.user);
   };
 
   const logout = async () => {
     await authApi.logout();
+    clearMemoryCaches();
     setUser(null);
   };
 
@@ -71,15 +71,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const markOnboardingSeen = () => {
+    setUser((current) => (current ? { ...current, onboarding_seen: true } : current));
+    // A failed request only means it opens again at the next visit
+    authApi.markOnboardingSeen().catch((error) => console.error('Failed to save the welcome tour as seen:', error));
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         isAuthenticated: !!user,
+        hasFullAccess: !!user && !user.must_change_password,
         isLoading,
         login,
         logout,
         refreshUser,
+        markOnboardingSeen,
       }}
     >
       {children}

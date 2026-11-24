@@ -1,0 +1,10 @@
+# The same service, built from this checkout instead of pulled (README
+# "Development"). Used on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# The image is named ytmusicdownloader:dev, apart from the published one.
+services:
+  ytmusicdownloader:
+    build: .
+    image: ytmusicdownloader:dev

@@ -2,49 +2,52 @@
 """
 SQLAlchemy engine & session management for the application.
 """
-
 from __future__ import annotations
-import os
-from typing import Generator, Optional
+import logging
+import time
+from typing import Generator
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
 
-from .config import DB_PATH, ensure_dirs
-from .models import Base  # requires backend/models.py to define Base
+from .config import DB_PATH
+from .migrations import runner as migrations
 
-# Ensure parent directory exists before creating sqlite file
-ensure_dirs()
+logger = logging.getLogger("db")
 
-# SQLite URL
-sqlite_url = f"sqlite:///{str(DB_PATH)}"
-
-# create engine with optimized settings for SQLite concurrency
+# A regular connection pool, not StaticPool. StaticPool hands the same single
+# connection to every thread, which serialises every request in the web
+# process behind whichever one is running (and, when that one is writing,
+# behind the worker's write lock too). With WAL, readers never block on the
+# writer, so a handful of connections per process lets the API keep
+# answering while a big import is committing in the worker.
 engine = create_engine(
-    sqlite_url,
+    f"sqlite:///{DB_PATH}",
     connect_args={
         "check_same_thread": False,
         "timeout": 30.0,  # 30 second timeout for lock acquisition
     },
-    poolclass=StaticPool,  # Single connection pool (optimal for SQLite)
+    pool_size=5,
+    max_overflow=10,
     pool_pre_ping=True,    # Verify connections before using
-    future=True,
 )
+
 
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
     cursor = dbapi_conn.cursor()
+    # Off by default in SQLite: without it the models' ON DELETE rules (a
+    # deleted user's sessions, likes...) do nothing. Per connection.
+    cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA journal_mode=WAL")          # Enable WAL mode
     cursor.execute("PRAGMA synchronous=NORMAL")        # Faster writes, still safe
     cursor.execute("PRAGMA cache_size=-64000")         # 64MB cache
     cursor.execute("PRAGMA busy_timeout=30000")        # 30 seconds in milliseconds
     cursor.execute("PRAGMA temp_store=MEMORY")         # Store temp tables in memory
     cursor.execute("PRAGMA mmap_size=268435456")       # 256MB memory-mapped I/O
-    cursor.execute("PRAGMA page_size=4096")            # 4KB pages
     cursor.close()
 
-# Session factory
+
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,
@@ -53,50 +56,51 @@ SessionLocal = sessionmaker(
     class_=Session
 )
 
+
 def init_db() -> None:
     """
-    Create all tables, ensure first admin, and initialize default settings.
+    Create or upgrade the schema (backend/migrations/runner.py), then the
+    first admin and the default settings.
     """
-    # Create tables
-    Base.metadata.create_all(bind=engine)
-    
-    # Create first admin user if needed
     from .services import auth as auth_svc
+    from . import settings as settings_module
+
+    migrations.upgrade(DB_PATH)
     with SessionLocal() as session:
         auth_svc.ensure_first_admin(session)
-    
-    # Initialize default settings
-    from . import settings as settings_module
-    with SessionLocal() as session:
         settings_module.ensure_defaults(session)
+    logger.info("Database is ready (%s)", DB_PATH)
 
-def get_engine():
-    return engine
 
 def get_session() -> Generator[Session, None, None]:
-    """
-    Dependency / context manager to get DB session.
-    Yields a Session, caller should commit/rollback as needed.
-    """
+    """FastAPI dependency: a Session for the request, closed afterwards."""
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-def cleanup_expired_tokens_job() -> None:
+
+def wait_for_db(max_retries: int = 300, delay: float = 1) -> None:
     """
-    Background job to clean up expired refresh tokens.
-    Should be called periodically (e.g., daily via scheduler).
+    Wait until the web process has created or upgraded the schema (workers
+    and the scheduler start alongside it), so none of them runs against
+    tables a migration is still changing. Raises if it never happens.
+
+    Five minutes: an upgrade that copies a large table can take a while on
+    slow storage. Logs at debug only: nine processes call this at once,
+    and the web process already logs the upgrade.
     """
-    import logging
-    logger = logging.getLogger("db")
-    
-    try:
-        from .services import auth as auth_svc
-        with SessionLocal() as session:
-            count = auth_svc.cleanup_expired_tokens(session)
-            if count > 0:
-                logger.info(f"Token cleanup: removed {count} expired tokens")
-    except Exception as e:
-        logger.exception(f"Token cleanup failed: {e}")
+    logger.debug("Waiting for database to be ready...")
+    for attempt in range(1, max_retries + 1):
+        try:
+            with engine.connect() as conn:
+                if migrations.is_up_to_date(conn):
+                    logger.debug("Database is ready")
+                    return
+            logger.debug("Database schema not up to date yet (attempt %s/%s)", attempt, max_retries)
+        except Exception as e:
+            logger.debug("Database not ready (attempt %s/%s): %s", attempt, max_retries, e)
+        if attempt < max_retries:
+            time.sleep(delay)
+    raise RuntimeError(f"Database not ready after {max_retries} attempts")

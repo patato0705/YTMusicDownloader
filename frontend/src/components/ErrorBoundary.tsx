@@ -1,113 +1,76 @@
 // src/components/ErrorBoundary.tsx
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
+import { useI18n } from '../contexts/I18nContext';
+import { PageBackground } from './layout/PageBackground';
+import { Button } from './ui/Button';
+import { Icon } from './ui/icons';
 
 interface Props {
   children: ReactNode;
 }
 
 interface State {
-  hasError: boolean;
   error: Error | null;
-  errorInfo: ErrorInfo | null;
+}
+
+/** What replaces the app when it crashes while rendering */
+function ErrorScreen({ error }: { error: Error }): JSX.Element {
+  const { t } = useI18n();
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <PageBackground />
+
+      <div className="relative max-w-3xl w-full glass rounded-2xl shadow-2xl p-8 md:p-12">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-red-100 to-orange-100 dark:from-red-950/40 dark:to-orange-950/40 mb-6">
+            <Icon name="warning" className="w-10 h-10 text-red-600 dark:text-red-400" />
+          </div>
+          <h1 className="text-4xl font-bold mb-3 text-foreground">
+            {t('errorBoundary.title')}
+          </h1>
+          <p className="text-lg text-muted-foreground max-w-md mx-auto">
+            {t('errorBoundary.description')}
+          </p>
+        </div>
+
+        <details className="glass rounded-xl p-4 mb-8">
+          <summary className="cursor-pointer font-semibold text-foreground mb-3 hover:text-accent-600 dark:hover:text-accent-400 transition-colors">
+            {t('errorBoundary.details')}
+          </summary>
+          <p className="font-mono text-sm text-foreground break-words mb-3">{error.message}</p>
+          {error.stack && (
+            <pre className="p-3 bg-slate-100 dark:bg-zinc-900 rounded-lg text-xs overflow-x-auto max-h-64 border border-slate-200 dark:border-white/10">
+              {error.stack}
+            </pre>
+          )}
+        </details>
+
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Button variant="secondary" size="lg" onClick={() => window.location.reload()}>
+            {t('errorBoundary.reload')}
+          </Button>
+          <Button variant="primary" size="lg" onClick={() => window.location.assign('/')}>
+            {t('errorBoundary.home')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    };
-  }
+  state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
-    return {
-      hasError: true,
-      error,
-      errorInfo: null,
-    };
+    return { error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
-    this.setState({
-      error,
-      errorInfo,
-    });
   }
 
-  handleReset = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    });
-    window.location.href = '/';
-  };
-
   render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-background px-4">
-          <div className="max-w-2xl w-full">
-            <div className="bg-card border border-border rounded-lg shadow-xl p-8">
-              <div className="text-center mb-6">
-                <div className="text-6xl mb-4">💥</div>
-                <h1 className="text-3xl font-bold text-foreground mb-2">
-                  Something went wrong
-                </h1>
-                <p className="text-muted-foreground">
-                  The application encountered an unexpected error.
-                </p>
-              </div>
-
-              {this.state.error && (
-                <div className="mb-6">
-                  <details className="bg-secondary/50 rounded-lg p-4">
-                    <summary className="cursor-pointer font-semibold text-card-foreground mb-2">
-                      Error Details
-                    </summary>
-                    <div className="space-y-2 text-sm">
-                      <div>
-                        <strong className="text-foreground">Message:</strong>
-                        <pre className="mt-1 p-2 bg-background rounded text-xs overflow-x-auto">
-                          {this.state.error.message}
-                        </pre>
-                      </div>
-                      {this.state.error.stack && (
-                        <div>
-                          <strong className="text-foreground">Stack Trace:</strong>
-                          <pre className="mt-1 p-2 bg-background rounded text-xs overflow-x-auto">
-                            {this.state.error.stack}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  </details>
-                </div>
-              )}
-
-              <div className="flex gap-4 justify-center">
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-6 py-3 bg-secondary hover:bg-secondary/80 text-secondary-foreground font-semibold rounded-lg transition"
-                >
-                  Reload Page
-                </button>
-                <button
-                  onClick={this.handleReset}
-                  className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg transition"
-                >
-                  Go to Home
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return this.props.children;
+    return this.state.error ? <ErrorScreen error={this.state.error} /> : this.props.children;
   }
 }

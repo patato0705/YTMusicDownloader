@@ -3,107 +3,148 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Callable, Optional
+from typing import Any, Dict, Optional
 
 from ytmusicapi import YTMusic
+from ytmusicapi.helpers import parse_description_runs
+from ytmusicapi.navigation import (
+    CAROUSEL, CAROUSEL_TITLE, DESCRIPTION_RUN_LIST, SECTION_LIST, SINGLE_COLUMN_TAB,
+    TAB_CONTENT, THUMBNAILS, TITLE_TEXT, TWO_COLUMN_RENDERER, find_object_by_key, nav,
+)
 
 from ..config import HEADERS_AUTH, YTM_MAX_CONC, YTM_BACKOFF_BASE, YTM_BACKOFF_MAX
 
 logger = logging.getLogger("ytm_service.client")
 
-# Module-level lazy client and concurrency control
+
+class _YTMusic(YTMusic):
+    def get_artist(self, channelId: str) -> Dict[str, Any]:  # noqa: N803 (ytmusicapi's name)
+        """
+        An artist page, read where ytmusicapi's get_artist (1.12.3) fails:
+          - a YouTube user's channel (a YouTuber credited on a video): its
+            header is a musicVisualHeaderRenderer, not an artist's
+            musicImmersiveHeaderRenderer, with the channel's round picture
+            beside the wide banner; it has no albums or singles
+          - a page with an untitled carousel (a "Watch the new music video"
+            promo), which get_artist's section parser can't name
+
+        Returns only what the adapter reads: name, description, thumbnails
+        (the banner), picture (the square picture's thumbnails: the banner's
+        for an artist), channel (a YouTube user's channel, not an artist: the
+        user's header, and no releases) and the page's sections (albums,
+        singles, related...).
+        """
+        response = self._send_request("browse", {"browseId": channelId.removeprefix("MPLA")})
+        # Some artist pages are two-column (ytmusicapi #929)
+        results = nav(response, SINGLE_COLUMN_TAB + SECTION_LIST, True)
+        if results is None:
+            results = nav(response, [*TWO_COLUMN_RENDERER, *TAB_CONTENT, *SECTION_LIST])
+        headers = response["header"]
+        header = headers.get("musicImmersiveHeaderRenderer") or headers["musicVisualHeaderRenderer"]
+        banner = nav(header, THUMBNAILS, True) or []
+        description_shelf = find_object_by_key(results, "musicDescriptionShelfRenderer", is_key=True)
+        description, _ = parse_description_runs(nav(description_shelf or {}, DESCRIPTION_RUN_LIST, True))
+        titled = [r for r in results if CAROUSEL[0] not in r or nav(r, CAROUSEL + CAROUSEL_TITLE, True)]
+        sections = self.parser.parse_channel_contents(titled)
+        return {
+            **sections,
+            "name": nav(header, TITLE_TEXT),
+            # Both, as an artist page without a banner may use the user's
+            # header too: what's taken for a channel is unfollowed
+            "channel": "musicImmersiveHeaderRenderer" not in headers
+            and not sections.get("albums") and not sections.get("singles"),
+            "description": description or None,
+            "thumbnails": banner,
+            "picture": nav(header, ["foregroundThumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails"], True)
+            or banner,
+        }
+
+
+# One client per process, created on first use; at most YTM_MAX_CONC calls at once
 _ytm_lock = threading.Lock()
 _ytm_client: Optional[YTMusic] = None
+_ytm_sem = threading.BoundedSemaphore(YTM_MAX_CONC)
 
-_YTM_MAX_CONC = int(YTM_MAX_CONC)
-_ytm_sem = threading.BoundedSemaphore(_YTM_MAX_CONC)
+# The client's language, and when the setting was last read. Every process
+# (web, workers, scheduler) has its own client, and only the web process
+# hears about a change made in the admin panel (reset_client): the others
+# re-read the setting this often and rebuild their client when it changed.
+_ytm_language: Optional[str] = None
+_ytm_language_checked_at = 0.0
+LANGUAGE_RECHECK_SECONDS = 60
 
-_BACKOFF_BASE = float(YTM_BACKOFF_BASE)
+# YouTube Music errors can quote the whole page they couldn't parse (2 KB+)
+_MAX_LOGGED_ERROR = 300
 
-_BACKOFF_MAX = float(YTM_BACKOFF_MAX)
 
-
-def _init_client() -> YTMusic:
-    """
-    Initialize YTMusic instance once.
-    HEADERS_AUTH can be:
-      - None: no headers file (anonymous)
-      - Path to headers_auth.json to re-use an authenticated session
-    """
-    global _ytm_client
-    with _ytm_lock:
-        if _ytm_client is not None:
-            return _ytm_client
-        try:
-            if HEADERS_AUTH:
-                # HEADERS_AUTH expected to be a path (string) to headers_auth.json
-                logger.info("Initializing YTMusic with headers file: %s", HEADERS_AUTH)
-                _ytm_client = YTMusic(auth=HEADERS_AUTH,language="en")
-            else:
-                logger.info("Initializing anonymous YTMusic client")
-                _ytm_client = YTMusic(language="en")
-        except Exception as e:
-            logger.exception("Failed to initialize YTMusic client: %s", e)
-            raise
-        return _ytm_client
+def _get_language() -> str:
+    """The ytmusic.language setting, 'en' if it can't be read."""
+    from ..db import SessionLocal
+    from ..settings import get_setting
+    try:
+        with SessionLocal() as session:
+            return str(get_setting(session, "ytmusic.language") or "en")
+    except Exception:
+        logger.exception("Failed to read ytmusic.language setting; falling back to 'en'")
+        return "en"
 
 
 def get_client() -> YTMusic:
     """
-    Return the lazily initialized YTMusic instance.
-    Use this when you want to call YTMusic methods directly (e.g. get_playlist()).
+    The YTMusic instance, created on first use. HEADERS_AUTH, when set, is
+    the path of a headers_auth.json to reuse an authenticated session;
+    otherwise the client is anonymous. Rebuilt when the ytmusic.language
+    setting changes (checked every LANGUAGE_RECHECK_SECONDS).
+    """
+    global _ytm_client, _ytm_language, _ytm_language_checked_at
+    with _ytm_lock:
+        now = time.monotonic()
+        if _ytm_client is not None and now - _ytm_language_checked_at >= LANGUAGE_RECHECK_SECONDS:
+            _ytm_language_checked_at = now
+            language = _get_language()
+            if language != _ytm_language:
+                logger.info("ytmusic.language changed from %s to %s", _ytm_language, language)
+                _ytm_client = None
+        if _ytm_client is None:
+            language = _get_language()
+            _ytm_language, _ytm_language_checked_at = language, now
+            if HEADERS_AUTH:
+                logger.info("Initializing YTMusic with headers file: %s (language=%s)", HEADERS_AUTH, language)
+                _ytm_client = _YTMusic(auth=HEADERS_AUTH, language=language)
+            else:
+                logger.info("Initializing anonymous YTMusic client (language=%s)", language)
+                _ytm_client = _YTMusic(language=language)
+        return _ytm_client
+
+
+def reset_client() -> None:
+    """
+    Invalidate the cached YTMusic client. The next call to get_client() will
+    re-initialize it, picking up any changed settings (e.g. language).
     """
     global _ytm_client
-    if _ytm_client is None:
-        return _init_client()
-    return _ytm_client
+    with _ytm_lock:
+        _ytm_client = None
+    logger.info("YTMusic client cache cleared")
 
 
 def call(method_name: str, *args: Any, max_retries: int = 4, **kwargs: Any) -> Any:
     """
-    Safe call helper that:
-      - acquires a semaphore to limit concurrent calls
-      - retries with exponential backoff on exceptions
-      - logs errors
+    Call a YTMusic method, retrying with exponential backoff (YouTube Music
+    sends empty or unparseable pages at times). Raises the last error once
+    out of retries; the caller decides how to report it.
 
-    Usage:
-      from backend.ytm_service.client import call
-      call("get_playlist", playlistId="...")
-    or:
-      client = get_client(); client.get_playlist(...)
+        call("get_playlist", playlistId="...")
     """
-    client = get_client()
-
-    # bound method lookup
-    if not hasattr(client, method_name):
-        raise AttributeError(f"YTMusic client has no method {method_name!r}")
-
-    method: Callable[..., Any] = getattr(client, method_name)
-
-    attempt = 0
-    while True:
-        attempt += 1
-        acquired = _ytm_sem.acquire(timeout=30)
-        if not acquired:
-            # semaphore acquisition timed out; keep trying a few times before failing
-            logger.warning("Timeout acquiring YTMusic semaphore for method %s (attempt %s)", method_name, attempt)
+    method = getattr(get_client(), method_name)
+    for attempt in range(1, max_retries + 1):
         try:
-            try:
+            with _ytm_sem:
                 return method(*args, **kwargs)
-            except Exception as e:
-                # Decide whether to retry
-                if attempt >= max_retries:
-                    logger.exception("YTMusic call %s failed after %s attempts: %s", method_name, attempt, e)
-                    raise
-                # compute backoff
-                backoff = min(_BACKOFF_MAX, _BACKOFF_BASE * (2 ** (attempt - 1)))
-                logger.warning("YTMusic call %s failed (attempt %s/%s): %s — retrying in %.2fs",
-                               method_name, attempt, max_retries, e, backoff)
-                time.sleep(backoff)
-                continue
-        finally:
-            try:
-                _ytm_sem.release()
-            except Exception:
-                # semaphore release should not crash the app; log and continue
-                logger.debug("Failed to release YTMusic semaphore", exc_info=True)
+        except Exception as e:
+            if attempt == max_retries:
+                raise
+            backoff = min(YTM_BACKOFF_MAX, YTM_BACKOFF_BASE * (2 ** (attempt - 1)))
+            logger.warning("YTMusic call %s failed (attempt %s/%s): %s, retrying in %.2fs",
+                           method_name, attempt, max_retries, str(e)[:_MAX_LOGGED_ERROR], backoff)
+            time.sleep(backoff)

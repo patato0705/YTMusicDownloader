@@ -1,0 +1,133 @@
+# backend/services/folders.py
+"""
+Where an artist's and an album's files go: MUSIC_DIR/<artist folder>/<album folder>.
+
+Each folder is named after the artist or the album the first time a file is
+written there, and keeps that name (Artist.folder, Album.folder). A name that
+changes afterwards never splits the files across two folders: YouTube Music's
+album page and artist page can spell the same artist differently ("CG5" and
+"Cg5"), and the artist's sync replaces one with the other.
+
+A name another artist (or another album of the same artist) already has gets
+a number, "Name (2)", so two namesakes never share a folder: deleting one
+would delete the other's files with it. Media servers read the names from
+the tags and .nfo files, so the number only shows on disk. Names are compared
+ignoring case, as on a Windows or macOS share.
+"""
+from __future__ import annotations
+import logging
+from pathlib import Path
+from typing import Optional, Set, Union
+
+from sqlalchemy import select, update
+from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
+
+from .. import config
+from ..downloader.core import fit_name, safe_name
+from ..models import Album, Artist
+from .playlists import M3U_DIR_NAME
+
+logger = logging.getLogger("services.folders")
+
+# The folder of albums without an artist
+NO_ARTIST = safe_name(None)
+
+
+def _is_plain_name(folder: str) -> bool:
+    """
+    One folder inside its parent: not ".", "..", or a path. Names are made
+    safe when they're picked, so a stored one that isn't comes from a row
+    named before fit_name checked its cut, or edited by hand.
+    """
+    return folder not in ("", ".", "..") and "/" not in folder and "\0" not in folder
+
+
+def _free_name(name: str, taken: Set[str]) -> str:
+    """name, or "name (2)", "name (3)"...: the first not taken, ignoring case."""
+    taken = {t.casefold() for t in taken}
+    candidate, n = name, 1
+    while candidate.casefold() in taken:
+        n += 1
+        suffix = f" ({n})"
+        candidate = fit_name(name, len(suffix.encode())) + suffix
+    return candidate
+
+
+def _taken(session: Session, row: Union[Artist, Album]) -> Set[str]:
+    """The folder names `row` can't have: those of its siblings, and for an artist the fixed ones."""
+    if isinstance(row, Artist):
+        siblings = select(Artist.folder).where(Artist.folder.is_not(None), Artist.id != row.id)
+        reserved = {M3U_DIR_NAME, NO_ARTIST}
+    else:
+        same_artist = Album.artist_id == row.artist_id if row.artist_id else Album.artist_id.is_(None)
+        siblings = select(Album.folder).where(Album.folder.is_not(None), Album.id != row.id, same_artist)
+        reserved = set()
+    return set(session.execute(siblings).scalars()) | reserved
+
+
+def _claim(session: Session, row: Union[Artist, Album], name: Optional[str]) -> str:
+    """
+    row.folder, named after `name` when it has none yet. Takes SQLite's write
+    lock first, so no other writer names a folder between the check and the
+    update: two workers writing an album's first files at once agree on its
+    folder, and two namesakes never get the same one.
+    """
+    if not row.folder or not _is_plain_name(row.folder):
+        model = type(row)
+        session.flush()  # a row just created must be in the DB for the updates to find it
+        # A write that changes nothing, for the lock
+        session.execute(update(model).where(model.id == row.id).values(folder=model.folder))
+        folder = session.execute(select(model.folder).where(model.id == row.id)).scalar_one()
+        if folder is not None and not _is_plain_name(folder):
+            logger.warning("%s %s had an unusable folder name %r: naming it again", model.__name__, row.id, folder)
+            folder = None
+        if folder is None:
+            folder = _free_name(fit_name(safe_name(name)), _taken(session, row))
+            session.execute(update(model).where(model.id == row.id).values(folder=folder))
+        set_committed_value(row, "folder", folder)
+    return row.folder
+
+
+def artist_dir(session: Session, artist: Optional[Artist]) -> Path:
+    """
+    The artist's folder, named now if nothing of it was written yet. Naming
+    it takes SQLite's write lock: the caller commits soon after. Does not commit.
+    """
+    if artist is None:
+        return config.MUSIC_DIR / NO_ARTIST
+    return config.MUSIC_DIR / _claim(session, artist, artist.name)
+
+
+def album_dir(session: Session, album: Album) -> Path:
+    """The album's folder, inside its artist's. Named like artist_dir. Does not commit."""
+    return artist_dir(session, album.artist) / _claim(session, album, album.title)
+
+
+def restore_folder(session: Session, row: Union[Artist, Album], folder: str) -> None:
+    """
+    Give a row without a folder the one a backup had for it, so copied files
+    and new ones stay together (numbered if another row here has that name).
+    Takes the write lock like artist_dir. Does not commit.
+    """
+    if not row.folder:
+        _claim(session, row, folder)
+
+
+def existing_artist_dir(artist: Artist) -> Optional[Path]:
+    """
+    The artist's folder, or None when nothing of it was ever written (no
+    folder named), or when its stored name isn't a plain one: deleting the
+    artist removes this folder recursively, and "/data/.." is everything.
+    """
+    return config.MUSIC_DIR / artist.folder if artist.folder and _is_plain_name(artist.folder) else None
+
+
+def existing_album_dir(album: Album) -> Optional[Path]:
+    """The album's folder, or None when nothing of it was ever written (no folder named) or its name isn't a plain one."""
+    if not album.folder or not _is_plain_name(album.folder):
+        return None
+    if album.artist is None:
+        return config.MUSIC_DIR / NO_ARTIST / album.folder
+    artist_folder = existing_artist_dir(album.artist)
+    return artist_folder / album.folder if artist_folder else None

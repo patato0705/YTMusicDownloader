@@ -1,0 +1,6 @@
+# Shell scripts keep LF line endings in every checkout, Windows included
+# (core.autocrlf=true would give them CRLF): the Docker image copies
+# deploy/entrypoint.sh from the checkout, and with CRLF its first line asks
+# for "/bin/sh\r", so the container stops at once with
+# "exec /entrypoint.sh: no such file or directory".
+*.sh text eol=lf

@@ -1,12 +1,55 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Music Manager</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <!-- A private, signed-in app: nothing for search engines -->
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- Kept in sync with the active theme by ThemeContext; colours the browser chrome on mobile -->
+    <meta name="theme-color" content="#f8fafc" />
+    <!-- Icons from public/, which Vite serves under /static. The .ico is for
+         browsers without SVG favicons; iOS takes the 180px PNG and rounds it -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- The home screen label: the full name gets cut short there -->
+    <meta name="apple-mobile-web-app-title" content="MusicDL" />
+    <!-- viewport-fit=cover: the page runs to the screen edges and iOS reports
+         the safe areas (notch, home indicator) through env(), which the
+         navbars, sheets and body padding then clear. Without it the insets
+         read 0 and a home screen web app puts the tab bar under the home
+         indicator. -->
+    <script>
+      // Apply the saved theme and accent before first paint. Avoids a light flash when
+      // loading in dark mode, and hands mobile browsers the right theme-color
+      // from the start (Safari only re-reads it on toolbar transitions).
+      (function () {
+        try {
+          var theme = localStorage.getItem('theme')
+            || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          if (theme === 'dark') document.documentElement.classList.add('dark');
+          document.querySelector('meta[name="theme-color"]').content =
+            theme === 'dark' ? '#09090b' : '#f8fafc';
+          // The accent colour (ThemeContext); an unknown one matches no rule and shows the default
+          var accent = localStorage.getItem('accent');
+          if (accent) document.documentElement.dataset.accent = accent;
+        } catch (e) {}
+      })();
+
+      // iOS Safari zooms in on a focused field and keeps that zoom, even on
+      // the next load. maximum-scale=1 stops it there, and Safari still lets
+      // the user pinch zoom. Other browsers would block pinch zoom, so iOS only
+      // (iPads report as a Mac with touch).
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent)
+          || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+        document.querySelector('meta[name="viewport"]').content =
+          'width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover';
+      }
+    </script>
+    <title>YTMusicDownloader</title>
   </head>
-  <!-- important: on applique les classes utilitaires au body pour forcer Tailwind à les générer -->
-  <body class="bg-gray-50 text-gray-900">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

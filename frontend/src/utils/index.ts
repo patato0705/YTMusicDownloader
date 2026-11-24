@@ -1,48 +1,30 @@
 // src/utils/index.ts
-
 /**
- * Central export file for all utility functions
- * Import utils like: import { formatDuration, formatDate } from '@/utils';
+ * Utility functions, imported from '../utils' (or '../../utils')
  */
 
 // Media helpers
 export {
-  getBestThumbnail,
-  formatArtist,
-  formatAlbum,
-  formatTrack,
-  normalizeSearchResults,
-  filterAlbums,
+  getAlbumStatus,
+  getArtistStatus,
   categorizeAlbums,
-  getPrimaryArtist,
+  primaryArtistName,
   formatDuration,
   formatDurationLong,
-  needsThumbnailProxy,
-  getProxiedThumbnailUrl,
+  artistPath,
+  albumPath,
+  exceptionalStatus,
 } from './mediaHelpers';
 
 // Formatting utilities
-export {
-  formatDate,
-  formatRelativeTime,
-  formatFileSize,
-  formatNumber,
-  truncateText,
-  capitalize,
-  snakeToTitle,
-  pluralize,
-  formatCount,
-} from './formatting';
+export { formatNumber } from './formatting';
 
 // Validation utilities
-export {
-  isValidEmail,
-  isValidUsername,
-  validatePassword,
-  passwordsMatch,
-  sanitizeString,
-  isEmpty,
-  validateRequired,
-  validateMinLength,
-  validateMaxLength,
-} from './validation';
+export { usernameErrorKey, passwordErrorKey, confirmErrorKey } from './validation';
+
+// API error handling
+export { apiErrorMessage, invalidFields, isServerUnreachable, retryAfterMinutes } from './apiError';
+
+// In-memory page caches
+export { createMemoryCache, clearMemoryCaches } from './memoryCache';
+export type { MemoryCache } from './memoryCache';

@@ -4,53 +4,70 @@
  * All API calls go through this client.
  */
 
-const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/+$/, "");
+export const API_BASE = '/api';
 
 /**
- * Get auth token from localStorage
+ * The access token lives in memory only (never localStorage) so an XSS bug
+ * can't read it out of storage. It's lost on a hard refresh by design:
+ * refreshAccessToken() below re-acquires one on app load via the httpOnly
+ * refresh_token cookie, which JS never touches directly.
  */
-function getAuthToken(): string | null {
-  return localStorage.getItem('access_token');
+let accessToken: string | null = null;
+
+/**
+ * Store the access token in memory after login/refresh.
+ */
+export function setAccessToken(token: string): void {
+  accessToken = token;
 }
 
 /**
- * Set auth tokens in localStorage
+ * Clear the in-memory access token (logout, or failed refresh).
  */
-export function setAuthTokens(accessToken: string, refreshToken: string): void {
-  localStorage.setItem('access_token', accessToken);
-  localStorage.setItem('refresh_token', refreshToken);
+export function clearAccessToken(): void {
+  accessToken = null;
 }
 
-/**
- * Clear auth tokens from localStorage
- */
-export function clearAuthTokens(): void {
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
-}
+// The refresh in flight, shared by every caller: requests failing with a 401
+// at the same time wait on one refresh instead of each sending their own
+let refreshing: Promise<boolean> | null = null;
 
-/**
- * Refresh access token using refresh token
- */
-async function refreshAccessToken(): Promise<boolean> {
-  const refreshToken = localStorage.getItem('refresh_token');
-  if (!refreshToken) return false;
-
+async function requestNewAccessToken(): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      credentials: 'include',
     });
-
     if (!res.ok) return false;
 
     const data = await res.json();
-    localStorage.setItem('access_token', data.access_token);
+    if (!data.access_token) return false;
+
+    setAccessToken(data.access_token);
     return true;
-  } catch {
+  } catch (error) {
+    console.error('[Auth] Token refresh error:', error);
     return false;
   }
+}
+
+/**
+ * Re-acquire an access token using the httpOnly refresh_token cookie
+ * (sent automatically by the browser: credentials: 'include' is what makes
+ * fetch attach it). Called on app load and on a 401.
+ */
+export function refreshAccessToken(): Promise<boolean> {
+  if (!refreshing) {
+    refreshing = requestNewAccessToken().finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
+}
+
+/** The body of endpoints that only confirm what they did */
+export interface MessageResponse {
+  message: string;
 }
 
 /**
@@ -67,71 +84,81 @@ export class ApiError extends Error {
   }
 }
 
+/** A response's body: parsed JSON when it is some, else the text (null when empty) */
+async function readBody(response: Response): Promise<any> {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return text;
+  }
+}
+
 /**
- * Main fetch wrapper with auth and retry logic
+ * The `detail` of a request that never reached the app: no connection, or a
+ * reverse proxy answering for it because the container is down or restarting
  */
-export async function apiFetch<T = any>(
+export const SERVER_UNREACHABLE = 'server_unreachable';
+
+function unreachable(status: number): ApiError {
+  return new ApiError(status, SERVER_UNREACHABLE, { detail: SERVER_UNREACHABLE });
+}
+
+/**
+ * A proxy's own error page (HTML or plain text, never a JSON object) for
+ * an app that doesn't answer. The app's own 502/503 always come as JSON,
+ * with a detail of their own (ytmusic_unavailable, the health check).
+ */
+function isProxyError(response: Response, data: any): boolean {
+  return [502, 503, 504].includes(response.status) && (data === null || typeof data !== 'object');
+}
+
+async function send(url: string, options: RequestInit, headers: Headers): Promise<Response> {
+  if (accessToken) {
+    headers.set('Authorization', `Bearer ${accessToken}`);
+  }
+  try {
+    return await fetch(url, { ...options, headers, credentials: 'include' });
+  } catch {
+    // fetch only rejects when no response came at all
+    throw unreachable(0);
+  }
+}
+
+/**
+ * Main fetch wrapper: authenticates the request and, on a 401, refreshes
+ * the access token and retries it once.
+ */
+async function apiFetch<T = any>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
-  
-  // Add auth token to headers
-  const token = getAuthToken();
+  const url = `${API_BASE}${path}`;
   const headers = new Headers(options.headers);
-  
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  
-  // Add Content-Type for requests with body
   if (options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
-  let response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let response = await send(url, options, headers);
+  let data = await readBody(response);
 
-  // Handle 401 - try refreshing token
   if (response.status === 401) {
-    const refreshed = await refreshAccessToken();
-    
-    if (refreshed) {
-      // Retry with new token
-      const newToken = getAuthToken();
-      if (newToken) {
-        headers.set('Authorization', `Bearer ${newToken}`);
-        response = await fetch(url, {
-          ...options,
-          headers,
-        });
-      }
+    if (await refreshAccessToken()) {
+      response = await send(url, options, headers);
+      data = await readBody(response);
     } else {
-      // Refresh failed - redirect to login
-      clearAuthTokens();
-      window.location.href = '/login';
-      throw new ApiError(401, 'Session expired');
+      clearAccessToken();
+      // Back to the sign-in page, unless already on an auth page
+      const currentPath = window.location.pathname;
+      if (!currentPath.startsWith('/login') && !currentPath.startsWith('/register')) {
+        window.location.href = '/login';
+      }
     }
   }
 
-  // Parse response
-  const contentType = response.headers.get('content-type');
-  let data: any;
-
-  if (contentType?.includes('application/json')) {
-    data = await response.json();
-  } else {
-    const text = await response.text();
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = text;
-    }
+  if (isProxyError(response, data)) {
+    throw unreachable(response.status);
   }
-
-  // Handle errors
   if (!response.ok) {
     const message = data?.detail || data?.message || `HTTP ${response.status}`;
     throw new ApiError(response.status, message, data);
@@ -146,7 +173,7 @@ export async function apiFetch<T = any>(
 export const api = {
   get: <T = any>(path: string, params?: Record<string, any>): Promise<T> => {
     const url = params
-      ? `${path}?${new URLSearchParams(params as any).toString()}`
+      ? `${path}?${new URLSearchParams(params).toString()}`
       : path;
     return apiFetch<T>(url, { method: 'GET' });
   },

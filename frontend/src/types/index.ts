@@ -1,198 +1,58 @@
 // src/types/index.ts
+/**
+ * Shapes shared by several endpoints. Types used by a single endpoint live
+ * next to its call in src/api/.
+ */
 
-// ============================================================================
-// AUTH TYPES
-// ============================================================================
-
-export type UserRole = 'administrator' | 'member' | 'visitor';
-
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  role: UserRole;
-  is_active: boolean;
-  created_at: string;
-  last_login_at: string | null;
+/** An artist named on a track or an album; YouTube Music doesn't always give the id */
+export interface ArtistRef {
+  id: string | null;
+  name: string | null;
 }
 
-export interface LoginCredentials {
-  username: string;
-  password: string;
-}
+/** Badge shown on a MediaCard; undefined means "nothing to show" */
+export type MediaStatus = 'downloaded' | 'in_library' | 'downloading' | 'queued' | 'paused' | 'failed' | undefined;
 
-export interface RegisterData {
-  username: string;
-  email: string;
-  password: string;
-}
+/**
+ * Download state of a track in the DB (backend/services/tracks.py):
+ * available = nothing planned, queued = a download job is waiting for it
+ * (incl. retries and rate-limit pauses), failed = out of attempts.
+ * Tracks served straight from YTMusic have none.
+ */
+export type TrackStatus = 'available' | 'queued' | 'downloading' | 'done' | 'failed';
 
-export interface AuthTokens {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-}
+/** What kind of .lrc a downloaded track has on disk; null = none yet */
+export type LyricsKind = 'synced' | 'plain' | 'instrumental' | null;
 
-// ============================================================================
-// MUSIC TYPES
-// ============================================================================
+/** Album download state (backend/services/subscriptions.py), null for albums not being downloaded */
+export type AlbumDownloadStatus = 'completed' | 'downloading' | 'pending' | 'failed' | 'idle' | null;
 
-export interface Thumbnail {
-  url: string;
-  width: number;
-  height: number;
-}
+/** How an album is kept: its music downloaded, or only its metadata (from a followed artist's light sync) */
+export type AlbumMode = 'download' | 'metadata';
 
-export interface Artist {
-  id: string;
-  name: string;
-  thumbnail?: string;
-  thumbnails?: Thumbnail[];
-  image_local?: string | null;
-  subscribers?: string;
-  resultType?: string;
-}
+/** How an artist is followed: in full (every release downloaded), or light (metadata only) */
+export type SubscriptionMode = 'full' | 'light';
 
-export interface ArtistDetail extends Artist {
-  followed?: boolean;
-}
-
-export type AlbumType = 'Album' | 'Single' | 'EP';
-
-export interface Album {
-  id: string;
-  title: string;
-  artist?: string;
-  artist_id?: string;
-  artist_name?: string;
-  year?: string;
-  type?: AlbumType | string;
-  thumbnail?: string;
-  thumbnails?: Thumbnail[];
-  image_local?: string | null;
-  playlist_id?: string;
-  playlistId?: string;
-  resultType?: string;
-}
-
-export interface AlbumDetail extends Album {
-  followed?: boolean;
-}
-
+/**
+ * A track of an album page (Track.to_dict). Those served from YouTube Music
+ * (album not imported yet) have no download state.
+ */
 export interface Track {
   id: string;
   title: string;
-  artists?: Array<{ id: string; name: string }>;
-  album?: string | { id: string; name: string } | null;
+  artists: ArtistRef[];
+  track_number: number | null;
+  /** Seconds */
+  duration: number | null;
   album_id?: string;
-  cover?: string | null;
-  thumbnail?: string;
-  thumbnails?: Thumbnail[] | null;
-  duration?: number;
-  duration_seconds?: number;
-  track_number?: number;
-  isExplicit?: boolean;
   status?: TrackStatus;
-  videoId?: string;
-  resultType?: string;
-  raw?: any;
+  last_error?: string | null;
+  lyrics?: LyricsKind;
+  lyrics_local?: string | null;
+  /** When YouTube Music stopped listing it in its album (ISO). Its file, if
+   *  any, stays; it's never downloaded again */
+  removed_at?: string | null;
+  /** No lyrics yet, but a lyrics lookup is queued or the audio is still
+   *  downloading (album page only) */
+  lyrics_pending?: boolean;
 }
-
-export type TrackStatus = 'new' | 'downloading' | 'done' | 'failed';
-
-// ============================================================================
-// SEARCH TYPES
-// ============================================================================
-
-export interface SearchResults {
-  artists?: Artist[];
-  albums?: Album[];
-  tracks?: Track[];
-  songs?: Track[]; // Alias for tracks
-}
-
-// ============================================================================
-// LIBRARY TYPES
-// ============================================================================
-
-export interface LibraryStats {
-  artists_count?: number;
-  albums_count?: number;
-  tracks_count?: number;
-  disk_usage_gb?: number;
-}
-
-// ============================================================================
-// API RESPONSE TYPES
-// ============================================================================
-
-export interface ApiError {
-  message: string;
-  status?: number;
-  details?: any;
-}
-
-export interface ArtistApiResponse {
-  ok: boolean;
-  source: string;
-  followed: boolean;
-  artist: Artist;
-  albums: Album[];
-  singles: Album[];
-}
-
-export interface AlbumApiResponse {
-  source: string;
-  followed: boolean;
-  album: AlbumDetail;
-  tracks: Track[];
-}
-
-// ============================================================================
-// UI COMPONENT TYPES
-// ============================================================================
-
-export type MediaType = 'artist' | 'album' | 'track';
-
-export interface MediaCardProps {
-  id: string;
-  title: string;
-  subtitle?: string;
-  thumbnail?: string;
-  type: MediaType;
-  year?: string;
-  onClick?: () => void;
-}
-
-export interface FormattedMedia {
-  id: string;
-  title: string;
-  subtitle?: string;
-  thumbnail?: string;
-  year?: string;
-  albumId?: string;
-}
-
-// ============================================================================
-// JOB TYPES
-// ============================================================================
-
-export type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
-
-export interface Job {
-  id: string;
-  type: string;
-  status: JobStatus;
-  progress?: number;
-  created_at: string;
-  updated_at: string;
-  error?: string;
-}
-
-// ============================================================================
-// UTILITY TYPES
-// ============================================================================
-
-export type Nullable<T> = T | null;
-export type Optional<T> = T | undefined;
-export type Maybe<T> = T | null | undefined;

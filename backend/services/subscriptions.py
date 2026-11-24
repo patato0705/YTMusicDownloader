@@ -1,293 +1,447 @@
 # backend/services/subscriptions.py
+"""
+What the library follows: artist subscriptions ("light": album metadata
+only; "full": every release downloaded) and each album's mode
+("metadata" or "download"), with the jobs that act on them.
+"""
 from __future__ import annotations
 import logging
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+from typing import Collection, Optional
+from datetime import datetime, timedelta
 
+from sqlalchemy import select, func, case
 from sqlalchemy.orm import Session
-from sqlalchemy import select
 
-from . import normalizers as N
-
-from ..models import ArtistSubscription, AlbumSubscription, Artist, Album
-from ..time_utils import now_utc, ensure_timezone_aware
+from ..jobs.jobqueue import cancel_download_jobs, enqueue_job, pending_jobs
+from ..jobs.priorities import Origin, promote
+from ..models import Artist, Album, ArtistSubscription, Exclusion, Track, UserChannel
+from ..time_utils import now_utc
+from ..ytm_service import adapter as ytm_adapter
+from . import exclusions as exclusions_svc
+from . import reissues as reissues_svc
+from . import tracks as tracks_svc
 
 logger = logging.getLogger("services.subscriptions")
 
 
-def subscribe_to_artist(
-    session: Session,
-    artist_id: str,
-    mode: str = "full",
-) -> ArtistSubscription:
-    """
-    Create or update an artist subscription.
-    mode: "full" = download all albums, "monitor" = track but don't download
-    """
-    # Check if subscription already exists
-    stmt = select(ArtistSubscription).where(ArtistSubscription.artist_id == artist_id)
-    existing = session.execute(stmt).scalar_one_or_none()
-    
-    if existing:
-        # Update existing subscription
-        existing.enabled = True
-        existing.mode = mode
-        session.add(existing)
-        logger.info(f"Updated artist subscription for {artist_id}")
-        return existing
-    
-    # Create new subscription
-    subscription = ArtistSubscription(
-        artist_id=artist_id,
-        mode=mode,
-        enabled=True,
-        created_at=now_utc(),
-    )
-    session.add(subscription)
-    logger.info(f"Created artist subscription for {artist_id}")
-    return subscription
-
-
-def unsubscribe_from_artist(session: Session, artist_id: str) -> bool:
-    """
-    Disable artist subscription (soft delete).
-    Returns True if subscription was found and disabled.
-    """
-    stmt = select(ArtistSubscription).where(ArtistSubscription.artist_id == artist_id)
-    subscription = session.execute(stmt).scalar_one_or_none()
-    
-    if not subscription:
-        return False
-    
-    subscription.enabled = False
-    session.add(subscription)
-    logger.info(f"Disabled artist subscription for {artist_id}")
-    return True
-
-
-def subscribe_to_album(
-    session: Session,
-    album_id: str,
-    artist_id: Optional[str] = None,
-    mode: str = "download",
-) -> AlbumSubscription:
-    """
-    Create or update an album subscription.
-    mode: "download" = download all tracks, "monitor" = track but don't download
-    """
-    # Check if subscription already exists
-    stmt = select(AlbumSubscription).where(AlbumSubscription.album_id == album_id)
-    existing = session.execute(stmt).scalar_one_or_none()
-    
-    if existing:
-        # Update existing subscription
-        existing.mode = mode
-        if artist_id:
-            existing.artist_id = artist_id
-        session.add(existing)
-        logger.info(f"Updated album subscription for {album_id}")
-        return existing
-    
-    # Create new subscription
-    subscription = AlbumSubscription(
-        album_id=album_id,
-        artist_id=artist_id,
-        mode=mode,
-        created_at=now_utc(),
-        download_status="pending",
-    )
-    session.add(subscription)
-    logger.info(f"Created album subscription for {album_id}")
-    return subscription
-
-
-def unsubscribe_from_album(session: Session, album_id: str) -> bool:
-    """
-    Delete album subscription.
-    Returns True if subscription was found and deleted.
-    """
-    stmt = select(AlbumSubscription).where(AlbumSubscription.album_id == album_id)
-    subscription = session.execute(stmt).scalar_one_or_none()
-    
-    if not subscription:
-        return False
-    
-    session.delete(subscription)
-    logger.info(f"Deleted album subscription for {album_id}")
-    return True
-
+# ============================================================================
+# ARTIST SUBSCRIPTIONS
+# ============================================================================
 
 def get_artist_subscription(session: Session, artist_id: str) -> Optional[ArtistSubscription]:
-    """Get artist subscription if it exists."""
+    """Get artist subscription by artist ID."""
     stmt = select(ArtistSubscription).where(ArtistSubscription.artist_id == artist_id)
-    return session.execute(stmt).scalar_one_or_none()
+    return session.execute(stmt).scalars().first()
 
 
-def get_album_subscription(session: Session, album_id: str) -> Optional[AlbumSubscription]:
-    """Get album subscription if it exists."""
-    stmt = select(AlbumSubscription).where(AlbumSubscription.album_id == album_id)
-    return session.execute(stmt).scalar_one_or_none()
+def subscribe_to_artist(session: Session, artist_id: str, mode: str = "full") -> ArtistSubscription:
+    """Create the artist's subscription, or change its mode. Does not commit."""
+    if mode not in ("light", "full"):
+        raise ValueError(f"Invalid mode: {mode}. Must be 'light' or 'full'")
+
+    subscription = get_artist_subscription(session, artist_id)
+    if subscription is None:
+        subscription = ArtistSubscription(artist_id=artist_id, mode=mode, enabled=True, created_at=now_utc())
+        session.add(subscription)
+        logger.info("Created artist subscription: %s (mode=%s)", artist_id, mode)
+    elif subscription.mode != mode:
+        logger.info("Updating artist subscription %s: %s -> %s", artist_id, subscription.mode, mode)
+        subscription.mode = mode
+    return subscription
 
 
-def list_active_artist_subscriptions(session: Session) -> List[ArtistSubscription]:
-    """Get all enabled artist subscriptions."""
-    stmt = select(ArtistSubscription).where(ArtistSubscription.enabled == True)
-    return list(session.execute(stmt).scalars().all())
-
-
-def list_pending_album_downloads(session: Session) -> List[AlbumSubscription]:
-    """Get all album subscriptions that need downloading."""
-    stmt = select(AlbumSubscription).where(
-        AlbumSubscription.download_status.in_(["pending", "failed"])
-    )
-    return list(session.execute(stmt).scalars().all())
-
-
-def get_due_album_subscriptions(session: Session) -> List[AlbumSubscription]:
-    """
-    Get album subscriptions that are due for sync/download.
-    Returns subscriptions with download_status in ('pending', 'failed').
-    This is called by the scheduler.
-    """
-    return list_pending_album_downloads(session)
-
-
-def get_monitored_artists_needing_sync(
+def queue_artist_sync(
     session: Session,
-    sync_interval_hours: int
-) -> List[Artist]:
+    artist_id: str,
+    user_id: Optional[int] = None,
+    *,
+    origin: Origin,
+) -> bool:
     """
-    Get artists that are followed and need syncing.
-    An artist needs syncing if:
-    - artist.followed = True
-    - Either: artist_subscription doesn't exist, OR last_synced_at is older than sync_interval_hours
+    Queue a sync_artist job, or move one already waiting up to `origin`'s
+    class. One already running doesn't count: it may have read the
+    subscription before the change that calls for this sync. Does not
+    commit. Returns whether a job was queued.
     """
-    from sqlalchemy import select, or_
-    from datetime import timedelta
-    from ..models import Artist
-    
-    # Calculate cutoff time
-    cutoff = now_utc() - timedelta(hours=sync_interval_hours)
-    
-    # Get all followed artists
-    stmt = select(Artist).where(Artist.followed == True)
-    followed_artists = list(session.execute(stmt).scalars().all())
-    
-    due_artists = []
-    for artist in followed_artists:
-        # Check if subscription exists and when it was last synced
-        sub = get_artist_subscription(session, artist.id)
-        
-        if not sub:
-            # No subscription but followed - needs sync
-            due_artists.append(artist)
-        else:
-            # Ensure last_synced_at is timezone-aware for comparison
-            last_synced = ensure_timezone_aware(sub.last_synced_at)
-            if not last_synced or last_synced < cutoff:
-                # Subscription exists but hasn't been synced recently
-                due_artists.append(artist)
-    
-    return due_artists
+    waiting = pending_jobs(session, "sync_artist", statuses=("queued",), artist_id=artist_id)
+    if waiting:
+        promote(waiting[0], origin)
+        return False
+    enqueue_job(
+        session, job_type="sync_artist", payload={"artist_id": artist_id},
+        origin=origin, user_id=user_id, commit=False,
+    )
+    return True
+
+
+def follow_artist(
+    session: Session,
+    artist_id: str,
+    name: Optional[str],
+    user_id: Optional[int] = None,
+    *,
+    origin: Origin,
+    explicit: bool = False,
+    by_chart: bool = False,
+) -> bool:
+    """
+    Follow an artist in full: its row (named `name` if it's new), a full
+    subscription (a light one upgraded), and a sync job, which fetches the
+    artist and brings in every release. No network here. Does not commit.
+
+    `by_chart`: a chart sync follows it, so the charts may unfollow it again
+    (ArtistSubscription.chart_followed, services/charts.py).
+
+    `explicit`: someone asked for this artist (the Follow button), which
+    lifts its exclusion (services/exclusions.py). Otherwise (a chart, a
+    playlist, a backup) an excluded artist isn't followed.
+
+    Returns False when it was already followed in full, is excluded, or is
+    a YouTube user's channel (UserChannel), which isn't followed.
+    """
+    if session.get(UserChannel, artist_id) is not None:
+        return False
+    if explicit:
+        exclusions_svc.lift_artist(session, artist_id)
+    elif exclusions_svc.get(session, exclusions_svc.ARTIST, artist_id) is not None:
+        return False
+    subscription = get_artist_subscription(session, artist_id)
+    if subscription is not None and subscription.mode == "full":
+        return False
+    if session.get(Artist, artist_id) is None:
+        session.add(Artist(id=artist_id, name=name or ""))
+    subscribe_to_artist(session, artist_id, mode="full").chart_followed = by_chart
+    queue_artist_sync(session, artist_id, user_id=user_id, origin=origin)
+    return True
 
 
 def mark_artist_synced(
     session: Session,
     artist_id: str,
-    error: Optional[str] = None
+    error: Optional[str] = None,
 ) -> None:
-    """Update last_synced_at timestamp for artist subscription."""
+    """Record a sync of the artist (and its error, if it failed). Does not commit."""
     subscription = get_artist_subscription(session, artist_id)
     if subscription:
         subscription.last_synced_at = now_utc()
-        if error:
-            subscription.last_error = error
-        else:
-            subscription.last_error = None
-        session.add(subscription)
+        # YouTube Music errors can quote the whole page they couldn't parse
+        subscription.last_error = tracks_svc.truncate_error(error)
 
 
-def mark_album_download_status(
-    session: Session,
-    album_id: str,
-    status: str,
-    error: Optional[str] = None
-) -> None:
-    """Update download status for album subscription."""
-    subscription = get_album_subscription(session, album_id)
-    if subscription:
-        subscription.download_status = status
-        subscription.last_synced_at = now_utc()
-        if error:
-            subscription.last_error = error
-        else:
-            subscription.last_error = None
-        session.add(subscription)
-
-def check_and_update_album_download_status(
-    session: Session,
-    album_id: str,
-) -> str:
+def get_monitored_artists_needing_sync(session: Session, cutoff: datetime) -> list[Artist]:
     """
-    Check all tracks for an album and update AlbumSubscription.download_status.
-    
-    Returns the new status:
-    - "idle": No subscription found
-    - "pending": Some tracks not downloaded
-    - "downloading": Some tracks actively downloading
-    - "completed": All tracks done
-    - "failed": All tracks failed
+    Artists not synced since `cutoff` (or ever), of an enabled subscription:
+    followed in full (new releases), or light with an album in the library
+    (its renames and pictures, and the refresh of those albums: see
+    sync_artist). A light one with nothing downloaded (unfollowed) has
+    nothing a sync would keep up to date. Used by the scheduler.
     """
-    from ..models import Track
-    
-    # Get subscription
-    subscription = get_album_subscription(session, album_id)
-    if not subscription:
-        return "idle"
-    
-    # Get all tracks for album
-    tracks = session.query(Track).filter(Track.album_id == album_id).all()
-    
-    if not tracks:
-        # No tracks yet
-        subscription.download_status = "pending"
-        session.add(subscription)
-        return "pending"
-    
-    # Count track statuses
-    status_counts = {}
-    for track in tracks:
-        status = track.status or "new"
-        status_counts[status] = status_counts.get(status, 0) + 1
-    
-    total = len(tracks)
-    done_count = status_counts.get("done", 0)
-    downloading_count = status_counts.get("downloading", 0)
-    failed_count = status_counts.get("failed", 0)
-    new_count = status_counts.get("new", 0)
-    
-    # Determine overall status
-    if done_count == total:
-        new_status = "completed"
-    elif done_count > 0 and (new_count + failed_count) == 0:
-        new_status = "completed"  # Some might be in other states but main ones are done
-    elif downloading_count > 0:
-        new_status = "downloading"
-    elif failed_count == total:
-        new_status = "failed"
-    elif failed_count > 0 or new_count > 0:
-        new_status = "pending"
-    else:
-        new_status = "completed"
-    
-    # Update subscription
-    subscription.download_status = new_status
-    subscription.last_synced_at = now_utc()
-    session.add(subscription)
-    
-    logger.debug(
-        f"Album {album_id} download status: {new_status} "
-        f"(done={done_count}/{total}, downloading={downloading_count}, failed={failed_count})"
+    has_download_album = (
+        select(Album.id)
+        .where(Album.artist_id == Artist.id, Album.mode == "download")
+        .exists()
     )
-    
+    stmt = (
+        select(Artist)
+        .join(ArtistSubscription, ArtistSubscription.artist_id == Artist.id)
+        .where(
+            ArtistSubscription.enabled.is_(True),
+            (ArtistSubscription.mode == "full") | has_download_album,
+            ArtistSubscription.last_synced_at.is_(None) | (ArtistSubscription.last_synced_at < cutoff),
+        )
+    )
+    return list(session.execute(stmt).scalars().all())
+
+
+# ============================================================================
+# ALBUM MODE
+# ============================================================================
+
+def upgrade_all_albums_to_download(
+    session: Session,
+    artist_id: str,
+    user_id: Optional[int] = None,
+    *,
+    origin: Origin,
+) -> int:
+    """
+    Switch the artist's metadata albums to download mode and queue an
+    import_album for each, so their tracks get (re)listed and downloaded;
+    the download-mode albums that still have no tracks get one too (just
+    created by a sync, or an earlier import that never landed: nothing
+    else would ever import them). Excluded albums stay metadata-only
+    (services/exclusions.py). Does not commit. Returns the imports queued.
+    """
+    excluded = select(Exclusion.item_id).where(Exclusion.kind == exclusions_svc.ALBUM)
+    albums = session.execute(
+        select(Album).where(Album.artist_id == artist_id, Album.mode == "metadata", Album.id.not_in(excluded))
+    ).scalars().all()
+    for album in albums:
+        album.mode = "download"
+    if albums:
+        logger.info("Upgraded %s albums to download mode for artist %s", len(albums), artist_id)
+        session.flush()  # autoflush=False: the trackless query below must see them
+
+    trackless = session.execute(
+        select(Album.id).where(
+            Album.artist_id == artist_id,
+            Album.mode == "download",
+            ~select(Track.id).where(Track.album_id == Album.id).exists(),
+        )
+    ).scalars().all()
+    return queue_album_imports(
+        session,
+        {a.id for a in albums} | set(trackless),
+        artist_id=artist_id,
+        user_id=user_id,
+        origin=origin,
+    )
+
+
+# How long an album's stored tracklist is trusted before its artist's sync
+# reads it again: about a dozen albums a day for a library of a few hundred
+ALBUM_REFRESH_INTERVAL = timedelta(days=30)
+
+
+def queue_album_refreshes(
+    session: Session,
+    artist_id: str,
+    *,
+    origin: Origin,
+) -> int:
+    """
+    Queue an import_album for each of the artist's download-mode albums not
+    read from YouTube Music in ALBUM_REFRESH_INTERVAL (or ever), which
+    brings its tracklist up to date (albums.fetch_and_upsert_album). Does
+    not commit. Returns the imports queued.
+    """
+    cutoff = now_utc() - ALBUM_REFRESH_INTERVAL
+    due = session.execute(
+        select(Album.id).where(
+            Album.artist_id == artist_id,
+            Album.mode == "download",
+            Album.last_synced_at.is_(None) | (Album.last_synced_at < cutoff),
+        )
+    ).scalars().all()
+    return queue_album_imports(session, due, artist_id=artist_id, origin=origin)
+
+
+def queue_album_imports(
+    session: Session,
+    album_ids: Collection[str],
+    artist_id: Optional[str] = None,
+    user_id: Optional[int] = None,
+    *,
+    origin: Origin,
+) -> int:
+    """
+    Queue an import_album job for each album that doesn't already have one
+    waiting or running. A waiting one is moved up to `origin`'s class if
+    that's higher (see jobs/priorities.py) rather than duplicated. Does not
+    commit. Returns the number queued.
+    """
+    if not album_ids:
+        return 0
+    pending = {
+        job.payload.get("browse_id"): job
+        for job in pending_jobs(session, "import_album", browse_id=set(album_ids))
+    }
+    queued = 0
+    for album_id in sorted(album_ids):
+        if album_id in pending:
+            promote(pending[album_id], origin)
+            continue
+        enqueue_job(
+            session,
+            job_type="import_album",
+            payload={"browse_id": album_id, "artist_id": artist_id},
+            origin=origin,
+            user_id=user_id,
+            commit=False,
+        )
+        queued += 1
+    return queued
+
+
+def downgrade_all_albums_to_metadata(session: Session, artist_id: str) -> int:
+    """
+    Downgrade all albums for an artist from download to metadata mode and
+    cancel their pending downloads. Files already on disk stay.
+    Used when downgrading artist from full to light mode. Does not commit.
+
+    Returns:
+        Number of albums downgraded
+    """
+    albums = session.execute(
+        select(Album).where(Album.artist_id == artist_id, Album.mode == "download")
+    ).scalars().all()
+    for album in albums:
+        album.mode = "metadata"
+        album.download_status = None
+    _stop_album_downloads(session, [a.id for a in albums])
+
+    if albums:
+        logger.info("Downgraded %s albums to metadata mode for artist %s", len(albums), artist_id)
+    return len(albums)
+
+
+def _stop_album_downloads(session: Session, album_ids: Collection[str]) -> None:
+    """
+    Cancel the download jobs of these albums' tracks and hand the tracks
+    that were waiting (or had failed) back to "available". A download
+    already running is left to finish. Does not commit.
+    """
+    if not album_ids:
+        return
+    tracks = session.execute(
+        select(Track).where(Track.album_id.in_(list(album_ids)))
+    ).scalars().all()
+    cancel_download_jobs(session, [t.id for t in tracks], reason="album no longer followed")
+
+    for track in tracks:
+        if track.status in ("queued", "failed"):
+            track.status = "available"
+            track.last_error = None
+
+
+def start_album_download(
+    session: Session,
+    album_id: str,
+    *,
+    origin: Origin,
+    user_id: Optional[int] = None,
+    explicit: bool = False,
+) -> dict:
+    """
+    Download an album: set it to download mode, write its album.nfo and
+    queue a download for every track not on disk.
+
+    `explicit`: someone asked for this album (the Download button), which
+    lifts its exclusion, and turns its artist's from "deleted" (its albums
+    kept out too) to "unfollowed": the artist is back in the library, just
+    not followed. Otherwise (a playlist scan) an excluded album isn't
+    downloaded; callers leave out the albums of a deleted artist
+    (exclusions.blocked_album_ids), as only they may know its artist.
+
+    An album not in the DB yet is fetched here (raises
+    ytm_adapter.YTMusicUnavailable when it can't be), unless it's the
+    reissue of one in the library, which moves to it (services/reissues.py),
+    so it shows up with
+    its real title, artist and tracks right away, and its downloads are
+    queued straight from that fetch. One already in the DB gets an
+    import_album instead, which fetches the current tracklist first: the
+    same path as the albums of a followed artist. Its artist gets a light
+    subscription if it has none (album metadata and pictures, no
+    downloads), synced right after.
+
+    Commits. Returns {"album": Album, "started": bool,
+    "artist_subscription_created": bool}; started is False for an album
+    already in download mode, or excluded.
+    """
+    from . import albums as albums_svc
+
+    if explicit:
+        exclusions_svc.lift(session, exclusions_svc.ALBUM, album_id)
+    elif exclusions_svc.get(session, exclusions_svc.ALBUM, album_id) is not None:
+        return {"album": session.get(Album, album_id), "started": False, "artist_subscription_created": False}
+
+    album = session.get(Album, album_id)
+    fetched = album is None
+    adopted = False
+    if fetched:
+        logger.info("Album %s not in DB, fetching from YTMusic", album_id)
+        album_data = ytm_adapter.get_album(browse_id=album_id)
+        # A reissue of an album in the library takes its place, files and all
+        replaced = reissues_svc.replaced_by(session, album_data)
+        if replaced is not None:
+            album = reissues_svc.adopt(session, replaced, album_id, album_data)
+            fetched, adopted = False, True
+        else:
+            albums_svc.fetch_and_upsert_album(session, browse_id=album_id, album_data=album_data)
+            session.flush()  # autoflush=False: get can't see the new row before this
+            album = session.get(Album, album_id)
+    if not fetched and album.mode == "download":
+        if adopted:
+            # Its import brings the moved album's tracklist up to date
+            queue_album_imports(session, [album_id], artist_id=album.artist_id, user_id=user_id, origin=origin)
+            session.commit()
+        return {"album": album, "started": False, "artist_subscription_created": False}
+
+    album.mode = "download"
+    artist_exclusion = exclusions_svc.get(session, exclusions_svc.ARTIST, album.artist_id)
+    if explicit and artist_exclusion is not None and artist_exclusion.reason == exclusions_svc.DELETED:
+        artist_exclusion.reason = exclusions_svc.UNFOLLOWED
+    artist_sub_created = False
+    if album.artist_id and not get_artist_subscription(session, album.artist_id):
+        subscribe_to_artist(session, artist_id=album.artist_id, mode="light")
+        # The light subscription's sync fetches the artist's album list and pictures
+        queue_artist_sync(session, album.artist_id, user_id=user_id, origin=origin)
+        artist_sub_created = True
+        logger.info("Auto-created light artist subscription for %s", album.artist_id)
+
+    if fetched:
+        session.commit()
+        albums_svc.complete_import(session, album_id, origin=origin)
+    else:
+        session.flush()  # autoflush=False: the rollup and the import check see the mode change
+        check_and_update_album_download_status(session, album_id)
+        queue_album_imports(session, [album_id], artist_id=album.artist_id, user_id=user_id, origin=origin)
+        session.commit()
+
+    logger.info("Album %s set to download", album_id)
+    return {"album": album, "started": True, "artist_subscription_created": artist_sub_created}
+
+
+def check_and_update_album_download_status(session: Session, album_id: str) -> str:
+    """
+    Recompute Album.download_status from its tracks' statuses. Does not commit.
+
+    Over the tracks that count (tracks_svc.counted: not those YouTube Music
+    no longer lists, unless on disk). Status logic, first match wins:
+    - "completed": all tracks are "done"
+    - "downloading": at least one track is "downloading"
+    - "pending": at least one track is "queued"
+    - "failed": at least one track is "failed" (and nothing left to try)
+    - "idle": no tracks, or the rest are "available" (nothing planned)
+
+    Returns:
+        The new download_status string
+    """
+    album = session.get(Album, album_id)
+    if not album:
+        return "idle"
+
+    # Only albums being downloaded have a download status. A metadata album
+    # can still see a track finish (a download that was already running when
+    # it was unfollowed), which mustn't bring the status back.
+    if album.mode != "download":
+        album.download_status = None
+        return "idle"
+
+    stats = (
+        session.query(
+            func.count(Track.id).label("total"),
+            func.sum(case((Track.status == "done", 1), else_=0)).label("done"),
+            func.sum(case((Track.status == "downloading", 1), else_=0)).label("downloading"),
+            func.sum(case((Track.status == "failed", 1), else_=0)).label("failed"),
+            func.sum(case((Track.status == "queued", 1), else_=0)).label("queued"),
+        )
+        .filter(Track.album_id == album_id, tracks_svc.counted())
+        .one()
+    )
+
+    if not stats.total:
+        new_status = "idle"
+    elif stats.done == stats.total:
+        new_status = "completed"
+    elif stats.downloading:
+        new_status = "downloading"
+    elif stats.queued:
+        new_status = "pending"
+    elif stats.failed:
+        new_status = "failed"
+    else:
+        new_status = "idle"
+
+    album.download_status = new_status
     return new_status

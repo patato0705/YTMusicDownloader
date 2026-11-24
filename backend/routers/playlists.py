@@ -1,57 +1,198 @@
 # backend/routers/playlists.py
 """
-Playlist endpoints.
+Playlist endpoints (see services/playlists.py).
 
 Endpoints :
-- GET /api/playlist/{playlist_id} - Get playlist details with track/album info.
-- GET /api/playlist/{playlist_id}/albums - Extract unique album IDs from a playlist.
+- GET /api/playlists - Playlists added to the library
+- GET /api/playlists/{playlist_id} - A YouTube Music playlist with its tracks, and
+  how it's added to the library ("saved", null if it isn't)
+- POST /api/playlists/{playlist_id} - Add a playlist (mode, followed, m3u)
+- PATCH /api/playlists/{playlist_id} - Change how it's added
+- POST /api/playlists/{playlist_id}/sync - Rescan a followed playlist now
+- DELETE /api/playlists/{playlist_id} - Remove it (and its M3U; the music stays)
 """
-from fastapi import APIRouter, Depends
+from __future__ import annotations
+import logging
+from typing import Any, Dict, Literal, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_session
-from ..dependencies import require_auth
-from ..models import User
-from ..ytm_service import adapter
+from ..dependencies import require_auth, require_member_or_admin
+from ..jobs.priorities import Origin
+from ..models import Album, ArtistSubscription, Playlist, User
+from ..services import exclusions as exclusions_svc
+from ..services import playlists as playlists_svc
+from ..ytm_service.adapter import YTMusicUnavailable
+
+logger = logging.getLogger("routers.playlists")
 
 router = APIRouter(prefix="/api/playlists", tags=["Playlists"])
+
+
+class AddPlaylistRequest(BaseModel):
+    mode: Literal["albums", "artists"]
+    followed: bool
+    m3u: bool
+
+
+class UpdatePlaylistRequest(BaseModel):
+    mode: Optional[Literal["albums", "artists"]] = None
+    followed: Optional[bool] = None
+    m3u: Optional[bool] = None
+
+
+def _unreadable() -> HTTPException:
+    """Private playlists can't be told apart from YouTube Music not answering: one code for both."""
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="playlist_unavailable")
+
+
+def _playlist_id(raw: str) -> str:
+    """`raw` as a playlist ID, or a 400 when it can't be one (no YouTube Music call for it)."""
+    playlist_id = playlists_svc.parse_playlist_id(raw)
+    if playlist_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="playlist_invalid")
+    return playlist_id
+
+
+def _saved(session: Session, playlist_id: str) -> Playlist:
+    playlist = session.get(Playlist, playlist_id)
+    if playlist is None:
+        raise HTTPException(status_code=404, detail="Playlist not added")
+    return playlist
+
+
+@router.get("")
+def list_playlists(
+    current_user: User = Depends(require_auth),
+    session: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    return {"playlists": playlists_svc.list_playlists(session)}
 
 
 @router.get("/{playlist_id}")
 def get_playlist(
     playlist_id: str,
     current_user: User = Depends(require_auth),
-):
-    """
-    Get playlist details with track/album info.
-    
-    Use this to extract album IDs from playlists for bulk following.
-    Playlists are not saved to library.
-    """
-    return adapter.get_playlist(playlist_id)
-
-
-@router.get("/{playlist_id}/albums")
-def extract_albums_from_playlist(
-    playlist_id: str,
-    current_user: User = Depends(require_auth),
     session: Session = Depends(get_session),
-):
+) -> Dict[str, Any]:
     """
-    Extract unique album IDs from a playlist.
-    Returns list of albums for bulk operations.
+    The playlist from YouTube Music, with how it's added to the library
+    ("saved"). Its music videos stand for their songs where those were found
+    already; the others are looked up by a job ("songs_pending": their
+    video ids), and the page asks again once it's done.
+    "excluded_artists" / "excluded_albums": what the bulk buttons leave out
+    (services/exclusions.py); following or downloading one by hand lifts it.
     """
-    playlist = adapter.get_playlist(playlist_id)
-    
-    # Extract unique album IDs
-    album_ids = set()
-    for track in playlist.get("tracks", []):
-        if track.get("album") and track["album"].get("id"):
-            album_ids.add(track["album"]["id"])
-    
-    return {
-        "playlist_id": playlist_id,
-        "playlist_title": playlist.get("title"),
-        "album_count": len(album_ids),
-        "album_ids": list(album_ids),
+    playlist_id = _playlist_id(playlist_id)
+    try:
+        data = playlists_svc.fetch_playlist(session, playlist_id)
+    except YTMusicUnavailable:
+        raise _unreadable()
+    to_look_up = data.pop("videos_to_look_up")
+    if to_look_up:
+        playlists_svc.queue_song_lookup(session, playlist_id, to_look_up, origin=Origin.USER)
+    playlist = session.get(Playlist, playlist_id)
+    tracks = data.get("tracks") or []
+    artist_ids = {a["id"] for t in tracks for a in t.get("artists") or [] if a.get("id")}
+    album_ids = {(t.get("album") or {}).get("id") for t in tracks} - {None}
+    # What's already in the library, so the page shows Followed / Downloaded
+    followed_artists = session.scalars(
+        select(ArtistSubscription.artist_id).where(
+            ArtistSubscription.artist_id.in_(artist_ids),
+            ArtistSubscription.enabled.is_(True),
+            ArtistSubscription.mode == "full",
+        )
+    ).all() if artist_ids else []
+    downloaded_albums = session.scalars(
+        select(Album.id).where(Album.id.in_(album_ids), Album.mode == "download")
+    ).all() if album_ids else []
+    excluded_artists = exclusions_svc.excluded_artist_ids(session) & artist_ids
+    album_artists = {
+        album["id"]: next((a.get("id") for a in t.get("artists") or [] if a.get("id")), None)
+        for t in tracks
+        for album in [t.get("album") or {}]
+        if album.get("id")
     }
+    excluded_albums = exclusions_svc.blocked_album_ids(session, album_artists)
+    return {
+        **data,
+        "saved": playlists_svc.summary(session, playlist) if playlist else None,
+        "followed_artists": list(followed_artists),
+        "downloaded_albums": list(downloaded_albums),
+        "excluded_artists": sorted(excluded_artists),
+        "excluded_albums": sorted(excluded_albums),
+        "songs_pending": [v["id"] for v in to_look_up],
+    }
+
+
+@router.post("/{playlist_id}", status_code=status.HTTP_201_CREATED)
+def add_playlist(
+    playlist_id: str,
+    body: AddPlaylistRequest,
+    current_user: User = Depends(require_member_or_admin),
+    session: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    playlist_id = _playlist_id(playlist_id)
+    try:
+        playlist = playlists_svc.add_playlist(
+            session, playlist_id,
+            mode=body.mode, followed=body.followed, m3u=body.m3u, user_id=current_user.id,
+        )
+    except playlists_svc.PlaylistAlreadyAdded:
+        raise HTTPException(status_code=409, detail="Playlist already added")
+    except YTMusicUnavailable:
+        session.rollback()
+        raise _unreadable()
+    except ValueError as e:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    logger.info("User %s added playlist %s", current_user.username, playlist_id)
+    return playlists_svc.summary(session, playlist)
+
+
+@router.patch("/{playlist_id}")
+def update_playlist(
+    playlist_id: str,
+    body: UpdatePlaylistRequest,
+    current_user: User = Depends(require_member_or_admin),
+    session: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    playlist = _saved(session, playlist_id)
+    try:
+        playlists_svc.update_playlist(session, playlist, mode=body.mode, followed=body.followed, m3u=body.m3u)
+    except ValueError as e:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    logger.info("User %s changed playlist %s: %s", current_user.username, playlist_id, body.model_dump(exclude_none=True))
+    return playlists_svc.summary(session, playlist)
+
+
+@router.post("/{playlist_id}/sync")
+def sync_playlist(
+    playlist_id: str,
+    current_user: User = Depends(require_member_or_admin),
+    session: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    playlist = _saved(session, playlist_id)
+    if not playlist.followed:
+        raise HTTPException(status_code=400, detail="Only a followed playlist is rescanned")
+    # Like a scheduled rescan: it only brings in what's new
+    playlists_svc.queue_sync(session, playlist, origin=Origin.AUTO, fetch=True)
+    session.commit()
+    return playlists_svc.summary(session, playlist)
+
+
+@router.delete("/{playlist_id}")
+def remove_playlist(
+    playlist_id: str,
+    current_user: User = Depends(require_member_or_admin),
+    session: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    playlist = _saved(session, playlist_id)
+    playlists_svc.remove_playlist(session, playlist)
+    logger.info("User %s removed playlist %s", current_user.username, playlist_id)
+    return {"ok": True, "playlist_id": playlist_id}

@@ -3,25 +3,21 @@
 Search endpoints.
 
 Endpoints:
-- GET /api/search - Search all types (artists, albums, songs)
-- GET /api/search/artists - Search for artists only.
-- GET /api/search/albums - Search for albums only.
-- GET /api/search/songs - Search for songs only.
-- GET /api/search/charts - Get music charts for a country.
-- DELETE /api/search/cache - Clear the search cache. (Admin only)
+- GET /api/search - Search artists, albums and songs
 """
 from __future__ import annotations
-import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from ..db import get_session
+from ..dependencies import require_auth
+from ..models import ArtistSubscription, User
 from ..services import search as search_service
-
-from backend.dependencies import require_auth, require_member_or_admin, require_admin
-from backend.models import User
-
-logger = logging.getLogger("routers.search")
+from ..ytm_service.adapter import YTMusicUnavailable
+from .albums import ytmusic_unavailable
 
 router = APIRouter(prefix="/api/search", tags=["Search"])
 
@@ -31,157 +27,25 @@ def search(
     current_user: User = Depends(require_auth),
     q: str = Query(..., min_length=1, description="Query string to search for"),
     limit: int = Query(10, ge=1, le=50, description="Max results per type"),
+    session: Session = Depends(get_session),
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Search all types (artists, albums, songs) using filtered searches.
-    
-    This is the recommended search endpoint - it uses filtered searches
-    which provide more reliable and complete results than unfiltered search.
-    
-    Results are cached for 15 minutes.
-    
-    Returns:
-        {"artists": [...], "albums": [...], "songs": [...]}
+    Search YouTube Music: {"artists": [...], "albums": [...], "songs": [...]},
+    from one filtered search per type. Results are cached for 15 minutes;
+    each artist's "followed" (in full) is read fresh, for its follow button.
     """
     try:
-        results = search_service.search_all(
-            query=q,
-            limit_per_type=limit,
-            use_cache=True
-        )
-        return results
-    except Exception as e:
-        logger.exception(f"Search failed for query '{q}'")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Search service unavailable: {str(e)}"
-        )
+        results = search_service.search_all(q, limit_per_type=limit)
+    except YTMusicUnavailable:
+        raise ytmusic_unavailable()
 
-
-@router.get("/artists", response_model=List[Dict[str, Any]])
-def search_artists_only(
-    current_user: User = Depends(require_auth),
-    q: str = Query(..., min_length=1, description="Query string"),
-    limit: int = Query(10, ge=1, le=50, description="Max results"),
-) -> List[Dict[str, Any]]:
-    """
-    Search for artists only.
-    
-    Returns:
-        List of artist results
-    """
-    try:
-        results = search_service.search_artists(
-            query=q,
-            limit=limit,
-            use_cache=True
+    artist_ids = [a["id"] for a in results["artists"]]
+    followed = set(session.execute(
+        select(ArtistSubscription.artist_id).where(
+            ArtistSubscription.artist_id.in_(artist_ids),
+            ArtistSubscription.enabled == True,  # noqa: E712
+            ArtistSubscription.mode == "full",
         )
-        return results
-    except Exception as e:
-        logger.exception(f"Artist search failed for query '{q}'")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Artist search unavailable: {str(e)}"
-        )
-
-
-@router.get("/albums", response_model=List[Dict[str, Any]])
-def search_albums_only(
-    current_user: User = Depends(require_auth),
-    q: str = Query(..., min_length=1, description="Query string"),
-    limit: int = Query(10, ge=1, le=50, description="Max results"),
-) -> List[Dict[str, Any]]:
-    """
-    Search for albums only.
-    
-    Returns:
-        List of album results
-    """
-    try:
-        results = search_service.search_albums(
-            query=q,
-            limit=limit,
-            use_cache=True
-        )
-        return results
-    except Exception as e:
-        logger.exception(f"Album search failed for query '{q}'")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Album search unavailable: {str(e)}"
-        )
-
-
-@router.get("/songs", response_model=List[Dict[str, Any]])
-def search_songs_only(
-    current_user: User = Depends(require_auth),
-    q: str = Query(..., min_length=1, description="Query string"),
-    limit: int = Query(10, ge=1, le=50, description="Max results"),
-) -> List[Dict[str, Any]]:
-    """
-    Search for songs only.
-    
-    Returns:
-        List of song results
-    """
-    try:
-        results = search_service.search_songs(
-            query=q,
-            limit=limit,
-            use_cache=True
-        )
-        return results
-    except Exception as e:
-        logger.exception(f"Song search failed for query '{q}'")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Song search unavailable: {str(e)}"
-        )
-
-
-@router.get("/charts", response_model=Dict[str, Any])
-def get_charts(
-    current_user: User = Depends(require_auth),
-    country: Optional[str] = Query("US", description="Country code (e.g., 'US', 'FR')"),
-) -> Dict[str, Any]:
-    """
-    Get music charts for a country.
-    
-    Returns top artists and songs.
-    Results are cached for 15 minutes.
-    
-    Returns:
-        {"artists": [...], "songs": [...]}
-    """
-    try:
-        results = search_service.get_charts(
-            country=country,
-            use_cache=True
-        )
-        return results
-    except Exception as e:
-        logger.exception(f"Charts failed for country '{country}'")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Charts service unavailable: {str(e)}"
-        )
-
-
-@router.delete("/cache", status_code=204)
-def clear_search_cache(
-    current_user: User = Depends(require_admin),
-) -> None:
-    """
-    Clear the search cache.
-    
-    Admin endpoint to force refresh of cached search results.
-    """
-    try:
-        search_service.clear_cache()
-        logger.info("Search cache cleared via API")
-    except Exception as e:
-        logger.exception("Failed to clear search cache")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to clear cache: {str(e)}"
-        )
+    ).scalars()) if artist_ids else set()
+    # Copies: the cached results stay as YouTube Music gave them
+    return {**results, "artists": [{**a, "followed": a["id"] in followed} for a in results["artists"]]}

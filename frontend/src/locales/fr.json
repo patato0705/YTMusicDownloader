@@ -1,21 +1,41 @@
 {
   "common": {
-    "search": "Rechercher",
+    "unknownArtist": "Artiste inconnu",
+    "untitled": "Sans titre",
     "loading": "Chargement...",
     "error": "Erreur",
-    "success": "Succès",
     "cancel": "Annuler",
+    "confirm": "Confirmer",
     "save": "Enregistrer",
     "delete": "Supprimer",
-    "edit": "Modifier",
     "close": "Fermer",
+    "clear": "Effacer",
     "back": "Retour",
-    "next": "Suivant",
-    "submit": "Soumettre",
-    "yes": "Oui",
-    "no": "Non"
+    "or": "ou",
+    "all": "Tout",
+    "searchPlaceholder": "Rechercher...",
+    "ytmusicUnavailable": "YouTube Music ne répond pas pour le moment. Réessayez dans un instant.",
+    "serverUnreachable": "Le serveur ne répond pas, il redémarre peut-être. Réessayez dans un instant."
+  },
+  "mediaCard": {
+    "type": {
+      "album": "Album",
+      "ep": "EP",
+      "single": "Single",
+      "track": "Titre"
+    },
+    "status": {
+      "downloaded": "Sur le disque",
+      "inLibrary": "Dans la bibliothèque",
+      "downloading": "Téléchargement",
+      "queued": "En attente",
+      "paused": "En pause",
+      "failed": "Échec"
+    }
   },
   "auth": {
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
     "login": {
       "title": "Connexion",
       "subtitle": "Connectez-vous à votre compte",
@@ -24,120 +44,973 @@
       "button": "Se connecter",
       "loading": "Connexion...",
       "noAccount": "Pas de compte ?",
-      "register": "S'inscrire ici"
+      "register": "S'inscrire ici",
+      "sso": "Se connecter avec {name}",
+      "ssoErrors": {
+        "denied": "La connexion a été annulée chez le fournisseur.",
+        "not_allowed": "Votre compte n'a pas accès ici. Demandez l'accès à un administrateur.",
+        "inactive": "Ce compte est désactivé. Contactez un administrateur.",
+        "unavailable": "Le fournisseur de connexion est injoignable pour le moment. Réessayez plus tard.",
+        "failed": "La connexion a échoué. Réessayez, et contactez un administrateur si le problème persiste."
+      }
     },
     "register": {
       "title": "Créer un compte",
       "subtitle": "Rejoignez la bibliothèque musicale",
       "username": "Nom d'utilisateur",
-      "email": "Email",
       "password": "Mot de passe",
       "confirmPassword": "Confirmer le mot de passe",
       "button": "Créer un compte",
       "loading": "Création...",
       "hasAccount": "Vous avez déjà un compte ?",
-      "login": "Se connecter ici"
+      "login": "Se connecter ici",
+      "usernameHint": "Le nom d'utilisateur doit contenir entre 3 et 64 caractères",
+      "disabled": {
+        "title": "Inscription désactivée",
+        "message": "L'inscription publique est actuellement désactivée. Veuillez contacter un administrateur pour obtenir un accès.",
+        "goToLogin": "Aller à la connexion"
+      }
     },
     "logout": "Déconnexion",
     "changePassword": {
       "title": "Changer le mot de passe",
+      "subtitle": "Choisissez un nouveau mot de passe",
       "current": "Mot de passe actuel",
       "new": "Nouveau mot de passe",
       "confirm": "Confirmer le nouveau mot de passe",
       "button": "Changer le mot de passe",
-      "success": "Mot de passe modifié avec succès"
+      "required": "Un changement de mot de passe est requis",
+      "temporaryWarning": "Vous êtes connecté avec un mot de passe temporaire (le mot de passe administrateur initial, ou un mot de passe défini par un administrateur). Choisissez le vôtre pour continuer.",
+      "tips": {
+        "title": "Conseils pour choisir un mot de passe",
+        "length": "Votre mot de passe doit contenir au moins 8 caractères",
+        "mix": "Essayez d'utiliser une combinaison de lettres, de chiffres et de symboles",
+        "unique": "Utilisez un mot de passe unique pour chaque site web."
+      }
     },
     "errors": {
+      "usernameRequired": "Le nom d'utilisateur est requis",
+      "passwordRequired": "Le mot de passe est requis",
+      "currentPasswordRequired": "Le mot de passe actuel est requis",
+      "newPasswordRequired": "Le nouveau mot de passe est requis",
+      "confirmPasswordRequired": "Veuillez confirmer votre mot de passe",
       "invalidCredentials": "Nom d'utilisateur ou mot de passe invalide",
       "passwordMismatch": "Les mots de passe ne correspondent pas",
       "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
-      "usernameRequired": "Le nom d'utilisateur est requis",
-      "sessionExpired": "Session expirée. Veuillez vous reconnecter."
+      "passwordTooLong": "Le mot de passe doit contenir au plus 72 caractères (moins avec des accents ou des emoji)",
+      "usernameTooShort": "Le nom d'utilisateur doit contenir au moins 3 caractères",
+      "usernameTooLong": "Le nom d'utilisateur doit contenir au plus 64 caractères",
+      "usernameInvalidChars": "Le nom d'utilisateur ne peut contenir que des lettres, chiffres, tirets et underscores",
+      "usernameInvalid": "Nom d'utilisateur invalide",
+      "passwordInvalid": "Mot de passe invalide",
+      "registrationFailed": "Échec de l'inscription",
+      "changePasswordFailed": "Échec du changement de mot de passe",
+      "currentPasswordIncorrect": "Le mot de passe actuel est incorrect",
+      "loginFailed": "Échec de la connexion. Veuillez réessayer.",
+      "usernameTaken": "Ce nom d'utilisateur est déjà utilisé",
+      "tooManyAttempts": "Trop de tentatives échouées. Réessayez dans {minutes} min."
     }
   },
   "nav": {
     "home": "Accueil",
     "browse": "Explorer",
     "library": "Bibliothèque",
-    "settings": "Paramètres",
-    "admin": "Administration"
-  },
-  "browse": {
-    "title": "Explorer",
-    "searchPlaceholder": "Rechercher artistes, albums, titres...",
-    "searching": "Recherche...",
-    "noQuery": "Tapez quelque chose pour rechercher",
-    "noResults": "Aucun résultat trouvé",
-    "sections": {
-      "artists": "Artistes",
-      "albums": "Albums",
-      "tracks": "Titres"
-    }
-  },
-  "artist": {
-    "albums": "Albums",
-    "singles": "Singles & EPs",
-    "follow": "Suivre",
-    "unfollow": "Ne plus suivre",
-    "following": "Suivi",
-    "sync": "Synchroniser",
-    "syncing": "Synchronisation..."
-  },
-  "album": {
-    "tracks": "Titres",
-    "year": "Année",
-    "type": "Type",
-    "follow": "Suivre",
-    "unfollow": "Ne plus suivre",
-    "download": "Télécharger",
-    "downloading": "Téléchargement..."
-  },
-  "library": {
-    "title": "Bibliothèque",
-    "artists": "Artistes suivis",
-    "albums": "Albums suivis",
-    "tracks": "Titres téléchargés",
-    "stats": {
-      "title": "Statistiques",
-      "artists": "Artistes",
-      "albums": "Albums",
-      "tracks": "Titres",
-      "diskUsage": "Espace disque"
-    },
-    "empty": {
-      "artists": "Aucun artiste suivi",
-      "albums": "Aucun album suivi",
-      "tracks": "Aucun titre téléchargé"
+    "admin": "Administration",
+    "main": "Navigation principale",
+    "charts": "Charts",
+    "activeJobs": "{count} en cours",
+    "rateLimited": "Limité par YouTube : téléchargements en pause jusqu'à {time}",
+    "jobTypes": {
+      "download_track": "titres",
+      "download_lyrics": "paroles",
+      "sync_artist": "synchros d'artiste",
+      "sync_chart": "synchros de charts",
+      "import_album": "imports d'album",
+      "find_video_songs": "recherches de clips"
     }
   },
   "settings": {
-    "title": "Paramètres",
-    "profile": "Profil",
-    "appearance": "Apparence",
-    "language": "Langue",
     "theme": {
-      "title": "Thème",
       "light": "Clair",
-      "dark": "Sombre",
-      "system": "Système"
+      "dark": "Sombre"
     },
-    "account": {
-      "username": "Nom d'utilisateur",
-      "email": "Email",
-      "role": "Rôle",
-      "changePassword": "Changer le mot de passe"
+    "appearance": "Apparence",
+    "accent": {
+      "label": "Couleur d'accent",
+      "colors": {
+        "indigo": "Indigo",
+        "sky": "Bleu ciel",
+        "teal": "Bleu canard",
+        "orange": "Orange",
+        "rose": "Framboise"
+      }
+    },
+    "changeLanguage": "Changer de langue"
+  },
+  "home": {
+    "welcomeBack": "Bon retour,",
+    "inProgress": "En cours",
+    "recentlyAdded": "Ajoutés récemment",
+    "quickActions": "Actions rapides",
+    "browseDescription": "Rechercher de nouveaux contenus sur YouTube Music",
+    "libraryDescription": "Gérer vos artistes et albums suivis",
+    "playlistDescription": "Suivre les artistes et albums d'une playlist YouTube Music",
+    "loadingActivity": "Chargement de l'activité récente...",
+    "noActivity": "Votre bibliothèque est vide",
+    "noActivityDescription": "Commencez par explorer et suivre vos artistes favoris",
+    "browseMusic": "Explorer la musique"
+  },
+  "browse": {
+    "heroSubtitle": "Rechercher des artistes, albums et titres sur YouTube Music à ajouter à votre bibliothèque",
+    "searchInputPlaceholder": "Rechercher des artistes, albums ou titres...",
+    "noResults": "Aucun résultat trouvé",
+    "searchError": "Erreur de recherche",
+    "startSearch": "Commencez votre recherche",
+    "startSearchDescription": "Entrez un nom d'artiste, un titre d'album ou une chanson pour découvrir de la nouvelle musique sur YouTube Music",
+    "noResultsFor": "Aucun résultat pour « {query} »",
+    "tryDifferentKeywords": "Essayez d'autres mots-clés ou vérifiez l'orthographe",
+    "sections": {
+      "artists": "Artistes",
+      "albums": "Albums",
+      "songs": "Titres"
+    },
+    "recommendations": {
+      "title": "Recommandés pour vous",
+      "subtitle": "Des artistes proches de ceux que vous aimez",
+      "similarTo": "Similaire à {names}",
+      "similarToMany": "Similaire à {count} artistes que vous aimez",
+      "dismiss": "Pas intéressé",
+      "dismissedToast": "{name} ne sera plus recommandé",
+      "undo": "Annuler",
+      "dismissedLink": "Masqués ({count})",
+      "dismissedTitle": "Artistes masqués",
+      "dismissedDescription": "Ces artistes ne sont plus recommandés. Rétablissez-en un pour le revoir quand il ressemble à des artistes que vous aimez.",
+      "noDismissed": "Aucun artiste masqué",
+      "restore": "Rétablir",
+      "noneLeft": "Aucune recommandation pour le moment. Aimez d'autres artistes pour en obtenir.",
+      "noLikes": "Aimez des artistes de votre bibliothèque avec leur ♥ (suivre un artiste l'aime aussi) et des artistes proches apparaîtront ici.",
+      "error": "Impossible de mettre à jour les recommandations"
     }
   },
-  "jobs": {
-    "title": "Tâches",
-    "status": {
+  "artist": {
+    "releaseCount": "{count} sorties",
+    "releaseCount_one": "{count} sortie",
+    "follow": "Suivre",
+    "unfollow": "Ne plus suivre",
+    "followed": "Suivi",
+    "unfollowTitle": "Ne plus suivre l'artiste",
+    "unfollowMessage": "Ses nouvelles sorties ne seront plus téléchargées, et aucun chart ni playlist ne le suivra à nouveau (le suivre à la main, si). Ce qui est déjà téléchargé reste.",
+    "like": "J'aime",
+    "unlike": "Je n'aime plus",
+    "likeError": "Impossible de mettre à jour vos artistes aimés",
+    "albums": "Albums",
+    "singles": "Singles & EPs",
+    "noAlbums": "Aucun album pour le moment",
+    "noAlbumsDescription": "Cet artiste n'a encore aucun album dans notre base de données.",
+    "notFound": "Artiste introuvable",
+    "delete": "Supprimer l'artiste",
+    "deleteTitle": "Supprimer l'artiste",
+    "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet artiste et tous les albums, titres et fichiers associés ? Cette action est irréversible. Les charts et playlists ne le ramèneront pas ; le suivre à nouveau, si.",
+    "deleted": "Artiste supprimé avec succès",
+    "channelTitle": "Pas une page d'artiste",
+    "channelNotice": "C'est une chaîne YouTube : une mise en ligne crédite la chaîne qui l'a publiée. Elle n'a aucune sortie à suivre.",
+    "namesakes": "Artistes portant ce nom",
+    "noNamesakes": "Aucun artiste de ce nom sur YouTube Music.",
+    "notAnArtist": "C'est une chaîne YouTube, pas un artiste : il n'y a rien à suivre.",
+    "chartFollow": "Suivi à cause des charts {charts}. Une fois sorti de ceux-ci depuis un moment, les charts ne suivent plus cet artiste (réglable dans Admin > Charts) ; aimer l'artiste le garde.",
+    "chartFollow_one": "Suivi à cause du chart {charts}. Une fois sorti de celui-ci depuis un moment, le chart ne suit plus cet artiste (réglable dans Admin > Charts) ; aimer l'artiste le garde."
+  },
+  "album": {
+    "album": "Album",
+    "downloadError": "Erreur de téléchargement",
+    "trackCount": "{count} titres",
+    "trackCount_one": "{count} titre",
+    "download": "Télécharger l'album",
+    "downloadQueued": "Téléchargement de l'album en file d'attente",
+    "downloadQueuedWithArtist": "Téléchargement en file d'attente. L'artiste a aussi été ajouté à votre bibliothèque.",
+    "downloadFailed": "Échec du téléchargement",
+    "deleteAlbum": "Supprimer l'album",
+    "deleteTitle": "Supprimer l'album",
+    "deleteMessage": "Êtes-vous sûr de vouloir supprimer cet album et tous les titres et fichiers associés ? Cette action est irréversible. Son artiste reste suivi, mais aucune synchronisation, chart ou playlist ne retéléchargera cet album ; le télécharger à la main, si.",
+    "deleted": "Album supprimé avec succès",
+    "following": "Dans la bibliothèque",
+    "trackList": "Liste des titres",
+    "title": "Titre",
+    "artist": "Artiste",
+    "duration": "Durée",
+    "status": "Statut",
+    "trackStatus": {
+      "done": "Téléchargé",
+      "available": "Non téléchargé",
       "queued": "En attente",
-      "reserved": "Réservé",
-      "done": "Terminé",
-      "failed": "Échoué"
+      "paused": "En pause",
+      "downloading": "Téléchargement",
+      "failed": "Échoué",
+      "removed": "Retiré"
     },
-    "cancel": "Annuler la tâche",
-    "retry": "Réessayer",
-    "view": "Voir les détails"
+    "removedKept": "N'est plus sur YouTube Music depuis le {date}. Son fichier reste dans la bibliothèque.",
+    "removedNotDownloaded": "N'est plus sur YouTube Music depuis le {date}. Il ne peut plus être téléchargé.",
+    "retryingAfter": "Nouvelle tentative prévue après : {error}",
+    "pausedUntil": "Téléchargements en pause jusqu'à {time} (limite de YouTube)",
+    "retry": "Réessayer les titres manquants",
+    "retryQueued": "{count} titres mis en file de téléchargement",
+    "retryQueued_one": "{count} titre mis en file de téléchargement",
+    "retryNothing": "Rien à réessayer : tous les titres sont sur le disque ou déjà en attente",
+    "retryImport": "La liste des titres de l'album va être récupérée à nouveau, puis ses titres téléchargés",
+    "retryFailed": "Impossible de mettre les titres en file d'attente",
+    "lyrics": "Paroles",
+    "notDownloadedNote": "Non téléchargé : les paroles et l'état du téléchargement apparaissent une fois l'album téléchargé.",
+    "noTracks": "Aucun titre",
+    "noTracksDescription": "Cet album n'a pas encore de titres disponibles.",
+    "notFound": "Album introuvable",
+    "removedBadge": "Retiré de YouTube Music",
+    "removedNote": "N'est plus sur YouTube Music depuis le {date}, et rien ne l'a remplacé. Ses fichiers restent dans la bibliothèque ; rien de plus n'est téléchargé pour lui."
+  },
+  "lyrics": {
+    "open": "Voir ou modifier les paroles",
+    "saved": "Paroles enregistrées",
+    "clear": "Supprimer les paroles",
+    "searchLrclib": "Rechercher sur LRCLIB",
+    "searchLrclibHint": "Ouvre lrclib.net avec l'artiste et le titre. Copiez le texte LRC d'un résultat correspondant et collez-le ci-dessous.",
+    "placeholder": "Collez ici des paroles LRC (synchronisées) ou en texte brut...",
+    "empty": "Aucune parole sur le disque pour ce titre.",
+    "notDownloaded": "Les paroles pourront être ajoutées une fois le fichier audio téléchargé.",
+    "readOnly": "Seuls les membres et administrateurs peuvent modifier les paroles.",
+    "formatHint": "Les lignes commençant par [mm:ss.xx] sont considérées comme synchronisées.",
+    "willSaveAs": "Sera enregistré comme paroles {kind}.",
+    "willClear": "Enregistrer un texte vide supprime le fichier de paroles ; la prochaine vérification les recherchera à nouveau.",
+    "instrumental": "LRCLIB indique que ce titre est instrumental : il n'a pas de paroles.",
+    "instrumentalHint": "LRCLIB indique que ce titre est instrumental, il n'est donc pas revérifié. Collez des paroles pour passer outre.",
+    "pendingHint": "Pas encore recherchées : la recherche a lieu une fois l'audio téléchargé, quand la file des paroles y arrive.",
+    "kind": {
+      "synced": "Synchronisées",
+      "plain": "Texte brut",
+      "instrumental": "Instrumental",
+      "pending": "En attente",
+      "none": "Aucune"
+    }
+  },
+  "library": {
+    "heroSubtitle": "Gérez vos artistes et albums suivis. Suivez les téléchargements et organisez votre collection.",
+    "artists": "Artistes suivis",
+    "albums": "Albums suivis",
+    "searchPlaceholder": "Artiste, album ou titre...",
+    "view": {
+      "grid": "Vue grille",
+      "list": "Vue liste"
+    },
+    "columns": {
+      "name": "Nom",
+      "artist": "Artiste",
+      "type": "Type",
+      "year": "Année",
+      "tracks": "Titres",
+      "albums": "Albums",
+      "added": "Ajouté",
+      "followed": "Suivi depuis",
+      "status": "Statut"
+    },
+    "meta": {
+      "albumCount": "{count} albums",
+      "albumCount_one": "{count} album",
+      "trackCount": "{tracks} titres"
+    },
+    "emptyTitle": "Votre bibliothèque est vide",
+    "emptyDescription": "Commencez à construire votre collection en explorant et en suivant vos artistes favoris !",
+    "noMatches": "Aucun résultat",
+    "noMatchesDescription": "Aucun élément dans votre bibliothèque ne correspond à « {query} »",
+    "trackMatch": {
+      "one": "Contient \"{title}\"",
+      "many": "Contient \"{title}\" et {count} autres titres correspondants",
+      "many_one": "Contient \"{title}\" et 1 autre titre correspondant",
+      "artistOne": "A \"{title}\" sur {album}",
+      "artistMany": "A \"{title}\" et {count} autres titres correspondants",
+      "artistMany_one": "A \"{title}\" et 1 autre titre correspondant"
+    },
+    "stats": {
+      "artists": "Artistes",
+      "albums": "Albums",
+      "tracks": "Titres",
+      "diskUsage": "Espace disque",
+      "diskUsageShort": "Disque",
+      "diskUsageInfo": "Taille totale des fichiers audio téléchargés. Les paroles et pochettes ne sont pas comptées."
+    },
+    "export": {
+      "button": "Exporter la bibliothèque",
+      "description": "Télécharge la liste des artistes, albums isolés et charts suivis en JSON. Un administrateur peut l'importer sur une autre instance.",
+      "failed": "Échec de l'export de la bibliothèque"
+    },
+    "playlists": "Playlists",
+    "noPlaylists": "Aucune playlist ne correspond.",
+    "filters": {
+      "button": "Filtres",
+      "buttonActive": "Filtres, {count} choisis",
+      "buttonActive_one": "Filtres, 1 choisi",
+      "title": "Filtres",
+      "clearAll": "Tout effacer",
+      "clear": "Effacer les filtres",
+      "remove": "Retirer le filtre : {label}",
+      "results": "{formatted} résultats",
+      "results_one": "{formatted} résultat",
+      "showResults": "Afficher {formatted} résultats",
+      "showResults_one": "Afficher {formatted} résultat",
+      "noMatchesTitle": "Rien ne correspond à ces filtres",
+      "noMatchesDescription": "Essayez de retirer un ou deux filtres.",
+      "noMatchesWithSearch": "Aucun résultat pour « {query} » avec ces filtres. Essayez d'en retirer un ou deux.",
+      "genreSearch": "Chercher un genre",
+      "noGenreMatch": "Aucun genre ne correspond.",
+      "showAllGenres": "Afficher les {count} genres",
+      "showFewerGenres": "Afficher moins",
+      "groups": {
+        "downloads": "Téléchargements",
+        "lyrics": "Paroles",
+        "metadata": "Pochettes et genres",
+        "type": "Type de sortie",
+        "decade": "Décennie",
+        "genre": "Genre",
+        "source": "Ajouté par",
+        "follow": "Suivi de l'artiste",
+        "liked": "J'aime",
+        "excluded": "Exclus"
+      },
+      "options": {
+        "downloads": {
+          "missing": "Titres manquants",
+          "failed": "Titres en échec",
+          "active": "En cours"
+        },
+        "lyrics": {
+          "missing": "Paroles manquantes",
+          "synced": "Paroles synchronisées",
+          "plain": "Paroles non synchronisées",
+          "instrumental": "Instrumental"
+        },
+        "metadata": {
+          "artwork": "Pochette manquante",
+          "genre": "Aucun genre trouvé"
+        },
+        "type": {
+          "album": "Albums",
+          "single": "Singles",
+          "ep": "EP"
+        },
+        "decade": {
+          "value": "Années {decade}",
+          "unknown": "Année inconnue"
+        },
+        "source": {
+          "artist": "Un artiste suivi",
+          "playlist": "Une playlist",
+          "own": "Suivi seul"
+        },
+        "follow": {
+          "full": "Suivi complet",
+          "light": "Suivi léger",
+          "chart": "Suivi par un chart"
+        },
+        "liked": {
+          "liked": "Artistes aimés"
+        },
+        "excluded": {
+          "excluded": "Supprimés ou plus suivis"
+        }
+      },
+      "hints": {
+        "missingTracks": "{count} titres manquants sur {total}",
+        "missingTracks_one": "1 titre manquant sur {total}",
+        "failedTracks": "{count} titres en échec",
+        "failedTracks_one": "1 titre en échec",
+        "missingLyrics": "{count} titres sans paroles",
+        "missingLyrics_one": "1 titre sans paroles",
+        "plainLyrics": "{count} titres aux paroles non synchronisées",
+        "plainLyrics_one": "1 titre aux paroles non synchronisées",
+        "syncedLyrics": "{count} titres aux paroles synchronisées",
+        "syncedLyrics_one": "1 titre aux paroles synchronisées",
+        "instrumental": "{count} titres instrumentaux",
+        "instrumental_one": "1 titre instrumental",
+        "noArtwork": "Pas de pochette",
+        "noGenre": "Aucun genre trouvé"
+      }
+    },
+    "sort": {
+      "label": "Trier par",
+      "button": "Trier par {key}, {order}",
+      "orderLabel": "Ordre",
+      "keys": {
+        "name": "Nom",
+        "added": "Date d'ajout",
+        "year": "Année de sortie",
+        "completion": "Progression"
+      },
+      "order": {
+        "name": {
+          "asc": "De A à Z",
+          "desc": "De Z à A"
+        },
+        "added": {
+          "asc": "Plus anciens d'abord",
+          "desc": "Plus récents d'abord"
+        },
+        "year": {
+          "asc": "Plus anciens d'abord",
+          "desc": "Plus récents d'abord"
+        },
+        "completion": {
+          "asc": "Moins complets d'abord",
+          "desc": "Plus complets d'abord"
+        }
+      }
+    },
+    "excluded": {
+      "artistDeleted": "Supprimé le {date}",
+      "artistUnfollowed": "Plus suivi depuis le {date}",
+      "albumDeleted": "Supprimé le {date}",
+      "restore": "Rétablir {name}",
+      "restoreTitle": "Rétablir : les charts, playlists et synchronisations peuvent le ramener. Rien n'est téléchargé tout de suite.",
+      "restored": "{name} rétabli : les charts, playlists et synchronisations peuvent le ramener",
+      "note": "Rien d'automatique ne les ramène : ni les charts, ni les playlists, ni les synchronisations d'artistes, ni les sauvegardes. Suivre ou télécharger l'un d'eux à la main le rétablit, tout comme son bouton Rétablir.",
+      "empty": "Rien n'est exclu de la bibliothèque",
+      "emptyDescription": "Les artistes et albums supprimés, et les artistes plus suivis, apparaissent ici.",
+      "artists": "Artistes exclus",
+      "albums": "Albums exclus"
+    }
+  },
+  "charts": {
+    "heroSubtitle": "Découvrez les artistes tendance du monde entier",
+    "errorTitle": "Erreur de chargement des charts",
+    "unavailableTitle": "Impossible de charger : {countries}",
+    "noCharts": "Aucun chart suivi",
+    "noChartsDescription": "Aucun chart musical n'est actuellement suivi. Contactez un administrateur pour suivre les charts de différents pays.",
+    "noChartsAdminDescription": "Choisissez un pays dans l'administration : ses artistes du moment apparaîtront ici.",
+    "followingTopN": "Top {n} suivi sur {total}",
+    "followedArtist": "Artiste suivi",
+    "lastUpdated": "Dernière mise à jour : {date}",
+    "followChart": "Suivre le chart",
+    "musicChart": "Chart Musical",
+    "numberOfArtists": "Nombre d'artistes à suivre",
+    "top": "Top",
+    "storageWarning": "Des nombres plus élevés suivent plus d'artistes mais nécessitent plus de stockage et de temps de synchronisation",
+    "disabled": "La fonctionnalité Charts est actuellement désactivée. Un administrateur peut l'activer depuis le panneau d'administration.",
+    "keepWeeks": {
+      "column": "Ne plus suivre après",
+      "label": "Ne plus suivre ses artistes après",
+      "never": "Jamais",
+      "weeks": "{count} semaines hors du chart",
+      "weeks_one": "1 semaine hors du chart",
+      "help": "Un artiste suivi par ce chart n'est plus suivi une fois sorti du chart (et de tous les autres charts suivis) depuis aussi longtemps. Les fichiers déjà téléchargés restent, et un j'aime de n'importe qui garde l'artiste."
+    }
+  },
+  "admin": {
+    "subtitle": "Gérer les paramètres de l'application et les utilisateurs",
+    "tabs": {
+      "settings": "Paramètres",
+      "charts": "Charts",
+      "users": "Utilisateurs",
+      "backup": "Sauvegarde"
+    },
+    "settings": {
+      "save": "Enregistrer les paramètres",
+      "unsaved": "Modifications non enregistrées",
+      "saved": "Paramètres enregistrés avec succès",
+      "saveFailed": "Échec de l'enregistrement des paramètres",
+      "invalidNumber": "« {name} » doit être un nombre entier d'au moins {min}",
+      "invalidNumberRange": "« {name} » doit être un nombre entier entre {min} et {max}",
+      "default": "Défaut",
+      "resetToDefault": "Rétablir la valeur par défaut ({value})",
+      "on": "Activé",
+      "off": "Désactivé",
+      "categories": {
+        "auth": "Authentification",
+        "download": "Téléchargements",
+        "features": "Fonctionnalités",
+        "scheduler": "Planificateur",
+        "ytmusic": "YouTube Music"
+      },
+      "options": {
+        "auth": {
+          "oidc_default_role": {
+            "visitor": "Visiteur",
+            "member": "Membre"
+          }
+        }
+      },
+      "keys": {
+        "auth": {
+          "registration_enabled": {
+            "label": "Inscription publique",
+            "description": "Autoriser n'importe qui à créer un compte depuis la page d'inscription."
+          },
+          "login_max_failures_per_ip": {
+            "label": "Échecs de connexion par IP",
+            "description": "Mots de passe erronés autorisés depuis une même adresse IP pendant la fenêtre avant qu'elle soit bloquée (en IPv6, depuis un même réseau /64, ce qu'une connexion reçoit). Mettre à 0 pour désactiver cette vérification."
+          },
+          "login_max_failures_per_account": {
+            "label": "Échecs de connexion par compte",
+            "description": "Mots de passe erronés autorisés pour un même compte pendant la fenêtre avant que les nouveaux navigateurs soient bloqués. Un navigateur déjà connecté à ce compte (et non déconnecté depuis) dispose de son propre quota, pour que son propriétaire ne soit pas bloqué. S'applique aussi au mot de passe actuel lors d'un changement de mot de passe. Mettre à 0 pour désactiver cette vérification."
+          },
+          "login_failure_window_minutes": {
+            "label": "Fenêtre des échecs de connexion (minutes)",
+            "description": "Durée pendant laquelle les échecs de connexion sont mémorisés. Une IP ou un compte bloqué est libéré à leur expiration."
+          },
+          "oidc_signup_enabled": {
+            "label": "Nouveaux comptes par authentification unique",
+            "description": "Créer un compte la première fois que quelqu'un se connecte par authentification unique. Désactivé, seuls les comptes existants peuvent se connecter. Quand les rôles viennent des groupes du fournisseur, seuls les membres de ces groupes peuvent se connecter : un compte existant qui les a quittés est refusé aussi."
+          },
+          "oidc_default_role": {
+            "label": "Rôle des nouveaux comptes par authentification unique",
+            "description": "Attribué aux comptes créés par authentification unique. Quand les rôles viennent des groupes du fournisseur et que les nouveaux comptes sont autorisés, attribué aussi à toute personne hors de ces groupes."
+          },
+          "oidc_session_hours": {
+            "label": "Durée des sessions par authentification unique (heures)",
+            "description": "Durée d'une session par authentification unique avant de repasser par le fournisseur (en général un clic). Les changements de rôle et désactivations côté fournisseur ne s'appliquent qu'à ce moment-là, d'où une durée plus courte que pour les sessions par mot de passe (7 jours)."
+          }
+        },
+        "download": {
+          "max_concurrent": {
+            "label": "Téléchargements simultanés max.",
+            "description": "Pistes téléchargées depuis YouTube en même temps. Les métadonnées et les paroles sont déjà traitées en parallèle ; ceci n'ajoute que des flux de téléchargement, et chaque flux supplémentaire depuis une même IP augmente le risque de limitation. Appliqué sans redémarrage ; le plafond est la variable d'environnement DOWNLOAD_WORKERS."
+          },
+          "rate_limit_pause_minutes": {
+            "label": "Pause après limitation",
+            "description": "Minutes pendant lesquelles tous les téléchargements s'arrêtent quand YouTube nous limite ou nous soupçonne d'être un robot, pour que les autres workers ne transforment pas une limite temporaire en bannissement. Double à chaque pause consécutive (jusqu'à 16x) jusqu'au prochain téléchargement réussi."
+          }
+        },
+        "features": {
+          "lyrics_enabled": {
+            "label": "Téléchargement des paroles",
+            "description": "Récupérer automatiquement les paroles de chaque titre téléchargé, depuis LRCLIB, ou YouTube Music quand LRCLIB n'en a pas."
+          },
+          "synced_lyrics_only": {
+            "label": "Paroles synchronisées uniquement",
+            "description": "Ne conserver que les paroles synchronisées ; les paroles simples (non synchronisées) sont rejetées et réessayées plus tard."
+          },
+          "genres_enabled": {
+            "label": "Recherche des genres",
+            "description": "Rechercher les genres des albums et des artistes sur MusicBrainz, avec Deezer en secours, et les écrire dans les tags et les fichiers NFO. Désactivée, plus aucune recherche n'est faite ; les genres déjà trouvés sont conservés."
+          },
+          "charts_enabled": {
+            "label": "Charts",
+            "description": "Activer la page Charts et les abonnements aux charts."
+          }
+        },
+        "scheduler": {
+          "artist_sync": {
+            "label": "Synchronisation des artistes",
+            "description": "Quand les artistes suivis sont vérifiés pour de nouvelles sorties, et les albums de la bibliothèque pour des changements sur YouTube Music.",
+            "intervalHint": "Chaque artiste est vérifié {count} heures après sa dernière vérification : les vérifications s'étalent sur la journée.",
+            "intervalHint_one": "Chaque artiste est vérifié une heure après sa dernière vérification : les vérifications s'étalent sur la journée."
+          },
+          "chart_sync": {
+            "label": "Synchronisation des charts",
+            "description": "Quand les charts suivis sont récupérés à nouveau pour suivre les nouveaux artistes du top N. YouTube Music ne met à jour ses charts qu'une fois par semaine : plus souvent que tous les 7 jours, on ne trouve presque jamais rien de nouveau.",
+            "intervalHint": "Chaque chart est récupéré à nouveau {count} jours après sa dernière synchronisation.",
+            "intervalHint_one": "Chaque chart est récupéré à nouveau un jour après sa dernière synchronisation."
+          },
+          "playlist_sync": {
+            "label": "Synchronisation des playlists",
+            "description": "Quand les playlists suivies sont réanalysées : les nouveaux titres ajoutent leurs albums ou artistes, et leurs fichiers M3U suivent la playlist.",
+            "intervalHint": "Chaque playlist est réanalysée {count} heures après sa dernière analyse.",
+            "intervalHint_one": "Chaque playlist est réanalysée une heure après sa dernière analyse."
+          },
+          "lyrics_retry": {
+            "label": "Nouvel essai des paroles",
+            "description": "Quand les titres sans paroles ou avec des paroles non synchronisées sont réessayés.",
+            "intervalHint": "Un essai {count} heures après le précédent.",
+            "intervalHint_one": "Un essai toutes les heures."
+          },
+          "job_cleanup_days": {
+            "label": "Conservation des tâches (jours)",
+            "description": "Les tâches terminées (réussies, en échec ou annulées) plus anciennes que cette durée sont supprimées."
+          }
+        },
+        "ytmusic": {
+          "language": {
+            "label": "Langue YouTube Music",
+            "description": "Langue des données récupérées depuis YouTube Music (biographies d'artistes, descriptions d'albums, …)."
+          }
+        }
+      },
+      "cookies": {
+        "label": "Cookies de compte YouTube",
+        "description": "Un fichier cookies.txt exporté depuis un navigateur connecté à un compte YouTube (utilisez un compte jetable, pas votre compte principal). Servi uniquement pour récupérer les pistes soumises à une limite d'âge ; jamais pour les téléchargements ordinaires ni pour contourner une limitation, le compte ne voit donc qu'une poignée de requêtes.",
+        "none": "Aucun cookie de compte importé : les pistes soumises à une limite d'âge échoueront.",
+        "present": "Importé : {count} cookies, {date}",
+        "upload": "Importer cookies.txt",
+        "replace": "Remplacer",
+        "remove": "Supprimer",
+        "uploaded": "Cookies de compte enregistrés",
+        "uploadFailed": "Ce fichier ne ressemble pas à un cookies.txt",
+        "deleted": "Cookies de compte supprimés"
+      },
+      "schedule": {
+        "modeFixed": "À",
+        "unit_hours": "heures",
+        "unit_hours_one": "heure",
+        "unit_days": "jours",
+        "unit_days_one": "jour",
+        "every_hours": "Toutes les {count} heures",
+        "every_hours_one": "Toutes les heures",
+        "every_days": "Tous les {count} jours",
+        "every_days_one": "Tous les jours",
+        "everyDay": "Tous les jours",
+        "fixedSummary": "{days} à {time}",
+        "nextRun": "Prochaine exécution : {when}",
+        "nextRunAfterSave": "La prochaine exécution s'affiche une fois enregistré.",
+        "noDays": "Choisissez au moins un jour.",
+        "timezone": "Les heures fixes sont dans le fuseau {timezone}, celui du conteneur (TZ). Une exécution manquée parce que l'application était arrêtée est sautée, pas rattrapée.",
+        "invalid": "{name} : la planification est incomplète",
+        "intervalRange": "{name} : l'intervalle doit être compris entre {min} et {max}",
+        "timeLabel": "Heure",
+        "daysLabel": "Jours de la semaine",
+        "modeInterval_hours": "Toutes les",
+        "modeInterval_days": "Tous les"
+      }
+    },
+    "users": {
+      "search": "Rechercher des utilisateurs",
+      "showing": "Affichage de {shown} sur {count} utilisateurs",
+      "showing_one": "Affichage de {shown} sur {count} utilisateur",
+      "allStatuses": "Tous les statuts",
+      "allRoles": "Tous les rôles",
+      "create": "Créer un utilisateur",
+      "username": "Nom d'utilisateur",
+      "role": "Rôle",
+      "status": "Statut",
+      "actions": "Actions",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "delete": "Supprimer",
+      "deleteTitle": "Supprimer l'utilisateur",
+      "confirmDelete": "Supprimer l'utilisateur \"{username}\" ? Cette action est irréversible.",
+      "resetPassword": "Réinitialiser le mot de passe",
+      "resetPasswordTitle": "Réinitialiser le mot de passe",
+      "confirmResetPassword": "Donner un mot de passe temporaire à \"{username}\" ? Ses sessions seront fermées partout et un nouveau mot de passe lui sera demandé à la prochaine connexion.",
+      "temporaryPasswordTitle": "Mot de passe temporaire",
+      "temporaryPasswordMessage": "Transmettez ce mot de passe à {username}. Il n'est affiché qu'une fois ; un nouveau mot de passe lui sera demandé à la prochaine connexion.",
+      "temporaryPasswordDone": "Terminé",
+      "copy": "Copier",
+      "copied": "Copié",
+      "ssoBadge": "SSO",
+      "ssoTooltip": "Se connecte avec {name}",
+      "roleFromGroups": "Ce rôle vient des groupes de l'utilisateur chez le fournisseur de connexion",
+      "roleFromGroupsShort": "Selon les groupes du fournisseur",
+      "noResults": "Aucun utilisateur trouvé",
+      "created": "Utilisateur créé avec succès",
+      "deleted": "Utilisateur supprimé avec succès",
+      "activated": "Utilisateur activé",
+      "deactivated": "Utilisateur désactivé",
+      "roleUpdated": "Rôle mis à jour avec succès",
+      "roles": {
+        "visitor": "Visiteur",
+        "member": "Membre",
+        "administrator": "Administrateur"
+      },
+      "roleInfo": {
+        "title": "Ce que chaque rôle peut faire",
+        "visitor": "Lecture seule (rôle par défaut des nouveaux comptes). Peut parcourir la bibliothèque, les artistes, les albums, les charts et les paroles, mais ne peut rien modifier.",
+        "member": "Tout ce qu'un visiteur peut faire, plus : suivre et ne plus suivre des artistes, télécharger des albums, et ajouter, modifier ou supprimer des paroles.",
+        "administrator": "Tout ce qu'un membre peut faire, plus : supprimer des albums et des artistes, et gérer le panneau d'administration (utilisateurs, abonnements aux charts et paramètres de l'application)."
+      }
+    },
+    "charts": {
+      "selectCountry": "Sélectionner un pays…",
+      "followChart": "Suivre un chart",
+      "previewTop": "Aperçu du top {n} artistes",
+      "unfollowChart": "Ne plus suivre",
+      "syncNow": "Synchroniser",
+      "syncDisabledHint": "Activez le chart pour le synchroniser",
+      "preview": "Aperçu",
+      "hidePreview": "Masquer",
+      "previewFollowing": "Top {n} suivi sur {total} artistes. Les artistes suivis sont marqués d'une coche.",
+      "apply": "Appliquer",
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "currentSubscriptions": "Abonnements aux charts actuels",
+      "country": "Pays",
+      "topArtists": "Meilleurs artistes",
+      "status": "Statut",
+      "lastSynced": "Dernière synchronisation",
+      "actions": "Actions",
+      "enabled": "Activé",
+      "disabled": "Désactivé",
+      "neverSynced": "Jamais",
+      "noSubscriptions": "Aucun chart suivi pour le moment",
+      "followed": "Chart suivi avec succès",
+      "unfollowed": "Chart retiré des abonnements",
+      "updated": "Chart mis à jour",
+      "enabledToast": "Synchronisation du chart activée",
+      "disabledToast": "Synchronisation du chart désactivée",
+      "syncQueued": "Synchronisation du chart planifiée",
+      "confirm": {
+        "unfollowTitle": "Ne plus suivre le chart",
+        "unfollow": "Ne plus suivre le chart {country} ? Les artistes déjà suivis grâce à ce chart restent suivis.",
+        "disableTitle": "Désactiver le chart",
+        "disable": "Désactiver le chart {country} ? Il ne sera plus resynchronisé et n'apparaîtra plus sur la page Charts. Les artistes suivis ne sont pas affectés.",
+        "enableTitle": "Activer le chart",
+        "enable": "Activer le chart {country} ? Il sera resynchronisé périodiquement et de nouveau affiché sur la page Charts.",
+        "topNTitle": "Modifier le nombre d'artistes",
+        "topNIncrease": "Suivre le top {to} du chart {country} au lieu du top {from} ? Une synchronisation est lancée immédiatement et les artistes supplémentaires sont suivis avec leur discographie complète.",
+        "topNDecrease": "Suivre le top {to} du chart {country} au lieu du top {from} ? Les artistes déjà suivis restent suivis.",
+        "syncTitle": "Synchroniser le chart",
+        "sync": "Synchroniser le chart {country} maintenant ? Les artistes de son top {n} qui ne sont pas encore suivis le seront avec leur discographie complète."
+      }
+    },
+    "backup": {
+      "sections": {
+        "library": "bibliothèque",
+        "catalog": "catalogue",
+        "users": "utilisateurs",
+        "settings": "paramètres"
+      },
+      "export": {
+        "title": "Exporter une sauvegarde",
+        "description": "Télécharge l'état de cette instance en JSON. Les fichiers musicaux restent dans le dossier data : copiez-le avec cette sauvegarde pour migrer.",
+        "options": {
+          "library": {
+            "label": "Bibliothèque",
+            "description": "Artistes et albums isolés suivis. À l'import, la nouvelle instance les suit à nouveau et télécharge leur musique."
+          },
+          "charts": {
+            "label": "Charts",
+            "description": "Charts suivis. À l'import, la nouvelle instance les suit à nouveau et continue de suivre automatiquement leurs meilleurs artistes."
+          },
+          "catalog": {
+            "label": "Catalogue",
+            "description": "Utile uniquement si vous copiez aussi le dossier data (vos fichiers musicaux) sur la nouvelle instance : l'import reconnaîtra alors les fichiers déjà présents au lieu de tout retélécharger. Peut être désactivé sinon."
+          },
+          "users": {
+            "label": "Utilisateurs",
+            "description": "Comptes, rôles et empreintes de mot de passe, avec les artistes aimés et les recommandations masquées de chacun. Chacun garde son mot de passe sur la nouvelle instance."
+          },
+          "settings": {
+            "label": "Paramètres",
+            "description": "Paramètres de l'application (planificateur, téléchargements, fonctionnalités)."
+          }
+        },
+        "usersWarning": "Ce fichier contiendra des empreintes de mot de passe. Gardez-le privé.",
+        "button": "Télécharger la sauvegarde",
+        "failed": "Échec de l'export"
+      },
+      "import": {
+        "title": "Importer",
+        "description": "Restaure une sauvegarde ou importe l'export de bibliothèque de quelqu'un. Rien de déjà présent n'est modifié : les artistes, albums et charts manquants sont suivis et leurs téléchargements lancés ; les utilisateurs existants ne sont jamais écrasés.",
+        "choose": "Choisir un fichier",
+        "previewing": "Analyse…",
+        "previewTitle": "Aperçu : rien n'a encore été appliqué",
+        "resultTitle": "Import appliqué",
+        "confirm": "Confirmer l'import",
+        "done": "Import terminé. Les téléchargements tournent en arrière-plan.",
+        "failed": "Échec de l'import",
+        "errors": {
+          "invalid_json": "Ce fichier n'est pas un JSON valide.",
+          "not_export_file": "Ce fichier n'est pas un export de cette application."
+        }
+      },
+      "summary": {
+        "artistsFollowed": "Artistes à suivre",
+        "artistsExisting": "Artistes déjà suivis",
+        "albumsQueued": "Albums à télécharger",
+        "albumsCovered": "Albums gérés par la synchro de l'artiste",
+        "albumsExisting": "Albums déjà dans la bibliothèque",
+        "chartsCreated": "Charts à suivre",
+        "chartsExisting": "Charts déjà suivis",
+        "chartsSkipped": "Charts ignorés",
+        "playlistsAdded": "Playlists à ajouter",
+        "catalogRows": "Lignes du catalogue (artistes / albums / titres)",
+        "tracksOnDisk": "Titres trouvés sur le disque",
+        "tracksToDownload": "Titres à télécharger",
+        "usersCreated": "Utilisateurs à créer",
+        "usersSkipped": "Utilisateurs ignorés (déjà existants)",
+        "likesAdded": "Artistes aimés à ajouter",
+        "dismissedAdded": "Recommandations masquées à ajouter",
+        "settingsApplied": "Paramètres à appliquer",
+        "settingsIgnored": "Paramètres ignorés (inconnus)",
+        "albumsToImport": "Albums à récupérer (titres ou pochette manquants)",
+        "exclusionsAdded": "Exclusions ajoutées",
+        "artistsExcluded": "Artistes laissés de côté (exclus)",
+        "albumsExcluded": "Albums laissés de côté (exclus)"
+      },
+      "warnings": {
+        "charts_disabled": "Les charts sont désactivés sur cette instance ; les abonnements ont été ignorés.",
+        "settings_ignored": "Certains paramètres sont inconnus de cette version et ont été ignorés.",
+        "invalid_setting": "Un paramètre a une valeur invalide et a été ignoré.",
+        "users_skipped": "Certains utilisateurs existent déjà ici : leurs comptes n'ont pas été modifiés, seuls leurs artistes aimés et recommandations masquées ont été ajoutés.",
+        "likes_skipped": "Certains artistes aimés ne sont pas dans cette bibliothèque et ont été ignorés.",
+        "invalid_chart": "Un abonnement à un chart n'a pas pu être créé.",
+        "administrators_created": "Ce fichier crée des comptes administrateur. Son auteur connaît leurs mots de passe : ne l'importez que si vous avez confiance en sa provenance."
+      }
+    }
+  },
+  "playlist": {
+    "title": "Importer une playlist",
+    "subtitle": "Collez une URL de playlist YouTube Music pour découvrir et suivre des artistes et albums",
+    "whereLinkTitle": "Où trouver le lien ?",
+    "whereLinkBody": "Dans YouTube Music, ouvrez la playlist puis Partager › Copier le lien. Il ressemble à music.youtube.com/playlist?list=…",
+    "urlPlaceholder": "Collez une URL de playlist YouTube Music...",
+    "untitled": "Playlist",
+    "loadPlaylist": "Charger la playlist",
+    "invalidUrl": "Ce n'est pas un lien ou un identifiant de playlist YouTube Music",
+    "artists": "Artistes",
+    "albums": "Albums",
+    "trackCount": "{count} titres",
+    "trackCount_one": "{count} titre",
+    "summary": {
+      "tracks": "{count} titres dans la playlist",
+      "tracks_one": "{count} titre dans la playlist",
+      "artists": "{count} artistes",
+      "artists_one": "{count} artiste",
+      "albums": "{count} albums",
+      "albums_one": "{count} album"
+    },
+    "followMainArtists": "Suivre les artistes principaux",
+    "followAll": "Suivre tous les artistes",
+    "mainArtist": "Principal",
+    "secondaryArtist": "Secondaire",
+    "downloadAll": "Télécharger tous les albums",
+    "followingProgress": "Suivi de {current} sur {total}...",
+    "downloadingProgress": "Téléchargement de {current} sur {total}...",
+    "followComplete": "Tous les artistes ont été suivis avec succès",
+    "downloadComplete": "Tous les albums ont été mis en file d'attente",
+    "followed": "Suivi",
+    "downloaded": "En file d'attente",
+    "emptyPlaylist": "Playlist vide",
+    "emptyPlaylistDescription": "Cette playlist ne contient aucun titre",
+    "noArtists": "Aucun artiste à suivre dans cette playlist",
+    "noAlbums": "Aucun album téléchargeable dans cette playlist",
+    "partialSuccess": "{succeeded} sur {total} réussis, {failed} échoués",
+    "importFromPlaylist": "Importer depuis une playlist",
+    "trackView": "Titres",
+    "unavailable": "Impossible de lire cette playlist. Elle n'existe pas, est privée, ou YouTube Music ne répond pas pour le moment.",
+    "skippedNote": "{count} titres ne peuvent pas être importés",
+    "skippedNote_one": "1 titre ne peut pas être importé",
+    "skippedUploads": "Mises en ligne ({count}) : ce ne sont pas des morceaux. Elles créditent la chaîne YouTube qui les a publiées, pas un artiste.",
+    "skippedNoSong": "Sans album ({count}) : vidéos dont YouTube Music n'a pas le morceau.",
+    "songsPending": "Recherche des morceaux de {count} clips...",
+    "songsPending_one": "Recherche du morceau d'1 clip...",
+    "skippedNoArtist": "Aucun artiste crédité ({count})",
+    "options": {
+      "addTitle": "Ajouter la playlist à la bibliothèque",
+      "editTitle": "Options de la playlist",
+      "bringIn": "Ses titres ajoutent",
+      "albums": "Leurs albums",
+      "albumsDescription": "L'album complet de chaque titre est téléchargé.",
+      "artists": "Leurs artistes",
+      "artistsDescription": "L'artiste principal de chaque titre est suivi : toutes ses sorties sont téléchargées.",
+      "follow": "Continuer à suivre",
+      "followOn": "Réanalysée selon la planification des playlists : les nouveaux titres ajoutent leurs albums ou artistes, et les titres retirés de la playlist quittent le M3U.",
+      "followOff": "Ajoutée une fois : les changements ultérieurs de la playlist sont ignorés.",
+      "m3u": "Fichier M3U",
+      "m3uDescription": "Écrit dans Playlists/ du dossier de musique, pour Jellyfin et les autres lecteurs. Les titres y sont ajoutés au fil des téléchargements.",
+      "needOne": "Activez au moins l'une des deux options. Pour un téléchargement ponctuel sans fichier M3U, utilisez les boutons sous la playlist.",
+      "switchToArtists": "L'artiste principal de chaque titre de la playlist sera suivi.",
+      "switchToAlbums": "Les artistes déjà suivis le restent. Désormais, les titres ajoutent leurs albums.",
+      "add": "Ajouter",
+      "addButton": "Ajouter à la bibliothèque",
+      "addHint": "La suivre, ou la garder comme playlist M3U",
+      "editButton": "Options",
+      "remove": "Retirer",
+      "removeTitle": "Retirer la playlist",
+      "removeMessage": "La playlist et son fichier M3U sont retirés de la bibliothèque. La musique reste.",
+      "added": "Playlist ajoutée : ses titres sont en cours d'ajout",
+      "saved": "Playlist mise à jour",
+      "removed": "Playlist retirée"
+    },
+    "status": {
+      "followed": "Suivie",
+      "once": "Une fois",
+      "available": "{available} titres sur {songs} dans la bibliothèque",
+      "skipped": "{count} ignorés",
+      "lastScan": "Dernière analyse : {when}",
+      "scanning": "Analyse en cours…",
+      "lastError": "Échec de la dernière analyse : {error}",
+      "syncNow": "Synchroniser",
+      "syncQueued": "Analyse programmée"
+    },
+    "excludedSkipped": "{count} artistes ou albums exclus ont été laissés de côté.",
+    "excludedSkipped_one": "1 artiste ou album exclu a été laissé de côté.",
+    "excludedNote": "Exclu : supprimé ou plus suivi dans la bibliothèque. Les boutons ci-dessus le laissent de côté ; son propre bouton le ramène."
+  },
+  "onboarding": {
+    "label": "Visite rapide",
+    "step": "{current} / {total}",
+    "goTo": "Étape {current} sur {total}",
+    "skip": "Passer",
+    "next": "Suivant",
+    "finish": "C'est parti",
+    "welcome": {
+      "title": "Bienvenue, {name}",
+      "body": "Un petit tour de ce que vous pouvez faire, y compris quelques fonctions faciles à manquer. D'abord, réglez l'application à votre goût :",
+      "bodyVisitor": "Un petit tour des lieux. Votre compte peut parcourir la bibliothèque, lire les paroles et voir les charts ; un administrateur peut vous permettre d'ajouter de la musique. D'abord, réglez l'application à votre goût :",
+      "language": "Langue",
+      "theme": "Thème",
+      "note": "Enregistré dans ce navigateur. Modifiable à tout moment depuis la barre du haut, ou le menu du compte sur téléphone."
+    },
+    "follow": {
+      "title": "Suivre un artiste, ou prendre un album",
+      "body": "Suivre un artiste télécharge tout ce qu'il a sorti, puis ses nouveautés à leur sortie. Pour un seul album, Télécharger l'album sur sa page prend juste celui-là."
+    },
+    "activity": {
+      "title": "Les téléchargements en cours",
+      "body": "Pendant les téléchargements, la barre du haut compte les tâches en cours : survolez-la ou touchez-la pour le détail. Si YouTube ralentit les choses, un badge rouge indique que les téléchargements sont en pause. Ils reprennent tout seuls."
+    },
+    "lyrics": {
+      "title": "Les paroles de chaque titre",
+      "body": "Sur la page d'un album, la colonne Paroles indique ce qu'a chaque titre téléchargé. Cliquez sur un badge pour lire les paroles.",
+      "bodyEditor": "Sur la page d'un album, la colonne Paroles indique ce qu'a chaque titre téléchargé. Cliquez sur un badge pour lire les paroles, ou pour les coller et les corriger à la main.",
+      "kinds": {
+        "synced": "les lignes s'allument au rythme de la musique",
+        "plain": "le texte, sans le minutage",
+        "instrumental": "pas de paroles à chercher",
+        "pending": "pas encore recherchées",
+        "none": "rien trouvé pour l'instant, recherchées à nouveau régulièrement"
+      }
+    },
+    "likes": {
+      "title": "Des recommandations selon vos goûts",
+      "body": "Aimez des artistes avec le cœur, sur leur page ou dans la Bibliothèque (suivre un artiste l'aime aussi). Explorer vous suggère alors des artistes proches. Pas pour vous ? La croix d'une suggestion (visible au survol) la masque, rien que pour vous.",
+      "try": "Essayez le cœur",
+      "dismissed": "Masqué de vos recommandations"
+    },
+    "playlists": {
+      "title": "Toute une playlist d'un coup",
+      "body": "À côté de la recherche d'Explorer, collez le lien d'une playlist YouTube Music : suivez ses artistes ou téléchargez ses albums d'un coup, ou gardez-la dans la bibliothèque, suivie pour ses nouveaux titres et enregistrée comme playlist pour Jellyfin."
+    },
+    "charts": {
+      "title": "Les tendances",
+      "body": "La page Charts montre les artistes en tête des pays suivis ici, avec une coche sur ceux déjà dans la bibliothèque.",
+      "bodyAdmin": "Suivez le chart d'un pays depuis l'administration : ses meilleurs artistes sont suivis pour vous, et mis à jour au fil du classement. Tout le monde le voit sur la page Charts."
+    },
+    "admin": {
+      "title": "Gérer l'instance",
+      "body": "L'administration se trouve dans le menu de votre compte. Seuls les administrateurs peuvent supprimer des artistes et des albums, et la suppression efface aussi leurs fichiers du disque.",
+      "tabs": {
+        "users": "Créer des comptes, attribuer des rôles, réinitialiser des mots de passe",
+        "charts": "Les pays dont les meilleurs artistes sont suivis",
+        "settings": "Inscriptions, planification, téléchargements, paroles, genres et plus",
+        "backup": "Exporter la bibliothèque, les utilisateurs et les réglages, ou les restaurer"
+      }
+    },
+    "done": {
+      "title": "Tout est prêt",
+      "body": "C'est tout pour la visite. Par où voulez-vous commencer ?",
+      "browse": "Chercher des artistes et albums sur YouTube Music",
+      "library": "Tout ce qui a été téléchargé",
+      "playlist": "Suivre les artistes d'une playlist, ou télécharger ses albums",
+      "charts": "Les meilleurs artistes des pays suivis",
+      "admin": "Utilisateurs, planification, réglages et sauvegardes"
+    }
+  },
+  "errorBoundary": {
+    "title": "Une erreur s'est produite",
+    "description": "La page a rencontré une erreur inattendue. Recharger suffit en général ; les détails ci-dessous aident à la signaler.",
+    "details": "Détails de l'erreur",
+    "reload": "Recharger la page",
+    "home": "Retour à l'accueil"
+  },
+  "exclusion": {
+    "badge": "Exclu",
+    "artistDeleted": "Supprimé de la bibliothèque : aucun chart ni playlist ne ramène cet artiste. Le suivre, si.",
+    "artistUnfollowed": "Plus suivi : aucun chart ni playlist ne suit à nouveau cet artiste. Le suivre, si.",
+    "album": "Supprimé de la bibliothèque : aucune synchronisation, chart ni playlist ne le retélécharge. Le télécharger, si."
   }
 }

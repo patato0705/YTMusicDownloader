@@ -5,74 +5,213 @@
 
 @layer base {
   :root {
-    /* Light theme colors */
-    --color-background: 249 250 251;       /* gray-50 */
-    --color-foreground: 17 24 39;          /* gray-900 */
-    --color-card: 255 255 255;             /* white */
-    --color-card-foreground: 17 24 39;     /* gray-900 */
-    --color-primary: 37 99 235;            /* blue-600 */
-    --color-primary-foreground: 255 255 255; /* white */
-    --color-secondary: 243 244 246;        /* gray-100 */
-    --color-secondary-foreground: 17 24 39; /* gray-900 */
-    --color-muted: 243 244 246;            /* gray-100 */
-    --color-muted-foreground: 107 114 128; /* gray-500 */
-    --color-accent: 243 244 246;           /* gray-100 */
-    --color-accent-foreground: 17 24 39;   /* gray-900 */
-    --color-border: 229 231 235;           /* gray-200 */
-    --color-input: 229 231 235;            /* gray-200 */
-    --color-ring: 37 99 235;               /* blue-600 */
+    /* Light theme: slate, with the accent picked in the appearance menu */
+    --color-background: 248 250 252;         /* slate-50 */
+    --color-foreground: 15 23 42;            /* slate-900 */
+    --color-muted-foreground: 100 116 139;   /* slate-500 */
+    --color-border: 226 232 240;             /* slate-200 */
+
+    /* The accent, for inline styles (e.g. the chart slider) */
+    --color-accent: theme(colors.accent.500);
+    /* The phone tab bar's height (Navbar), cleared by main and sticky bars */
+    --tab-bar-height: 4.25rem;
   }
 
   .dark {
-    /* Dark theme colors */
-    --color-background: 17 24 39;          /* gray-900 */
-    --color-foreground: 249 250 251;       /* gray-50 */
-    --color-card: 31 41 55;                /* gray-800 */
-    --color-card-foreground: 249 250 251;  /* gray-50 */
-    --color-primary: 59 130 246;           /* blue-500 */
-    --color-primary-foreground: 255 255 255; /* white */
-    --color-secondary: 55 65 81;           /* gray-700 */
-    --color-secondary-foreground: 249 250 251; /* gray-50 */
-    --color-muted: 55 65 81;               /* gray-700 */
-    --color-muted-foreground: 156 163 175; /* gray-400 */
-    --color-accent: 55 65 81;              /* gray-700 */
-    --color-accent-foreground: 249 250 251; /* gray-50 */
-    --color-border: 55 65 81;              /* gray-700 */
-    --color-input: 55 65 81;               /* gray-700 */
-    --color-ring: 59 130 246;              /* blue-500 */
+    /* Dark theme: deep blacks, same accent as light */
+    --color-background: 9 9 11;              /* zinc-950 */
+    --color-foreground: 250 250 250;         /* zinc-50 */
+    --color-muted-foreground: 161 161 170;   /* zinc-400 */
+    --color-border: 39 39 42;                /* zinc-800 */
   }
 
   * {
     @apply border-border;
   }
 
+  /* Both html and body: mobile browsers paint the letterbox / overscroll
+     area with the root background, and a light one flashes white in dark mode. */
+  html {
+    @apply bg-background;
+  }
+
+  /* The landscape notch side (viewport-fit=cover in index.html); fixed
+     chrome adds the same insets itself */
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Edge's own reveal button would sit next to PasswordInput's toggle */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
   }
 }
 
 @layer utilities {
-  /* Custom utility classes */
-  .text-balance {
-    text-wrap: balance;
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-accent-600 to-accent-500;
   }
+
+  /* Dark mode gradient text */
+  .dark .text-gradient {
+    @apply from-accent-400 to-accent-300;
+  }
+
+  /* Glassmorphism - Light mode defaults */
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-sm;
+  }
+
+  /* Dark mode glass - darker, subtle */
+  .dark .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-none;
+  }
+
+  /* Floating chrome (navbar, tab bar, menus): any content can scroll under it,
+     so dark mode needs a dark tint as dense as light mode's white one */
+  .glass-chrome {
+    @apply bg-white/80 backdrop-blur-2xl backdrop-saturate-150 border border-slate-200/60 shadow-sm;
+  }
+
+  .dark .glass-chrome {
+    @apply bg-zinc-900/80 border-white/10 shadow-none;
+  }
+
+  /* Gradient backgrounds - Light mode defaults */
+  .bg-gradient-radial {
+    background: radial-gradient(
+      circle at top right,
+      theme(colors.accent.500 / 10%) 0%,
+      transparent 50%
+    );
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(theme(colors.accent.500 / 4%) 1px, transparent 1px),
+      linear-gradient(90deg, theme(colors.accent.500 / 4%) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  .border-gradient {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(rgb(255, 255, 255), rgb(255, 255, 255)) padding-box,
+      linear-gradient(135deg, theme(colors.accent.500), theme(colors.accent.400)) border-box;
+  }
+
+  /* Dark mode gradient backgrounds */
+  .dark .bg-gradient-radial {
+    background: radial-gradient(
+      circle at top right,
+      theme(colors.accent.500 / 14%) 0%,
+      transparent 50%
+    );
+  }
+
+  .dark .bg-grid {
+    background-image:
+      linear-gradient(theme(colors.accent.400 / 4%) 1px, transparent 1px),
+      linear-gradient(90deg, theme(colors.accent.400 / 4%) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  .dark .border-gradient {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(rgb(24, 24, 27), rgb(24, 24, 27)) padding-box,
+      linear-gradient(135deg, theme(colors.accent.600), theme(colors.accent.500), theme(colors.accent.400)) border-box;
+  }
+
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling - Light mode default */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-secondary;
+  @apply bg-slate-100;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground rounded;
+  @apply bg-slate-300 rounded-full;
+  border: 2px solid rgb(248, 250, 252);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-foreground/60;
+  @apply bg-accent-500/60;
+}
+
+/* Dark mode scrollbar */
+.dark::-webkit-scrollbar-track {
+  @apply bg-zinc-900;
+}
+
+.dark::-webkit-scrollbar-thumb {
+  @apply bg-zinc-700 rounded-full;
+  border: 2px solid rgb(24, 24, 27);
+}
+
+.dark::-webkit-scrollbar-thumb:hover {
+  @apply bg-accent-500/60;
+}
+
+/* Selection styling - Light mode default */
+::selection {
+  @apply bg-accent-500/30 text-accent-900;
+}
+
+.dark ::selection {
+  @apply bg-accent-500/40 text-accent-50;
+}
+
+/* Swipe to scroll without a visible bar (library filter tabs on phones) */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Thin scrollbar for inner scrolling areas (chart grid, browse artist row) */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: theme(colors.accent.500 / 30%) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: theme(colors.accent.500 / 30%);
+  border-radius: 10px;
+}
+
+.dark .custom-scrollbar {
+  scrollbar-color: theme(colors.accent.400 / 30%) transparent;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: theme(colors.accent.400 / 30%);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: theme(colors.accent.500 / 50%);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: theme(colors.accent.400 / 50%);
 }

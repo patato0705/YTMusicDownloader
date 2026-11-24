@@ -4,43 +4,58 @@
  */
 
 import { api } from './client';
+import type { AlbumMode, ArtistRef, Track } from '../types';
 
-export interface Album {
+export interface AlbumDetails {
   id: string;
   title: string;
-  artist_id?: string;
-  thumbnails?: any[];
-  playlist_id?: string;
-  year?: string;
-  type?: string;
-  image_local?: string;
-  tracks?: any[];
-  followed?: boolean;
-  [key: string]: any;
+  artist: ArtistRef | null;
+  year: string | null;
+  type: string;
+  /** Cover on disk, or YouTube Music's for an album not in the library */
+  thumbnail: string | null;
+  genres: string[];
+  /** When YouTube Music stopped serving it, nothing in its place (albums in the library only): its files stay */
+  removed_at?: string | null;
+}
+
+export interface AlbumPage {
+  /**
+   * "database" when the page follows the job queue (a download-mode album,
+   * even one whose tracks still come from YouTube Music); "ytmusic" otherwise
+   */
+  source: 'database' | 'ytmusic';
+  mode: AlbumMode | null;
+  /** A download-mode album without tracks and with no import waiting: Retry imports it again */
+  needs_import: boolean;
+  /** Deleted from the library (itself or with its artist): nothing automatic downloads it, Download lifts that */
+  excluded: boolean;
+  album: AlbumDetails;
+  tracks: Track[];
 }
 
 /**
- * Get album details
- * Tries DB first, then fetches from YTMusic if not found
+ * An album and its tracks: from the DB when its tracks are there, otherwise
+ * from YouTube Music
  */
-export async function getAlbum(albumId: string): Promise<Album> {
-  return api.get<Album>(`/albums/${encodeURIComponent(albumId)}`);
+export async function getAlbum(albumId: string): Promise<AlbumPage> {
+  return api.get<AlbumPage>(`/albums/${encodeURIComponent(albumId)}`);
 }
 
 /**
- * Follow an album
- * 1. Fetch album from YTMusic if not in DB
- * 2. Create album subscription
- * 3. Queue download jobs for all tracks
+ * Download an album: sets it to download mode and queues its import, which
+ * refreshes the tracklist and queues a download for every track not on disk.
+ * `artist_subscription_created`: its artist was added to the library (light).
  */
-export async function followAlbum(albumId: string): Promise<any> {
-  return api.post(`/albums/${encodeURIComponent(albumId)}/follow`);
+export async function downloadAlbum(albumId: string): Promise<{ started: boolean; artist_subscription_created: boolean }> {
+  return api.post(`/albums/${encodeURIComponent(albumId)}/download`);
 }
 
 /**
- * Unfollow an album
- * Removes album subscription but doesn't delete data or cancel jobs
+ * Requeue the tracks of a downloaded album that aren't on disk
+ * (failed ones, and any left without a job), or its import when it has
+ * no tracks at all (import_queued)
  */
-export async function unfollowAlbum(albumId: string): Promise<any> {
-  return api.delete(`/albums/${encodeURIComponent(albumId)}/follow`);
+export async function retryAlbum(albumId: string): Promise<{ album_id: string; tracks_queued: number; import_queued: boolean }> {
+  return api.post(`/albums/${encodeURIComponent(albumId)}/retry`);
 }

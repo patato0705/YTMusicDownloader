@@ -1,19 +1,12 @@
 services:
   ytmusicdownloader:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ytmusicdownloader:latest
+    image: ghcr.io/patato0705/ytmusicdownloader:latest
     ports:
-      - "8000:8000"
+      - "8484:8484"
     volumes:
       - ./config:/config
       - ./data:/data
-    restart: unless-stopped
     environment:
-      - TZ=Europe/Paris
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      - TZ=Europe/Paris  # your time zone, for the schedules
+      # More options: README "Environment variables"
+    restart: unless-stopped

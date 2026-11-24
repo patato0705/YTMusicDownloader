@@ -5,34 +5,103 @@
 
 import { api } from './client';
 
+export interface PlaylistTrack {
+  id: string;
+  title: string;
+  artists: Array<{ id: string | null; name: string | null }>;
+  album: { id: string | null; name: string | null } | null;
+  cover?: string | null;
+  duration_seconds: number;
+  track_number?: number | null;
+  isExplicit?: boolean;
+  /** YouTube Music's musicVideoType: MUSIC_VIDEO_TYPE_ATV (a song), _OMV (a music video), _UGC (an upload) */
+  video_type?: string | null;
+  /** A music video's song, found by the backend: the album above is the song's */
+  song?: { id: string; title: string } | null;
+}
+
+/** An upload: not a song, and what it credits is the channel that posted it, not an artist */
+export const isUpload = (track: PlaylistTrack): boolean => track.video_type === 'MUSIC_VIDEO_TYPE_UGC';
+
+export type PlaylistMode = 'albums' | 'artists';
+
+/** A playlist added to the library (backend/services/playlists.py) */
+export interface SavedPlaylist {
+  id: string;
+  title: string;
+  author: string | null;
+  thumbnail: string | null;
+  /** What its songs bring in: their albums, or their main artists (followed in full) */
+  mode: PlaylistMode;
+  /** Rescanned on the schedule; otherwise kept as added */
+  followed: boolean;
+  m3u: boolean;
+  /** Path of the M3U file in the music folder */
+  m3u_file: string | null;
+  songs: number;
+  /** Songs that bring nothing in: uploads, music videos whose song wasn't found (albums mode) */
+  skipped: number;
+  /** Songs found in the library */
+  available: number;
+  /** A scan is waiting or running */
+  syncing: boolean;
+  last_synced_at: string | null;
+  last_error: string | null;
+  created_at: string | null;
+}
+
+export interface PlaylistOptions {
+  mode: PlaylistMode;
+  followed: boolean;
+  m3u: boolean;
+}
+
 export interface Playlist {
   id: string;
   title?: string;
-  thumbnails?: any[];
-  tracks?: any[];
-  [key: string]: any;
+  description?: string | null;
+  author?: string | null;
+  thumbnail?: string | null;
+  tracks: PlaylistTrack[];
+  /** How it's added to the library, null if it isn't */
+  saved: SavedPlaylist | null;
+  /** Its artists already followed, and its albums already downloaded */
+  followed_artists: string[];
+  downloaded_albums: string[];
+  /**
+   * Its artists unfollowed or deleted, and its albums deleted (or by a
+   * deleted artist): the bulk buttons leave them out, following or
+   * downloading one by hand brings it back
+   */
+  excluded_artists: string[];
+  excluded_albums: string[];
+  /** Music videos whose song a job is looking for: the page asks again once the queue moves */
+  songs_pending: string[];
 }
 
-export interface PlaylistAlbum {
-  id: string;
-  title: string;
-  artist_id?: string;
-  [key: string]: any;
-}
-
-/**
- * Get playlist details with track/album info
- * Use this to extract album IDs from playlists for bulk following
- * Playlists are not saved to library
- */
+/** A playlist from YouTube Music with its tracks, and how it's added to the library */
 export async function getPlaylist(playlistId: string): Promise<Playlist> {
   return api.get<Playlist>(`/playlists/${encodeURIComponent(playlistId)}`);
 }
 
-/**
- * Extract unique album IDs from a playlist
- * Returns list of albums for bulk operations
- */
-export async function extractAlbumsFromPlaylist(playlistId: string): Promise<PlaylistAlbum[]> {
-  return api.get<PlaylistAlbum[]>(`/playlists/${encodeURIComponent(playlistId)}/albums`);
+export async function listPlaylists(): Promise<SavedPlaylist[]> {
+  return (await api.get<{ playlists: SavedPlaylist[] }>('/playlists')).playlists;
+}
+
+export async function addPlaylist(playlistId: string, options: PlaylistOptions): Promise<SavedPlaylist> {
+  return api.post<SavedPlaylist>(`/playlists/${encodeURIComponent(playlistId)}`, options);
+}
+
+export async function updatePlaylist(playlistId: string, options: Partial<PlaylistOptions>): Promise<SavedPlaylist> {
+  return api.patch<SavedPlaylist>(`/playlists/${encodeURIComponent(playlistId)}`, options);
+}
+
+/** Rescan a followed playlist now */
+export async function syncPlaylist(playlistId: string): Promise<SavedPlaylist> {
+  return api.post<SavedPlaylist>(`/playlists/${encodeURIComponent(playlistId)}/sync`);
+}
+
+/** Remove it from the library, with its M3U; the music stays */
+export async function removePlaylist(playlistId: string): Promise<void> {
+  await api.delete(`/playlists/${encodeURIComponent(playlistId)}`);
 }

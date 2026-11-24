@@ -1,98 +1,40 @@
 // src/api/tracks.ts
 /**
- * Track API endpoints
+ * Track lyrics (.lrc files next to the audio)
  */
 
 import { api } from './client';
+import type { LyricsKind, Track } from '../types';
 
-export interface Track {
-  id: string;
-  title: string;
-  duration?: number;
-  artists?: any[];
-  album_id?: string;
-  has_lyrics?: boolean;
-  file_path?: string;
-  status?: string;
-  created_at?: string;
-  [key: string]: any;
+export interface TrackLyrics {
+  track_id: string;
+  lyrics: LyricsKind;
+  lyrics_local: string | null;
+  /** Raw .lrc text, null when no file exists on disk */
+  content: string | null;
+  /** False until the audio file is downloaded (nowhere to put the .lrc yet) */
+  editable: boolean;
 }
 
-export interface DownloadTrackRequest {
-  video_id?: string;
-  [key: string]: any;
-}
-
-export interface EnsureLyricsRequest {
-  artists?: string[];
-  title?: string;
-  album?: string;
-  duration?: number;
-  dest_audio_path?: string;
-}
-
-export interface MarkDoneRequest {
-  file_path?: string;
-  [key: string]: any;
-}
-
-export interface MarkFailedRequest {
-  error?: string;
-  [key: string]: any;
+export interface UpdateTrackLyricsResponse {
+  track: Track;
+  content: string | null;
 }
 
 /**
- * Get track info from DB
+ * Read the track's .lrc file from disk
  */
-export async function getTrack(trackId: string): Promise<Track> {
-  return api.get<Track>(`/tracks/${encodeURIComponent(trackId)}`);
+export async function getTrackLyrics(trackId: string): Promise<TrackLyrics> {
+  return api.get<TrackLyrics>(`/tracks/${encodeURIComponent(trackId)}/lyrics`);
 }
 
 /**
- * List tracks for a specific album
+ * Overwrite the track's .lrc file. Empty content removes it and marks the
+ * track as having no lyrics (the scheduler will look them up again later).
  */
-export async function getAlbumTracks(albumId: string): Promise<Track[]> {
-  return api.get<Track[]>(`/tracks/album/${encodeURIComponent(albumId)}`);
-}
-
-/**
- * Enqueue a download job for the track
- * Returns { ok: true, job_id: <int> }
- */
-export async function downloadTrack(
+export async function updateTrackLyrics(
   trackId: string,
-  metadata?: DownloadTrackRequest
-): Promise<any> {
-  return api.post(`/tracks/${encodeURIComponent(trackId)}/download`, metadata);
-}
-
-/**
- * Enqueue a job to fetch synchronized lyrics for the track
- * Returns { ok: true, job_id: <int> }
- */
-export async function ensureLyrics(
-  trackId: string,
-  metadata?: EnsureLyricsRequest
-): Promise<any> {
-  return api.post(`/tracks/${encodeURIComponent(trackId)}/ensure_lyrics`, metadata);
-}
-
-/**
- * Mark a track as done and optionally provide file_path
- */
-export async function markTrackDone(
-  trackId: string,
-  data?: MarkDoneRequest
-): Promise<any> {
-  return api.post(`/tracks/${encodeURIComponent(trackId)}/mark_done`, data);
-}
-
-/**
- * Mark a track as failed with optional error message
- */
-export async function markTrackFailed(
-  trackId: string,
-  data?: MarkFailedRequest
-): Promise<any> {
-  return api.post(`/tracks/${encodeURIComponent(trackId)}/mark_failed`, data);
+  content: string
+): Promise<UpdateTrackLyricsResponse> {
+  return api.put<UpdateTrackLyricsResponse>(`/tracks/${encodeURIComponent(trackId)}/lyrics`, { content });
 }

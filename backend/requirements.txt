@@ -1,13 +1,37 @@
-fastapi
-uvicorn[standard]
-ytmusicapi
-yt-dlp
-requests
-SQLAlchemy
-pydantic
-Pillow
-httpx
-bcrypt
-email-validator==2.1.0
-PyJWT==2.8.0
-python-multipart
+# Pinned to the versions this image was last built and import-tested against.
+# When bumping a pin, re-test the app (esp. bcrypt/pydantic/SQLAlchemy, which
+# this code targets the modern major-version API of) before committing.
+#
+# yt-dlp is deliberately NOT pinned here: YouTube breaks it often enough that
+# pinning it would mean the app silently going stale between image releases.
+# deploy/entrypoint.sh runs `uv pip install --upgrade-package yt-dlp` at container
+# startup so a restart alone can pick up an upstream fix, no rebuild required
+# (wheels only, releases at least a day old: see the entrypoint).
+#
+# The extras matter: YouTube extraction now needs a JavaScript runtime plus
+# yt-dlp's challenge-solver scripts (github.com/yt-dlp/yt-dlp/wiki/EJS).
+# "default" pulls the yt-dlp-ejs solver at the exact version this yt-dlp
+# wants, "deno" a deno binary from PyPI -- so the three always move together.
+# Without them the `web` client is skipped: some formats go missing and
+# age-restricted videos fail even with valid account cookies.
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+ytmusicapi==1.12.3
+yt-dlp[default,deno]
+requests==2.34.2
+# Not imported by the app: a floor under requests' and yt-dlp's HTTP library,
+# since neither requires a version past the ones with known CVEs (<2.8.0).
+urllib3>=2.8.0
+SQLAlchemy==2.1.6
+# Database schema upgrades (backend/migrations/)
+alembic==1.20.1
+pydantic==2.14.1
+httpx==0.28.1
+bcrypt==5.0.0
+PyJWT==2.15.1
+joserfc==1.7.7
+python-multipart==0.0.32
+mutagen==1.48.1
+# Not imported by the app: the process manager the Docker image runs
+# web/workers/scheduler under (deploy/supervisord.conf).
+supervisor==4.3.0

@@ -1,0 +1,402 @@
+// src/components/admin/SettingsTab.tsx
+/**
+ * Admin panel > Settings: edit application settings grouped by category.
+ */
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '../../contexts/I18nContext';
+import { Button } from '../ui/Button';
+import { SectionHeader } from '../ui/SectionHeader';
+import { Select } from '../ui/Select';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
+import * as adminApi from '../../api/admin';
+import type { Setting, SettingOption, YoutubeCookiesStatus } from '../../api/admin';
+import { apiErrorMessage } from '../../utils';
+import { AdminTabShell } from './AdminTabShell';
+import { ScheduleControls, ScheduleHint, isValidSchedule, useScheduleSummary } from './ScheduleInput';
+import type { AdminTabProps } from './AdminTabShell';
+import { Icon } from '../ui/icons';
+
+interface SettingsTabProps extends AdminTabProps {
+  /** Called after a successful save; feature flags may have changed. */
+  onSaved: () => void;
+}
+
+/** Each setting's value by key: what the form edits */
+const valuesOf = (settings: Setting[]): Record<string, any> =>
+  Object.fromEntries(settings.map((setting) => [setting.key, setting.value]));
+
+export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) => {
+  const { t, tOr, locale, formatLocale } = useI18n();
+  const scheduleSummary = useScheduleSummary();
+
+  const [settings, setSettings] = useState<Setting[]>([]);
+  const [editedSettings, setEditedSettings] = useState<Record<string, any>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
+
+  // YouTube account cookies (fallback jar for age-restricted tracks)
+  const [cookies, setCookies] = useState<YoutubeCookiesStatus | null>(null);
+  const [cookiesBusy, setCookiesBusy] = useState(false);
+  const cookiesFileRef = useRef<HTMLInputElement>(null);
+
+  // Localized language names for the ytmusic.language dropdown
+  const languageNames = useMemo(() => {
+    try {
+      return new Intl.DisplayNames([locale], { type: 'language' });
+    } catch {
+      return null;
+    }
+  }, [locale]);
+
+  const loadSettings = async () => {
+    const settingsArray = await adminApi.getAllSettings();
+    setSettings(settingsArray);
+    setEditedSettings(valuesOf(settingsArray));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await Promise.all([
+          loadSettings(),
+          adminApi.getYoutubeCookies().then(setCookies),
+        ]);
+      } catch (err: any) {
+        console.error('Failed to load settings:', err);
+        if (!cancelled) setError(apiErrorMessage(err, t, t('common.error')));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSettingChange = (key: string, value: any, type: string) => {
+    let parsedValue = value;
+
+    if (type === 'int') {
+      // Keep an emptied field empty (rather than NaN) so it can be typed into;
+      // saveSettings() refuses to submit it.
+      parsedValue = value === '' ? '' : Number(value);
+    } else if (type === 'bool') {
+      parsedValue = Boolean(value);
+    }
+
+    setEditedSettings(prev => ({
+      ...prev,
+      [key]: parsedValue,
+    }));
+  };
+
+  // Settings are defined on the backend: a key without a translation falls
+  // back to the backend's English text
+  const settingLabel = (setting: Setting): string =>
+    tOr(
+      `admin.settings.keys.${setting.key}.label`,
+      setting.key.split('.').slice(1).join('.').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    );
+
+  const settingDescription = (setting: Setting): string =>
+    tOr(`admin.settings.keys.${setting.key}.description`, setting.description ?? '');
+
+  const settingOptionLabel = (setting: Setting, option: SettingOption): string => {
+    let fallback = option.label;
+    if (setting.key === 'ytmusic.language' && languageNames) {
+      try {
+        const name = languageNames.of(option.value.replace('_', '-'));
+        if (name) fallback = name.charAt(0).toUpperCase() + name.slice(1);
+      } catch {
+        // Unknown tag: the backend label
+      }
+    }
+    return tOr(`admin.settings.options.${setting.key}.${option.value}`, fallback);
+  };
+
+  // Compared as JSON so a schedule matches by content, not identity.
+  // Keys without a built-in default never count as changed.
+  const isAtDefault = (setting: Setting): boolean =>
+    setting.default == null ||
+    JSON.stringify(editedSettings[setting.key]) === JSON.stringify(setting.default);
+
+  const defaultValueLabel = (setting: Setting): string => {
+    if (setting.type === 'bool') return t(setting.default ? 'admin.settings.on' : 'admin.settings.off');
+    if (setting.type === 'schedule') return scheduleSummary(setting.default, setting.unit);
+    const option = setting.allowed_values?.find(o => o.value === setting.default);
+    return option ? settingOptionLabel(setting, option) : String(setting.default);
+  };
+
+  // Like any other edit: the field takes the default, Save persists it
+  const resetToDefault = (setting: Setting) => {
+    setEditedSettings(prev => ({ ...prev, [setting.key]: setting.default }));
+  };
+
+  const invalidIntSetting = (setting: Setting): boolean => {
+    if (setting.type !== 'int') return false;
+    const value = editedSettings[setting.key];
+    return (
+      !Number.isInteger(value) ||
+      (setting.min != null && value < setting.min) ||
+      (setting.max != null && value > setting.max)
+    );
+  };
+
+  const invalidScheduleSetting = (setting: Setting): boolean =>
+    setting.type === 'schedule' && !isValidSchedule(editedSettings[setting.key], setting.min ?? 1, setting.max);
+
+  const dirty = settings.some((setting) => JSON.stringify(editedSettings[setting.key]) !== JSON.stringify(setting.value));
+  const discardChanges = () =>
+    setEditedSettings(valuesOf(settings));
+
+  const saveSettings = async () => {
+    const invalidSchedule = settings.find(invalidScheduleSetting);
+    if (invalidSchedule) {
+      const value = editedSettings[invalidSchedule.key];
+      // A whole number of hours/days, but out of bounds: say which bounds
+      const outOfRange = value?.mode === 'interval' && Number.isInteger(value.every) && invalidSchedule.max != null;
+      const params = { name: settingLabel(invalidSchedule), min: invalidSchedule.min ?? 1, max: invalidSchedule.max ?? 0 };
+      onToast(t(outOfRange ? 'admin.settings.schedule.intervalRange' : 'admin.settings.schedule.invalid', params), 'error');
+      return;
+    }
+    const invalid = settings.find(invalidIntSetting);
+    if (invalid) {
+      const params = { name: settingLabel(invalid), min: invalid.min ?? 0, max: invalid.max ?? 0 };
+      onToast(
+        t(invalid.max != null ? 'admin.settings.invalidNumberRange' : 'admin.settings.invalidNumber', params),
+        'error',
+      );
+      return;
+    }
+
+    setSaveLoading(true);
+    setError(null);
+
+    try {
+      const changed = Object.entries(editedSettings).filter(([key, value]) => {
+        const originalSetting = settings.find(s => s.key === key);
+        return originalSetting && JSON.stringify(originalSetting.value) !== JSON.stringify(value);
+      });
+      // Each saved on its own: one refused doesn't undo the others, which
+      // are on the server whatever happens here
+      const results = await Promise.allSettled(changed.map(([key, value]) => adminApi.updateSetting(key, value)));
+      const failed = changed.filter((_, i) => results[i].status === 'rejected');
+      const firstError = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')?.reason;
+
+      await loadSettings();
+      // The refused ones stay edited, to fix and save again
+      if (failed.length > 0) setEditedSettings((current) => ({ ...current, ...Object.fromEntries(failed) }));
+      if (failed.length < changed.length) onSaved();
+      if (firstError) {
+        onToast(apiErrorMessage(firstError, t, t('admin.settings.saveFailed')), 'error');
+      } else {
+        onToast(t('admin.settings.saved'), 'success');
+      }
+    } catch (err: any) {
+      onToast(apiErrorMessage(err, t, t('admin.settings.saveFailed')), 'error');
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handleCookiesFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setCookiesBusy(true);
+    try {
+      const content = await file.text();
+      setCookies(await adminApi.uploadYoutubeCookies(content));
+      onToast(t('admin.settings.cookies.uploaded'), 'success');
+    } catch (err: any) {
+      onToast(apiErrorMessage(err, t, t('admin.settings.cookies.uploadFailed')), 'error');
+    } finally {
+      setCookiesBusy(false);
+    }
+  };
+
+  const handleCookiesDelete = async () => {
+    setCookiesBusy(true);
+    try {
+      await adminApi.deleteYoutubeCookies();
+      setCookies({ present: false, cookie_count: 0, size_bytes: 0, modified_at: null });
+      onToast(t('admin.settings.cookies.deleted'), 'success');
+    } catch (err: any) {
+      onToast(apiErrorMessage(err, t, t('common.error')), 'error');
+    } finally {
+      setCookiesBusy(false);
+    }
+  };
+
+  const cookiesStatusText = (): string => {
+    if (!cookies?.present) return t('admin.settings.cookies.none');
+    const when = cookies.modified_at ? new Date(cookies.modified_at).toLocaleString(formatLocale) : '';
+    return t('admin.settings.cookies.present', { count: cookies.cookie_count, date: when });
+  };
+
+  // Group settings by category
+  const grouped: Record<string, Setting[]> = {};
+  settings.forEach(setting => {
+    const category = setting.key.split('.')[0];
+    if (!grouped[category]) grouped[category] = [];
+    grouped[category].push(setting);
+  });
+
+  return (
+    <AdminTabShell loading={loading} error={error}>
+      <div className="space-y-8">
+        {Object.entries(grouped).map(([category, categorySettings]) => (
+          <section key={category}>
+            <SectionHeader>
+              {tOr(`admin.settings.categories.${category}`, category.charAt(0).toUpperCase() + category.slice(1))}
+            </SectionHeader>
+
+            <div className="glass rounded-2xl p-6 space-y-4">
+              {categorySettings.map(setting => (
+                <div key={setting.key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-3 border-b border-slate-200 dark:border-white/10 last:border-0">
+                  <div className="flex-1 basis-40 min-w-0">
+                    <label className="font-semibold text-foreground block mb-1">
+                      {settingLabel(setting)}
+                    </label>
+                    <p className="text-sm text-muted-foreground max-w-prose">{settingDescription(setting)}</p>
+                    {setting.type === 'schedule' && editedSettings[setting.key] && (
+                      <ScheduleHint
+                        settingKey={setting.key}
+                        value={editedSettings[setting.key]}
+                        nextRun={setting.next_run}
+                        dirty={JSON.stringify(editedSettings[setting.key]) !== JSON.stringify(setting.value)}
+                        timezone={setting.timezone}
+                      />
+                    )}
+                  </div>
+
+                  <div className="w-full sm:w-auto flex-shrink-0 ml-auto flex flex-wrap items-center justify-end gap-2 max-w-full">
+                    {!isAtDefault(setting) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => resetToDefault(setting)}
+                        title={t('admin.settings.resetToDefault', { value: defaultValueLabel(setting) })}
+                      >
+                        <Icon name="undo" className="w-4 h-4 mr-1" />
+                        {t('admin.settings.default')}
+                      </Button>
+                    )}
+                    {setting.type === 'schedule' ? (
+                      editedSettings[setting.key] && (
+                        <ScheduleControls
+                          value={editedSettings[setting.key]}
+                          onChange={(value) => handleSettingChange(setting.key, value, setting.type)}
+                          unit={setting.unit === 'days' ? 'days' : 'hours'}
+                          min={setting.min ?? 1}
+                          max={setting.max}
+                        />
+                      )
+                    ) : setting.type === 'bool' ? (
+                      <ToggleSwitch
+                        checked={!!editedSettings[setting.key]}
+                        onChange={(checked) => handleSettingChange(setting.key, checked, setting.type)}
+                      />
+                    ) : setting.type === 'int' ? (
+                      <input
+                        type="number"
+                        min={setting.min ?? undefined}
+                        max={setting.max ?? undefined}
+                        step={1}
+                        value={editedSettings[setting.key] ?? ''}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value, setting.type)}
+                        className={`w-24 px-3 py-2 glass rounded-xl text-foreground text-center focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 ${
+                          invalidIntSetting(setting)
+                            ? 'border border-red-500 dark:border-red-500'
+                            : 'border-slate-200 dark:border-white/10'
+                        }`}
+                      />
+                    ) : Array.isArray(setting.allowed_values) && setting.allowed_values.length > 0 ? (
+                      <Select
+                        value={editedSettings[setting.key] ?? ''}
+                        onChange={(value) => handleSettingChange(setting.key, value, setting.type)}
+                        options={setting.allowed_values.map(option => ({
+                          value: option.value,
+                          label: settingOptionLabel(setting, option),
+                        }))}
+                        className="w-48"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={editedSettings[setting.key] ?? ''}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value, setting.type)}
+                        className="w-48 px-3 py-2 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600"
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {category === 'scheduler' && categorySettings.some(s => s.timezone) && (
+                <p className="text-xs text-muted-foreground">
+                  {t('admin.settings.schedule.timezone', {
+                    timezone: categorySettings.find(s => s.timezone)?.timezone ?? '',
+                  })}
+                </p>
+              )}
+
+              {category === 'download' && (
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-3">
+                  <div className="flex-1 basis-40 min-w-0">
+                    <label className="font-semibold text-foreground block mb-1">
+                      {t('admin.settings.cookies.label')}
+                    </label>
+                    <p className="text-sm text-muted-foreground max-w-prose">{t('admin.settings.cookies.description')}</p>
+                    <p className={`text-sm mt-1 ${cookies?.present ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                      {cookiesStatusText()}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0 ml-auto flex items-center gap-2">
+                    <input
+                      ref={cookiesFileRef}
+                      type="file"
+                      accept="text/plain,.txt"
+                      onChange={handleCookiesFile}
+                      className="hidden"
+                      id="youtube-cookies-file"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => cookiesFileRef.current?.click()}
+                      disabled={cookiesBusy}
+                    >
+                      {cookies?.present ? t('admin.settings.cookies.replace') : t('admin.settings.cookies.upload')}
+                    </Button>
+                    {cookies?.present && (
+                      <Button variant="outline" onClick={handleCookiesDelete} disabled={cookiesBusy}>
+                        {t('admin.settings.cookies.remove')}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        ))}
+
+        {/* Stays in view while anything is unsaved (above the phone tab bar) */}
+        {dirty && (
+          <div className="sticky bottom-[calc(var(--tab-bar-height)+env(safe-area-inset-bottom)+0.5rem)] md:bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 glass-chrome rounded-2xl px-4 py-3 shadow-lg">
+            <span className="text-sm font-medium text-foreground">{t('admin.settings.unsaved')}</span>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={discardChanges} disabled={saveLoading}>
+                {t('common.cancel')}
+              </Button>
+              <Button onClick={saveSettings} isLoading={saveLoading} variant="primary">
+                {t('admin.settings.save')}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </AdminTabShell>
+  );
+};

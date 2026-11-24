@@ -1,0 +1,57 @@
+# backend/schemas/settings.py
+"""
+Pydantic schemas for settings management endpoints.
+"""
+from __future__ import annotations
+from typing import Any, Dict, List, Optional
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+class SettingResponse(BaseModel):
+    """Response model for a setting"""
+    key: str
+    value: Any  # Can be int, bool, str, dict depending on type
+    type: str  # "string", "int", "bool", "schedule"
+    description: Optional[str] = None
+    allowed_values: Optional[List[Dict[str, str]]] = None
+    min: Optional[int] = None  # lower bound for int settings
+    max: Optional[int] = None  # upper bound for int settings
+    default: Any = None  # built-in default value; None for keys without one
+    unit: Optional[str] = None  # schedule settings: "hours" or "days" for interval mode
+    next_run: Optional[str] = None  # schedule settings in fixed mode: ISO time of the next run
+    timezone: Optional[str] = None  # schedule settings: the container's TZ the times are in
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+class SettingUpdateRequest(BaseModel):
+    """Request to update a setting value"""
+    value: Any = Field(..., description="New value for the setting")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"value": 12},
+                {"value": True},
+                {"value": "en"},
+                {"value": {"mode": "interval", "every": 6}},
+            ]
+        }
+    }
+
+
+class YoutubeCookiesStatus(BaseModel):
+    """State of the admin-uploaded YouTube account cookie jar"""
+    present: bool
+    cookie_count: int = 0
+    size_bytes: int = 0
+    modified_at: Optional[datetime] = None
+
+
+class YoutubeCookiesUpload(BaseModel):
+    """A Netscape-format cookies.txt, as exported by a browser extension"""
+    content: str = Field(..., min_length=1, max_length=512 * 1024)

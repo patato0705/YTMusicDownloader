@@ -1,0 +1,108 @@
+// src/components/ui/ChartArtistGrid.tsx
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { useI18n } from '../../contexts/I18nContext';
+import { getImageUrl } from '../../api/media';
+import { Artwork } from './Artwork';
+import type { ChartArtist } from '../../api/charts';
+import { artistPath } from '../../utils';
+import { Icon } from './icons';
+
+interface ChartArtistGridProps {
+  artists: ChartArtist[];
+  maxHeight?: string;
+}
+
+export const ChartArtistGrid: React.FC<ChartArtistGridProps> = ({ 
+  artists, 
+  maxHeight = '200px' 
+}) => {
+  const { t } = useI18n();
+
+  const getTrendIcon = (trend: 'up' | 'down' | 'neutral') => {
+    switch (trend) {
+      case 'up':
+        return '↑';
+      case 'down':
+        return '↓';
+      default:
+        return '–';
+    }
+  };
+
+  const getTrendColor = (trend: 'up' | 'down' | 'neutral') => {
+    switch (trend) {
+      case 'up':
+        return 'bg-green-500';
+      case 'down':
+        return 'bg-red-500';
+      default:
+        return 'bg-slate-400';
+    }
+  };
+
+  return (
+    <div 
+      className="overflow-y-auto pr-2 custom-scrollbar" 
+      style={{ maxHeight }}
+    >
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        {artists.map((artist) => {
+          const thumbnail = artist.thumbnail;
+          const isFollowed = artist.followed;
+
+          return (
+            <Link
+              key={artist.id}
+              to={artistPath(artist.id)}
+              className="relative group flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
+              title={isFollowed ? t('charts.followedArtist') : undefined}
+            >
+              {/* Artist Image Circle */}
+              <div className="relative w-16 h-16">
+                {/* Rank Badge - Top Left */}
+                <div className="absolute -top-1 -left-1 z-10 w-6 h-6 rounded-full bg-accent-600 flex items-center justify-center shadow-lg border-2 border-white dark:border-zinc-900">
+                  <span className="text-[10px] font-bold text-white">{artist.rank}</span>
+                </div>
+
+                {/* Followed Badge - Top Right */}
+                {isFollowed && (
+                  <div className="absolute -top-1 -right-1 z-10 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shadow-lg border-2 border-white dark:border-zinc-900">
+                    <Icon name="check" strokeWidth={3.5} className="w-3 h-3 text-white" />
+                  </div>
+                )}
+
+                {/* Artist Image */}
+                <div className={`w-full h-full rounded-full overflow-hidden bg-slate-200 dark:bg-white/10 border-2 transition-all group-hover:border-accent-500 ${
+                  isFollowed
+                    ? 'border-accent-500/70'
+                    : 'border-slate-300 dark:border-white/20'
+                }`}>
+                  <Artwork
+                    src={getImageUrl(thumbnail)}
+                    kind="artist"
+                    className="w-full h-full"
+                  />
+                </div>
+
+                {/* Trend Indicator - Bottom Right */}
+                <div 
+                  className={`absolute -bottom-1 -right-1 z-10 w-5 h-5 rounded-full ${getTrendColor(artist.trend)} flex items-center justify-center shadow-lg border-2 border-white dark:border-zinc-900`}
+                >
+                  <span className="text-[10px] font-bold text-white">
+                    {getTrendIcon(artist.trend)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Artist Name */}
+              <span className="text-xs font-medium text-center text-foreground line-clamp-1 w-full px-1">
+                {artist.name}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+};

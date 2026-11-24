@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from . import config
 from .models import Setting
 from .time_utils import now_utc
 
@@ -19,89 +20,382 @@ logger = logging.getLogger("settings")
 # Default settings with descriptions
 DEFAULT_SETTINGS = {
     # Scheduler settings
-    "scheduler.sync_interval_hours": {
-        "value": 6,
-        "type": "int",
-        "description": "Hours between artist sync checks",
+    # Schedules (backend/schedules.py): every N hours/days ("unit"), or at a
+    # fixed time on chosen days of the week. Their *_last_run companions
+    # record the last fixed run done, so one isn't repeated or caught up.
+    "scheduler.artist_sync": {
+        # A quiet hour, three times a week: plenty to catch new releases,
+        # which mostly land on Fridays
+        "value": {"mode": "fixed", "time": "02:00", "days": ["tue", "thu", "sat"]},
+        "type": "schedule",
+        "unit": "hours",
+        "min": 1,
+        # A year at most, here and on the other schedules: a far larger value
+        # overflows the scheduler's date math on every tick
+        "max": 8760,
+        "description": "When followed artists are checked for new releases, and the albums in the library for changes",
+    },
+    "scheduler.artist_sync_last_run": {
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last fixed-time artist sync run",
+    },
+    "scheduler.chart_sync": {
+        # YouTube Music publishes its charts weekly, so syncing more often
+        # than once a week mostly fetches the same chart again.
+        "value": {"mode": "fixed", "time": "04:00", "days": ["mon"]},
+        "type": "schedule",
+        "unit": "days",
+        "min": 1,
+        "max": 365,
+        "description": "When followed charts are re-fetched (YouTube Music updates its charts weekly)",
+    },
+    "scheduler.chart_sync_last_run": {
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last fixed-time chart sync run",
+    },
+    "scheduler.playlist_sync": {
+        # Daily: playlists change more often than artists release. Between
+        # the artist sync (02:00) and the chart sync (04:00).
+        "value": {"mode": "fixed", "time": "03:00", "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
+        "type": "schedule",
+        "unit": "hours",
+        "min": 1,
+        "max": 8760,
+        "description": "When followed playlists are rescanned for new songs",
+    },
+    "scheduler.playlist_sync_last_run": {
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last fixed-time playlist sync run",
+    },
+    "scheduler.lyrics_retry": {
+        "value": {"mode": "interval", "every": 24},
+        "type": "schedule",
+        "unit": "hours",
+        "min": 1,
+        "max": 8760,
+        "description": "When tracks with missing or plain lyrics are retried",
+    },
+    "scheduler.lyrics_retry_last_run": {
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last fixed-time lyrics retry run",
     },
     "scheduler.job_cleanup_days": {
         "value": 3,
         "type": "int",
-        "description": "Days to keep completed jobs",
+        "min": 1,
+        "max": 3650,
+        "description": "Days to keep finished jobs (done, failed, cancelled)",
     },
-    "scheduler.token_cleanup_days": {
-        "value": 1,
-        "type": "int",
-        "description": "Days between expired token cleanup",
-    },
-    
+
     # Registration settings
     "auth.registration_enabled": {
         "value": False,
         "type": "bool",
+        "requires": "password_login",
         "description": "Allow public user registration",
     },
-    
+
+    # Failed password throttling (services/login_throttle.py). Read on every
+    # attempt, so changes apply immediately.
+    "auth.login_max_failures_per_ip": {
+        "value": 10,
+        "type": "int",
+        "min": 0,
+        "requires": "password_login",
+        "description": "Failed sign-ins allowed from one IP address (for IPv6, one /64 network) per window before it is blocked (set to 0 to turn this check off)",
+    },
+    "auth.login_max_failures_per_account": {
+        # Browsers that already signed in to the account get their own
+        # allowance of this size, so someone hammering the account (e.g. the
+        # default "admin") can't lock its owner out of their usual browser.
+        "value": 5,
+        "type": "int",
+        "min": 0,
+        "requires": "password_login",
+        "description": "Failed sign-ins allowed per account per window before it is blocked for new browsers (set to 0 to turn this check off)",
+    },
+    "auth.login_failure_window_minutes": {
+        "value": 15,
+        "type": "int",
+        "min": 1,
+        "requires": "password_login",
+        "description": "Minutes failed sign-ins are remembered; a blocked IP or account is released as they expire",
+    },
+
+    # Single sign-on (services/oidc.py). Who gets in and with which role;
+    # how sign-in works and which provider is trusted are env-only.
+    "auth.oidc_signup_enabled": {
+        "value": True,
+        "type": "bool",
+        "requires": "oidc",
+        "description": "Create an account on the first single sign-on of someone without one. When off, only existing accounts get in; with provider groups configured, only members of those groups (existing accounts outside them are refused too)",
+    },
+    "auth.oidc_default_role": {
+        # No administrator: admins come from OIDC_ADMIN_GROUP, the CLI or the panel
+        "value": "visitor",
+        "type": "string",
+        "requires": "oidc",
+        "description": "Role of accounts created by single sign-on (and, while new accounts are allowed, of everyone outside the configured groups)",
+        "allowed_values": [
+            {"value": "visitor", "label": "Visitor"},
+            {"value": "member", "label": "Member"},
+        ],
+    },
+    "auth.oidc_session_hours": {
+        # Shorter than password sessions (7 days): what the provider says
+        # (groups, so roles; a deactivated account) only reaches this app
+        # at sign-in, and signing in again is usually one redirect.
+        "value": 24,
+        "type": "int",
+        "min": 1,
+        "max": 168,
+        "requires": "oidc",
+        "description": "Hours a single sign-on session lasts before going through the provider again. Role changes and deactivations at the provider apply from then: keep it short (password sessions last 7 days)",
+    },
+
     # Download settings
     "download.max_concurrent": {
-        "value": 3,
+        # How many of the download worker processes actually take jobs; the
+        # rest idle. Every parallel stream from one IP raises the odds of
+        # YouTube rate-limiting or bot-checking, so the default is one and
+        # the ceiling is the number of processes supervisord started
+        # (config.DOWNLOAD_WORKERS). Workers re-read this on every poll, so
+        # a change in the admin panel applies within seconds, no restart.
+        "value": 1,
         "type": "int",
+        "min": 1,
+        "max": lambda: config.DOWNLOAD_WORKERS,
         "description": "Maximum concurrent downloads",
     },
-    "download.audio_quality": {
-        "value": "best",
-        "type": "string",
-        "description": "Audio quality preference (best, high, medium)",
+    "download.rate_limit_pause_minutes": {
+        # When a download still hits YouTube's rate limit after a cookie
+        # reset, *all* download workers stop taking jobs for this long
+        # (jobs.gate.pause_downloads) -- with several workers, the others
+        # carrying on is exactly how a soft limit turns into a ban.
+        "value": 10,
+        "type": "int",
+        "min": 1,
+        # A day; escalation (jobs.gate) stretches it up to 16 times. A far
+        # larger value overflows the resume time, and no pause is set at all
+        "max": 1440,
+        "description": "Minutes to pause all downloads after hitting YouTube's rate limit",
     },
-    
+    "download.pause_streak": {
+        # How many rate-limit pauses in a row without a successful download
+        # in between; each one doubles the pause (jobs.gate.pause_downloads).
+        "value": 0,
+        "type": "int",
+        "min": 0,
+        "internal": True,
+        "description": "Consecutive rate-limit pauses (set automatically)",
+    },
+    "download.paused_until": {
+        # ISO timestamp set by jobs.gate.pause_downloads; empty when not
+        # paused. Bookkeeping, not a preference: hidden from the settings UI
+        # (internal=True), surfaced read-only via /api/jobs/stats/summary.
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Downloads are paused until this time (set automatically on rate limit)",
+    },
+    "download.last_refused": {
+        # "<track id> <ISO time>" of the last download YouTube refused with a
+        # 403 since the last one that got through, empty otherwise. A 403
+        # can be one video YouTube won't serve for now or the whole IP
+        # refused: a second track refused tells them apart
+        # (jobs.gate.note_download_refused).
+        "value": "",
+        "type": "string",
+        "internal": True,
+        "description": "Last download refused by YouTube (set automatically)",
+    },
+
     # Feature flags
     "features.lyrics_enabled": {
         "value": True,
         "type": "bool",
-        "description": "Enable automatic lyrics download",
+        "description": "Enable automatic lyrics download (LRCLIB, then YouTube Music)",
+    },
+    "features.synced_lyrics_only": {
+        "value": True,
+        "type": "bool",
+        "description": "Only keep synced lyrics (reject plain/unsynced lyrics)",
+    },
+    "features.genres_enabled": {
+        "value": True,
+        "type": "bool",
+        "description": "Look up album and artist genres on MusicBrainz and Deezer",
     },
     "features.charts_enabled": {
         "value": True,
         "type": "bool",
         "description": "Enable charts import feature",
     },
+
+    # YTMusic API
+    "ytmusic.language": {
+        "value": "en",
+        "type": "string",
+        "description": "Language code for localized YTMusic responses (artist bios, album descriptions, etc.)",
+        "allowed_values": [
+            {"value": "ar", "label": "Arabic"},
+            {"value": "de", "label": "German"},
+            {"value": "en", "label": "English"},
+            {"value": "es", "label": "Spanish"},
+            {"value": "fr", "label": "French"},
+            {"value": "hi", "label": "Hindi"},
+            {"value": "it", "label": "Italian"},
+            {"value": "ja", "label": "Japanese"},
+            {"value": "ko", "label": "Korean"},
+            {"value": "nl", "label": "Dutch"},
+            {"value": "pt", "label": "Portuguese"},
+            {"value": "ru", "label": "Russian"},
+            {"value": "tr", "label": "Turkish"},
+            {"value": "ur", "label": "Urdu"},
+            {"value": "zh_CN", "label": "Chinese (Mainland)"},
+            {"value": "zh_TW", "label": "Chinese (Taiwan)"},
+        ],
+    },
 }
 
 
-def ensure_defaults(session: Session) -> None:
+def _spec(key: str) -> Dict[str, Any]:
+    """The declaration of a setting ({} for unknown keys)."""
+    return DEFAULT_SETTINGS.get(key, {})
+
+
+def get_allowed_values(key: str) -> Optional[List[Dict[str, str]]]:
+    """Return the allowed {value, label} options for a setting key, or None if unconstrained."""
+    values = _spec(key).get("allowed_values")
+    return list(values) if values else None
+
+
+def get_default_value(key: str) -> Any:
+    """Return the built-in default value for a setting key, or None if it has none."""
+    return _spec(key).get("value")
+
+
+def get_min_value(key: str) -> Optional[int]:
+    """Return the lower bound for an int setting, or None if unconstrained."""
+    return _spec(key).get("min")
+
+
+def get_unit(key: str) -> Optional[str]:
+    """The unit of a schedule setting's interval ("hours" or "days")."""
+    return _spec(key).get("unit")
+
+
+def get_max_value(key: str) -> Optional[int]:
     """
-    Ensure all default settings exist in database.
-    Call on startup.
+    Return the upper bound for an int setting, or None if unconstrained.
+    A bound may be declared as a callable for values only known at runtime
+    (e.g. how many worker processes this container was started with).
     """
-    for key, config in DEFAULT_SETTINGS.items():
-        existing = session.get(Setting, key)
-        if not existing:
-            setting = Setting(
-                key=key,
-                type=config["type"],
-                description=config["description"],
-                updated_at=now_utc(),
+    maximum = _spec(key).get("max")
+    return maximum() if callable(maximum) else maximum
+
+
+def is_applicable(key: str) -> bool:
+    """
+    False for settings the sign-in configuration makes moot (password sign-in
+    off, or single sign-on not configured): hidden from the settings panel.
+    They keep their value, and still travel in backups.
+    """
+    requires = _spec(key).get("requires")
+    if requires == "password_login":
+        return config.PASSWORD_LOGIN_ENABLED
+    if requires == "oidc":
+        return config.OIDC_ENABLED
+    return True
+
+
+def is_internal(key: str) -> bool:
+    """True for settings that are app bookkeeping rather than user preferences."""
+    return bool(_spec(key).get("internal"))
+
+
+def is_user_setting(key: str) -> bool:
+    """A known setting people may change (admin panel, CLI, backup import): not app bookkeeping."""
+    return key in DEFAULT_SETTINGS and not is_internal(key)
+
+
+def validate_value(key: str, setting_type: str, value: Any) -> Any:
+    """
+    Check `value` against the constraints declared for `key` and return it
+    coerced to the setting's type. Raises ValueError on a bad value.
+    """
+    allowed = get_allowed_values(key)
+    if allowed is not None:
+        valid = [opt["value"] for opt in allowed]
+        if str(value) not in valid:
+            raise ValueError(
+                f"Invalid value for {key}: must be one of {', '.join(valid)}"
             )
-            setting.set_value(config["value"])
+
+    if setting_type == "int":
+        if isinstance(value, bool) or value is None:
+            raise ValueError(f"Invalid value for {key}: must be an integer")
+        if isinstance(value, float) and not value.is_integer():
+            raise ValueError(f"Invalid value for {key}: must be an integer")
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid value for {key}: must be an integer")
+        minimum = get_min_value(key)
+        if minimum is not None and value < minimum:
+            raise ValueError(f"Invalid value for {key}: must be at least {minimum}")
+        maximum = get_max_value(key)
+        if maximum is not None and value > maximum:
+            raise ValueError(f"Invalid value for {key}: must be at most {maximum}")
+
+    elif setting_type == "bool":
+        if not isinstance(value, bool):
+            raise ValueError(f"Invalid value for {key}: must be true or false")
+
+    elif setting_type == "schedule":
+        from . import schedules
+        try:
+            value = schedules.validate(value, get_min_value(key) or 1, get_max_value(key))
+        except ValueError as e:
+            raise ValueError(f"Invalid value for {key}: {e}")
+
+    return value
+
+
+def ensure_defaults(session: Session) -> None:
+    """Create the rows of declared settings that don't have one yet. Commits."""
+    for key, spec in DEFAULT_SETTINGS.items():
+        if session.get(Setting, key) is None:
+            setting = Setting(key=key, type=spec["type"], description=spec["description"])
+            setting.set_value(spec["value"])
             session.add(setting)
-            logger.debug(f"Created default setting: {key} = {config['value']}")
-    
+            logger.debug("Created default setting: %s = %r", key, spec["value"])
     session.commit()
 
 
 def get_setting(session: Session, key: str, default: Any = None) -> Any:
     """
-    Get a setting value by key.
-    Returns typed value (int, bool, str, etc).
+    A setting's typed value (int, bool, str, schedule dict...). A declared
+    setting without a row yet gives its built-in default; an unknown key
+    gives `default`.
     """
     setting = session.get(Setting, key)
-    if not setting:
-        # Check if it's a default setting
-        if key in DEFAULT_SETTINGS:
-            return DEFAULT_SETTINGS[key]["value"]
-        return default
-    
+    if setting is None:
+        return _spec(key).get("value", default)
     return setting.get_typed_value()
+
+
+def feature_enabled(session: Session, name: str) -> bool:
+    """Whether the features.<name>_enabled flag is on (charts, lyrics, genres)."""
+    return bool(get_setting(session, f"features.{name}_enabled"))
 
 
 def set_setting(
@@ -109,70 +403,43 @@ def set_setting(
     key: str,
     value: Any,
     user_id: Optional[int] = None,
+    commit: bool = True,
 ) -> Setting:
     """
-    Update or create a setting.
-    
-    Args:
-        session: Database session
-        key: Setting key
-        value: New value (will be type-converted based on setting type)
-        user_id: User making the change (for audit)
-    
-    Returns:
-        Updated Setting instance
+    Validate and store a declared setting. Raises ValueError for an unknown
+    key or a bad value. Callers batching several changes in one transaction
+    pass commit=False.
     """
+    spec = _spec(key)
+    if not spec:
+        raise ValueError(f"Unknown setting: {key}")
+    value = validate_value(key, spec["type"], value)
+
     setting = session.get(Setting, key)
-    
-    if not setting:
-        # Create new setting
-        setting = Setting(
-            key=key,
-            type="string",  # Default type
-            updated_at=now_utc(),
-            updated_by=user_id,
-        )
-        
-        # Use default type if available
-        if key in DEFAULT_SETTINGS:
-            setting.type = DEFAULT_SETTINGS[key]["type"]
-            setting.description = DEFAULT_SETTINGS[key]["description"]
-        
+    if setting is None:
+        setting = Setting(key=key, type=spec["type"], description=spec["description"])
         session.add(setting)
-    
     setting.set_value(value)
     setting.updated_at = now_utc()
     setting.updated_by = user_id
-    
-    session.add(setting)
-    session.commit()
-    session.refresh(setting)
-    
-    logger.info(f"Setting updated: {key} = {value} (by user {user_id})")
-    
+    if commit:
+        session.commit()
+
+    logger.info("Setting updated: %s = %r (by user %s)", key, value, user_id)
     return setting
 
 
 def get_all_settings(session: Session) -> List[Dict[str, Any]]:
-    """Get all settings as list of dicts"""
-    stmt = select(Setting).order_by(Setting.key)
-    settings = session.execute(stmt).scalars().all()
-    return [s.to_dict() for s in settings]
-
-
-def delete_setting(session: Session, key: str) -> bool:
     """
-    Delete a setting (resets to default if it's a default setting).
-    
-    Returns:
-        True if deleted, False if not found
+    The settings as dicts, for the settings panel: internal bookkeeping keys
+    and settings moot under the current sign-in configuration left out.
     """
-    setting = session.get(Setting, key)
-    if not setting:
-        return False
-    
-    session.delete(setting)
-    session.commit()
-    
-    logger.info(f"Setting deleted: {key}")
-    return True
+    settings = session.execute(select(Setting)).scalars().all()
+    # In the order they're declared above, which keeps related settings
+    # together (each schedule next to the others); unknown keys last
+    declared = {key: i for i, key in enumerate(DEFAULT_SETTINGS)}
+    settings = sorted(settings, key=lambda s: (declared.get(s.key, len(declared)), s.key))
+    return [
+        s.to_dict() for s in settings
+        if not is_internal(s.key) and is_applicable(s.key)
+    ]

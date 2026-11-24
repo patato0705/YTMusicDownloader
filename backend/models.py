@@ -1,23 +1,30 @@
 # backend/models.py
 from __future__ import annotations
 import datetime
+import json
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey
-from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+from sqlalchemy import MetaData, String, Integer, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
+from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from backend.time_utils import now_utc
+from .time_utils import now_utc, ensure_timezone_aware
 
-logger = __import__("logging").getLogger("models")
 
-# Declarative base (SQLAlchemy 2.0)
+# Gives every constraint a predictable name, so a migration can drop or
+# change one by name (SQLite leaves unnamed ones nameless, and a migration
+# can't refer to those). "ix" is SQLAlchemy's default, kept as it was.
+NAMING_CONVENTION = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_N_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
+
 class Base(DeclarativeBase):
-    pass
-
-
-# JSON column alias (SQLite uses its dialect JSON)
-JSONCol = SQLiteJSON
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
 class Artist(Base):
@@ -25,9 +32,21 @@ class Artist(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    thumbnails: Mapped[Optional[List[Any]]] = mapped_column(JSONCol, nullable=True)
+    # Its folder in MUSIC_DIR, picked once when its first file is written so
+    # a later name change never splits its files (see services/folders.py)
+    folder: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Square picture (folder.jpg), shown round in the app; the wide banner of
+    # the YouTube Music artist page (backdrop.jpg) is only for media servers
     image_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
-    followed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # CHANGED from monitored
+    banner_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Genres (see services/genres.py): the artist's own, used for albums the
+    # genre sources know nothing specific about. The ids are this artist on
+    # each source, matched once and reused by later lookups.
+    genres: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    musicbrainz_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    deezer_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    genres_checked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
     # relationship: Artist -> Album
@@ -37,22 +56,13 @@ class Artist(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-
-    def to_dict(self) -> Dict[str, Any]:
-        thumbs = getattr(self, "thumbnails", None) or []
-        image_local = getattr(self, "image_local", None)
-        followed = bool(getattr(self, "followed", False))  # CHANGED from monitored
-        created_at_val = getattr(self, "created_at", None)
-        created_at = created_at_val.isoformat() if created_at_val is not None else None
-
-        return {
-            "id": getattr(self, "id", None),
-            "name": getattr(self, "name", None),
-            "thumbnails": thumbs,
-            "image_local": image_local,
-            "followed": followed,  # CHANGED from monitored
-            "created_at": created_at,
-        }
+    # Its "Fans might also like" (see services/recommendations.py). Deleted
+    # with the artist by the database (ON DELETE CASCADE).
+    related: Mapped[List["RelatedArtist"]] = relationship(
+        "RelatedArtist",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def __repr__(self) -> str:
         return f"<Artist id={self.id!r} name={self.name!r}>"
@@ -63,6 +73,8 @@ class Album(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    # Its folder inside its artist's, picked once like Artist.folder
+    folder: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     artist_id: Mapped[Optional[str]] = mapped_column(
         String(64),
@@ -70,10 +82,32 @@ class Album(Base):
         nullable=True,
         index=True,
     )
-    thumbnails: Mapped[Optional[List[Any]]] = mapped_column(JSONCol, nullable=True)
     playlist_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     year: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     image_local: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+    # The picture image_local holds (normalizers.image_id): a cover YouTube
+    # Music changed is told by it (albums.ensure_album_cover)
+    cover_id: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    # Whether its artist's page listed it at its last sync. One that was and
+    # no longer is was replaced (a reissue under a new id) or removed from
+    # YouTube Music, or neither (services/reissues.py)
+    on_artist_page: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # When YouTube Music stopped serving it, with nothing in its place. Its
+    # files stay; nothing more is downloaded for it. None again once its page
+    # opens (a refresh, albums.fetch_and_upsert_album)
+    removed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Up to 3 genres (services/genres.py): the album's own, else its artist's
+    genres: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    genres_checked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # What the library does with it, and its download progress (see services/subscriptions.py)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="metadata")  # "metadata" or "download"
+    download_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default=None)
+    # When its tracklist was last read from YouTube Music (import_album),
+    # successfully or not (last_error); read again once ALBUM_REFRESH_INTERVAL old
+    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
     # relationships
     artist: Mapped[Optional[Artist]] = relationship("Artist", back_populates="albums")
@@ -83,18 +117,6 @@ class Album(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-
-    def to_dict(self) -> Dict[str, Any]:
-        thumbs = getattr(self, "thumbnails", None) or []
-        return {
-            "id": getattr(self, "id", None),
-            "title": getattr(self, "title", None),
-            "artist_id": getattr(self, "artist_id", None),
-            "thumbnails": thumbs,
-            "playlist_id": getattr(self, "playlist_id", None),
-            "year": getattr(self, "year", None),
-            "image_local": getattr(self, "image_local", None),
-        }
 
     def __repr__(self) -> str:
         return f"<Album id={self.id!r} title={self.title!r}>"
@@ -106,40 +128,52 @@ class Track(Base):
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     title: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
     duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    artists: Mapped[Optional[List[Dict[str, Optional[str]]]]] = mapped_column(JSONCol, nullable=True)
+    artists: Mapped[Optional[List[Dict[str, Optional[str]]]]] = mapped_column(JSON, nullable=True)
     album_id: Mapped[Optional[str]] = mapped_column(
         String(64),
         ForeignKey("albums.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    track_number: Mapped[int] = mapped_column(Integer, nullable=True)
-    has_lyrics: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    track_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # synced | plain (a .lrc at lyrics_local) | instrumental (LRCLIB says there
+    # are no lyrics; no file) | None (not found yet, retried by the scheduler)
+    lyrics: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, default=None)
     lyrics_local: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    # When the scheduler last queued a lyrics recovery/upgrade for this track.
+    # Its sweeps take the oldest first, so every track gets a turn.
+    lyrics_retried_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     file_path: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
-    status: Mapped[str] = mapped_column(String(64), default="new", nullable=False)
+    # Audio file size in bytes, recorded when the download completes so the
+    # library stats can sum real sizes instead of guessing.
+    file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # available | queued | downloading | done | failed -- see services/tracks.py
+    status: Mapped[str] = mapped_column(String(64), default="available", nullable=False)
+    # Why the download last failed. Jobs carry the same message but get
+    # cleaned up; this one stays with the track until a later attempt clears it.
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     artist_valid: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # When YouTube Music stopped listing it in its album (an album refresh,
+    # services/albums.py). Its file stays; it's never downloaded again, and
+    # only counts in its album when on disk. None again if it comes back.
+    removed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
     album: Mapped[Optional[Album]] = relationship("Album", back_populates="tracks")
 
     def to_dict(self) -> Dict[str, Any]:
-        artists_val = getattr(self, "artists", None) or []
-        created_at_val = getattr(self, "created_at", None)
-        created_at_iso = created_at_val.isoformat() if isinstance(created_at_val, datetime.datetime) else None
-
         return {
-            "id": getattr(self, "id", None),
-            "title": getattr(self, "title", None),
-            "duration": getattr(self, "duration", None),
-            "artists": artists_val,
-            "album_id": getattr(self, "album_id", None),
-            "has_lyrics": bool(getattr(self, "has_lyrics", False)),
-            "lyrics_local": getattr(self, "lyrics_local", None),
-            "file_path": getattr(self, "file_path", None),
-            "status": getattr(self, "status", None),
-            "artist_valid": bool(getattr(self, "artist_valid", True)),
-            "created_at": created_at_iso,
+            "id": self.id,
+            "title": self.title,
+            "artists": self.artists or [],
+            "album_id": self.album_id,
+            "track_number": self.track_number,
+            "duration": self.duration,
+            "status": self.status,
+            "last_error": self.last_error,
+            "lyrics": self.lyrics,
+            "lyrics_local": self.lyrics_local,
+            "removed_at": self.removed_at.isoformat() if self.removed_at else None,
         }
 
     def __repr__(self) -> str:
@@ -151,7 +185,7 @@ class Job(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    payload: Mapped[Optional[Any]] = mapped_column(JSONCol, nullable=True)
+    payload: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued", index=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
@@ -160,10 +194,14 @@ class Job(Base):
     started_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    result: Mapped[Optional[Any]] = mapped_column(JSONCol, nullable=True)
+    result: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     reserved_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    
+    # Touched periodically by the worker holding the job; a "reserved" job
+    # whose heartbeat has gone stale belongs to a dead worker and gets
+    # requeued (see jobqueue.reclaim_orphaned_jobs).
+    heartbeat_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Who asked for it, when a user did (jobs queued by other jobs or the scheduler have none)
     user_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -171,90 +209,311 @@ class Job(Base):
         index=True,
     )
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": getattr(self, "id", None),
-            "type": getattr(self, "type", None),
-            "payload": getattr(self, "payload", None) or {},
-            "status": getattr(self, "status", None),
-            "attempts": getattr(self, "attempts", 0),
-            "max_attempts": getattr(self, "max_attempts", 0),
-            "priority": getattr(self, "priority", 0),
-            "scheduled_at": scheduled.isoformat() if (scheduled := getattr(self, "scheduled_at", None)) else None,
-            "started_at": started.isoformat() if (started := getattr(self, "started_at", None)) else None,
-            "finished_at": finished.isoformat() if (finished := getattr(self, "finished_at", None)) else None,
-            "last_error": getattr(self, "last_error", None),
-            "result": getattr(self, "result", None),
-            "created_at": created.isoformat() if (created := getattr(self, "created_at", None)) else None,
-            "reserved_by": getattr(self, "reserved_by", None),
-            "user_id": getattr(self, "user_id", None),  # NEW
-        }
-
 
 # Subscriptions
+
 class ArtistSubscription(Base):
     __tablename__ = "artist_subscriptions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
     artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), nullable=False, index=True)
-    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="full")
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="full")  # "light" or "full"
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Followed in full by a chart sync rather than by someone: the charts
+    # unfollow it once it's been out of them long enough (services/charts.py)
+    chart_followed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Not read anywhere: it tells the ORM to write the artist before its
+    # subscription (and delete in the reverse order), which it otherwise
+    # doesn't guarantee within one flush
+    artist: Mapped["Artist"] = relationship("Artist")
 
-class AlbumSubscription(Base):
-    __tablename__ = "album_subscriptions"
+
+# Playlists (see services/playlists.py)
+
+class Playlist(Base):
+    """
+    A YouTube Music playlist added to the library: what its songs bring in
+    (their albums, or their main artists), whether it's rescanned on a
+    schedule (followed) or kept as added (once), and whether it's written
+    out as an M3U file.
+    """
+    __tablename__ = "playlists"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # YouTube Music playlist id
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    author: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    thumbnail: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="albums")  # "albums" or "artists"
+    followed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    m3u: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # File name in MUSIC_DIR/Playlists, picked once so a title change or a
+    # namesake playlist never moves or overwrites it
+    m3u_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Songs found in the library at the last M3U refresh (written or not)
+    available_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    created_by: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # In playlist order. Deleted with the playlist by the database (ON DELETE CASCADE).
+    entries: Mapped[List["PlaylistEntry"]] = relationship(
+        "PlaylistEntry",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="PlaylistEntry.position",
+    )
+
+
+class PlaylistEntry(Base):
+    """
+    One song of a playlist, as YouTube Music lists it. Its video id is often
+    not the id of the album track downloaded for it, hence the title, artist
+    and album kept to find that track (services/playlists.resolve_entries).
+    """
+    __tablename__ = "playlist_entries"
+
+    playlist_id: Mapped[str] = mapped_column(String(64), ForeignKey("playlists.id", ondelete="CASCADE"), primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    video_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(1024), nullable=False)
+    artist_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # main artist
+    artist_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    album_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    album_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+class Exclusion(Base):
+    """
+    An artist or album kept out of the library: nothing automatic (charts,
+    playlist scans, artist syncs, backup imports) brings it back. Following
+    the artist or downloading the album by hand lifts it, and so does
+    Restore in the library (see services/exclusions.py).
+
+    reason, for an artist:
+      - "deleted": deleted from the library, its albums included (a playlist
+        scan doesn't download them either)
+      - "unfollowed": unfollowed, so not followed again by a chart or a
+        playlist; its albums can still come in on their own
+    and for an album (its row stays, metadata-only, unless its artist went
+    too): "deleted" on its own, or "artist_deleted" with its artist.
+
+    The name (and an album's artist) is kept to list it: a deleted artist
+    has no row left.
+    """
+    __tablename__ = "exclusions"
+
+    kind: Mapped[str] = mapped_column(String(8), primary_key=True)  # "artist" or "album"
+    item_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    reason: Mapped[str] = mapped_column(String(16), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    artist_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    artist_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
+class UserChannel(Base):
+    """
+    A YouTube user's channel met where an artist was expected (what an
+    upload credits; adapter.get_artist's "channel"): never followed
+    (subscriptions.follow_artist). Forgotten if its page turns out to be an
+    artist's after all (services/artists.note_channel).
+    """
+    __tablename__ = "user_channels"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
+class VideoSong(Base):
+    """
+    The song of a music video seen in a playlist (a video has no album, its
+    song does), as adapter.find_song found it: song_id None when it found
+    none, looked for again once checked_at is old enough
+    (services/playlists.VIDEO_SONG_RETRY).
+    """
+    __tablename__ = "video_songs"
+
+    video_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    song_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    song_title: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    album_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    album_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    checked_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
+# Recommendations (see services/recommendations.py)
+
+class RelatedArtist(Base):
+    """
+    One of an artist's similar artists ("Fans might also like" on YouTube
+    Music), as of its last fetch. The similar artist usually isn't in the
+    library, hence its name and thumbnail kept here.
+    """
+    __tablename__ = "related_artists"
+
+    artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True)
+    related_id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    thumbnail: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)  # 0 = most similar
+
+
+class DismissedRecommendation(Base):
+    """
+    An artist a user marked "not interested": never recommended to them
+    again, until restored. Deleted with the user by the database.
+    """
+    __tablename__ = "dismissed_recommendations"
+
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    artist_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Kept to list it, as the artist usually isn't in the library
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    thumbnail: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    dismissed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+    # Write order only, like ArtistSubscription.artist (a backup import
+    # creates users and their dismissals in one flush)
+    user: Mapped["User"] = relationship("User")
+
+
+class ArtistLike(Base):
+    """
+    An artist of the library a user likes: their recommendations are drawn
+    from these. Personal, unlike follows, which are the library's. Deleted
+    with the artist or the user by the database.
+    """
+    __tablename__ = "artist_likes"
+
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    artist_id: Mapped[str] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True, index=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+    # Write order only, like ArtistSubscription.artist
+    user: Mapped["User"] = relationship("User")
+    artist: Mapped["Artist"] = relationship("Artist")
+
+
+# Charts
+
+class ChartSubscription(Base):
+    """
+    Chart subscriptions - tracks which country charts to sync weekly.
+    Auto-follows top N artists from the chart.
+    """
+    __tablename__ = "chart_subscriptions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    album_id: Mapped[str] = mapped_column(String(64), ForeignKey("albums.id", ondelete="CASCADE"), nullable=False, index=True)
-    artist_id: Mapped[Optional[str]] = mapped_column(String(64), ForeignKey("artists.id", ondelete="CASCADE"), nullable=True, index=True)
-    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="download")
+    country_code: Mapped[str] = mapped_column(String(2), unique=True, nullable=False, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    top_n_artists: Mapped[int] = mapped_column(Integer, nullable=False, default=10)  # 1-40
+    # The artists it followed are unfollowed once out of its top N for this
+    # many weeks (services/charts.py); None: never
+    keep_weeks: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    created_by: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     last_synced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    download_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default="idle")
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<ChartSubscription country={self.country_code} top_n={self.top_n_artists} enabled={self.enabled}>"
+
+
+class ChartSighting(Base):
+    """
+    When a chart last listed an artist in its top N: what decides whether
+    the artists the charts followed are still in them. Deleted with the
+    chart by the database.
+    """
+    __tablename__ = "chart_sightings"
+
+    country_code: Mapped[str] = mapped_column(
+        String(2), ForeignKey("chart_subscriptions.country_code", ondelete="CASCADE"), primary_key=True,
+    )
+    artist_id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    last_seen_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 # Authentication
 
 class User(Base):
     __tablename__ = "users"
+    # AUTOINCREMENT: SQLite would otherwise give the id of the most recently
+    # created user, once deleted, to the next one created
+    __table_args__ = (UniqueConstraint("oidc_issuer", "oidc_subject"), {"sqlite_autoincrement": True})
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # NOCASE: equality and the unique index are case-insensitive (ASCII), so
+    # "Admin" and "admin" are the same account at the DB level
+    username: Mapped[str] = mapped_column(String(64, collation="NOCASE"), unique=True, nullable=False, index=True)
+    # None for single sign-on accounts (until given one by the recovery CLI)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Single sign-on identity: accounts are matched on these, never on names
+    oidc_issuer: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    oidc_subject: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")  # administrator, member, visitor
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Set for the first admin and on password resets (temporary password);
+    # the frontend sends the user to the change-password page until cleared
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     last_login_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Access and device tokens issued before this are rejected (set when the
+    # password changes, see services/auth.change_password). Whole seconds,
+    # like JWT "iat".
+    tokens_valid_after: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the welcome tour was closed: it opens at the first sign-in until
+    # then, once per account (not per browser), whatever the role becomes
+    onboarding_seen_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Return user data (excluding password)"""
-        created = getattr(self, "created_at", None)
-        last_login = getattr(self, "last_login_at", None)
-        
-        return {
-            "id": getattr(self, "id", None),
-            "username": getattr(self, "username", None),
-            "email": getattr(self, "email", None),
-            "role": getattr(self, "role", "member"),
-            "is_active": bool(getattr(self, "is_active", True)),
-            "created_at": created.isoformat() if created else None,
-            "last_login_at": last_login.isoformat() if last_login else None,
-        }
+    @property
+    def onboarding_seen(self) -> bool:
+        return self.onboarding_seen_at is not None
+
+    @property
+    def has_password(self) -> bool:
+        return bool(self.password_hash)
+
+    @property
+    def is_oidc(self) -> bool:
+        return bool(self.oidc_subject)
 
     def __repr__(self) -> str:
         return f"<User id={self.id} username={self.username!r} role={self.role}>"
 
 
 class RefreshToken(Base):
+    """
+    One refresh token of a sign-in. Each refresh replaces it with a new one
+    of the same family (the sign-in); see services/auth.rotate_refresh_token.
+    """
     __tablename__ = "refresh_tokens"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    token: Mapped[str] = mapped_column(String(512), unique=True, nullable=False, index=True)
+    # SHA-256 of the token, never the token itself: a copy of the database
+    # mustn't hold working sessions
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    family_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    # When a refresh replaced it, and with which token. Presented again
+    # after that (past a few seconds' grace) while its replacement has been
+    # used too, it's a stolen copy: the whole family is revoked.
+    replaced_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Indexed: every deleted token (the daily expiry sweep) is looked up here for SET NULL
+    replaced_by_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("refresh_tokens.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
     user_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -266,10 +525,8 @@ class RefreshToken(Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     def is_valid(self) -> bool:
-        """Check if token is still valid"""
-        if self.revoked:
-            return False
-        return now_utc() < self.expires_at
+        """Not revoked and not expired"""
+        return not self.revoked and now_utc() < ensure_timezone_aware(self.expires_at)
 
     def __repr__(self) -> str:
         return f"<RefreshToken id={self.id} user_id={self.user_id} revoked={self.revoked}>"
@@ -286,7 +543,7 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(String(128), primary_key=True)
     value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    type: Mapped[str] = mapped_column(String(32), nullable=False, default="string")  # string, int, bool, json
+    type: Mapped[str] = mapped_column(String(32), nullable=False, default="string")  # string, int, bool, schedule (stored as JSON)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
     updated_by: Mapped[Optional[int]] = mapped_column(
@@ -296,49 +553,38 @@ class Setting(Base):
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        updated = getattr(self, "updated_at", None)
         return {
-            "key": getattr(self, "key", None),
+            "key": self.key,
             "value": self.get_typed_value(),
-            "type": getattr(self, "type", "string"),
-            "description": getattr(self, "description", None),
-            "updated_at": updated.isoformat() if updated else None,
-            "updated_by": getattr(self, "updated_by", None),
+            "type": self.type,
+            "description": self.description,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "updated_by": self.updated_by,
         }
-    
+
     def get_typed_value(self) -> Any:
-        """Return value with proper type conversion"""
-        value = getattr(self, "value", None)
-        setting_type = getattr(self, "type", "string")
-        
-        if value is None:
+        """The stored text as its setting type (None when unparseable)"""
+        if self.value is None:
             return None
-        
-        if setting_type == "int":
+        if self.type == "int":
             try:
-                return int(value)
-            except (ValueError, TypeError):
+                return int(self.value)
+            except ValueError:
                 return None
-        
-        elif setting_type == "bool":
-            return value.lower() in ("true", "1", "yes", "on")
-        
-        elif setting_type == "json":
+        if self.type == "bool":
+            return self.value.lower() in ("true", "1", "yes", "on")
+        if self.type == "schedule":
             try:
-                import json
-                return json.loads(value)
-            except Exception:
+                return json.loads(self.value)
+            except ValueError:
                 return None
-        
-        else:  # string
-            return value
-    
+        return self.value
+
     def set_value(self, value: Any) -> None:
-        """Set value with type conversion to string"""
+        """Store value as text, according to the setting type"""
         if value is None:
             self.value = None
-        elif self.type == "json":
-            import json
+        elif self.type == "schedule":
             self.value = json.dumps(value)
         elif self.type == "bool":
             self.value = "true" if value else "false"

@@ -6,33 +6,53 @@ Functions:
 - hash_password() - Hash password using bcrypt
 - verify_password() - Verify password against hash
 - create_access_token() - Generate JWT access token
-- create_refresh_token() - Generate and store refresh token
+- refresh_token_lifetime() - How long a sign-in lasts (shorter for single sign-on)
+- create_refresh_token() - Generate and store refresh token (hashed)
 - verify_access_token() - Decode and validate access token
+- rotate_refresh_token() - Use a refresh token: replaced by a new one, replays revoke the sign-in
+- revoke_refresh_family() - Revoke every token of a sign-in
+- create_device_token() / verify_device_token() - Known-browser marker for login throttling
+- token_revoked() - Whether a token predates the user's tokens_valid_after or the account
+- revoke_refresh_token() - Invalidate refresh token (logout)
+- cleanup_expired_tokens() - Remove expired tokens from database
 - authenticate_user() - Verify username/password
 - create_user() - Register new user
 - get_user_by_username() - Fetch user by username
-- get_user_by_email() - Fetch user by email
 - get_user_by_id() - Fetch user by ID
-- refresh_access_token() - Exchange refresh token for new access token
-- revoke_refresh_token() - Invalidate refresh token (logout)
 - update_last_login() - Update user's last_login_at
+- revoke_sessions() - Sign a user out everywhere (but one session)
+- change_password() - Set a new password and sign out the user's other sessions
+- generate_temporary_password() - Random password for resets
+- ensure_first_admin() - Create first admin user on startup
+
+Exceptions:
+- UsernameTakenError - raised by create_user() on conflicts
+  (subclass ValueError so generic handlers keep working)
 """
 from __future__ import annotations
+import functools
+import hashlib
 import logging
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 import bcrypt
 import jwt
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..models import User, RefreshToken
-from ..time_utils import now_utc
+from ..secrets import jwt_secret
+from ..settings import get_setting
+from ..time_utils import now_utc, ensure_timezone_aware
 from .. import config
 
 logger = logging.getLogger("services.auth")
+
+
+class UsernameTakenError(ValueError):
+    """Username is already registered."""
 
 
 # ============================================================================
@@ -43,21 +63,27 @@ def hash_password(password: str) -> str:
     """Hash a password using bcrypt"""
     if not password:
         raise ValueError("Password cannot be empty")
-    
+
     salt = bcrypt.gensalt(rounds=config.BCRYPT_ROUNDS)
     hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
     return hashed.decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    """Verify a password against its hash"""
+    """
+    Verify a password against its hash. Only its first 72 bytes count, as
+    bcrypt has always done: bcrypt 5 raises on longer ones instead, and
+    hashes made with bcrypt 4 (this app until September 2026) are of the
+    first 72 bytes of what was typed. New passwords can't be longer
+    (schemas.auth.NewPassword).
+    """
     if not password or not password_hash:
         return False
-    
+
     try:
-        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+        return bcrypt.checkpw(password.encode("utf-8")[:72], password_hash.encode("utf-8"))
     except Exception as e:
-        logger.exception(f"Password verification failed: {e}")
+        logger.exception("Password verification failed: %s", e)
         return False
 
 
@@ -65,175 +91,270 @@ def verify_password(password: str, password_hash: str) -> bool:
 # JWT TOKEN MANAGEMENT
 # ============================================================================
 
-def create_access_token(user_id: int, username: str, role: str) -> str:
+def create_access_token(user: User) -> str:
     """
-    Create a JWT access token.
-    
+    Create a JWT access token for the user.
+
     Payload:
-    - sub: user_id
-    - username: username
-    - role: user role
+    - sub: user id
+    - typ: "access" (so other tokens signed with the same key, like device
+      tokens, can't be used as one)
     - exp: expiration timestamp
-    - iat: issued at timestamp
+    - iat: issued at timestamp (checked against token_revoked())
     """
     now = now_utc()
-    expires = now + timedelta(minutes=config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-    
     payload = {
-        "sub": str(user_id),
-        "username": username,
-        "role": role,
-        "exp": expires,
+        "sub": str(user.id),
+        "typ": "access",
+        "exp": now + timedelta(minutes=config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES),
         "iat": now,
     }
-    
-    token = jwt.encode(payload, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
-    return token
+    return jwt.encode(payload, jwt_secret(), algorithm=config.JWT_ALGORITHM)
 
 
 def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
     """
     Decode and verify JWT access token.
-    
+
     Returns:
-        Payload dict with user_id, username, role if valid
-        None if invalid/expired
+        {"user_id", "issued_at"} if valid, None if invalid/expired
+
+    Callers must still reject it if token_revoked() says so (needs the user).
     """
     try:
-        payload = jwt.decode(
-            token,
-            config.JWT_SECRET_KEY,
-            algorithms=[config.JWT_ALGORITHM]
-        )
-        
-        return {
-            "user_id": int(payload["sub"]),
-            "username": payload["username"],
-            "role": payload["role"],
-        }
+        payload = jwt.decode(token, jwt_secret(), algorithms=[config.JWT_ALGORITHM])
+        if payload.get("typ") != "access":
+            logger.debug("Token is not an access token")
+            return None
+        return {"user_id": int(payload["sub"]), "issued_at": int(payload["iat"])}
     except jwt.ExpiredSignatureError:
         logger.debug("Access token expired")
-        return None
-    except jwt.InvalidTokenError as e:
-        logger.debug(f"Invalid access token: {e}")
-        return None
-    except Exception as e:
-        logger.exception(f"Token verification error: {e}")
-        return None
+    except (jwt.InvalidTokenError, KeyError, ValueError, TypeError) as e:
+        logger.debug("Invalid access token: %s", e)
+    return None
 
 
-def create_refresh_token(session: Session, user_id: int) -> str:
+def create_device_token(user_id: int) -> str:
     """
-    Create and store a refresh token in the database.
-    
+    Create a device token: proof that this browser has signed in to this
+    account before. It authenticates nothing; login uses it to give known
+    browsers their own failed-attempt allowance (see services/login_throttle).
+
+    Payload:
+    - sub: user_id
+    - jti: random id, the browser's throttling bucket
+    - typ: "device"
+    - exp: expiration timestamp
+    - iat: issued at timestamp (checked against token_revoked())
+    """
+    now = now_utc()
+    payload = {
+        "sub": str(user_id),
+        "jti": secrets.token_urlsafe(16),
+        "typ": "device",
+        "exp": now + timedelta(days=config.DEVICE_TOKEN_EXPIRE_DAYS),
+        "iat": now,
+    }
+    return jwt.encode(payload, jwt_secret(), algorithm=config.JWT_ALGORITHM)
+
+
+def verify_device_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Decode a device token.
+
+    Returns:
+        {"user_id", "jti", "issued_at"} if valid
+        None if invalid/expired/not a device token
+
+    Callers must still reject it if token_revoked() says so (needs the user).
+    """
+    try:
+        payload = jwt.decode(token, jwt_secret(), algorithms=[config.JWT_ALGORITHM])
+        if payload.get("typ") != "device":
+            return None
+        return {"user_id": int(payload["sub"]), "jti": str(payload["jti"]), "issued_at": int(payload["iat"])}
+    except (jwt.InvalidTokenError, KeyError, ValueError, TypeError):
+        return None
+
+
+def token_revoked(user: User, issued_at: int) -> bool:
+    """
+    True if a token issued at `issued_at` (JWT "iat", whole seconds) was
+    issued before the user's tokens_valid_after, or before the account
+    itself was created: then it was issued to a deleted account whose id
+    this one reuses. A token from the very second of the cutoff is still
+    accepted: "iat" can't tell before from after within it.
+    """
+    for cutoff in (user.tokens_valid_after, user.created_at):
+        cutoff = ensure_timezone_aware(cutoff)
+        if cutoff is not None and issued_at < int(cutoff.timestamp()):
+            return True
+    return False
+
+
+# How long a refresh token that was just replaced still works: two tabs
+# refreshing at once both send it, and only the first one rotates it
+REFRESH_REUSE_GRACE = timedelta(seconds=30)
+
+
+def _hash_token(token: str) -> str:
+    """
+    What the database keeps of a refresh token. A plain hash is enough: the
+    token is 64 random bytes, nothing to guess, unlike a password.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _find_refresh_token(session: Session, token: str) -> Optional[RefreshToken]:
+    stmt = select(RefreshToken).where(RefreshToken.token_hash == _hash_token(token))
+    return session.execute(stmt).scalars().first()
+
+
+def refresh_token_lifetime(session: Session, user: User) -> timedelta:
+    """
+    How long a sign-in lasts before signing in again. Shorter for single
+    sign-on accounts (auth.oidc_session_hours): the provider's role changes
+    and deactivations only reach this app when they sign in.
+    """
+    if user.is_oidc:
+        return timedelta(hours=get_setting(session, "auth.oidc_session_hours"))
+    return timedelta(days=config.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+
+
+def create_refresh_token(session: Session, user_id: int, expires_at: datetime) -> str:
+    """
+    Create and store the refresh token of a new sign-in, which starts a
+    family (only its hash is stored). Commits.
+
     Returns:
         Refresh token string
     """
-    token = secrets.token_urlsafe(64)
-    expires = now_utc() + timedelta(days=config.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
-    
-    refresh_token = RefreshToken(
-        token=token,
-        user_id=user_id,
-        expires_at=expires,
-        created_at=now_utc(),
-        revoked=False,
-    )
-    
-    session.add(refresh_token)
+    _, token = _add_refresh_token(session, user_id, expires_at, None)
     session.commit()
-    session.refresh(refresh_token)
-    
-    logger.debug(f"Created refresh token for user {user_id}")
+    logger.debug("Created refresh token for user %s", user_id)
     return token
 
 
-def verify_refresh_token(session: Session, token: str) -> Optional[User]:
+def _add_refresh_token(
+    session: Session, user_id: int, expires_at: datetime, family_id: Optional[str],
+) -> Tuple[RefreshToken, str]:
+    """A new refresh token's row (flushed, so it has an id) and the token. Doesn't commit."""
+    token = secrets.token_urlsafe(64)
+    row = RefreshToken(
+        token_hash=_hash_token(token),
+        family_id=family_id or secrets.token_hex(16),
+        user_id=user_id,
+        expires_at=expires_at,
+        created_at=now_utc(),
+        revoked=False,
+    )
+    session.add(row)
+    session.flush()
+    return row, token
+
+
+def rotate_refresh_token(session: Session, token: str) -> Optional[Tuple[User, Optional[str], datetime]]:
     """
-    Verify refresh token and return associated user.
-    
+    Use a refresh token: it's replaced by a new one of the same sign-in,
+    expiring at the same time (a sign-in never outlives its first
+    lifetime). Commits.
+
+    A token already replaced is accepted without a new one for
+    REFRESH_REUSE_GRACE (another tab got there first and the browser
+    already holds its replacement). Past that, it depends on its
+    replacement:
+    - never used: most likely the response carrying it never reached the
+      browser (network drop, tab closed). The token is replaced again, and
+      the unused replacement is marked replaced. Should this have been a
+      thief replaying an old copy, the owner presenting that replacement
+      later lands in the case below.
+    - used: two parties hold tokens of this sign-in, one of them stolen.
+      The whole sign-in is revoked, the thief's and the owner's alike.
+
     Returns:
-        User instance if valid
-        None if invalid/expired/revoked
+        (user, the new token, when the sign-in expires) when valid; no new
+        token within the grace period
+        None if invalid/expired/revoked, or replayed
     """
-    stmt = select(RefreshToken).where(RefreshToken.token == token)
-    refresh_token = session.execute(stmt).scalars().first()
-    
-    if not refresh_token:
-        logger.debug("Refresh token not found")
+    refresh_token = _find_refresh_token(session, token)
+    if not refresh_token or not refresh_token.is_valid():
+        logger.debug("Refresh token unknown, revoked or expired")
         return None
-    
-    if not refresh_token.is_valid():
-        logger.debug("Refresh token invalid or expired")
-        return None
-    
-    # Get associated user
+
     user = session.get(User, refresh_token.user_id)
     if not user or not user.is_active:
-        logger.debug(f"User {refresh_token.user_id} not found or inactive")
+        logger.debug("User %s not found or inactive", refresh_token.user_id)
         return None
-    
-    return user
+
+    now = now_utc()
+    expires_at = ensure_timezone_aware(refresh_token.expires_at)
+    if refresh_token.replaced_at is not None:
+        if now - ensure_timezone_aware(refresh_token.replaced_at) <= REFRESH_REUSE_GRACE:
+            return user, None, expires_at
+        successor = session.get(RefreshToken, refresh_token.replaced_by_id) if refresh_token.replaced_by_id else None
+        if successor is None or successor.replaced_at is not None or not successor.is_valid():
+            revoked = revoke_refresh_family(session, refresh_token.family_id)
+            session.commit()
+            logger.warning(
+                "A replaced refresh token of user %s was used again: possible theft, signed out that session (%s token(s))",
+                user.username, revoked,
+            )
+            return None
+        # Never used: superseded, with nothing to point to (so presenting
+        # it later counts as the reuse above)
+        logger.info("Refresh token of user %s replaced again: its replacement was never used", user.username)
+        successor.replaced_at = now
+
+    row, new_token = _add_refresh_token(session, user.id, expires_at, refresh_token.family_id)
+    refresh_token.replaced_at = now
+    refresh_token.replaced_by_id = row.id
+    session.commit()
+    return user, new_token, expires_at
+
+
+def revoke_refresh_family(session: Session, family_id: str) -> int:
+    """Revoke every token of a sign-in. Doesn't commit. Returns how many were still valid."""
+    stmt = select(RefreshToken).where(RefreshToken.family_id == family_id, RefreshToken.revoked.is_(False))
+    tokens = session.execute(stmt).scalars().all()
+    for t in tokens:
+        t.revoked = True
+    return len(tokens)
 
 
 def revoke_refresh_token(session: Session, token: str) -> bool:
     """
-    Revoke a refresh token (logout).
-    
+    Sign out the session a refresh token belongs to (logout): its whole
+    family, older tokens included. Commits.
+
     Returns:
         True if revoked, False if not found
     """
-    stmt = select(RefreshToken).where(RefreshToken.token == token)
-    refresh_token = session.execute(stmt).scalars().first()
-    
+    refresh_token = _find_refresh_token(session, token)
     if not refresh_token:
         return False
-    
-    refresh_token.revoked = True
-    session.add(refresh_token)
+
+    revoke_refresh_family(session, refresh_token.family_id)
     session.commit()
-    
-    logger.info(f"Revoked refresh token for user {refresh_token.user_id}")
+
+    logger.info("Revoked refresh token for user %s", refresh_token.user_id)
     return True
 
 
 def cleanup_expired_tokens(session: Session) -> int:
-    """
-    Delete expired refresh tokens from database.
-    Call periodically to prevent bloat.
-    
-    Returns:
-        Number of tokens deleted
-    """
-    now = now_utc()
-    stmt = select(RefreshToken).where(RefreshToken.expires_at < now)
-    expired_tokens = session.execute(stmt).scalars().all()
-    
-    count = len(expired_tokens)
-    for token in expired_tokens:
-        session.delete(token)
-    
+    """Delete expired refresh tokens. Commits. Returns how many."""
+    deleted = session.execute(delete(RefreshToken).where(RefreshToken.expires_at < now_utc())).rowcount
     session.commit()
-    
-    if count > 0:
-        logger.info(f"Cleaned up {count} expired refresh tokens")
-    
-    return count
+    return deleted
 
 
 # ============================================================================
-# USER MANAGEMENT
+# USER AUTHENTICATION & LOOKUP
 # ============================================================================
 
 def get_user_by_username(session: Session, username: str) -> Optional[User]:
-    """Fetch user by username (case-insensitive)"""
-    stmt = select(User).where(User.username.ilike(username))
-    return session.execute(stmt).scalars().first()
-
-
-def get_user_by_email(session: Session, email: str) -> Optional[User]:
-    """Fetch user by email (case-insensitive)"""
-    stmt = select(User).where(User.email.ilike(email))
+    """Fetch user by username (case-insensitive via the column's NOCASE collation)"""
+    # Plain equality, not ilike: LIKE treats "%" and "_" as wildcards
+    stmt = select(User).where(User.username == username)
     return session.execute(stmt).scalars().first()
 
 
@@ -242,78 +363,45 @@ def get_user_by_id(session: Session, user_id: int) -> Optional[User]:
     return session.get(User, user_id)
 
 
-def create_user(
-    session: Session,
-    username: str,
-    email: str,
-    password: str,
-    role: str = config.ROLE_MEMBER,
-) -> User:
-    """
-    Create a new user.
-    
-    Raises:
-        ValueError if username/email already exists or invalid role
-    """
-    # Validate inputs
-    if not username or not email or not password:
-        raise ValueError("Username, email, and password are required")
-    
-    if role not in config.VALID_ROLES:
-        raise ValueError(f"Invalid role: {role}")
-    
-    # Check for existing username
-    if get_user_by_username(session, username):
-        raise ValueError(f"Username '{username}' already exists")
-    
-    # Check for existing email
-    if get_user_by_email(session, email):
-        raise ValueError(f"Email '{email}' already exists")
-    
-    # Hash password
-    password_hash = hash_password(password)
-    
-    # Create user
-    user = User(
-        username=username,
-        email=email,
-        password_hash=password_hash,
-        role=role,
-        is_active=True,
-        created_at=now_utc(),
-    )
-    
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    
-    logger.info(f"Created user: {username} (role={role})")
-    return user
+@functools.cache
+def _dummy_password_hash() -> str:
+    """A hash no password matches, computed once at the configured cost."""
+    return hash_password(secrets.token_urlsafe(32))
 
 
 def authenticate_user(session: Session, username: str, password: str) -> Optional[User]:
     """
     Authenticate user with username/password.
-    
+
     Returns:
         User instance if valid credentials
         None if invalid
     """
     user = get_user_by_username(session, username)
-    
+
     if not user:
-        logger.debug(f"Authentication failed: user '{username}' not found")
+        # Spend the same bcrypt time as a real check, so response times
+        # don't reveal which usernames exist
+        verify_password(password, _dummy_password_hash())
+        logger.debug("Authentication failed: user '%s' not found", username)
         return None
-    
+
     if not user.is_active:
-        logger.debug(f"Authentication failed: user '{username}' is inactive")
+        verify_password(password, _dummy_password_hash())
+        logger.debug("Authentication failed: user '%s' is inactive", username)
         return None
-    
+
+    if not user.password_hash:
+        # Single sign-on account: same timing as a wrong password
+        verify_password(password, _dummy_password_hash())
+        logger.debug("Authentication failed: '%s' has no password (single sign-on)", username)
+        return None
+
     if not verify_password(password, user.password_hash):
-        logger.debug(f"Authentication failed: invalid password for '{username}'")
+        logger.debug("Authentication failed: invalid password for '%s'", username)
         return None
-    
-    logger.info(f"User '{username}' authenticated successfully")
+
+    logger.info("User '%s' authenticated successfully", username)
     return user
 
 
@@ -326,78 +414,133 @@ def update_last_login(session: Session, user_id: int) -> None:
         session.commit()
 
 
-def update_user_role(session: Session, user_id: int, new_role: str) -> User:
+def revoke_sessions(session: Session, user: User, keep_refresh_token: Optional[str] = None) -> int:
     """
-    Update user's role.
-    
-    Raises:
-        ValueError if user not found or invalid role
-    """
-    if new_role not in config.VALID_ROLES:
-        raise ValueError(f"Invalid role: {new_role}")
-    
-    user = session.get(User, user_id)
-    if not user:
-        raise ValueError(f"User {user_id} not found")
-    
-    user.role = new_role
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    
-    logger.info(f"Updated user {user_id} role to {new_role}")
-    return user
+    Sign the user out everywhere but `keep_refresh_token`'s session: their
+    refresh tokens are revoked, and access/device tokens issued so far stop
+    being accepted (tokens_valid_after). Doesn't commit.
 
-
-def deactivate_user(session: Session, user_id: int) -> User:
+    Returns:
+        Number of refresh tokens revoked
     """
-    Deactivate a user (soft delete).
-    Also revokes all their refresh tokens.
-    """
-    user = session.get(User, user_id)
-    if not user:
-        raise ValueError(f"User {user_id} not found")
-    
-    user.is_active = False
+    user.tokens_valid_after = now_utc().replace(microsecond=0)
     session.add(user)
-    
-    # Revoke all refresh tokens
-    stmt = select(RefreshToken).where(RefreshToken.user_id == user_id)
-    tokens = session.execute(stmt).scalars().all()
-    for token in tokens:
+
+    keep = _find_refresh_token(session, keep_refresh_token) if keep_refresh_token else None
+    stmt = select(RefreshToken).where(
+        RefreshToken.user_id == user.id,
+        RefreshToken.revoked.is_(False),
+    )
+    revoked = 0
+    for token in session.execute(stmt).scalars().all():
+        # The whole family of the kept session: its older tokens stay
+        # recognisable as replaced ones (see rotate_refresh_token)
+        if keep is not None and token.family_id == keep.family_id:
+            continue
         token.revoked = True
         session.add(token)
-    
+        revoked += 1
+    return revoked
+
+
+def change_password(
+    session: Session,
+    user: User,
+    new_password: str,
+    keep_refresh_token: Optional[str] = None,
+    must_change_password: bool = False,
+) -> int:
+    """
+    Set a new password and sign the user out everywhere else: every refresh
+    token but `keep_refresh_token` (the session making the change) is
+    revoked, and access/device tokens issued so far stop being accepted
+    (tokens_valid_after). The caller hands the current session fresh ones.
+
+    Used for resets too (no session kept): pass must_change_password=True
+    when the new password is a temporary one someone else knows.
+
+    Returns:
+        Number of refresh tokens revoked
+    """
+    user.password_hash = hash_password(new_password)
+    user.must_change_password = must_change_password
+    session.add(user)
+    revoked = revoke_sessions(session, user, keep_refresh_token)
+
     session.commit()
     session.refresh(user)
-    
-    logger.info(f"Deactivated user {user_id}")
-    return user
+    return revoked
 
 
-def list_users(
+# No 0/O, 1/l/I: temporary passwords get read out or retyped by hand
+_TEMP_PASSWORD_ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def generate_temporary_password() -> str:
+    """Random password like 7hKq-3mPz-Xw9t-Ld2c (~90 bits)."""
+    groups = ("".join(secrets.choice(_TEMP_PASSWORD_ALPHABET) for _ in range(4)) for _ in range(4))
+    return "-".join(groups)
+
+
+# ============================================================================
+# USER REGISTRATION
+# ============================================================================
+
+def create_user(
     session: Session,
-    include_inactive: bool = False,
-    limit: int = 100,
-    offset: int = 0,
-) -> list[User]:
+    username: str,
+    password: str,
+    role: str = config.ROLE_VISITOR,
+    must_change_password: bool = False,
+) -> User:
     """
-    List all users.
-    
+    Create a new user.
+
     Args:
         session: SQLAlchemy session
-        include_inactive: Include deactivated users
-        limit: Max results
-        offset: Pagination offset
+        username: Unique username
+        password: Plain text password (will be hashed)
+        must_change_password: Password is a temporary one (generated, or
+            from the environment for the first admin)
+        role: User role (default: visitor)
+
+    Returns:
+        Created User instance
+
+    Raises:
+        UsernameTakenError: If username already exists
+        ValueError: If inputs are missing or role is invalid
     """
-    stmt = select(User)
-    
-    if not include_inactive:
-        stmt = stmt.where(User.is_active == True)
-    
-    stmt = stmt.order_by(User.created_at.desc()).limit(limit).offset(offset)
-    
-    return list(session.execute(stmt).scalars().all())
+    # Validate inputs
+    if not username or not password:
+        raise ValueError("Username and password are required")
+
+    if role not in config.VALID_ROLES:
+        raise ValueError(f"Invalid role: {role}. Must be one of {config.VALID_ROLES}")
+
+    # Check for existing username
+    if get_user_by_username(session, username):
+        raise UsernameTakenError(f"Username '{username}' already exists")
+
+    # Hash password
+    password_hash = hash_password(password)
+
+    # Create user
+    user = User(
+        username=username,
+        password_hash=password_hash,
+        role=role,
+        is_active=True,
+        must_change_password=must_change_password,
+        created_at=now_utc(),
+    )
+
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    logger.info("Created user: %s (role=%s)", username, role)
+    return user
 
 
 # ============================================================================
@@ -412,24 +555,37 @@ def ensure_first_admin(session: Session) -> None:
     # Check if any users exist
     stmt = select(User).limit(1)
     existing_user = session.execute(stmt).scalars().first()
-    
+
     if existing_user:
         logger.debug("Users already exist, skipping first admin creation")
         return
-    
-    # Create first admin
+
+    if not config.PASSWORD_LOGIN_ENABLED:
+        # A password account couldn't sign in; the first admin comes from SSO
+        logger.warning(
+            "No users yet and password sign-in is disabled. To get a first administrator: "
+            "set OIDC_ADMIN_GROUP to a provider group you're in, or sign in once with SSO "
+            "and run `python -m backend.cli set-role <username> administrator` (see README)."
+        )
+        return
+
+    # Create first admin. Generated, never a known default: whoever reaches
+    # a fresh instance first would otherwise get an administrator account.
+    # It ends up in the log files, which is why it only works to choose a
+    # new password (must_change_password, enforced by dependencies.py).
+    password = generate_temporary_password()
     try:
         admin = create_user(
             session=session,
             username=config.FIRST_ADMIN_USERNAME,
-            email=config.FIRST_ADMIN_EMAIL,
-            password=config.FIRST_ADMIN_PASSWORD,
+            password=password,
             role=config.ROLE_ADMINISTRATOR,
+            must_change_password=True,
         )
-        logger.info(f"Created first admin user: {admin.username}")
         logger.warning(
-            f"DEFAULT ADMIN CREATED! Username: {admin.username}, "
-            f"Password: {config.FIRST_ADMIN_PASSWORD} - CHANGE IMMEDIATELY!"
+            "Created the first administrator. Sign in as %r with the password %s "
+            "(you'll be asked to choose a new one right away)",
+            admin.username, password,
         )
-    except Exception as e:
-        logger.exception(f"Failed to create first admin user: {e}")
+    except Exception:
+        logger.exception("Failed to create first admin user")
