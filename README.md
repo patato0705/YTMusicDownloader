@@ -711,7 +711,12 @@ npm test              # once; `npm run test:watch` to rerun on save
 npm run lint          # ESLint: only rules that catch bugs
 ```
 
-GitHub runs both test suites on every push and pull request, along with the frontend lint, type check and build, and the Docker build (`.github/workflows/ci.yml`).
+GitHub runs both test suites on every push and pull request, along with the frontend lint, type check and build (`.github/workflows/ci.yml`). It also builds the Docker image and starts it the way `docker-compose.yml` does: the image has to become healthy, serve the frontend with its security headers, run every process as `PUID`, let the first administrator sign in with the password from the log, and start again on the same database. To run that check yourself (Docker, curl and jq):
+
+```bash
+docker build -t ytmusicdownloader:test .
+bash .github/scripts/docker-smoke-test.sh ytmusicdownloader:test
+```
 
 **Translations** live in `frontend/src/locales/`; adding a language is a new JSON file plus one line in `frontend/src/config/i18n.ts`.
 

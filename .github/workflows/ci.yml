@@ -69,7 +69,7 @@ jobs:
       - run: python -m pytest backend/tests
 
   docker:
-    name: Docker image builds
+    name: Docker image (build and smoke test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -80,5 +80,11 @@ jobs:
         with:
           context: .
           push: false
+          # Into the runner's Docker, for the smoke test below
+          load: true
+          tags: ytmusicdownloader:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # Starts the image like docker-compose.yml and checks the entrypoint,
+      # every process, the served frontend and a restart (see the script)
+      - run: bash .github/scripts/docker-smoke-test.sh ytmusicdownloader:ci
