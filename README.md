@@ -136,7 +136,7 @@ Open <http://localhost:8484> and sign in with it: you'll choose your own right a
 2. Point Jellyfin (or any media server reading NFO files) at the `./data` folder.
 3. Serving it over HTTPS? Read [Running behind a reverse proxy](#running-behind-a-reverse-proxy).
 4. Have an identity provider? Set up [single sign-on](#single-sign-on-oidc).
-5. Invite people from **Admin Panel → Users**.
+5. Invite people from **Admin panel → Users**.
 
 ---
 
@@ -160,7 +160,7 @@ Open <http://localhost:8484> and sign in with it: you'll choose your own right a
 | **Member** | Everything a visitor can, plus follow/unfollow artists, download albums, edit lyrics, like artists and get recommendations. |
 | **Administrator** | Everything a member can, plus delete artists/albums (including files), and manage users, charts, settings and backups. |
 
-Admins create users from **Admin Panel → Users**, or turn on public registration in [Settings](#admin-settings).
+Admins create users from **Admin panel → Users**, or turn on public registration in [Settings](#admin-settings).
 
 At their first sign-in, everyone gets a short tour of what their role can do (the lyrics badges, charts, likes and recommendations, playlist import...), starting with the language, theme and accent colour. It's shown once per account, on any device, and closing it at any step ends it for good.
 
@@ -168,9 +168,9 @@ At their first sign-in, everyone gets a short tour of what their role can do (th
 
 **Passwords**
 
-- Changing your password (user menu → *Change Password*) signs you out of every other browser and device; the one you changed it from stays signed in.
-- Forgotten password: an admin uses *Reset password* in **Admin Panel → Users**, which shows a temporary password once to pass on. The user is signed out everywhere and has to pick a new password before doing anything else (the temporary password works for nothing but that).
-- Admins can reset anyone's password, other administrators' included (administrators are trusted), but not their own: use *Change Password*, or the [recovery commands](#recovering-access) if you can't sign in.
+- Changing your password (user menu → *Change password*) signs you out of every other browser and device; the one you changed it from stays signed in.
+- Forgotten password: an admin uses *Reset password* in **Admin panel → Users**, which shows a temporary password once to pass on. The user is signed out everywhere and has to pick a new password before doing anything else (the temporary password works for nothing but that).
+- Admins can reset anyone's password, other administrators' included (administrators are trusted), but not their own: use *Change password*, or the [recovery commands](#recovering-access) if you can't sign in.
 
 ### Following and downloading
 
@@ -178,7 +178,7 @@ At their first sign-in, everyone gets a short tour of what their role can do (th
 |---|---|---|
 | **Follow an artist** | artist page → *Follow* | Downloads every release and keeps watching for new ones. Following also likes the artist. |
 | **Unfollow** | artist page | Stops watching for new releases and cancels downloads that haven't started yet (one in progress is allowed to finish). Nothing is deleted: the artist stays in your library in "light" (metadata-only) mode, and charts and artists-mode playlists won't follow it again (see [Kept out of the library](#kept-out-of-the-library)). |
-| **Download an album** | album page → *Download Album* | Grabs just that album. The artist is added to the library in light mode so the album has somewhere to live. |
+| **Download an album** | album page → *Download album* | Grabs just that album. The artist is added to the library in light mode so the album has somewhere to live. |
 | **Retry missing tracks** | album page | Shown on a downloaded album when some tracks failed or have no download queued. Requeues every track that isn't on disk and isn't already waiting. |
 | **Delete artist / album** | admin only | Removes the database entries *and* the files on disk. Deleting an album leaves its artist followed: only that album stays out. |
 
@@ -219,7 +219,7 @@ A reissue reached through a playlist or a download before the next artist sync i
 
 ### Playlists
 
-On the **Browse** page, click *Import from playlist* (next to the search bar) and paste a YouTube Music playlist URL (or a raw playlist ID). The page lists the unique artists and albums in it, with per-item buttons and three bulk actions: *Follow Main Artists*, *Follow All Artists* and *Download All Albums*. These act once: later changes to the playlist are ignored.
+On the **Browse** page, click *Import from playlist* (next to the search bar) and paste a YouTube Music playlist URL (or a raw playlist ID). The page lists the unique artists and albums in it, with per-item buttons and three bulk actions: *Follow main artists*, *Follow all artists* and *Download all albums*. These act once: later changes to the playlist are ignored.
 
 ![Playlist import page](docs/screenshots/playlist-import.png)
 
@@ -248,11 +248,11 @@ A rescan skips [excluded](#kept-out-of-the-library) artists and albums, so delet
 
 ### Charts
 
-Admins follow a country chart from **Admin Panel → Charts** and choose how many of its top artists to follow (1 to 40). Those artists are followed in full. The chart is re-synced on the *Chart sync* [schedule](#schedules), following any new entrants. The **Charts** page shows the current chart for every followed country.
+Admins follow a country chart from **Admin panel → Charts** and choose how many of its top artists to follow (1 to 40). Those artists are followed in full. The chart is re-synced on the *Chart sync* [schedule](#schedules), following any new entrants. The **Charts** page shows the current chart for every followed country.
 
 ![Charts page](docs/screenshots/charts.png)
 
-**Unfollow after** (in the follow dialog and in **Admin Panel → Charts**; *Never* by default): an artist a chart followed is unfollowed, like the Unfollow button (files stay, new releases stop), once it has been out of that chart, and of every other followed chart, for that many weeks.
+**Unfollow after** (in the follow dialog and in **Admin panel → Charts**; *Never* by default): an artist a chart followed is unfollowed, like the Unfollow button (files stay, new releases stop), once it has been out of that chart, and of every other followed chart, for that many weeks.
 
 - It's kept if anyone likes it, if a followed playlist in artists mode lists it, or while a chart that listed it is disabled.
 - Only successful syncs count, so a YouTube Music outage never unfollows anyone, and an artist that comes back into the chart is followed again.
@@ -381,7 +381,7 @@ Set in `docker-compose.yml`. All are optional.
 
 ### Admin settings
 
-Everything below is changed live from **Admin Panel → Settings**, no restart needed.
+Everything below is changed live from **Admin panel → Settings**, no restart needed.
 
 ![Admin panel settings, Scheduler section](docs/screenshots/admin-settings.png)
 
@@ -434,7 +434,7 @@ The three single sign-on settings are shown only when [single sign-on](#single-s
 
 ### Schedules
 
-Artist syncs, chart syncs, playlist syncs and lyrics retries each run on their own schedule, set in **Admin Panel → Settings → Scheduler**:
+Artist syncs, chart syncs, playlist syncs and lyrics retries each run on their own schedule, set in **Admin panel → Settings → Scheduler**:
 
 - **Every N hours** (days for charts): each artist or chart is synced N hours after its own last sync, so the work spreads over the day.
 - **At a fixed time**, on the days of the week you tick: say 04:00 every day, or 07:00 on Mondays and Fridays. Everything due is queued at that time. The settings page shows the next run.
@@ -527,17 +527,17 @@ With `PASSWORD_LOGIN_ENABLED=false`, the password form, registration, *Create us
 
 - `OIDC_ADMIN_GROUP` set to a provider group you're in: you're an admin from your first sign-in;
 - sign in once, then `docker compose exec ytmusicdownloader python -m backend.cli set-role <your-username> administrator`;
-- start with password sign-in on, sign in as the first admin, promote your single sign-on account in **Admin Panel → Users**, then set `PASSWORD_LOGIN_ENABLED=false` and restart.
+- start with password sign-in on, sign in as the first admin, promote your single sign-on account in **Admin panel → Users**, then set `PASSWORD_LOGIN_ENABLED=false` and restart.
 
 #### Limits
 
-- Removing someone at the provider doesn't end their session here: sessions last up to 7 days. Deactivate the account in **Admin Panel → Users** too.
+- Removing someone at the provider doesn't end their session here: sessions last up to 7 days. Deactivate the account in **Admin panel → Users** too.
 - Signing out signs out of this app only, not of the provider.
 - A sign-in that fails sends you back to the login page with a short reason; the exact cause is in `config/logs/web.log`.
 
 ### Age-restricted tracks
 
-Age-restricted videos need a signed-in, age-verified YouTube account. Export a `cookies.txt` (Netscape format; browser extensions such as *Get cookies.txt LOCALLY* do this) while on youtube.com, and upload it under **Admin Panel → Settings → YouTube account cookies**.
+Age-restricted videos need a signed-in, age-verified YouTube account. Export a `cookies.txt` (Netscape format; browser extensions such as *Get cookies.txt LOCALLY* do this) while on youtube.com, and upload it under **Admin panel → Settings → YouTube account cookies**.
 
 The jar is used **only** as a fallback for tracks that fail with an age-gate error (never for ordinary downloads, and never to get around a rate limit), so the account sees a handful of requests at most.
 
@@ -560,7 +560,7 @@ Downloads use an anonymous session. When YouTube throttles it ("rate-limited", "
 
 ### Backup and migration
 
-**Admin Panel → Backup** exports a JSON document with any of:
+**Admin panel → Backup** exports a JSON document with any of:
 
 - **Library**: followed artists, standalone albums, playlists (with their songs), and what's excluded. On import, the new instance follows them again and downloads their music, leaving out whatever is excluded (in the file or on the new instance).
 - **Charts**: chart subscriptions.
@@ -612,7 +612,7 @@ docker compose exec ytmusicdownloader python -m backend.cli reset-password admin
 docker compose exec ytmusicdownloader python -m backend.cli set-role admin administrator   # if it was demoted
 ```
 
-Then reactivate the legitimate accounts from **Admin Panel → Users**, and check settings and other admins.
+Then reactivate the legitimate accounts from **Admin panel → Users**, and check settings and other admins.
 </details>
 
 <details>
@@ -745,7 +745,7 @@ The workflow refuses a tag that doesn't match the code's version, then runs ever
 gh attestation verify oci://ghcr.io/patato0705/ytmusicdownloader:0.8.0 --owner patato0705
 ```
 
-**Translations** live in `frontend/src/locales/`; adding a language is a new JSON file plus one line in `frontend/src/config/i18n.ts`.
+**Translations** live in `frontend/src/locales/`; adding a language is a new JSON file plus one line in `frontend/src/config/i18n.ts`. The [translation guide](frontend/src/locales/README.md) covers plural forms, placeholders, and where each short text appears.
 
 ## Troubleshooting
 

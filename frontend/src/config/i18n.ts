@@ -1,7 +1,7 @@
 // src/config/i18n.ts
 /**
  * Supported languages. To add one: add it to SUPPORTED_LOCALES and create
- * its translation file, src/locales/{code}.json.
+ * its translation file, src/locales/{code}.json (see src/locales/README.md).
  */
 
 export interface Language {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '../../src/config/i18n';
+import notes from '../../src/locales/notes/keys.json';
 
 // Every translation file, by locale code
 const files = Object.fromEntries(
@@ -107,5 +108,18 @@ describe('translation files', () => {
         && countsIn(rules, category(key), base(key)).length > 1);
       expect(wrong).toEqual([]);
     });
+  });
+});
+
+describe('translator notes (locales/notes/keys.json)', () => {
+  it('are about keys, or groups of keys, that exist', () => {
+    // A note names a key, or a group: "mediaCard.status" covers mediaCard.status.*
+    const keys = Object.keys(reference);
+    const stale = Object.keys(notes).filter((note) => !keys.some((key) => key === note || key.startsWith(`${note}.`)));
+    expect(stale, 'notes whose keys are gone').toEqual([]);
+  });
+
+  it('all say something', () => {
+    expect(Object.entries(notes).filter(([, note]) => typeof note !== 'string' || !note.trim())).toEqual([]);
   });
 });
