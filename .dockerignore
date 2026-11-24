@@ -8,6 +8,7 @@ build
 # Python env / caches
 backend/.venv
 backend/tests
+frontend/tests
 *.pyc
 __pycache__
 

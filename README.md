@@ -704,7 +704,14 @@ pip install -r backend/requirements.txt pytest
 python -m pytest backend/tests
 ```
 
-GitHub runs them on every push and pull request, along with the frontend type check and build (`.github/workflows/ci.yml`).
+The frontend's tests are in `frontend/tests/`, laid out like `frontend/src/`, and run with [Vitest](https://vitest.dev): the library filters, the API client (sign-in refresh, errors), translations (every language has the same keys and `{placeholders}`) and the route guards. They need no backend. From `frontend/`:
+
+```bash
+npm test              # once; `npm run test:watch` to rerun on save
+npm run lint          # ESLint: only rules that catch bugs
+```
+
+GitHub runs both test suites on every push and pull request, along with the frontend lint, type check and build, and the Docker build (`.github/workflows/ci.yml`).
 
 **Translations** live in `frontend/src/locales/`; adding a language is a new JSON file plus one line in `frontend/src/config/i18n.ts`.
 
