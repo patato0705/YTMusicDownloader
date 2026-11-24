@@ -16,10 +16,11 @@ export default defineConfig(
     rules: {
       // A hook called conditionally or in a loop breaks React's state order
       'react-hooks/rules-of-hooks': 'error',
-      // A warning, so it shows in the editor without failing CI: the effects
-      // here that leave a dependency out mostly do so on purpose (a load on
-      // mount, a function that never changes), but a new one may be a stale
-      // value. The plugin's React Compiler rules (refs, set-state-in-effect...)
+      // A dependency left out may be a stale value. A warning, but `npm run
+      // lint` allows none (CI fails on it): one left out on purpose (a load on
+      // mount, a refresh on one value only) says why in an
+      // `eslint-disable-next-line ... -- reason` comment above the deps.
+      // The plugin's React Compiler rules (refs, set-state-in-effect...)
       // stay off: this app isn't compiled, and the patterns they flag (the
       // latest value kept in a ref) are deliberate.
       'react-hooks/exhaustive-deps': 'warn',

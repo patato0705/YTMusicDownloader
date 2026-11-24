@@ -67,6 +67,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
       });
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refetched for another track only; t only words the error
   }, [track.id]);
 
   const dirty = draft !== original;

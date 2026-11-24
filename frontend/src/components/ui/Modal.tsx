@@ -112,6 +112,7 @@ export const Modal: React.FC<ModalProps> = ({
       openModals.splice(openModals.indexOf(panel), 1);
       previouslyFocused?.focus?.();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- set up once per open modal: sheet never changes on a mounted one
   }, []);
 
   return createPortal(

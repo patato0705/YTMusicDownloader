@@ -39,7 +39,7 @@ export function useSheetDismiss(
   // A sheet unmounted mid-slide (its page left) doesn't close anything later
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  const animate = (transform: string, opacity: string) => {
+  const animate = useCallback((transform: string, opacity: string) => {
     const panel = panelRef.current;
     const backdrop = backdropRef.current;
     if (panel) {
@@ -50,7 +50,7 @@ export function useSheetDismiss(
       backdrop.style.transition = `opacity ${DURATION_MS}ms ease`;
       backdrop.style.opacity = opacity;
     }
-  };
+  }, [panelRef, backdropRef]);
 
   const close = useCallback(() => {
     if (!enabled || reducedMotion()) {
@@ -66,7 +66,7 @@ export function useSheetDismiss(
       closing.current = false;
       animate('', '');
     }, DURATION_MS);
-  }, [enabled]);
+  }, [enabled, animate]);
 
   useEffect(() => {
     const panel = panelRef.current;
@@ -160,7 +160,7 @@ export function useSheetDismiss(
       panel.removeEventListener('touchend', onEnd);
       panel.removeEventListener('touchcancel', onCancel);
     };
-  }, [enabled, panelRef, backdropRef, close]);
+  }, [enabled, panelRef, backdropRef, close, animate]);
 
   return close;
 }

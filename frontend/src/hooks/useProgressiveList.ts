@@ -46,7 +46,7 @@ export function useProgressiveList<T>(items: T[], pageSize: number, resetKey: un
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [sentinel, hasMore, pageSize, count]);
+  }, [sentinel, hasMore, pageSize, count, setCount]);
 
   return {
     visible: hasMore ? items.slice(0, count) : items,

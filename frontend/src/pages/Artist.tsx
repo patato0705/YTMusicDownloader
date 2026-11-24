@@ -74,6 +74,7 @@ export default function Artist(): JSX.Element {
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reloaded for another artist only (a new revision refreshes below); fetchArtist reads the latest revision when called
   }, [artistId]);
 
   // Keep the album badges in step with the job queue. Only for artists
@@ -89,6 +90,7 @@ export default function Artist(): JSX.Element {
       .catch((err) => console.error('Failed to refresh artist:', err));
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchArtist reads the latest revision when called
   }, [artistId, revision, source]);
 
   if (loading) return <LoadingState />;

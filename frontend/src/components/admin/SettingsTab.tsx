@@ -73,6 +73,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
       }
     })();
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loaded once on mount; t only words the error
   }, []);
 
   const handleSettingChange = (key: string, value: any, type: string) => {

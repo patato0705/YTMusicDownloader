@@ -329,6 +329,7 @@ export default function PlaylistImport(): JSX.Element {
   useEffect(() => {
     const playlistId = extractPlaylistId(url);
     if (playlistId) fetchPlaylist(playlistId, restored !== null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only the playlist in the URL on mount; later ones are loaded by handleLoad
   }, []);
 
   // Follows, downloads and library changes made here are kept in the cached
@@ -353,6 +354,7 @@ export default function PlaylistImport(): JSX.Element {
   const lookingUp = songsPending.size > 0;
   useEffect(() => {
     if (loadedId && lookingUp) fetchPlaylist(loadedId, true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the queue moves, for the playlist and lookups on screen then
   }, [revision]);
 
   const without = (set: Set<string>, id: string) => {
