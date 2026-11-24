@@ -20,7 +20,8 @@ const PASSWORD_MAX_BYTES = 72;
 /** A new password: at least 8 characters, at most 72 bytes */
 export function passwordErrorKey(password: string, requiredKey?: string): string | null {
   if (!password) return requiredKey ?? null;
-  if (password.length < 8) return 'auth.errors.passwordTooShort';
+  // By code point, like the backend's len(): .length counts an emoji as two
+  if ([...password].length < 8) return 'auth.errors.passwordTooShort';
   if (new TextEncoder().encode(password).length > PASSWORD_MAX_BYTES) return 'auth.errors.passwordTooLong';
   return null;
 }
