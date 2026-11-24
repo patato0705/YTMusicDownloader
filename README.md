@@ -148,7 +148,7 @@ Open <http://localhost:8484> and sign in with it: you'll choose your own right a
 
 **Under the hood**: [How it works](#how-it-works) · [API](#api) · [Logs](#logs) · [Development](#development)
 
-[Troubleshooting](#troubleshooting) · [Disclaimer](#disclaimer) · [License](#license)
+[Troubleshooting](#troubleshooting) · [Contributing](#contributing) · [Disclaimer](#disclaimer) · [License](#license)
 
 ## Using the app
 
@@ -810,6 +810,10 @@ Make sure `PUID`/`PGID` match your host user. Files that already existed before 
 
 A new one is generated on start; every user just has to log in again.
 </details>
+
+## Contributing
+
+Bug reports, fixes, translations and ideas are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Found a security problem? Please report it privately, as [SECURITY.md](SECURITY.md) explains.
 
 ## Disclaimer
 
