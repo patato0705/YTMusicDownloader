@@ -63,5 +63,17 @@ describe('translation files', () => {
       });
       expect(wrong).toEqual([]);
     });
+
+    // Where 0 is singular too (French), a singular that spells out "1" or
+    // "une heure" would show it for a count of 0
+    it.runIf(new Intl.PluralRules(code).select(0) === 'one')('shows {count} in singulars whose plural does', () => {
+      // "Toutes les heures": no number to show, and 0 is no schedule anyway
+      const wordOnly = ['admin.settings.schedule.every_hours_one', 'admin.settings.schedule.every_days_one'];
+      const wrong = keys.filter((key) =>
+        key.endsWith(SINGULAR) && !wordOnly.includes(key)
+        && placeholders(String(strings[base(key)] ?? '')).includes('count')
+        && !placeholders(strings[key] as string).includes('count'));
+      expect(wrong).toEqual([]);
+    });
   });
 });
