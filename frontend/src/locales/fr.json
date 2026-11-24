@@ -198,6 +198,8 @@
     "releaseCount_one": "{count} sortie",
     "follow": "Suivre",
     "unfollow": "Ne plus suivre",
+    "followArtist": "Suivre {name}",
+    "unfollowArtist": "Ne plus suivre {name}",
     "followed": "Suivi",
     "unfollowTitle": "Ne plus suivre l'artiste",
     "unfollowMessage": "Ses nouvelles sorties ne seront plus téléchargées, et aucun chart ni playlist ne le suivra à nouveau (le suivre à la main, si). Ce qui est déjà téléchargé reste.",

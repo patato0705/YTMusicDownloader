@@ -56,6 +56,8 @@
 
   "artist.follow": "Button on an artist: follow it, which downloads all its releases and watches for new ones. Not a social media follow.",
   "artist.unfollow": "Same button once followed: stop following. Files stay.",
+  "artist.followArtist": "Screen reader label of the round follow button on an artist card. {name} is the artist.",
+  "artist.unfollowArtist": "Screen reader label of that button once the artist is followed. {name} is the artist.",
   "artist.followed": "Tooltip of the follow button once the artist is followed: a state, not an action.",
   "artist.like": "Tooltip of the heart button: like the artist. Personal, it feeds the recommendations, and is not the same as follow.",
   "artist.unlike": "Same button once liked: remove the like.",

@@ -198,6 +198,8 @@
     "releaseCount_one": "{count} release",
     "follow": "Follow",
     "unfollow": "Unfollow",
+    "followArtist": "Follow {name}",
+    "unfollowArtist": "Unfollow {name}",
     "followed": "Following",
     "unfollowTitle": "Unfollow artist",
     "unfollowMessage": "Their new releases won't be downloaded anymore, and no chart or playlist will follow them again (following them by hand still does). What's already downloaded stays.",
