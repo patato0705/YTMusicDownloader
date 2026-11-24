@@ -9,6 +9,8 @@ on:
     branches-ignore: ["dependabot/**"]
   pull_request:
     branches: [main]
+  # release.yml runs these checks on the tagged commit before publishing
+  workflow_call:
 
 # A newer push to the same branch makes the older run pointless
 concurrency:

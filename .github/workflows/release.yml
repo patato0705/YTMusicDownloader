@@ -1,0 +1,211 @@
+name: Release
+
+# Pushing a version tag (v1.2.3, or v1.2.3-rc.1 for a pre-release) publishes
+# the image to ghcr.io for amd64 and arm64, with a signed build provenance,
+# and makes a GitHub release with notes generated from the merged pull
+# requests. The steps (README > Development > Releases):
+#   1. the tag matches the version in the code (backend/config.py, frontend/package.json)
+#   2. every CI check passes on the tagged commit (ci.yml)
+#   3. each architecture's image is built on its own native runner and
+#      smoke-tested there, then pushed by digest (no tag yet)
+#   4. one multi-architecture image is tagged from the two digests
+#   5. the GitHub release
+# Nothing is tagged before both architectures passed, so a failed release
+# leaves the published tags as they were.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+# Two pushes of the same tag never publish at once; a release in progress
+# is never cancelled halfway through.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Each job asks for what it needs
+permissions: {}
+
+jobs:
+  version:
+    name: Tag matches the code's version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compare the versions
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          backend=$(sed -n 's/^APP_VERSION = "\(.*\)"$/\1/p' backend/config.py)
+          frontend=$(jq -r .version frontend/package.json)
+          echo "Tag $TAG, backend/config.py $backend, frontend/package.json $frontend"
+          if [ "${TAG#v}" != "$backend" ] || [ "${TAG#v}" != "$frontend" ]; then
+            echo "::error::The tag $TAG doesn't match the version in the code (backend/config.py: $backend, frontend/package.json: $frontend)"
+            exit 1
+          fi
+
+  ci:
+    name: CI
+    needs: version
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Image (${{ matrix.arch }})
+    needs: ci
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # ghcr.io names are lowercase, the repository's may not be. The
+      # commit's time as the image's creation time (buildx reads
+      # SOURCE_DATE_EPOCH): both builds below then make the same image.
+      - name: Image name and date
+        run: |
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >>"$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >>"$GITHUB_ENV"
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Built into the runner's Docker first, for the smoke test, natively:
+      # no emulation, so what's tested is what an arm64 server will run
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          load: true
+          tags: ytmusicdownloader:release
+          cache-from: type=gha,scope=release-${{ matrix.arch }}
+          cache-to: type=gha,scope=release-${{ matrix.arch }},mode=max
+      - name: Smoke test
+        run: bash .github/scripts/docker-smoke-test.sh ytmusicdownloader:release
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The same build again, every layer from the builder's cache of the
+      # step above and the same creation time, so the image pushed is the
+      # one just tested. Pushed by
+      # digest only: the tags come once both architectures passed (merge).
+      # Provenance is attested on the final image instead (merge).
+      - id: push
+        name: Push by digest
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=release-${{ matrix.arch }}
+      - name: Keep the digest for the merge
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Tag the multi-architecture image
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      # The signed build provenance (actions/attest-build-provenance)
+      id-token: write
+      attestations: write
+    steps:
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >>"$GITHUB_ENV"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+      # v1.2.3 gives 1.2.3, 1.2, 1 and latest; a pre-release (v1.2.3-rc.1)
+      # only its own tag. No "0" tag while versions are 0.x: 0.2 and 0.3 may
+      # well be incompatible.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          # On the image index: what ghcr.io shows for a multi-architecture image
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref_name, 'v0.') }}
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: index
+        name: Tag the image
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          args=()
+          while IFS= read -r tag; do args+=(--tag "$tag"); done < <(jq -r '.tags[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          while IFS= read -r annotation; do args+=(--annotation "$annotation"); done < <(jq -r '.annotations[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          for digest in "$RUNNER_TEMP"/digests/*; do args+=("$IMAGE@sha256:$(basename "$digest")"); done
+          docker buildx imagetools create "${args[@]}"
+          docker buildx imagetools inspect "$IMAGE:$VERSION"
+          echo "digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)" >>"$GITHUB_OUTPUT"
+      # Verifiable with: gh attestation verify oci://ghcr.io/<owner>/<repo>:<tag> --owner <owner>
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true
+
+  release:
+    name: GitHub release
+    needs: merge
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:${TAG#v}"
+          flags=(--generate-notes --verify-tag --title "$TAG")
+          # A pre-release (v1.2.3-rc.1) is marked as such, and never "latest"
+          if [[ $TAG == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" "${flags[@]}" \
+            --notes "Image: \`$image\` (linux/amd64, linux/arm64)"

@@ -718,6 +718,22 @@ docker build -t ytmusicdownloader:test .
 bash .github/scripts/docker-smoke-test.sh ytmusicdownloader:test
 ```
 
+**Releases**: pushing a version tag publishes the image to `ghcr.io/patato0705/ytmusicdownloader`, for linux/amd64 and linux/arm64 (`.github/workflows/release.yml`). To release version 0.2.0:
+
+1. Set the version in the code, in a pull request to `main`: `APP_VERSION` in `backend/config.py`, and the frontend's with `npm version 0.2.0 --no-git-tag-version` in `frontend/` (it updates `package.json` and `package-lock.json`).
+2. Once merged, tag `main` and push the tag:
+
+   ```bash
+   git switch main && git pull
+   git tag v0.2.0 && git push origin v0.2.0
+   ```
+
+The workflow refuses a tag that doesn't match the code's version, then runs every CI check on the tagged commit, builds each architecture on its own runner and smoke-tests it there. Only then does it tag the image (`0.2.0`, `0.2` and `latest`, plus `1` from 1.0.0 on), attach a signed build provenance, and create the GitHub release with notes from the merged pull requests. A tag like `v0.2.0-rc.1` makes a pre-release: only its own image tag, never `latest`. Anyone can check an image was built here:
+
+```bash
+gh attestation verify oci://ghcr.io/patato0705/ytmusicdownloader:0.2.0 --owner patato0705
+```
+
 **Translations** live in `frontend/src/locales/`; adding a language is a new JSON file plus one line in `frontend/src/config/i18n.ts`.
 
 ## Troubleshooting

@@ -163,6 +163,20 @@ sleep 10
 after=$(processes) || fail "the process check failed (above)"
 [ "$before" = "$after" ] || fail "processes restarted: $before, then $after"
 
+# runs COMMAND...: it starts and exits 0 in the container
+runs() {
+    docker exec "$NAME" "$@" >/dev/null 2>&1 || fail "'$*' doesn't run in the image"
+}
+
+# Being on PATH isn't enough: a binary for another architecture is there
+# too (the health check only looks for ffmpeg), and fails when run
+step "The bundled programs run"
+runs ffmpeg -version
+runs ffprobe -version
+runs deno --version
+runs yt-dlp --version
+runs uv --version
+
 step "Files on the host belong to PUID:PGID, /config to it alone"
 [ -f "$WORK/config/db.sqlite" ] || fail "no database in /config"
 [ "$(stat -c '%u:%g' "$WORK/config/db.sqlite")" = "$PUID:$PGID" ] \
