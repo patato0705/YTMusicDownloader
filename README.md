@@ -9,9 +9,9 @@
 Follow an artist once: every release is downloaded, tagged, given synced lyrics and filed into a clean folder structure, and new ones keep arriving on their own.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
-![Docker](https://img.shields.io/badge/runs%20on-Docker-2496ED?logo=docker&logoColor=white)
-![Python 3.14](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)
-![React 18](https://img.shields.io/badge/react-18-61DAFB?logo=react&logoColor=black)
+[![Docker](https://img.shields.io/badge/runs%20on-Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![React 18](https://img.shields.io/badge/react-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 
 [Features](#features) · [Screenshots](#screenshots) · [Quick start](#quick-start) · [Documentation](#documentation) · [Troubleshooting](#troubleshooting)
 
@@ -102,26 +102,33 @@ More screenshots sit next to the features they show: [playlists](#playlists), [c
 
 ## Quick start
 
-You need Docker and Docker Compose.
+You need Docker with Compose. In an empty folder, save this as `docker-compose.yml` (set `TZ` to your time zone):
 
-```bash
-git clone https://github.com/patato0705/YTMusicDownloader.git
-cd YTMusicDownloader
-docker compose up -d --build
+```yaml
+services:
+  ytmusicdownloader:
+    image: ghcr.io/patato0705/ytmusicdownloader:latest
+    ports:
+      - "8484:8484"
+    volumes:
+      - ./config:/config
+      - ./data:/data
+    environment:
+      - TZ=Europe/Paris  # your time zone, for the schedules
+      # More options: README "Environment variables"
+    restart: unless-stopped
 ```
 
-The first build takes a few minutes (frontend build plus Python dependencies); later starts are fast.
+Then, in a terminal in that folder:
 
-On its first start, the app creates an administrator named `admin` with a generated password and prints it in the log:
-
-```bash
-docker compose logs ytmusicdownloader | grep -i password
+```
+docker compose up -d
+docker compose logs
 ```
 
-> [!NOTE]
-> The password is printed once, and you're asked to choose a new one at the first sign-in. Lost the log? See [Recovering access](#recovering-access).
+The log shows the password of the `admin` account the first start creates (the line *Created the first administrator*).
 
-Open <http://localhost:8000>, sign in, and you're ready.
+Open <http://localhost:8484> and sign in with it: you'll choose your own right away. Lost it? See [Recovering access](#recovering-access).
 
 **Next steps**
 
@@ -336,9 +343,11 @@ data/
 ### Updating
 
 ```bash
-git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+What changed in each version is on the [releases page](https://github.com/patato0705/YTMusicDownloader/releases). `docker-compose.yml` follows `latest`, the newest release. To choose when to move on instead, put a version in its `image:` line: `:0.7` gets that version's fixes but never 0.8, `:0.7.0` stays exactly there. Versions before 1.0 may change something you have to act on from one minor version to the next (0.7 to 0.8): its release notes say so.
 
 On start, the app upgrades its database to the new version's schema by itself. Before changing anything, it copies the database to `config/db-backups/` (the copies from the last three upgrades are kept). An upgrade that fails changes nothing: the app stops with the reason in the log and the database is left as it was.
 
@@ -351,7 +360,7 @@ An older version can't read a database a newer one has upgraded, so restore the 
 1. Stop the container.
 2. Delete `config/db.sqlite-wal` and `config/db.sqlite-shm` if they exist: they belong to the upgraded database, and SQLite would apply them to the copy.
 3. Put the copy taken before the upgrade back as `config/db.sqlite`.
-4. Check out and start that version.
+4. Put that version in the `image:` line of `docker-compose.yml` (`ghcr.io/patato0705/ytmusicdownloader:0.7.0`, say) and start it.
 </details>
 
 ### Environment variables
@@ -434,7 +443,7 @@ Fixed times are in the container's time zone (`TZ` in `docker-compose.yml`). A f
 
 ### Running behind a reverse proxy
 
-Proxy to port 8000 and set `COOKIE_SECURE=true` if the proxy terminates TLS (the app doesn't infer it from the proxy). The frontend and API share one origin, so no CORS configuration is required. The `/api/health` endpoint (no auth) can be used for uptime checks; it returns 503 if the database, ffmpeg/ffprobe or the data directories are unhealthy. Being public, it only says which check fails: the reason is in the log (`docker compose logs`, "Health check failing").
+Proxy to port 8484 and set `COOKIE_SECURE=true` if the proxy terminates TLS (the app doesn't infer it from the proxy). The frontend and API share one origin, so no CORS configuration is required. The `/api/health` endpoint (no auth) can be used for uptime checks; it returns 503 if the database, ffmpeg/ffprobe or the data directories are unhealthy. Being public, it only says which check fails: the reason is in the log (`docker compose logs`, "Health check failing").
 
 > [!WARNING]
 > **Set `FORWARDED_ALLOW_IPS` to your proxy's address.** Without it the app sees every request as coming from the proxy, so the per-IP sign-in limit is shared by all your users: one person guessing passwords blocks sign-in for everyone.
@@ -444,7 +453,7 @@ With it, the app takes the real client address from the proxy's `X-Forwarded-For
 - **Proxy in another container on the same Docker network** (Traefik, Caddy, Nginx Proxy Manager...): use the network's subnet, found with `docker network inspect <network>`, e.g. `FORWARDED_ALLOW_IPS=172.18.0.0/16`.
 - **Proxy installed on the host**, reaching the published port: connections arrive from the Docker network's gateway, so the subnet works here too.
 
-Only trust the proxy. The header is trivial to forge, so `*` (or a range that includes your clients) lets anyone pick their own IP and skip the limit. For the same reason, don't keep port 8000 reachable from outside once the proxy is in place: publish it as `127.0.0.1:8000:8000`, or drop `ports:` entirely when the proxy shares the container's network.
+Only trust the proxy. The header is trivial to forge, so `*` (or a range that includes your clients) lets anyone pick their own IP and skip the limit. For the same reason, don't keep port 8484 reachable from outside once the proxy is in place: publish it as `127.0.0.1:8484:8484`, or drop `ports:` entirely when the proxy shares the container's network.
 
 ### Single sign-on (OIDC)
 
@@ -627,7 +636,7 @@ Everything runs in a single Docker container managed by supervisord:
 
 | Process | Role |
 |---|---|
-| `web` | FastAPI backend + the built React frontend, on port 8000 |
+| `web` | FastAPI backend + the built React frontend, on port 8484 |
 | `worker-download-N` | Downloads audio with yt-dlp (N processes, see `DOWNLOAD_WORKERS`) |
 | `worker-metadata-N` | Talks to YouTube Music: artist syncs, album imports, chart syncs (3 processes) |
 | `worker-lyrics` | Fetches lyrics from LRCLIB and YouTube Music |
@@ -667,13 +676,15 @@ Interactive OpenAPI docs are served at `/api/docs`. Authentication is JWT: `POST
 
 The stack is FastAPI + SQLAlchemy 2 (backend) and React 18 + Vite + Tailwind + TypeScript (frontend).
 
-The backend expects `/config` and `/data` to exist and be writable (paths are fixed in `backend/config.py`), so the simplest workflow is to run the backend in Docker and only iterate on the frontend:
+The backend expects `/config` and `/data` to exist and be writable (paths are fixed in `backend/config.py`), so the simplest workflow is to run the backend in Docker and only iterate on the frontend. From a clone of the repository, `docker-compose.dev.yml` builds the image from your checkout (named `ytmusicdownloader:dev`) instead of pulling the published one:
 
 ```bash
-docker compose up -d            # backend on :8000
+git clone https://github.com/patato0705/YTMusicDownloader.git
+cd YTMusicDownloader
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build   # backend on :8484
 cd frontend
 npm install
-npm run dev                     # Vite dev server, proxies /api to :8000
+npm run dev                     # Vite dev server, proxies /api to :8484
 ```
 
 To run the backend natively (Python 3.14, ffmpeg on PATH, `/config` and `/data` writable):
@@ -687,11 +698,11 @@ python -m backend.scheduler                  # the scheduler
 
 The frontend is built into `backend/static/` by the Dockerfile; the API serves it as an SPA with `/api/*` taking precedence.
 
-**Database schema changes**: the schema is managed with [Alembic](https://alembic.sqlalchemy.org). Every change to `backend/models.py` needs a migration script in `backend/migrations/versions/`, which the app applies at startup. To generate one after changing the models (from the repository root, with the image built by `docker compose build`):
+**Database schema changes**: the schema is managed with [Alembic](https://alembic.sqlalchemy.org). Every change to `backend/models.py` needs a migration script in `backend/migrations/versions/`, which the app applies at startup. To generate one after changing the models (from the repository root, with the development image built by the command above):
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/backend:/app/backend" \
-  --entrypoint python ytmusicdownloader-ytmusicdownloader \
+  --entrypoint python ytmusicdownloader:dev \
   -m backend.migrations.dev revision "add a rating to tracks"
 ```
 
@@ -718,20 +729,20 @@ docker build -t ytmusicdownloader:test .
 bash .github/scripts/docker-smoke-test.sh ytmusicdownloader:test
 ```
 
-**Releases**: pushing a version tag publishes the image to `ghcr.io/patato0705/ytmusicdownloader`, for linux/amd64 and linux/arm64 (`.github/workflows/release.yml`). To release version 0.2.0:
+**Releases**: pushing a version tag publishes the image to `ghcr.io/patato0705/ytmusicdownloader`, for linux/amd64 and linux/arm64 (`.github/workflows/release.yml`). To release version 0.8.0:
 
-1. Set the version in the code, in a pull request to `main`: `APP_VERSION` in `backend/config.py`, and the frontend's with `npm version 0.2.0 --no-git-tag-version` in `frontend/` (it updates `package.json` and `package-lock.json`).
+1. Set the version in the code, in a pull request to `main`: `APP_VERSION` in `backend/config.py`, and the frontend's with `npm version 0.8.0 --no-git-tag-version` in `frontend/` (it updates `package.json` and `package-lock.json`).
 2. Once merged, tag `main` and push the tag:
 
    ```bash
    git switch main && git pull
-   git tag v0.2.0 && git push origin v0.2.0
+   git tag v0.8.0 && git push origin v0.8.0
    ```
 
-The workflow refuses a tag that doesn't match the code's version, then runs every CI check on the tagged commit, builds each architecture on its own runner and smoke-tests it there. Only then does it tag the image (`0.2.0`, `0.2` and `latest`, plus `1` from 1.0.0 on), attach a signed build provenance, and create the GitHub release with notes from the merged pull requests. A tag like `v0.2.0-rc.1` makes a pre-release: only its own image tag, never `latest`. Anyone can check an image was built here:
+The workflow refuses a tag that doesn't match the code's version, then runs every CI check on the tagged commit, builds each architecture on its own runner and smoke-tests it there. Only then does it tag the image (`0.8.0`, `0.8` and `latest`, plus `1` from 1.0.0 on), attach a signed build provenance, and create the GitHub release with notes from the merged pull requests. A tag like `v0.8.0-rc.1` makes a pre-release: only its own image tag, never `latest`. Anyone can check an image was built here:
 
 ```bash
-gh attestation verify oci://ghcr.io/patato0705/ytmusicdownloader:0.2.0 --owner patato0705
+gh attestation verify oci://ghcr.io/patato0705/ytmusicdownloader:0.8.0 --owner patato0705
 ```
 
 **Translations** live in `frontend/src/locales/`; adding a language is a new JSON file plus one line in `frontend/src/config/i18n.ts`.

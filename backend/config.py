@@ -161,7 +161,7 @@ YDL_USER_COOKIEFILE = Path("/config/ytcookies-user.txt")
 DOWNLOAD_WORKERS = _positive_int_env("DOWNLOAD_WORKERS", 3)
 
 # Server / docker
-PORT = int(os.environ.get("PORT", 8000))
+PORT = int(os.environ.get("PORT", 8484))
 HOST = os.environ.get("HOST", "0.0.0.0")
 
 

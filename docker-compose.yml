@@ -1,12 +1,12 @@
 services:
   ytmusicdownloader:
-    build: .
+    image: ghcr.io/patato0705/ytmusicdownloader:latest
     ports:
-      - "8000:8000"
+      - "8484:8484"
     volumes:
       - ./config:/config
       - ./data:/data
     environment:
-      - TZ=Europe/Paris
-      # More options: see README "Configuration"
+      - TZ=Europe/Paris  # your time zone, for the schedules
+      # More options: README "Environment variables"
     restart: unless-stopped

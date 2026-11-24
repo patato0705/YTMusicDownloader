@@ -65,10 +65,10 @@ RUN mkdir -p /data /config
 # ensure backend package import works
 ENV PYTHONPATH=/app
 
-EXPOSE 8000
+EXPOSE 8484
 
 # urlopen raises on the 503 /api/health returns when unhealthy
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=4)"]
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8484/api/health', timeout=4)"]
 
 ENTRYPOINT ["/entrypoint.sh"]

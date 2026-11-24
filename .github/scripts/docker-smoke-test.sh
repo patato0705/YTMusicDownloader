@@ -13,7 +13,7 @@ set -euo pipefail
 
 IMAGE=${1:?usage: $0 IMAGE}
 NAME=ytmd-smoke-$$
-PORT=${SMOKE_PORT:-8000}
+PORT=${SMOKE_PORT:-8484}
 BASE=http://127.0.0.1:$PORT
 PUID=$(id -u)
 PGID=$(id -g)
@@ -115,7 +115,7 @@ PY
 
 step "Starting $IMAGE as $PUID:$PGID"
 docker run -d --name "$NAME" \
-    -p "127.0.0.1:$PORT:8000" \
+    -p "127.0.0.1:$PORT:8484" \
     -v "$WORK/config:/config" -v "$WORK/data:/data" \
     -e PUID="$PUID" -e PGID="$PGID" \
     --health-interval=2s --health-start-period=120s --health-start-interval=2s \
