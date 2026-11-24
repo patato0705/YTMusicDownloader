@@ -4,6 +4,9 @@ name: CI
 # pass before it is merged. Nothing is published from here.
 on:
   push:
+    # Dependabot pushes a branch for each of its pull requests: the
+    # pull_request run checks it, a second run for the push would only repeat it
+    branches-ignore: ["dependabot/**"]
   pull_request:
     branches: [main]
 
