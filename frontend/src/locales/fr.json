@@ -322,10 +322,10 @@
     "trackMatch": {
       "one": "Contient \"{title}\"",
       "many": "Contient \"{title}\" et {count} autres titres correspondants",
-      "many_one": "Contient \"{title}\" et 1 autre titre correspondant",
+      "many_one": "Contient \"{title}\" et {count} autre titre correspondant",
       "artistOne": "A \"{title}\" sur {album}",
       "artistMany": "A \"{title}\" et {count} autres titres correspondants",
-      "artistMany_one": "A \"{title}\" et 1 autre titre correspondant"
+      "artistMany_one": "A \"{title}\" et {count} autre titre correspondant"
     },
     "stats": {
       "artists": "Artistes",
@@ -345,7 +345,7 @@
     "filters": {
       "button": "Filtres",
       "buttonActive": "Filtres, {count} choisis",
-      "buttonActive_one": "Filtres, 1 choisi",
+      "buttonActive_one": "Filtres, {count} choisi",
       "title": "Filtres",
       "clearAll": "Tout effacer",
       "clear": "Effacer les filtres",
@@ -417,17 +417,17 @@
       },
       "hints": {
         "missingTracks": "{count} titres manquants sur {total}",
-        "missingTracks_one": "1 titre manquant sur {total}",
+        "missingTracks_one": "{count} titre manquant sur {total}",
         "failedTracks": "{count} titres en échec",
-        "failedTracks_one": "1 titre en échec",
+        "failedTracks_one": "{count} titre en échec",
         "missingLyrics": "{count} titres sans paroles",
-        "missingLyrics_one": "1 titre sans paroles",
+        "missingLyrics_one": "{count} titre sans paroles",
         "plainLyrics": "{count} titres aux paroles non synchronisées",
-        "plainLyrics_one": "1 titre aux paroles non synchronisées",
+        "plainLyrics_one": "{count} titre aux paroles non synchronisées",
         "syncedLyrics": "{count} titres aux paroles synchronisées",
-        "syncedLyrics_one": "1 titre aux paroles synchronisées",
+        "syncedLyrics_one": "{count} titre aux paroles synchronisées",
         "instrumental": "{count} titres instrumentaux",
-        "instrumental_one": "1 titre instrumental",
+        "instrumental_one": "{count} titre instrumental",
         "noArtwork": "Pas de pochette",
         "noGenre": "Aucun genre trouvé"
       }
@@ -496,7 +496,7 @@
       "label": "Ne plus suivre ses artistes après",
       "never": "Jamais",
       "weeks": "{count} semaines hors du chart",
-      "weeks_one": "1 semaine hors du chart",
+      "weeks_one": "{count} semaine hors du chart",
       "help": "Un artiste suivi par ce chart n'est plus suivi une fois sorti du chart (et de tous les autres charts suivis) depuis aussi longtemps. Les fichiers déjà téléchargés restent, et un j'aime de n'importe qui garde l'artiste."
     }
   },
@@ -598,25 +598,25 @@
             "label": "Synchronisation des artistes",
             "description": "Quand les artistes suivis sont vérifiés pour de nouvelles sorties, et les albums de la bibliothèque pour des changements sur YouTube Music.",
             "intervalHint": "Chaque artiste est vérifié {count} heures après sa dernière vérification : les vérifications s'étalent sur la journée.",
-            "intervalHint_one": "Chaque artiste est vérifié une heure après sa dernière vérification : les vérifications s'étalent sur la journée."
+            "intervalHint_one": "Chaque artiste est vérifié {count} heure après sa dernière vérification : les vérifications s'étalent sur la journée."
           },
           "chart_sync": {
             "label": "Synchronisation des charts",
             "description": "Quand les charts suivis sont récupérés à nouveau pour suivre les nouveaux artistes du top N. YouTube Music ne met à jour ses charts qu'une fois par semaine : plus souvent que tous les 7 jours, on ne trouve presque jamais rien de nouveau.",
             "intervalHint": "Chaque chart est récupéré à nouveau {count} jours après sa dernière synchronisation.",
-            "intervalHint_one": "Chaque chart est récupéré à nouveau un jour après sa dernière synchronisation."
+            "intervalHint_one": "Chaque chart est récupéré à nouveau {count} jour après sa dernière synchronisation."
           },
           "playlist_sync": {
             "label": "Synchronisation des playlists",
             "description": "Quand les playlists suivies sont réanalysées : les nouveaux titres ajoutent leurs albums ou artistes, et leurs fichiers M3U suivent la playlist.",
             "intervalHint": "Chaque playlist est réanalysée {count} heures après sa dernière analyse.",
-            "intervalHint_one": "Chaque playlist est réanalysée une heure après sa dernière analyse."
+            "intervalHint_one": "Chaque playlist est réanalysée {count} heure après sa dernière analyse."
           },
           "lyrics_retry": {
             "label": "Nouvel essai des paroles",
             "description": "Quand les titres sans paroles ou avec des paroles non synchronisées sont réessayés.",
             "intervalHint": "Un essai {count} heures après le précédent.",
-            "intervalHint_one": "Un essai toutes les heures."
+            "intervalHint_one": "Un essai {count} heure après le précédent."
           },
           "job_cleanup_days": {
             "label": "Conservation des tâches (jours)",
@@ -882,11 +882,11 @@
     "trackView": "Titres",
     "unavailable": "Impossible de lire cette playlist. Elle n'existe pas, est privée, ou YouTube Music ne répond pas pour le moment.",
     "skippedNote": "{count} titres ne peuvent pas être importés",
-    "skippedNote_one": "1 titre ne peut pas être importé",
+    "skippedNote_one": "{count} titre ne peut pas être importé",
     "skippedUploads": "Mises en ligne ({count}) : ce ne sont pas des morceaux. Elles créditent la chaîne YouTube qui les a publiées, pas un artiste.",
     "skippedNoSong": "Sans album ({count}) : vidéos dont YouTube Music n'a pas le morceau.",
     "songsPending": "Recherche des morceaux de {count} clips...",
-    "songsPending_one": "Recherche du morceau d'1 clip...",
+    "songsPending_one": "Recherche du morceau de {count} clip...",
     "skippedNoArtist": "Aucun artiste crédité ({count})",
     "options": {
       "addTitle": "Ajouter la playlist à la bibliothèque",
@@ -927,7 +927,7 @@
       "syncQueued": "Analyse programmée"
     },
     "excludedSkipped": "{count} artistes ou albums exclus ont été laissés de côté.",
-    "excludedSkipped_one": "1 artiste ou album exclu a été laissé de côté.",
+    "excludedSkipped_one": "{count} artiste ou album exclu a été laissé de côté.",
     "excludedNote": "Exclu : supprimé ou plus suivi dans la bibliothèque. Les boutons ci-dessus le laissent de côté ; son propre bouton le ramène."
   },
   "onboarding": {
