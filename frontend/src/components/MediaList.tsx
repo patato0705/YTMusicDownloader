@@ -104,7 +104,6 @@ function formatDate(iso: string | null | undefined, locale: string): string {
 }
 
 export const MediaRow: React.FC<MediaRowProps> = ({
-  id,
   title,
   subtitle,
   subtitleTo,

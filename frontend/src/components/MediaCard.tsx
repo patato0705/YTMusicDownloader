@@ -150,7 +150,6 @@ export function albumTypeKey(albumType?: string): string {
 }
 
 export const MediaCard: React.FC<MediaCardProps> = ({
-  id,
   title,
   subtitle,
   subtitleTitle,
