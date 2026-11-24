@@ -51,7 +51,7 @@ export const TrackStatusBadge: React.FC<TrackStatusBadgeProps> = ({ track, downl
           icon: ICON_PATHS.alertCircle,
           label: t('album.trackStatus.failed'),
           // The download error, on hover
-          title: track.last_error ? `${t('album.downloadError')}: ${track.last_error}` : undefined,
+          title: track.last_error ? t('album.downloadError', { error: track.last_error }) : undefined,
         };
       case 'downloading':
         return {

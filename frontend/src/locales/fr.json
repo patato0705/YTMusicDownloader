@@ -148,7 +148,7 @@
     "changeLanguage": "Changer de langue"
   },
   "home": {
-    "welcomeBack": "Bon retour,",
+    "welcomeBack": "Bon retour, {name}",
     "inProgress": "En cours",
     "recentlyAdded": "Ajoutés récemment",
     "quickActions": "Actions rapides",
@@ -180,6 +180,7 @@
       "similarTo": "Similaire à {names}",
       "similarToMany": "Similaire à {count} artistes que vous aimez",
       "dismiss": "Ça ne m'intéresse pas",
+      "dismissArtist": "Ça ne m'intéresse pas : {name}",
       "dismissedToast": "{name} ne sera plus recommandé",
       "undo": "Annuler",
       "dismissedLink": "Masqués ({count})",
@@ -222,7 +223,7 @@
   },
   "album": {
     "album": "Album",
-    "downloadError": "Erreur de téléchargement",
+    "downloadError": "Erreur de téléchargement : {error}",
     "trackCount": "{count} titres",
     "trackCount_one": "{count} titre",
     "download": "Télécharger l'album",

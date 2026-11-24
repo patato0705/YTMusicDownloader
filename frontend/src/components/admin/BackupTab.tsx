@@ -17,13 +17,13 @@ import {
   readExportFile,
 } from '../../api/export';
 import type { BackupOptions, ExportDocument, ImportResult } from '../../api/export';
-import { apiErrorMessage } from '../../utils';
+import { apiErrorMessage, formatList } from '../../utils';
 import { ErrorBanner } from '../ui/PageStatus';
 import type { AdminTabProps } from './AdminTabShell';
 import { Icon, InlineWarning } from '../ui/icons';
 
 export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
-  const { t } = useI18n();
+  const { t, formatLocale } = useI18n();
 
   // Export
   const [options, setOptions] = useState<BackupOptions>({ library: true, charts: true, catalog: true, users: true, settings: true });
@@ -157,8 +157,8 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
         `${u.username} (${t(`admin.users.roles.${u.role}`)}${u.single_sign_on ? `, ${t('admin.users.ssoBadge')}` : ''})`
       );
       rows.push(
-        { label: t('admin.backup.summary.usersCreated'), value: created.length ? created.join(', ') : 0 },
-        { label: t('admin.backup.summary.usersSkipped'), value: r.users.skipped.length ? r.users.skipped.join(', ') : 0 },
+        { label: t('admin.backup.summary.usersCreated'), value: created.length ? formatList(created, formatLocale) : 0 },
+        { label: t('admin.backup.summary.usersSkipped'), value: r.users.skipped.length ? formatList(r.users.skipped, formatLocale) : 0 },
       );
       if (r.users.likes) {
         rows.push({ label: t('admin.backup.summary.likesAdded'), value: r.users.likes });
@@ -170,7 +170,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
     if (r.settings) {
       rows.push(
         { label: t('admin.backup.summary.settingsApplied'), value: r.settings.applied },
-        { label: t('admin.backup.summary.settingsIgnored'), value: r.settings.ignored.length ? r.settings.ignored.join(', ') : 0 },
+        { label: t('admin.backup.summary.settingsIgnored'), value: r.settings.ignored.length ? formatList(r.settings.ignored, formatLocale) : 0 },
       );
     }
 
@@ -270,7 +270,7 @@ export const BackupTab: React.FC<AdminTabProps> = ({ onToast }) => {
             {fileName && (
               <span className="text-sm text-muted-foreground truncate">
                 {fileName}
-                {doc && ` (${sectionsOf(doc).join(', ')})`}
+                {doc && ` (${formatList(sectionsOf(doc), formatLocale)})`}
               </span>
             )}
             {previewLoading && (

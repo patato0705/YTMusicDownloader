@@ -98,7 +98,7 @@ export default function Home(): JSX.Element {
 
   return (
     <div className="space-y-8 pb-12">
-      <PageHeader icon="home" title={<>{t('home.welcomeBack')} {user?.username}</>} />
+      <PageHeader icon="home" title={t('home.welcomeBack', { name: user?.username ?? '' })} />
 
       <LibraryStatCards stats={stats} loading={loading} />
 

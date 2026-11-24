@@ -17,7 +17,7 @@ export {
 } from './mediaHelpers';
 
 // Formatting utilities
-export { formatNumber } from './formatting';
+export { formatList, formatNumber } from './formatting';
 
 // Validation utilities
 export { usernameErrorKey, passwordErrorKey, confirmErrorKey } from './validation';
