@@ -64,7 +64,8 @@ jobs:
       # Imports every module the web process loads and builds the app, so a
       # broken import or route definition fails here
       - run: python -c "from backend.main import create_app; create_app()"
-      # backend/tests: startup on an empty database, migrations, route access
+      # backend/tests: startup on an empty database, migrations, route
+      # access, and the defences against what a request may send (see README)
       - run: python -m pytest backend/tests
 
   docker:
