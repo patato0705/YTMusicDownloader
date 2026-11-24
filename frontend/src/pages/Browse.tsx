@@ -150,6 +150,7 @@ export default function Browse(): JSX.Element {
       });
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- searched again for another query only; t only words the error
   }, [debouncedQuery]);
 
   const setFollowed = (artistId: string, followed: boolean) => {

@@ -86,6 +86,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
       }
     })();
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loaded once on mount; errorMessage only words the error
   }, []);
 
   // The country asked for last: a slow answer for one picked before it must

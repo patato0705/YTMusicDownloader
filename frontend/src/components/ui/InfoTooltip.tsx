@@ -33,29 +33,30 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
   const buttonRef = useRef<HTMLButtonElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
-  // Center the bubble on the trigger, above it when there is room, and keep it
-  // inside the viewport horizontally (the arrow stays under the trigger).
-  const updatePosition = () => {
-    const button = buttonRef.current;
-    const bubble = bubbleRef.current;
-    if (!button || !bubble) return;
-
-    const rect = button.getBoundingClientRect();
-    const width = bubble.offsetWidth;
-    const height = bubble.offsetHeight;
-    const placement = rect.top - gap - height >= MARGIN ? 'top' : 'bottom';
-    const top = placement === 'top' ? rect.top - gap - height : rect.bottom + gap;
-    const centerX = rect.left + rect.width / 2;
-    const left = Math.min(Math.max(centerX - width / 2, MARGIN), window.innerWidth - width - MARGIN);
-
-    setPosition({ top, left, arrowLeft: centerX - left, placement });
-  };
-
   useLayoutEffect(() => {
     if (!open) {
       setPosition(null);
       return;
     }
+
+    // Center the bubble on the trigger, above it when there is room, and keep it
+    // inside the viewport horizontally (the arrow stays under the trigger).
+    const updatePosition = () => {
+      const button = buttonRef.current;
+      const bubble = bubbleRef.current;
+      if (!button || !bubble) return;
+
+      const rect = button.getBoundingClientRect();
+      const width = bubble.offsetWidth;
+      const height = bubble.offsetHeight;
+      const placement = rect.top - gap - height >= MARGIN ? 'top' : 'bottom';
+      const top = placement === 'top' ? rect.top - gap - height : rect.bottom + gap;
+      const centerX = rect.left + rect.width / 2;
+      const left = Math.min(Math.max(centerX - width / 2, MARGIN), window.innerWidth - width - MARGIN);
+
+      setPosition({ top, left, arrowLeft: centerX - left, placement });
+    };
+
     updatePosition();
     // Live content (e.g. job counts) can resize the bubble while it is open
     const observer = new ResizeObserver(updatePosition);
@@ -67,7 +68,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
       window.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
     };
-  }, [open]);
+  }, [open, gap]);
 
   // Click/tap outside or Escape closes a bubble opened by click (touch devices)
   useEffect(() => {

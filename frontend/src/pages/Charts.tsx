@@ -54,6 +54,7 @@ export default function Charts(): JSX.Element {
     })();
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loaded once on mount; t only words the error
   }, []);
 
   const content = () => {

@@ -274,7 +274,7 @@ export default function Library(): JSX.Element {
         window.setTimeout(loadLibrary, Math.max(0, state.lastStartedAt + REFRESH_MIN_GAP_MS - Date.now()));
       }
     }
-  }, []);
+  }, [unsavedLikes]);
 
   useEffect(() => {
     const state = fetchRef.current;

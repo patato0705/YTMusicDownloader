@@ -40,8 +40,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --no-audit --progress=false
-      # Errors only: hooks called out of order, unused variables
-      # (frontend/eslint.config.mjs); its warnings don't fail the run
+      # Hooks called out of order, unused variables, effect dependencies left
+      # out (frontend/eslint.config.mjs); a warning fails the run too
       - run: npm run lint
       # Vitest: frontend/tests/, in a simulated browser (jsdom)
       - run: npm test

@@ -67,6 +67,7 @@ export default function Album(): JSX.Element {
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reloaded for another album only (a new revision refreshes below); fetchAlbum reads the latest revision when called
   }, [albumId]);
 
   // Follow the job queue, so the track badges move with the download.
@@ -82,6 +83,7 @@ export default function Album(): JSX.Element {
       .catch((err) => console.error('Failed to refresh album:', err));
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchAlbum reads the latest revision when called
   }, [albumId, revision, source]);
 
   if (loading) return <LoadingState />;

@@ -71,6 +71,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
       }
     })();
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loaded once on mount; t only words the error
   }, []);
 
   const toggleUserStatus = async (userId: number, currentStatus: boolean) => {
