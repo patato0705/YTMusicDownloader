@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '../../src/config/i18n';
+import notes from '../../src/locales/notes/keys.json';
 
 // Every translation file, by locale code
 const files = Object.fromEntries(
@@ -18,9 +19,23 @@ function flatten(tree: Record<string, unknown>, prefix = '', into: Record<string
 
 const placeholders = (text: string) => [...new Set([...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].sort();
 
-// The singular variant I18nContext picks for a count the language calls singular
-const SINGULAR = '_one';
-const base = (key: string) => key.slice(0, -SINGULAR.length);
+// The plural variants I18nContext picks by count (utils/translate): the plain
+// key is the "other" form
+const PLURAL = /_(zero|one|two|few|many)$/;
+const isVariant = (key: string) => PLURAL.test(key);
+const base = (key: string) => key.replace(PLURAL, '');
+const category = (key: string) => key.match(PLURAL)![1];
+
+// Counts 0 never takes: an interval of 0 is no schedule, so French can say
+// "Toutes les heures" for its singular (0 and 1) without showing the count
+const NO_ZERO = ['admin.settings.schedule.every_hours', 'admin.settings.schedule.every_days'];
+
+/** The whole numbers a key's count can be that fall in a plural category */
+function countsIn(rules: Intl.PluralRules, cat: string, key: string): number[] {
+  const counts: number[] = [];
+  for (let n = NO_ZERO.includes(key) ? 1 : 0; n <= 1000; n++) if (rules.select(n) === cat) counts.push(n);
+  return counts;
+}
 
 const reference = flatten(files[DEFAULT_LOCALE]);
 
@@ -32,19 +47,38 @@ describe('translation files', () => {
   describe.each(SUPPORTED_LOCALES.map((l) => l.code))('%s', (code) => {
     const strings = flatten(files[code]);
     const keys = Object.keys(strings);
+    const rules = new Intl.PluralRules(code);
 
-    it(`has the same keys as ${DEFAULT_LOCALE}, apart from singular variants`, () => {
-      // A language may need a singular where another doesn't (French says
+    it(`has the same keys as ${DEFAULT_LOCALE}, apart from plural variants`, () => {
+      // A language may need a plural form where another doesn't (French says
       // "1 titre manquant", English "1 of 10 tracks missing" works for both)
-      const main = (list: string[]) => list.filter((key) => !key.endsWith(SINGULAR));
+      const main = (list: string[]) => list.filter((key) => !isVariant(key));
       const missing = main(Object.keys(reference)).filter((key) => !(key in strings));
       const extra = main(keys).filter((key) => !(key in reference));
       expect(missing, 'keys to translate').toEqual([]);
       expect(extra, 'keys no longer used').toEqual([]);
     });
 
-    it('only has singular variants of keys it has', () => {
-      expect(keys.filter((key) => key.endsWith(SINGULAR) && !(base(key) in strings))).toEqual([]);
+    it('only has plural variants of keys it has', () => {
+      expect(keys.filter((key) => isVariant(key) && !(base(key) in strings))).toEqual([]);
+    });
+
+    it('only has plural variants its language uses', () => {
+      // An English "_few" is never picked: English counts are only one or other
+      const own = rules.resolvedOptions().pluralCategories as string[];
+      expect(keys.filter((key) => isVariant(key) && !own.includes(category(key)))).toEqual([]);
+    });
+
+    it(`has every plural form of its language wherever it or ${DEFAULT_LOCALE} needs one`, () => {
+      // Russian needs "1 альбом", "2 альбома" and "5 альбомов": a key with
+      // only "_one" would show the plain form for both 2 and 5. "other" is the
+      // plain key, which may only take fractions (Russian) and isn't counted.
+      const wholeNumbers = new Set(Array.from({ length: 1001 }, (_, n) => rules.select(n)));
+      wholeNumbers.delete('other');
+      const plural = new Set([...Object.keys(reference), ...keys].filter(isVariant).map(base));
+      const missing = [...plural].flatMap((key) =>
+        [...wholeNumbers].map((cat) => `${key}_${cat}`).filter((variant) => !(variant in strings)));
+      expect(missing).toEqual([]);
     });
 
     it('has a text for every key', () => {
@@ -54,8 +88,8 @@ describe('translation files', () => {
     it(`uses the same {placeholders} as ${DEFAULT_LOCALE}`, () => {
       const wrong = keys.filter((key) => {
         const own = placeholders(strings[key] as string);
-        if (key.endsWith(SINGULAR)) {
-          // A singular may spell out the count ("1 titre"), not add a value
+        if (isVariant(key)) {
+          // A variant may spell out the count ("1 titre"), not add a value
           const allowed = placeholders(String(strings[base(key)] ?? ''));
           return own.some((name) => !allowed.includes(name));
         }
@@ -64,16 +98,28 @@ describe('translation files', () => {
       expect(wrong).toEqual([]);
     });
 
-    // Where 0 is singular too (French), a singular that spells out "1" or
-    // "une heure" would show it for a count of 0
-    it.runIf(new Intl.PluralRules(code).select(0) === 'one')('shows {count} in singulars whose plural does', () => {
-      // "Toutes les heures": no number to show, and 0 is no schedule anyway
-      const wordOnly = ['admin.settings.schedule.every_hours_one', 'admin.settings.schedule.every_days_one'];
+    // A variant may spell out "1" or "an hour" only where its category is that
+    // one count: French singulars also take 0, Russian ones 21, 31...
+    it('shows {count} in plural variants that cover several counts', () => {
       const wrong = keys.filter((key) =>
-        key.endsWith(SINGULAR) && !wordOnly.includes(key)
+        isVariant(key)
         && placeholders(String(strings[base(key)] ?? '')).includes('count')
-        && !placeholders(strings[key] as string).includes('count'));
+        && !placeholders(strings[key] as string).includes('count')
+        && countsIn(rules, category(key), base(key)).length > 1);
       expect(wrong).toEqual([]);
     });
+  });
+});
+
+describe('translator notes (locales/notes/keys.json)', () => {
+  it('are about keys, or groups of keys, that exist', () => {
+    // A note names a key, or a group: "mediaCard.status" covers mediaCard.status.*
+    const keys = Object.keys(reference);
+    const stale = Object.keys(notes).filter((note) => !keys.some((key) => key === note || key.startsWith(`${note}.`)));
+    expect(stale, 'notes whose keys are gone').toEqual([]);
+  });
+
+  it('all say something', () => {
+    expect(Object.entries(notes).filter(([, note]) => typeof note !== 'string' || !note.trim())).toEqual([]);
   });
 });

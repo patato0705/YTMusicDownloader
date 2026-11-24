@@ -10,7 +10,7 @@ import { EmptyState, ErrorBanner, LoadingState } from '../components/ui/PageStat
 import * as chartsApi from '../api/charts';
 import type { ChartSubscription, Chart } from '../api/charts';
 import { getCountry, useCountryName } from '../config/charts';
-import { apiErrorMessage } from '../utils';
+import { apiErrorMessage, formatList } from '../utils';
 
 export default function Charts(): JSX.Element {
   const { user } = useAuth();
@@ -84,7 +84,7 @@ export default function Charts(): JSX.Element {
     return (
       <>
         {failed.length > 0 && (
-          <ErrorBanner title={t('charts.unavailableTitle', { countries: failed.map((code) => countryName(code)).join(', ') })}>
+          <ErrorBanner title={t('charts.unavailableTitle', { countries: formatList(failed.map((code) => countryName(code)), formatLocale) })}>
             {t('common.ytmusicUnavailable')}
           </ErrorBanner>
         )}

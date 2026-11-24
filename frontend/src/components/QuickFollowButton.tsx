@@ -47,7 +47,7 @@ export const QuickFollowButton: React.FC<QuickFollowButtonProps> = ({ artistId, 
     }
   };
 
-  const label = `${followed ? t('artist.unfollow') : t('artist.follow')}: ${name}`;
+  const label = t(followed ? 'artist.unfollowArtist' : 'artist.followArtist', { name });
 
   return (
     <>

@@ -10,6 +10,7 @@
 import React, { useMemo, useRef } from 'react';
 import { useI18n } from '../../contexts/I18nContext';
 import { Select } from '../ui/Select';
+import { formatList } from '../../utils';
 import type { Schedule, Weekday } from '../../api/admin';
 
 export const WEEKDAYS: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -41,7 +42,7 @@ const useWeekdayNames = (style: 'short' | 'long' = 'short'): Record<Weekday, str
 
 /** "Every 6 hours" / "Mon, Fri at 07:00": the schedule in a few words. */
 export const useScheduleSummary = () => {
-  const { t } = useI18n();
+  const { t, formatLocale } = useI18n();
   const dayNames = useWeekdayNames();
   return (value: Schedule | null | undefined, unit: 'hours' | 'days' | null | undefined): string => {
     if (!value) return '';
@@ -50,7 +51,7 @@ export const useScheduleSummary = () => {
     }
     const days = value.days.length === 7
       ? t('admin.settings.schedule.everyDay')
-      : value.days.map((d) => dayNames[d]).join(', ');
+      : formatList(value.days.map((d) => dayNames[d]), formatLocale);
     return t('admin.settings.schedule.fixedSummary', { days, time: value.time });
   };
 };
@@ -76,14 +77,16 @@ export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onCha
   // What each mode last held, so flipping back and forth loses nothing
   const remembered = useRef<{ interval?: Schedule; fixed?: Schedule }>({});
   remembered.current[value.mode] = value;
+  const defaultInterval: Extract<Schedule, { mode: 'interval' }> = { mode: 'interval', every: unit === 'days' ? 7 : 6 };
+  // The interval the "every" option stands for: this one, or the one picking it brings back
+  const interval = value.mode === 'interval' ? value : remembered.current.interval;
+  const intervalCount = interval?.mode === 'interval' ? interval.every : defaultInterval.every;
 
   const setMode = (mode: string) => {
     if (mode === value.mode || (mode !== 'interval' && mode !== 'fixed')) return;
     onChange(
       remembered.current[mode] ??
-        (mode === 'fixed'
-          ? { mode: 'fixed', time: '04:00', days: [...WEEKDAYS] }
-          : { mode: 'interval', every: unit === 'days' ? 7 : 6 }),
+        (mode === 'fixed' ? { mode: 'fixed', time: '04:00', days: [...WEEKDAYS] } : defaultInterval),
     );
   };
 
@@ -100,7 +103,9 @@ export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onCha
           value={value.mode}
           onChange={setMode}
           options={[
-            { value: 'interval', label: t(`admin.settings.schedule.modeInterval_${unit}`) },
+            // The count, for languages where "every" agrees with it (Russian
+            // "каждый час", "каждые 2 часа")
+            { value: 'interval', label: t(`admin.settings.schedule.modeInterval_${unit}`, { count: intervalCount }) },
             { value: 'fixed', label: t('admin.settings.schedule.modeFixed') },
           ]}
           // min-w-0: gives way on the narrowest phones rather than pushing the row off screen

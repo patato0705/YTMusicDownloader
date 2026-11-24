@@ -201,7 +201,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
                   <button
                     type="button"
                     onClick={() => dismiss(rec)}
-                    aria-label={`${t('browse.recommendations.dismiss')}: ${rec.name}`}
+                    aria-label={t('browse.recommendations.dismissArtist', { name: rec.name })}
                     title={t('browse.recommendations.dismiss')}
                     className="flex w-7 h-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
                   >

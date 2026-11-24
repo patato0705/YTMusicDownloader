@@ -2,9 +2,7 @@
 import React, { createContext, useCallback, useContext, useState, useEffect, useMemo } from 'react';
 import { Locale, DEFAULT_LOCALE, isValidLocale, regionalLocale } from '../config/i18n';
 import { readStorage, writeStorage } from '../utils/storage';
-
-type Translations = Record<string, any>;
-type Params = Record<string, string | number>;
+import { translate, type Params, type Translations } from '../utils/translate';
 
 interface I18nContextType {
   locale: Locale;
@@ -13,8 +11,8 @@ interface I18nContextType {
   setLocale: (locale: Locale) => void;
   /**
    * Translate a key, replacing {param}s. With a numeric `count` param, the
-   * key's "_one" variant is used when the language calls for the singular
-   * (1 in English; 0 and 1 in French) and the variant exists.
+   * key's variant for the language's plural form of that count is used when
+   * it exists ("_one", "_few"...: see utils/translate).
    */
   t: (key: string, params?: Params) => string;
   /** t(), or `fallback` when the key has no translation (e.g. labels defined by the backend) */
@@ -37,16 +35,6 @@ async function loadTranslations(locale: Locale): Promise<Translations> {
     console.error(`Failed to load translations for ${locale}:`, error);
     return {};
   }
-}
-
-/** The string at a dotted key ("auth.login.title"), or undefined */
-function lookup(translations: Translations, key: string): string | undefined {
-  let value: any = translations;
-  for (const part of key.split('.')) {
-    if (!value || typeof value !== 'object' || !(part in value)) return undefined;
-    value = value[part];
-  }
-  return typeof value === 'string' ? value : undefined;
 }
 
 function initialLocale(): Locale {
@@ -79,17 +67,11 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { current = false; };
   }, [locale]);
 
-  const tOr = useCallback((key: string, fallback: string, params?: Params): string => {
-    const count = params?.count;
-    const strings = translations ?? {};
-    const singular = typeof count === 'number' && pluralRules.select(count) === 'one'
-      ? lookup(strings, `${key}_one`)
-      : undefined;
-    const value = singular ?? lookup(strings, key);
-    if (value === undefined) return fallback;
-    if (!params) return value;
-    return value.replace(/\{(\w+)\}/g, (match, param) => (param in params ? String(params[param]) : match));
-  }, [translations, pluralRules]);
+  const tOr = useCallback(
+    (key: string, fallback: string, params?: Params): string =>
+      translate(translations ?? {}, pluralRules, key, params) ?? fallback,
+    [translations, pluralRules],
+  );
 
   // A missing translation shows its key, so it stands out
   const t = useCallback((key: string, params?: Params) => tOr(key, key, params), [tOr]);

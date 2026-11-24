@@ -37,7 +37,7 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "login": {
-      "title": "Sign In",
+      "title": "Sign in",
       "subtitle": "Sign in to your account",
       "username": "Username",
       "password": "Password",
@@ -47,7 +47,7 @@
       "register": "Register here",
       "sso": "Sign in with {name}",
       "ssoErrors": {
-        "denied": "Sign-in was cancelled at the provider.",
+        "denied": "Sign-in was canceled at the provider.",
         "not_allowed": "Your account doesn't have access here. Ask an administrator for access.",
         "inactive": "This account is deactivated. Contact an administrator.",
         "unavailable": "The sign-in provider can't be reached right now. Try again later.",
@@ -55,37 +55,37 @@
       }
     },
     "register": {
-      "title": "Create Account",
+      "title": "Create account",
       "subtitle": "Join the music library",
       "username": "Username",
       "password": "Password",
-      "confirmPassword": "Confirm Password",
+      "confirmPassword": "Confirm password",
       "button": "Create account",
       "loading": "Creating account...",
       "hasAccount": "Already have an account?",
       "login": "Sign in here",
       "usernameHint": "Username must be 3-64 characters",
       "disabled": {
-        "title": "Registration Disabled",
+        "title": "Registration disabled",
         "message": "Public registration is currently disabled. Please contact an administrator for access.",
-        "goToLogin": "Go to Login"
+        "goToLogin": "Go to sign-in"
       }
     },
-    "logout": "Logout",
+    "logout": "Sign out",
     "changePassword": {
-      "title": "Change Password",
+      "title": "Change password",
       "subtitle": "Choose a new password",
-      "current": "Current Password",
-      "new": "New Password",
-      "confirm": "Confirm New Password",
-      "button": "Change Password",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm new password",
+      "button": "Change password",
       "required": "A password change is required",
       "temporaryWarning": "You are signed in with a temporary password (the initial admin password, or one set by an administrator). Choose your own to continue.",
       "tips": {
         "title": "Tips for selecting a password",
         "length": "Your password must be at least 8 characters",
         "mix": "You should try to use a combination of letters, numbers and symbols",
-        "unique": "You should use an unique password on each website."
+        "unique": "You should use a unique password on each website."
       }
     },
     "errors": {
@@ -106,7 +106,7 @@
       "registrationFailed": "Registration failed",
       "changePasswordFailed": "Failed to change password",
       "currentPasswordIncorrect": "Current password is incorrect",
-      "loginFailed": "Login failed. Please try again.",
+      "loginFailed": "Sign-in failed. Please try again.",
       "usernameTaken": "This username is already taken",
       "tooManyAttempts": "Too many failed attempts. Try again in {minutes} min."
     }
@@ -116,7 +116,7 @@
     "browse": "Browse",
     "library": "Library",
     "charts": "Charts",
-    "admin": "Admin Panel",
+    "admin": "Admin panel",
     "main": "Main navigation",
     "activeJobs": "{count} active",
     "rateLimited": "Rate-limited by YouTube: downloads paused until {time}",
@@ -148,7 +148,7 @@
     "changeLanguage": "Change language"
   },
   "home": {
-    "welcomeBack": "Welcome back,",
+    "welcomeBack": "Welcome back, {name}",
     "inProgress": "In progress",
     "recentlyAdded": "Recently added",
     "quickActions": "Quick actions",
@@ -158,14 +158,14 @@
     "loadingActivity": "Loading recent activity...",
     "noActivity": "Your library is empty",
     "noActivityDescription": "Start by browsing and following your favorite artists",
-    "browseMusic": "Browse Music"
+    "browseMusic": "Browse music"
   },
   "browse": {
     "heroSubtitle": "Search YouTube Music for artists, albums, and tracks to add to your library",
     "searchInputPlaceholder": "Search for artists, albums, or tracks...",
     "noResults": "No results found",
-    "searchError": "Search Error",
-    "startSearch": "Start Your Search",
+    "searchError": "Search error",
+    "startSearch": "Start your search",
     "startSearchDescription": "Enter an artist name, album title, or song to discover new music from YouTube Music",
     "noResultsFor": "We couldn't find anything matching \"{query}\"",
     "tryDifferentKeywords": "Try different keywords or check your spelling",
@@ -180,6 +180,7 @@
       "similarTo": "Similar to {names}",
       "similarToMany": "Similar to {count} artists you like",
       "dismiss": "Not interested",
+      "dismissArtist": "Not interested: {name}",
       "dismissedToast": "{name} won't be recommended again",
       "undo": "Undo",
       "dismissedLink": "Dismissed ({count})",
@@ -197,19 +198,21 @@
     "releaseCount_one": "{count} release",
     "follow": "Follow",
     "unfollow": "Unfollow",
+    "followArtist": "Follow {name}",
+    "unfollowArtist": "Unfollow {name}",
     "followed": "Following",
-    "unfollowTitle": "Unfollow Artist",
+    "unfollowTitle": "Unfollow artist",
     "unfollowMessage": "Their new releases won't be downloaded anymore, and no chart or playlist will follow them again (following them by hand still does). What's already downloaded stays.",
     "like": "Like",
     "unlike": "Unlike",
     "likeError": "Couldn't update your liked artists",
     "albums": "Albums",
     "singles": "Singles & EPs",
-    "noAlbums": "No Albums Yet",
+    "noAlbums": "No albums yet",
     "noAlbumsDescription": "This artist doesn't have any albums in our database yet.",
     "notFound": "Artist not found",
-    "delete": "Delete Artist",
-    "deleteTitle": "Delete Artist",
+    "delete": "Delete artist",
+    "deleteTitle": "Delete artist",
     "deleteMessage": "Are you sure you want to delete this artist and all associated albums, tracks, and files? This cannot be undone. Charts and playlists won't bring them back; following them again will.",
     "deleted": "Artist deleted successfully",
     "channelTitle": "Not an artist page",
@@ -217,24 +220,24 @@
     "namesakes": "Artists with this name",
     "noNamesakes": "No artist with this name on YouTube Music.",
     "notAnArtist": "This is a YouTube channel, not an artist: there's nothing to follow.",
-    "chartFollow": "Followed because of the {charts} charts. Once out of them for a while, the charts unfollow this artist again (set in Admin > Charts); liking the artist keeps it.",
-    "chartFollow_one": "Followed because of the {charts} chart. Once out of it for a while, the chart unfollows this artist again (set in Admin > Charts); liking the artist keeps it."
+    "chartFollow": "Followed because of the {charts} charts. Once out of them for a while, the charts unfollow this artist again (set in Admin panel > Charts); liking the artist keeps it.",
+    "chartFollow_one": "Followed because of the {charts} chart. Once out of it for a while, the chart unfollows this artist again (set in Admin panel > Charts); liking the artist keeps it."
   },
   "album": {
     "album": "Album",
-    "downloadError": "Download error",
+    "downloadError": "Download error: {error}",
     "trackCount": "{count} tracks",
     "trackCount_one": "{count} track",
-    "download": "Download Album",
+    "download": "Download album",
     "downloadQueued": "Album download queued successfully",
     "downloadQueuedWithArtist": "Album download queued. Artist also added to your library.",
     "downloadFailed": "Download failed",
-    "deleteAlbum": "Delete Album",
-    "deleteTitle": "Delete Album",
+    "deleteAlbum": "Delete album",
+    "deleteTitle": "Delete album",
     "deleteMessage": "Are you sure you want to delete this album and all associated tracks and files? This cannot be undone. Its artist stays followed, but no sync, chart or playlist will download this album again; downloading it by hand will.",
     "deleted": "Album deleted successfully",
-    "following": "In Library",
-    "trackList": "Track List",
+    "following": "In library",
+    "trackList": "Track list",
     "title": "Title",
     "artist": "Artist",
     "duration": "Duration",
@@ -260,7 +263,7 @@
     "retryFailed": "Could not queue the tracks",
     "lyrics": "Lyrics",
     "notDownloadedNote": "Not downloaded: lyrics and download status appear once the album is downloaded.",
-    "noTracks": "No Tracks",
+    "noTracks": "No tracks",
     "noTracksDescription": "This album doesn't have any tracks available yet.",
     "notFound": "Album not found",
     "removedBadge": "Removed from YouTube Music",
@@ -277,7 +280,8 @@
     "notDownloaded": "Lyrics can be added once the audio file is downloaded.",
     "readOnly": "Only members and administrators can edit lyrics.",
     "formatHint": "Lines starting with [mm:ss.xx] are treated as synced lyrics.",
-    "willSaveAs": "Will be saved as {kind} lyrics.",
+    "willSaveAsSynced": "Will be saved as synced lyrics.",
+    "willSaveAsPlain": "Will be saved as plain lyrics.",
     "willClear": "Saving with empty text removes the lyrics file; the next retry sweep will look them up again.",
     "instrumental": "LRCLIB lists this track as instrumental: there are no lyrics.",
     "instrumentalHint": "LRCLIB lists this track as instrumental, so it is not retried. Paste lyrics to override.",
@@ -292,8 +296,8 @@
   },
   "library": {
     "heroSubtitle": "Manage your followed artists and albums. Track downloads and organize your collection.",
-    "artists": "Followed Artists",
-    "albums": "Followed Albums",
+    "artists": "Followed artists",
+    "albums": "Followed albums",
     "searchPlaceholder": "Artist, album or track...",
     "view": {
       "grid": "Grid view",
@@ -331,7 +335,7 @@
       "artists": "Artists",
       "albums": "Albums",
       "tracks": "Tracks",
-      "diskUsage": "Disk Usage",
+      "diskUsage": "Disk usage",
       "diskUsageShort": "Disk",
       "diskUsageInfo": "Total size of the downloaded audio files. Lyrics and covers are not counted."
     },
@@ -476,17 +480,17 @@
   },
   "charts": {
     "heroSubtitle": "Discover trending artists from around the world",
-    "errorTitle": "Error Loading Charts",
+    "errorTitle": "Error loading charts",
     "unavailableTitle": "Couldn't load {countries}",
-    "noCharts": "No Charts Followed",
+    "noCharts": "No charts followed",
     "noChartsDescription": "No music charts are currently being tracked. Contact an administrator to follow charts from different countries.",
     "noChartsAdminDescription": "Pick a country in the admin panel: its trending artists will show up here.",
     "followingTopN": "Following the top {n} of {total}",
     "followedArtist": "Followed artist",
     "lastUpdated": "Last updated: {date}",
-    "followChart": "Follow Chart",
-    "musicChart": "Music Chart",
-    "numberOfArtists": "Number of Artists to Track",
+    "followChart": "Follow chart",
+    "musicChart": "Music chart",
+    "numberOfArtists": "Number of artists to track",
     "top": "Top",
     "storageWarning": "Higher numbers track more artists but require more storage and sync time",
     "disabled": "The charts feature is currently disabled. An administrator can turn it on in the admin panel.",
@@ -514,7 +518,7 @@
       "saveFailed": "Failed to save settings",
       "invalidNumber": "\"{name}\" must be a whole number of at least {min}",
       "invalidNumberRange": "\"{name}\" must be a whole number between {min} and {max}",
-      "default": "Default",
+      "default": "Reset",
       "resetToDefault": "Reset to default ({value})",
       "on": "On",
       "off": "Off",
@@ -619,7 +623,7 @@
           },
           "job_cleanup_days": {
             "label": "Job retention (days)",
-            "description": "Finished jobs (completed, failed or cancelled) older than this are deleted."
+            "description": "Finished jobs (completed, failed or canceled) older than this are deleted."
           }
         },
         "ytmusic": {
@@ -679,12 +683,12 @@
       "active": "Active",
       "inactive": "Inactive",
       "delete": "Delete",
-      "deleteTitle": "Delete User",
+      "deleteTitle": "Delete user",
       "confirmDelete": "Delete user \"{username}\"? This action cannot be undone.",
       "resetPassword": "Reset password",
-      "resetPasswordTitle": "Reset Password",
+      "resetPasswordTitle": "Reset password",
       "confirmResetPassword": "Give \"{username}\" a temporary password? They will be signed out everywhere and have to choose a new password at next sign-in.",
-      "temporaryPasswordTitle": "Temporary Password",
+      "temporaryPasswordTitle": "Temporary password",
       "temporaryPasswordMessage": "Give this password to {username}. It is only shown now; they will have to choose a new one at next sign-in.",
       "temporaryPasswordDone": "Done",
       "copy": "Copy",
@@ -775,7 +779,7 @@
           },
           "catalog": {
             "label": "Catalog",
-            "description": "Only useful if you also copy the data folder (your music files) to the new instance: the import will then recognise the files already there instead of downloading everything again. Can be left off otherwise."
+            "description": "Only useful if you also copy the data folder (your music files) to the new instance: the import will then recognize the files already there instead of downloading everything again. Can be left off otherwise."
           },
           "users": {
             "label": "Users",
@@ -794,7 +798,7 @@
         "title": "Import",
         "description": "Restore a backup or import someone's library export. Nothing already on this instance is changed: missing artists, albums and charts are followed and their downloads queued; existing users are never overwritten.",
         "choose": "Choose file",
-        "previewing": "Analysing…",
+        "previewing": "Analyzing…",
         "previewTitle": "Preview: nothing has been applied yet",
         "resultTitle": "Import applied",
         "confirm": "Confirm import",
@@ -841,13 +845,13 @@
     }
   },
   "playlist": {
-    "title": "Import Playlist",
+    "title": "Import playlist",
     "subtitle": "Paste a YouTube Music playlist URL to discover and follow artists and albums",
     "whereLinkTitle": "Where is the link?",
     "whereLinkBody": "In YouTube Music, open the playlist, then Share › Copy link. It looks like music.youtube.com/playlist?list=…",
     "urlPlaceholder": "Paste a YouTube Music playlist URL...",
     "untitled": "Playlist",
-    "loadPlaylist": "Load Playlist",
+    "loadPlaylist": "Load playlist",
     "invalidUrl": "This isn't a YouTube Music playlist link or ID",
     "artists": "Artists",
     "albums": "Albums",
@@ -861,18 +865,18 @@
       "albums": "{count} albums",
       "albums_one": "{count} album"
     },
-    "followMainArtists": "Follow Main Artists",
-    "followAll": "Follow All Artists",
+    "followMainArtists": "Follow main artists",
+    "followAll": "Follow all artists",
     "mainArtist": "Main",
     "secondaryArtist": "Secondary",
-    "downloadAll": "Download All Albums",
+    "downloadAll": "Download all albums",
     "followingProgress": "Following {current} of {total}...",
     "downloadingProgress": "Downloading {current} of {total}...",
     "followComplete": "All artists followed successfully",
     "downloadComplete": "All albums queued for download",
     "followed": "Followed",
     "downloaded": "Queued",
-    "emptyPlaylist": "Empty Playlist",
+    "emptyPlaylist": "Empty playlist",
     "emptyPlaylistDescription": "This playlist doesn't contain any tracks",
     "noArtists": "No followable artists found in this playlist",
     "noAlbums": "No downloadable albums found in this playlist",
@@ -934,6 +938,7 @@
     "step": "{current} / {total}",
     "goTo": "Step {current} of {total}",
     "skip": "Skip",
+    "previous": "Back",
     "next": "Next",
     "finish": "Get started",
     "welcome": {
@@ -946,7 +951,7 @@
     },
     "follow": {
       "title": "Follow an artist, or take one album",
-      "body": "Following an artist downloads everything they've released, then new releases as they come out. For a single album, Download Album on its page takes just that one."
+      "body": "Following an artist downloads everything they've released, then new releases as they come out. For a single album, Download album on its page takes just that one."
     },
     "activity": {
       "title": "Downloads at work",
@@ -981,7 +986,7 @@
     },
     "admin": {
       "title": "Running the instance",
-      "body": "The Admin Panel is in your account menu. Only administrators can delete artists and albums, and deleting also removes their files from disk.",
+      "body": "The admin panel is in your account menu. Only administrators can delete artists and albums, and deleting also removes their files from disk.",
       "tabs": {
         "users": "Create accounts, set roles, reset passwords",
         "charts": "The countries whose top artists are followed",
@@ -1004,7 +1009,7 @@
     "description": "The page ran into an unexpected error. Reloading usually fixes it; the details below help when reporting it.",
     "details": "Error details",
     "reload": "Reload page",
-    "home": "Go to Home"
+    "home": "Go to the home page"
   },
   "exclusion": {
     "badge": "Excluded",
