@@ -29,13 +29,13 @@ A text with `{count}` can have a variant for each plural form of your language: 
 
 | Language | Variants to add next to the plain key |
 | --- | --- |
-| English, Spanish, Portuguese | `_one` (1) |
-| French | `_one` (0 and 1) |
+| English, Spanish | `_one` (1) |
+| French, Portuguese | `_one` (0 and 1) |
 | Japanese, Chinese | none: the plain key is used for every count |
 | Russian | `_one` (1, 21, 31...), `_few` (2-4, 22-24...), `_many` (0, 5-20, 25-30...). The plain key is only used for fractions. |
 | Arabic | `_zero`, `_one`, `_two`, `_few` (3-10), `_many` (11-99) |
 
-A file copied from `en.json` starts with English's `_one` variants. Delete them for Japanese and Chinese. Wherever English has a `_one` variant, your file needs all of its own variants, even if they repeat the same text. A variant may spell out the number ("an hour") only when it covers a single count. Russian `_one` also covers 21 and 31, so it has to show `{count}`. The tests check both.
+A file copied from `en.json` starts with English's `_one` variants. Delete them for Japanese and Chinese. Wherever English has a `_one` variant, your file needs all of its own variants, even if they repeat the same text. A variant may spell out the number ("an hour") only when it covers a single count. Russian `_one` also covers 21 and 31, and French and Portuguese `_one` cover 0, so they have to show `{count}`. The tests check both.
 
 ## Words to keep consistent
 
