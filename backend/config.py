@@ -10,7 +10,7 @@ from pathlib import Path
 
 logger = logging.getLogger("config")
 
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.8.0"
 
 # Directories
 CONFIG_DIR = Path("/config")
