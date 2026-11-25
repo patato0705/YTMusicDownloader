@@ -1,0 +1,6 @@
+# The tools that check the backend, for CI (.github/workflows/ci.yml) and
+# local runs. Not in the Docker image: backend/tests is left out of it
+# (.dockerignore). Pinned like backend/requirements.txt, and kept up to
+# date by Dependabot (.github/dependabot.yml).
+ruff==0.17.6
+pytest==9.2.0

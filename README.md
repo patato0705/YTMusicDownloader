@@ -711,7 +711,7 @@ Read the generated script before committing it: `backend/migrations/dev.py` list
 **Tests**: `backend/tests/` checks that the app starts on an empty database, that the models match the migrations, who may call each API route (the `ACCESS` table in `test_access.py`: a new route goes in it, with the lowest role allowed to call it), and the app's defences against what a request may send: folder names, sign-in throttling and bcrypt's 72-byte limit, the thumbnail proxy's allowed hosts, the public health check, and the security headers. They need neither Docker nor `/config`, and never reach the network. From the repository root:
 
 ```bash
-pip install -r backend/requirements.txt pytest
+pip install -r backend/requirements.txt -r backend/tests/requirements.txt
 python -m pytest backend/tests
 ```
 

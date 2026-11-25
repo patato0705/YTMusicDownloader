@@ -1,7 +1,14 @@
+# The two base images are pinned by digest, like ffmpeg and uv below: a tag
+# can be moved to another image, a digest can't, so every build of a commit
+# starts from the same images. The digest is the multi-architecture one
+# (amd64 and arm64). Dependabot proposes a new digest when the tag gets a
+# patched image; a new Node or Python version is changed by hand, here and
+# in .github/workflows/ci.yml together.
+
 # -------------------------
 # 1. Build frontend (React + Vite)
 # -------------------------
-FROM node:24-slim AS frontend-builder
+FROM node:24-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338f9941bad1eb6b34530 AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -15,7 +22,7 @@ RUN npm run build
 # -------------------------
 # 2. Runtime python image with supervisord
 # -------------------------
-FROM python:3.14-slim
+FROM python:3.14-slim@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b
 
 # tzdata for TZ. Nothing else from apt: ffmpeg and uv come in as static
 # binaries below, and the HEALTHCHECK uses python rather than curl.
