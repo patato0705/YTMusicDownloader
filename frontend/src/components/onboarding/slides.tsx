@@ -90,8 +90,13 @@ const Preferences: React.FC = () => {
     <div className="mt-5 space-y-4">
       <div role="group" aria-labelledby="onboarding-language">
         <FieldLabel id="onboarding-language">{t('onboarding.welcome.language')}</FieldLabel>
-        {/* Laid out like the theme switch under it */}
-        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-white/10">
+        {/* Styled like the theme switch under it, with every language on one
+            row: flag over code keeps each button narrow enough for a phone.
+            The full name is the button's label and tooltip. */}
+        <div
+          className="grid gap-1 p-1 rounded-xl bg-slate-100 dark:bg-white/10"
+          style={{ gridTemplateColumns: `repeat(${SUPPORTED_LOCALES.length}, minmax(0, 1fr))` }}
+        >
           {SUPPORTED_LOCALES.map((language) => (
             <button
               key={language.code}
@@ -99,14 +104,16 @@ const Preferences: React.FC = () => {
               lang={language.code}
               onClick={() => setLocale(language.code)}
               aria-pressed={locale === language.code}
-              className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              aria-label={language.name}
+              title={language.name}
+              className={`flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 rounded-lg transition-all ${
                 locale === language.code
                   ? 'bg-white dark:bg-white/15 text-foreground shadow-sm'
                   : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
               }`}
             >
-              <span aria-hidden="true">{language.flag}</span>
-              {language.name}
+              <span aria-hidden="true" className="text-lg leading-none">{language.flag}</span>
+              <span aria-hidden="true" className="text-xs font-semibold tracking-wide uppercase">{language.code}</span>
             </button>
           ))}
         </div>
