@@ -14,23 +14,23 @@
 # wants, "deno" a deno binary from PyPI -- so the three always move together.
 # Without them the `web` client is skipped: some formats go missing and
 # age-restricted videos fail even with valid account cookies.
-fastapi==0.162.0
+fastapi==0.163.2
 uvicorn[standard]==0.54.0
-ytmusicapi==1.12.3
+ytmusicapi==1.12.4
 yt-dlp[default,deno]
 requests==2.34.2
 # Not imported by the app: a floor under requests' and yt-dlp's HTTP library,
 # since neither requires a version past the ones with known CVEs (<2.8.0).
 urllib3>=2.8.0
-SQLAlchemy==2.1.6
+SQLAlchemy==2.1.9
 # Database schema upgrades (backend/migrations/)
 alembic==1.20.1
-pydantic==2.14.1
+pydantic==2.14.3
 httpx==0.28.1
 bcrypt==5.0.0
 PyJWT==2.15.1
-joserfc==1.7.7
-python-multipart==0.0.32
+joserfc==1.8.0
+python-multipart==0.0.34
 mutagen==1.48.1
 # Not imported by the app: the process manager the Docker image runs
 # web/workers/scheduler under (deploy/supervisord.conf).
