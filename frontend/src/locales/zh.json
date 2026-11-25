@@ -1,0 +1,988 @@
+{
+  "common": {
+    "unknownArtist": "未知艺人",
+    "untitled": "无标题",
+    "loading": "加载中…",
+    "error": "错误",
+    "cancel": "取消",
+    "confirm": "确认",
+    "save": "保存",
+    "delete": "删除",
+    "close": "关闭",
+    "clear": "清除",
+    "back": "返回",
+    "or": "或",
+    "all": "全部",
+    "searchPlaceholder": "搜索…",
+    "ytmusicUnavailable": "YouTube Music 暂时没有响应，请稍后再试。",
+    "serverUnreachable": "无法连接到服务器，它可能正在重启，请稍后再试。"
+  },
+  "mediaCard": {
+    "type": {
+      "album": "专辑",
+      "ep": "EP",
+      "single": "单曲",
+      "track": "歌曲"
+    },
+    "status": {
+      "downloaded": "已存盘",
+      "inLibrary": "在音乐库中",
+      "downloading": "下载中",
+      "queued": "排队中",
+      "paused": "已暂停",
+      "failed": "失败"
+    }
+  },
+  "auth": {
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
+    "login": {
+      "title": "登录",
+      "subtitle": "登录你的账号",
+      "username": "用户名",
+      "password": "密码",
+      "button": "登录",
+      "loading": "正在登录…",
+      "noAccount": "还没有账号？",
+      "register": "在此注册",
+      "sso": "使用 {name} 登录",
+      "ssoErrors": {
+        "denied": "登录已在身份提供方处取消。",
+        "not_allowed": "你的账号没有此处的访问权限，请向管理员申请。",
+        "inactive": "此账号已停用，请联系管理员。",
+        "unavailable": "暂时无法连接到登录提供方，请稍后再试。",
+        "failed": "登录失败。请重试，如果问题持续出现，请联系管理员。"
+      }
+    },
+    "register": {
+      "title": "创建账号",
+      "subtitle": "加入音乐库",
+      "username": "用户名",
+      "password": "密码",
+      "confirmPassword": "确认密码",
+      "button": "创建账号",
+      "loading": "正在创建账号…",
+      "hasAccount": "已有账号？",
+      "login": "在此登录",
+      "usernameHint": "用户名须为 3 至 64 个字符",
+      "disabled": {
+        "title": "注册已关闭",
+        "message": "公开注册目前已关闭。如需访问，请联系管理员。",
+        "goToLogin": "前往登录"
+      }
+    },
+    "logout": "退出登录",
+    "changePassword": {
+      "title": "修改密码",
+      "subtitle": "设置新密码",
+      "current": "当前密码",
+      "new": "新密码",
+      "confirm": "确认新密码",
+      "button": "修改密码",
+      "required": "需要修改密码",
+      "temporaryWarning": "你正在使用临时密码登录（初始管理员密码，或管理员设置的密码）。请设置你自己的密码以继续。",
+      "tips": {
+        "title": "设置密码的建议",
+        "length": "密码至少需要 8 个字符",
+        "mix": "建议组合使用字母、数字和符号",
+        "unique": "建议每个网站使用不同的密码。"
+      }
+    },
+    "errors": {
+      "usernameRequired": "请输入用户名",
+      "passwordRequired": "请输入密码",
+      "currentPasswordRequired": "请输入当前密码",
+      "newPasswordRequired": "请输入新密码",
+      "confirmPasswordRequired": "请确认密码",
+      "invalidCredentials": "用户名或密码错误",
+      "passwordMismatch": "两次输入的密码不一致",
+      "passwordTooShort": "密码至少需要 8 个字符",
+      "passwordTooLong": "密码最多 72 个字符（含中文、重音字母或表情符号时更少）",
+      "usernameTooShort": "用户名至少需要 3 个字符",
+      "usernameTooLong": "用户名最多 64 个字符",
+      "usernameInvalidChars": "用户名只能包含字母、数字、连字符和下划线",
+      "usernameInvalid": "用户名无效",
+      "passwordInvalid": "密码无效",
+      "registrationFailed": "注册失败",
+      "changePasswordFailed": "修改密码失败",
+      "currentPasswordIncorrect": "当前密码不正确",
+      "loginFailed": "登录失败，请重试。",
+      "usernameTaken": "此用户名已被使用",
+      "tooManyAttempts": "失败次数过多，请在 {minutes} 分钟后重试。"
+    }
+  },
+  "nav": {
+    "home": "首页",
+    "browse": "探索",
+    "library": "音乐库",
+    "charts": "排行榜",
+    "admin": "管理面板",
+    "main": "主导航",
+    "activeJobs": "{count} 个进行中",
+    "rateLimited": "被 YouTube 限流：下载暂停至 {time}",
+    "jobTypes": {
+      "download_track": "歌曲",
+      "download_lyrics": "歌词",
+      "sync_artist": "艺人同步",
+      "sync_chart": "排行榜同步",
+      "import_album": "专辑导入",
+      "find_video_songs": "MV 歌曲查找"
+    }
+  },
+  "settings": {
+    "theme": {
+      "light": "浅色",
+      "dark": "深色"
+    },
+    "appearance": "外观",
+    "accent": {
+      "label": "强调色",
+      "colors": {
+        "indigo": "靛蓝",
+        "sky": "天蓝",
+        "teal": "青绿",
+        "orange": "橙色",
+        "rose": "玫红"
+      }
+    },
+    "changeLanguage": "更改语言"
+  },
+  "home": {
+    "welcomeBack": "欢迎回来，{name}",
+    "inProgress": "进行中",
+    "recentlyAdded": "最近添加",
+    "quickActions": "快捷操作",
+    "browseDescription": "在 YouTube Music 上搜索新内容",
+    "libraryDescription": "管理你关注的艺人和专辑",
+    "playlistDescription": "关注 YouTube Music 播放列表中的艺人和专辑",
+    "loadingActivity": "正在加载最近动态…",
+    "noActivity": "你的音乐库是空的",
+    "noActivityDescription": "先去探索并关注你喜欢的艺人吧",
+    "browseMusic": "探索音乐"
+  },
+  "browse": {
+    "heroSubtitle": "在 YouTube Music 上搜索艺人、专辑和歌曲，添加到你的音乐库",
+    "searchInputPlaceholder": "搜索艺人、专辑或歌曲…",
+    "noResults": "未找到结果",
+    "searchError": "搜索出错",
+    "startSearch": "开始搜索",
+    "startSearchDescription": "输入艺人名、专辑名或歌曲名，在 YouTube Music 上发现新音乐",
+    "noResultsFor": "未找到与“{query}”匹配的内容",
+    "tryDifferentKeywords": "换个关键词试试，或检查拼写",
+    "sections": {
+      "artists": "艺人",
+      "albums": "专辑",
+      "songs": "歌曲"
+    },
+    "recommendations": {
+      "title": "为你推荐",
+      "subtitle": "与你喜欢的艺人相似的艺人",
+      "similarTo": "与 {names} 相似",
+      "similarToMany": "与你喜欢的 {count} 位艺人相似",
+      "dismiss": "不感兴趣",
+      "dismissArtist": "不感兴趣：{name}",
+      "dismissedToast": "不会再推荐 {name}",
+      "undo": "撤销",
+      "dismissedLink": "已隐藏（{count}）",
+      "dismissedTitle": "已隐藏的艺人",
+      "dismissedDescription": "这些艺人不会被推荐。恢复后，当他们与你喜欢的艺人相似时会再次出现。",
+      "noDismissed": "没有已隐藏的艺人",
+      "restore": "恢复",
+      "noneLeft": "暂时没有推荐。多喜欢一些艺人就会有推荐了。",
+      "noLikes": "用 ♥ 喜欢音乐库中的艺人（关注艺人也会自动喜欢），与他们相似的艺人就会出现在这里。",
+      "error": "无法更新推荐"
+    }
+  },
+  "artist": {
+    "releaseCount": "{count} 部作品",
+    "follow": "关注",
+    "unfollow": "取消关注",
+    "followArtist": "关注 {name}",
+    "unfollowArtist": "取消关注 {name}",
+    "followed": "已关注",
+    "unfollowTitle": "取消关注艺人",
+    "unfollowMessage": "其新作品将不再下载，任何排行榜或播放列表也不会再关注该艺人（手动关注仍然可以）。已下载的内容会保留。",
+    "like": "喜欢",
+    "unlike": "取消喜欢",
+    "likeError": "无法更新你喜欢的艺人",
+    "albums": "专辑",
+    "singles": "单曲和 EP",
+    "noAlbums": "暂无专辑",
+    "noAlbumsDescription": "数据库中还没有这位艺人的专辑。",
+    "notFound": "未找到艺人",
+    "delete": "删除艺人",
+    "deleteTitle": "删除艺人",
+    "deleteMessage": "确定要删除该艺人及其所有专辑、歌曲和文件吗？此操作无法撤销。排行榜和播放列表不会再把它带回来；再次关注则可以。",
+    "deleted": "艺人已删除",
+    "channelTitle": "这不是艺人页面",
+    "channelNotice": "这是一个 YouTube 频道：上传内容署名的是发布它的频道。没有可关注的作品。",
+    "namesakes": "同名艺人",
+    "noNamesakes": "YouTube Music 上没有这个名字的艺人。",
+    "notAnArtist": "这是一个 YouTube 频道，不是艺人：没有可关注的内容。",
+    "chartFollow": "因 {charts} 排行榜而被关注。离开排行榜一段时间后，排行榜会取消关注该艺人（在 管理面板 > 排行榜 中设置）；喜欢该艺人可以保留关注。"
+  },
+  "album": {
+    "album": "专辑",
+    "downloadError": "下载出错：{error}",
+    "trackCount": "{count} 首歌曲",
+    "download": "下载专辑",
+    "downloadQueued": "专辑下载已加入队列",
+    "downloadQueuedWithArtist": "专辑下载已加入队列，艺人也已添加到你的音乐库。",
+    "downloadFailed": "下载失败",
+    "deleteAlbum": "删除专辑",
+    "deleteTitle": "删除专辑",
+    "deleteMessage": "确定要删除该专辑及其所有歌曲和文件吗？此操作无法撤销。其艺人仍保持关注，但任何同步、排行榜或播放列表都不会再下载这张专辑；手动下载则可以。",
+    "deleted": "专辑已删除",
+    "following": "在音乐库中",
+    "trackList": "曲目列表",
+    "title": "标题",
+    "artist": "艺人",
+    "duration": "时长",
+    "status": "状态",
+    "trackStatus": {
+      "done": "已下载",
+      "available": "未下载",
+      "queued": "排队中",
+      "paused": "已暂停",
+      "downloading": "下载中",
+      "failed": "失败",
+      "removed": "已下架"
+    },
+    "removedKept": "自 {date} 起已不在 YouTube Music 上。文件仍保留在音乐库中。",
+    "removedNotDownloaded": "自 {date} 起已不在 YouTube Music 上，无法再下载。",
+    "retryingAfter": "等待重试，原因：{error}",
+    "pausedUntil": "下载暂停至 {time}（YouTube 限流）",
+    "retry": "重试缺失的歌曲",
+    "retryQueued": "{count} 首歌曲已加入下载队列",
+    "retryNothing": "无需重试：所有歌曲都已存盘或已在队列中",
+    "retryImport": "将重新获取专辑的曲目列表，然后下载其中的歌曲",
+    "retryFailed": "无法将歌曲加入队列",
+    "lyrics": "歌词",
+    "notDownloadedNote": "未下载：专辑下载后会显示歌词和下载状态。",
+    "noTracks": "没有歌曲",
+    "noTracksDescription": "这张专辑暂时没有可用的歌曲。",
+    "notFound": "未找到专辑",
+    "removedBadge": "已从 YouTube Music 下架",
+    "removedNote": "自 {date} 起已不在 YouTube Music 上，也没有替代版本。文件仍保留在音乐库中；不会再为它下载任何内容。"
+  },
+  "lyrics": {
+    "open": "查看或编辑歌词",
+    "saved": "歌词已保存",
+    "clear": "移除歌词",
+    "searchLrclib": "在 LRCLIB 上搜索",
+    "searchLrclibHint": "用艺人和标题打开 lrclib.net。从匹配的结果中复制 LRC 文本，粘贴到下方。",
+    "placeholder": "在此粘贴 LRC（同步）歌词或纯文本歌词…",
+    "empty": "这首歌曲没有已存盘的歌词。",
+    "notDownloaded": "音频文件下载后即可添加歌词。",
+    "readOnly": "只有成员和管理员可以编辑歌词。",
+    "formatHint": "以 [mm:ss.xx] 开头的行会被视为同步歌词。",
+    "willSaveAsSynced": "将保存为同步歌词。",
+    "willSaveAsPlain": "将保存为纯文本歌词。",
+    "willClear": "以空文本保存会删除歌词文件；下一轮重试时会重新查找。",
+    "instrumental": "LRCLIB 将这首歌曲标记为纯音乐：没有歌词。",
+    "instrumentalHint": "LRCLIB 将这首歌曲标记为纯音乐，因此不会重试。粘贴歌词即可覆盖。",
+    "pendingHint": "尚未查找：音频下载后，轮到歌词队列处理时才会查找。",
+    "kind": {
+      "synced": "同步",
+      "plain": "纯文本",
+      "instrumental": "纯音乐",
+      "pending": "待查找",
+      "none": "无"
+    }
+  },
+  "library": {
+    "heroSubtitle": "管理你关注的艺人和专辑，跟踪下载并整理你的收藏。",
+    "artists": "已关注的艺人",
+    "albums": "已关注的专辑",
+    "searchPlaceholder": "艺人、专辑或歌曲…",
+    "view": {
+      "grid": "网格视图",
+      "list": "列表视图"
+    },
+    "columns": {
+      "name": "名称",
+      "artist": "艺人",
+      "type": "类型",
+      "year": "年份",
+      "tracks": "歌曲",
+      "albums": "专辑",
+      "added": "添加时间",
+      "followed": "关注时间",
+      "status": "状态"
+    },
+    "meta": {
+      "albumCount": "{count} 张专辑",
+      "trackCount": "{tracks} 首歌曲"
+    },
+    "emptyTitle": "你的音乐库是空的",
+    "emptyDescription": "去探索并关注你喜欢的艺人，开始建立你的收藏吧！",
+    "noMatches": "未找到匹配项",
+    "noMatchesDescription": "音乐库中没有与“{query}”匹配的内容",
+    "trackMatch": {
+      "one": "包含“{title}”",
+      "many": "包含“{title}”及另外 {count} 首匹配的歌曲",
+      "artistOne": "{album} 中有“{title}”",
+      "artistMany": "有“{title}”及另外 {count} 首匹配的歌曲"
+    },
+    "stats": {
+      "artists": "艺人",
+      "albums": "专辑",
+      "tracks": "歌曲",
+      "diskUsage": "磁盘占用",
+      "diskUsageShort": "磁盘",
+      "diskUsageInfo": "已下载音频文件的总大小，不包括歌词和封面。"
+    },
+    "export": {
+      "button": "导出音乐库",
+      "description": "将已关注的艺人、单独的专辑和排行榜列表下载为 JSON 文件。管理员可以将其导入到另一个实例。",
+      "failed": "导出音乐库失败"
+    },
+    "playlists": "播放列表",
+    "noPlaylists": "没有匹配的播放列表。",
+    "filters": {
+      "button": "筛选",
+      "buttonActive": "筛选，已选 {count} 项",
+      "title": "筛选",
+      "clearAll": "全部清除",
+      "clear": "清除筛选",
+      "remove": "移除筛选：{label}",
+      "results": "{formatted} 个结果",
+      "showResults": "查看 {formatted} 个结果",
+      "noMatchesTitle": "没有符合这些筛选条件的内容",
+      "noMatchesDescription": "试着移除一两个筛选条件。",
+      "noMatchesWithSearch": "与“{query}”匹配的内容中，没有符合这些筛选条件的。试着移除一两个筛选条件。",
+      "genreSearch": "查找流派",
+      "noGenreMatch": "没有匹配的流派。",
+      "showAllGenres": "显示全部 {count} 个流派",
+      "showFewerGenres": "收起",
+      "groups": {
+        "downloads": "下载",
+        "lyrics": "歌词",
+        "metadata": "封面和流派",
+        "type": "作品类型",
+        "decade": "年代",
+        "genre": "流派",
+        "source": "添加来源",
+        "follow": "艺人关注方式",
+        "liked": "喜欢",
+        "excluded": "已排除"
+      },
+      "options": {
+        "downloads": {
+          "missing": "缺失歌曲",
+          "failed": "失败歌曲",
+          "active": "进行中"
+        },
+        "lyrics": {
+          "missing": "缺少歌词",
+          "synced": "同步歌词",
+          "plain": "未同步歌词",
+          "instrumental": "纯音乐"
+        },
+        "metadata": {
+          "artwork": "缺少封面",
+          "genre": "未找到流派"
+        },
+        "type": {
+          "album": "专辑",
+          "single": "单曲",
+          "ep": "EP"
+        },
+        "decade": {
+          "value": "{decade} 年代",
+          "unknown": "年份未知"
+        },
+        "source": {
+          "artist": "已关注的艺人",
+          "playlist": "播放列表",
+          "own": "单独关注"
+        },
+        "follow": {
+          "full": "完整关注",
+          "light": "部分关注",
+          "chart": "由排行榜关注"
+        },
+        "liked": {
+          "liked": "喜欢的艺人"
+        },
+        "excluded": {
+          "excluded": "已删除或已取消关注"
+        }
+      },
+      "hints": {
+        "missingTracks": "{total} 首歌曲中缺失 {count} 首",
+        "failedTracks": "{count} 首歌曲失败",
+        "missingLyrics": "{count} 首歌曲没有歌词",
+        "plainLyrics": "{count} 首歌曲为未同步歌词",
+        "syncedLyrics": "{count} 首歌曲为同步歌词",
+        "instrumental": "{count} 首纯音乐",
+        "noArtwork": "无封面",
+        "noGenre": "未找到流派"
+      }
+    },
+    "sort": {
+      "label": "排序方式",
+      "button": "按{key}排序，{order}",
+      "orderLabel": "顺序",
+      "keys": {
+        "name": "名称",
+        "added": "添加日期",
+        "year": "发行年份",
+        "completion": "完成度"
+      },
+      "order": {
+        "name": {
+          "asc": "A 到 Z",
+          "desc": "Z 到 A"
+        },
+        "added": {
+          "asc": "最早的在前",
+          "desc": "最新的在前"
+        },
+        "year": {
+          "asc": "最早的在前",
+          "desc": "最新的在前"
+        },
+        "completion": {
+          "asc": "完成度低的在前",
+          "desc": "完成度高的在前"
+        }
+      }
+    },
+    "excluded": {
+      "artistDeleted": "删除于 {date}",
+      "artistUnfollowed": "取消关注于 {date}",
+      "albumDeleted": "删除于 {date}",
+      "restore": "恢复 {name}",
+      "restoreTitle": "恢复：排行榜、播放列表和同步可以再次把它带回来。不会立即下载任何内容。",
+      "restored": "{name} 已恢复：排行榜、播放列表和同步可以再次把它带回来",
+      "note": "任何自动操作都不会把它们带回来：排行榜、播放列表、艺人同步和备份都不会。手动关注或下载其中一项即可恢复它，点击它的恢复按钮也可以。",
+      "empty": "音乐库中没有被排除的内容",
+      "emptyDescription": "已删除的艺人和专辑，以及已取消关注的艺人，会列在这里。",
+      "artists": "已排除的艺人",
+      "albums": "已排除的专辑"
+    }
+  },
+  "charts": {
+    "heroSubtitle": "发现世界各地的热门艺人",
+    "errorTitle": "加载排行榜出错",
+    "unavailableTitle": "无法加载 {countries}",
+    "noCharts": "未关注任何排行榜",
+    "noChartsDescription": "目前没有跟踪任何音乐排行榜。请联系管理员关注不同国家的排行榜。",
+    "noChartsAdminDescription": "在管理面板中选择一个国家：它的热门艺人会显示在这里。",
+    "followingTopN": "已关注 {total} 位中的前 {n} 位",
+    "followedArtist": "已关注的艺人",
+    "lastUpdated": "最后更新：{date}",
+    "followChart": "关注排行榜",
+    "musicChart": "音乐排行榜",
+    "numberOfArtists": "要跟踪的艺人数量",
+    "top": "前",
+    "storageWarning": "数量越大，跟踪的艺人越多，但需要更多存储空间和同步时间",
+    "disabled": "排行榜功能目前已关闭。管理员可以在管理面板中开启。",
+    "keepWeeks": {
+      "column": "取消关注时间",
+      "label": "多久后取消关注其艺人",
+      "never": "从不",
+      "weeks": "离榜 {count} 周后",
+      "help": "由该排行榜关注的艺人，在离开该排行榜（以及所有其他已关注的排行榜）达到这段时间后会被取消关注。已下载的文件会保留，只要有人喜欢该艺人，就会继续保留。"
+    }
+  },
+  "admin": {
+    "subtitle": "管理应用设置和用户",
+    "tabs": {
+      "settings": "设置",
+      "charts": "排行榜",
+      "users": "用户",
+      "backup": "备份"
+    },
+    "settings": {
+      "save": "保存设置",
+      "unsaved": "有未保存的更改",
+      "saved": "设置已保存",
+      "saveFailed": "保存设置失败",
+      "invalidNumber": "“{name}”必须是不小于 {min} 的整数",
+      "invalidNumberRange": "“{name}”必须是 {min} 到 {max} 之间的整数",
+      "default": "重置",
+      "resetToDefault": "重置为默认值（{value}）",
+      "on": "开",
+      "off": "关",
+      "categories": {
+        "auth": "身份验证",
+        "download": "下载",
+        "features": "功能",
+        "scheduler": "计划任务",
+        "ytmusic": "YouTube Music"
+      },
+      "options": {
+        "auth": {
+          "oidc_default_role": {
+            "visitor": "访客",
+            "member": "成员"
+          }
+        }
+      },
+      "keys": {
+        "auth": {
+          "registration_enabled": {
+            "label": "公开注册",
+            "description": "允许任何人在注册页面创建账号。"
+          },
+          "login_max_failures_per_ip": {
+            "label": "每个 IP 的登录失败次数",
+            "description": "在时间窗口内，单个 IP 地址允许输错密码的次数，超过后将被封锁（IPv6 按 /64 网络计算，即单个连接分配到的范围）。设为 0 可关闭此检查。"
+          },
+          "login_max_failures_per_account": {
+            "label": "每个账号的登录失败次数",
+            "description": "在时间窗口内，单个账号允许输错密码的次数，超过后新的浏览器将无法登录该账号。之前登录过该账号（且之后未退出）的浏览器有单独的次数，因此账号主人不会被锁在外面。修改密码时输错当前密码也受此限制。设为 0 可关闭此检查。"
+          },
+          "login_failure_window_minutes": {
+            "label": "登录失败时间窗口（分钟）",
+            "description": "登录失败记录保留多久。记录过期后，被封锁的 IP 或账号会随之解除。"
+          },
+          "oidc_signup_enabled": {
+            "label": "新的单点登录账号",
+            "description": "有人首次通过单点登录时为其创建账号。关闭后，只有现有账号可以登录。当角色来自身份提供方的群组时，只有这些群组的成员可以登录：已离开群组的现有账号也会被拒绝。"
+          },
+          "oidc_default_role": {
+            "label": "新单点登录账号的角色",
+            "description": "授予通过单点登录创建的账号。当角色来自身份提供方的群组且允许新账号时，也会授予不在这些群组中的人。"
+          },
+          "oidc_session_hours": {
+            "label": "单点登录会话时长（小时）",
+            "description": "单点登录会话持续多久后需要再次经过身份提供方（通常只需点击一下）。身份提供方处的角色变更和停用从那时起才生效，所以它比密码会话（7 天）短。"
+          }
+        },
+        "download": {
+          "max_concurrent": {
+            "label": "最大同时下载数",
+            "description": "同时从 YouTube 下载的歌曲数量。元数据和歌词本来就是并行获取的；这只会增加下载流，而来自同一 IP 的下载流每多一个，被限流的可能性就越大。无需重启即可生效；上限由环境变量 DOWNLOAD_WORKERS 决定。"
+          },
+          "rate_limit_pause_minutes": {
+            "label": "限流暂停时长",
+            "description": "当 YouTube 限流或要求机器人验证时，所有下载暂停的分钟数，以免其他下载进程把临时限制变成封禁。每次连续暂停时长翻倍（最多 16 倍），直到再次有下载成功。"
+          }
+        },
+        "features": {
+          "lyrics_enabled": {
+            "label": "下载歌词",
+            "description": "自动为每首下载的歌曲获取歌词，来源为 LRCLIB；LRCLIB 没有时则使用 YouTube Music。"
+          },
+          "synced_lyrics_only": {
+            "label": "仅同步歌词",
+            "description": "只保留带时间轴的同步歌词；纯文本（未同步）歌词会被拒绝，并在稍后重试。"
+          },
+          "genres_enabled": {
+            "label": "查找流派",
+            "description": "在 MusicBrainz 上查找专辑和艺人的流派（以 Deezer 作为备选），并写入标签和 NFO 文件。关闭后会停止查找；已找到的流派会保留。"
+          },
+          "charts_enabled": {
+            "label": "排行榜",
+            "description": "启用排行榜页面和排行榜订阅。"
+          }
+        },
+        "scheduler": {
+          "artist_sync": {
+            "label": "艺人同步",
+            "description": "何时检查已关注艺人的新作品，以及音乐库中的专辑在 YouTube Music 上的变化。",
+            "intervalHint": "每位艺人在上次检查 {count} 小时后再次检查，因此检查会分散在一天中进行。"
+          },
+          "chart_sync": {
+            "label": "排行榜同步",
+            "description": "何时重新获取已关注的排行榜，以关注新进入前 N 名的艺人。YouTube Music 每周才更新一次排行榜，所以比每 7 天更频繁地同步很少会有新发现。",
+            "intervalHint": "每个排行榜在上次同步 {count} 天后重新获取。"
+          },
+          "playlist_sync": {
+            "label": "播放列表同步",
+            "description": "何时重新扫描已关注的播放列表：新歌曲会带入其专辑或艺人，M3U 文件也会随播放列表更新。",
+            "intervalHint": "每个播放列表在上次扫描 {count} 小时后重新扫描。"
+          },
+          "lyrics_retry": {
+            "label": "歌词重试",
+            "description": "何时重试缺少歌词或歌词未同步的歌曲。",
+            "intervalHint": "在上次重试 {count} 小时后再次重试。"
+          },
+          "job_cleanup_days": {
+            "label": "任务保留时长（天）",
+            "description": "早于此时长的已结束任务（已完成、失败或已取消）将被删除。"
+          }
+        },
+        "ytmusic": {
+          "language": {
+            "label": "YouTube Music 语言",
+            "description": "从 YouTube Music 获取的数据（艺人简介、专辑介绍等）所用的语言。"
+          }
+        }
+      },
+      "cookies": {
+        "label": "YouTube 账号 Cookie",
+        "description": "从已登录 YouTube 账号的浏览器中导出的 cookies.txt（请使用小号，而不是你的主账号）。仅用于获取有年龄限制的歌曲；从不用于普通下载，也从不用于绕过限流，因此该账号只会收到少量请求。",
+        "none": "未上传账号 Cookie：有年龄限制的歌曲将会失败。",
+        "present": "已上传：{count} 个 Cookie，{date}",
+        "upload": "上传 cookies.txt",
+        "replace": "替换",
+        "remove": "移除",
+        "uploaded": "账号 Cookie 已保存",
+        "uploadFailed": "这看起来不是 cookies.txt 文件",
+        "deleted": "账号 Cookie 已移除"
+      },
+      "schedule": {
+        "modeFixed": "定时",
+        "unit_hours": "小时",
+        "unit_days": "天",
+        "every_hours": "每 {count} 小时",
+        "every_days": "每 {count} 天",
+        "everyDay": "每天",
+        "fixedSummary": "{days} {time}",
+        "nextRun": "下次运行：{when}",
+        "nextRunAfterSave": "保存后显示下次运行时间。",
+        "noDays": "请至少选择一天。",
+        "timezone": "固定时间使用容器的时区（TZ）{timezone}。应用未运行时错过的任务会被跳过，不会补运行。",
+        "invalid": "{name}：计划不完整",
+        "intervalRange": "{name}：间隔必须在 {min} 到 {max} 之间",
+        "timeLabel": "时间",
+        "daysLabel": "星期",
+        "modeInterval_hours": "每",
+        "modeInterval_days": "每"
+      }
+    },
+    "users": {
+      "search": "搜索用户",
+      "showing": "显示 {count} 位用户中的 {shown} 位",
+      "allStatuses": "所有状态",
+      "allRoles": "所有角色",
+      "create": "创建用户",
+      "username": "用户名",
+      "role": "角色",
+      "status": "状态",
+      "actions": "操作",
+      "active": "已启用",
+      "inactive": "已停用",
+      "delete": "删除",
+      "deleteTitle": "删除用户",
+      "confirmDelete": "删除用户“{username}”？此操作无法撤销。",
+      "resetPassword": "重置密码",
+      "resetPasswordTitle": "重置密码",
+      "confirmResetPassword": "为“{username}”生成临时密码？该用户将在所有设备上退出登录，并须在下次登录时设置新密码。",
+      "temporaryPasswordTitle": "临时密码",
+      "temporaryPasswordMessage": "请将此密码告诉 {username}。它只显示这一次；对方须在下次登录时设置新密码。",
+      "temporaryPasswordDone": "完成",
+      "copy": "复制",
+      "copied": "已复制",
+      "ssoBadge": "SSO",
+      "ssoTooltip": "通过 {name} 登录",
+      "roleFromGroups": "此角色来自该用户在登录提供方中的群组",
+      "roleFromGroupsShort": "来自提供方群组",
+      "noResults": "未找到用户",
+      "created": "用户已创建",
+      "deleted": "用户已删除",
+      "activated": "用户已启用",
+      "deactivated": "用户已停用",
+      "roleUpdated": "角色已更新",
+      "roles": {
+        "visitor": "访客",
+        "member": "成员",
+        "administrator": "管理员"
+      },
+      "roleInfo": {
+        "title": "各角色的权限",
+        "visitor": "只读（新账号的默认角色）。可以浏览音乐库、艺人、专辑、排行榜和歌词，但不能更改任何内容。",
+        "member": "访客能做的一切，另外还可以：关注和取消关注艺人、下载专辑，以及添加、编辑或移除歌词。",
+        "administrator": "成员能做的一切，另外还可以：删除专辑和艺人，以及管理管理面板（用户、排行榜订阅和应用设置）。"
+      }
+    },
+    "charts": {
+      "selectCountry": "选择国家…",
+      "followChart": "关注排行榜",
+      "previewTop": "前 {n} 位艺人预览",
+      "unfollowChart": "取消关注",
+      "syncNow": "立即同步",
+      "syncDisabledHint": "启用排行榜后才能同步",
+      "preview": "预览",
+      "hidePreview": "隐藏",
+      "previewFollowing": "已关注 {total} 位艺人中的前 {n} 位。已关注的艺人带有勾号。",
+      "apply": "应用",
+      "enable": "启用",
+      "disable": "停用",
+      "currentSubscriptions": "当前的排行榜订阅",
+      "country": "国家",
+      "topArtists": "热门艺人",
+      "status": "状态",
+      "lastSynced": "上次同步",
+      "actions": "操作",
+      "enabled": "已启用",
+      "disabled": "已停用",
+      "neverSynced": "从未",
+      "noSubscriptions": "尚未关注任何排行榜",
+      "followed": "已关注排行榜",
+      "unfollowed": "已取消关注排行榜",
+      "updated": "排行榜已更新",
+      "enabledToast": "排行榜同步已启用",
+      "disabledToast": "排行榜同步已停用",
+      "syncQueued": "排行榜同步已加入队列",
+      "confirm": {
+        "unfollowTitle": "取消关注排行榜",
+        "unfollow": "停止关注{country}排行榜？已通过它关注的艺人会保持关注。",
+        "disableTitle": "停用排行榜",
+        "disable": "停用{country}排行榜？它将不再重新同步，并会从排行榜页面隐藏。已关注的艺人不受影响。",
+        "enableTitle": "启用排行榜",
+        "enable": "启用{country}排行榜？它将定期重新同步，并再次显示在排行榜页面上。",
+        "topNTitle": "更改热门艺人数量",
+        "topNIncrease": "关注{country}排行榜的前 {to} 位艺人，而不是前 {from} 位？将立即加入一次同步，新增的艺人会连同全部作品一起关注。",
+        "topNDecrease": "关注{country}排行榜的前 {to} 位艺人，而不是前 {from} 位？已关注的艺人会保持关注。",
+        "syncTitle": "同步排行榜",
+        "sync": "立即同步{country}排行榜？其前 {n} 位中尚未关注的艺人将连同全部作品一起关注。"
+      }
+    },
+    "backup": {
+      "sections": {
+        "library": "音乐库",
+        "catalog": "目录",
+        "users": "用户",
+        "settings": "设置"
+      },
+      "export": {
+        "title": "导出备份",
+        "description": "将此实例的状态下载为 JSON 文件。音乐文件本身在数据文件夹中：迁移时请将它与此备份一起复制。",
+        "options": {
+          "library": {
+            "label": "音乐库",
+            "description": "已关注的艺人和单独的专辑。导入时，新实例会重新关注它们并下载其音乐。"
+          },
+          "charts": {
+            "label": "排行榜",
+            "description": "已关注的排行榜。导入时，新实例会重新关注它们，并继续自动关注其热门艺人。"
+          },
+          "catalog": {
+            "label": "目录",
+            "description": "仅当你同时将数据文件夹（你的音乐文件）复制到新实例时才有用：导入时会识别已有的文件，而不是全部重新下载。否则可以不选。"
+          },
+          "users": {
+            "label": "用户",
+            "description": "用户账号、角色和密码哈希，以及每个人喜欢的艺人和隐藏的推荐。每个人在新实例上都保留原来的密码。"
+          },
+          "settings": {
+            "label": "设置",
+            "description": "应用设置（计划任务、下载、功能开关）。"
+          }
+        },
+        "usersWarning": "此文件将包含密码哈希，请妥善保管。",
+        "button": "下载备份",
+        "failed": "导出备份失败"
+      },
+      "import": {
+        "title": "导入",
+        "description": "恢复备份，或导入他人导出的音乐库。此实例上已有的内容都不会更改：缺少的艺人、专辑和排行榜会被关注并将其下载加入队列；现有用户永远不会被覆盖。",
+        "choose": "选择文件",
+        "previewing": "正在分析…",
+        "previewTitle": "预览：尚未应用任何内容",
+        "resultTitle": "导入已应用",
+        "confirm": "确认导入",
+        "done": "导入完成，下载正在后台进行。",
+        "failed": "导入失败",
+        "errors": {
+          "invalid_json": "此文件不是有效的 JSON。",
+          "not_export_file": "此文件不是本应用导出的文件。"
+        }
+      },
+      "summary": {
+        "artistsFollowed": "要关注的艺人",
+        "artistsExisting": "已关注的艺人",
+        "albumsQueued": "要下载的专辑",
+        "albumsCovered": "由艺人同步处理的专辑",
+        "albumsExisting": "已在音乐库中的专辑",
+        "chartsCreated": "要关注的排行榜",
+        "chartsExisting": "已关注的排行榜",
+        "chartsSkipped": "跳过的排行榜",
+        "playlistsAdded": "要添加的播放列表",
+        "catalogRows": "目录行数（艺人 / 专辑 / 歌曲）",
+        "tracksOnDisk": "在磁盘上找到的歌曲",
+        "tracksToDownload": "要下载的歌曲",
+        "usersCreated": "要创建的用户",
+        "usersSkipped": "跳过的用户（已存在）",
+        "likesAdded": "要添加的喜欢的艺人",
+        "dismissedAdded": "要添加的隐藏推荐",
+        "settingsApplied": "要应用的设置",
+        "settingsIgnored": "忽略的设置（未知）",
+        "albumsToImport": "要重新获取的专辑（缺少歌曲或封面）",
+        "exclusionsAdded": "新增的排除项",
+        "artistsExcluded": "跳过的艺人（已排除）",
+        "albumsExcluded": "跳过的专辑（已排除）"
+      },
+      "warnings": {
+        "charts_disabled": "此实例已关闭排行榜功能，已跳过排行榜订阅。",
+        "settings_ignored": "部分设置不被此版本识别，已忽略。",
+        "invalid_setting": "某项设置的值无效，已忽略。",
+        "users_skipped": "部分用户在此已存在：他们的账号保持不变，只添加了他们喜欢的艺人和隐藏的推荐。",
+        "likes_skipped": "部分喜欢的艺人不在此音乐库中，已跳过。",
+        "invalid_chart": "无法创建某个排行榜订阅。",
+        "administrators_created": "此文件会创建管理员账号。文件的制作者知道这些账号的密码：只有在信任其来源时才导入。"
+      }
+    }
+  },
+  "playlist": {
+    "title": "导入播放列表",
+    "subtitle": "粘贴 YouTube Music 播放列表的网址，发现并关注艺人和专辑",
+    "whereLinkTitle": "链接在哪里？",
+    "whereLinkBody": "在 YouTube Music 中打开播放列表，然后选择 分享 › 复制链接。链接形如 music.youtube.com/playlist?list=…",
+    "urlPlaceholder": "粘贴 YouTube Music 播放列表的网址…",
+    "untitled": "播放列表",
+    "loadPlaylist": "加载播放列表",
+    "invalidUrl": "这不是 YouTube Music 播放列表的链接或 ID",
+    "artists": "艺人",
+    "albums": "专辑",
+    "trackCount": "{count} 首歌曲",
+    "summary": {
+      "tracks": "播放列表中有 {count} 首歌曲",
+      "artists": "{count} 位艺人",
+      "albums": "{count} 张专辑"
+    },
+    "followMainArtists": "关注主要艺人",
+    "followAll": "关注所有艺人",
+    "mainArtist": "主要",
+    "secondaryArtist": "合作",
+    "downloadAll": "下载所有专辑",
+    "followingProgress": "正在关注 {current} / {total}…",
+    "downloadingProgress": "正在下载 {current} / {total}…",
+    "followComplete": "已关注所有艺人",
+    "downloadComplete": "所有专辑已加入下载队列",
+    "followed": "已关注",
+    "downloaded": "排队中",
+    "emptyPlaylist": "播放列表为空",
+    "emptyPlaylistDescription": "此播放列表中没有任何歌曲",
+    "noArtists": "此播放列表中没有可关注的艺人",
+    "noAlbums": "此播放列表中没有可下载的专辑",
+    "partialSuccess": "{total} 项中 {succeeded} 项成功，{failed} 项失败",
+    "importFromPlaylist": "从播放列表导入",
+    "trackView": "歌曲",
+    "unavailable": "无法读取此播放列表。它不存在、是私享的，或者 YouTube Music 暂时没有响应。",
+    "skippedNote": "{count} 首歌曲无法带入",
+    "skippedUploads": "上传内容（{count}）：不是歌曲。其署名是发布它们的 YouTube 频道，而不是艺人。",
+    "skippedNoSong": "无专辑（{count}）：YouTube Music 上没有对应歌曲的视频。",
+    "songsPending": "正在查找 {count} 个 MV 对应的歌曲…",
+    "skippedNoArtist": "无署名艺人（{count}）",
+    "options": {
+      "addTitle": "将播放列表添加到音乐库",
+      "editTitle": "播放列表选项",
+      "bringIn": "其中的歌曲会带入",
+      "albums": "所属专辑",
+      "albumsDescription": "下载每首歌曲所在的整张专辑。",
+      "artists": "所属艺人",
+      "artistsDescription": "关注每首歌曲的主要艺人：下载其所有作品。",
+      "follow": "持续关注",
+      "followOn": "按播放列表同步计划重新扫描：新歌曲会带入其专辑或艺人，从播放列表中移除的歌曲也会从 M3U 中移除。",
+      "followOff": "只添加一次：之后对播放列表的更改会被忽略。",
+      "m3u": "M3U 文件",
+      "m3uDescription": "写入音乐文件夹中的 Playlists/，供 Jellyfin 和其他播放器使用。歌曲下载后会陆续加入其中。",
+      "needOne": "请至少开启其中一项。如果只想下载一次且不需要 M3U 文件，请使用播放列表下方的按钮。",
+      "switchToArtists": "将关注播放列表中每首歌曲的主要艺人。",
+      "switchToAlbums": "已关注的艺人会保持关注。从现在起，歌曲会带入其所属专辑。",
+      "add": "添加",
+      "addButton": "添加到音乐库",
+      "addHint": "关注它，或保存为 M3U 播放列表",
+      "editButton": "选项",
+      "remove": "移除",
+      "removeTitle": "移除播放列表",
+      "removeMessage": "播放列表及其 M3U 文件将从音乐库中移除。音乐会保留。",
+      "added": "播放列表已添加：正在带入其中的歌曲",
+      "saved": "播放列表已更新",
+      "removed": "播放列表已移除"
+    },
+    "status": {
+      "followed": "已关注",
+      "once": "一次性",
+      "available": "{songs} 首歌曲中有 {available} 首在音乐库中",
+      "skipped": "已跳过 {count} 首",
+      "lastScan": "上次扫描：{when}",
+      "scanning": "正在扫描…",
+      "lastError": "上次扫描失败：{error}",
+      "syncNow": "立即同步",
+      "syncQueued": "扫描已加入队列"
+    },
+    "excludedSkipped": "已跳过 {count} 个已排除的艺人或专辑。",
+    "excludedNote": "已排除：在音乐库中被删除或取消关注。上方的按钮会跳过它们；点击该项目自己的按钮可以把它带回来。"
+  },
+  "onboarding": {
+    "label": "快速导览",
+    "step": "{current} / {total}",
+    "goTo": "第 {current} 步，共 {total} 步",
+    "skip": "跳过",
+    "previous": "上一步",
+    "next": "下一步",
+    "finish": "开始使用",
+    "welcome": {
+      "title": "欢迎，{name}",
+      "body": "快速了解一下你可以做些什么，包括一些容易被忽略的功能。首先，按你的喜好设置应用：",
+      "bodyVisitor": "快速了解一下这里。你的账号可以浏览音乐库、阅读歌词和查看排行榜；管理员可以允许你添加音乐。首先，按你的喜好设置应用：",
+      "language": "语言",
+      "theme": "主题",
+      "note": "保存在此浏览器中。随时可以在顶栏更改，在手机上则通过账号菜单更改。"
+    },
+    "follow": {
+      "title": "关注一位艺人，或只拿一张专辑",
+      "body": "关注一位艺人会下载其发行过的所有作品，之后新作品一发布也会下载。如果只想要一张专辑，在专辑页面点击“下载专辑”就只会下载那一张。"
+    },
+    "activity": {
+      "title": "下载进行中",
+      "body": "下载音乐时，顶栏会显示正在运行的任务数量：将鼠标悬停或点按即可查看详情。如果 YouTube 限速，红色徽标会提示下载已暂停。下载会自动恢复。"
+    },
+    "lyrics": {
+      "title": "每首歌曲都有歌词",
+      "body": "在专辑页面，“歌词”列会显示每首已下载歌曲的歌词情况。点击徽标即可阅读歌词。",
+      "bodyEditor": "在专辑页面，“歌词”列会显示每首已下载歌曲的歌词情况。点击徽标即可阅读歌词，或粘贴并手动修正歌词。",
+      "kinds": {
+        "synced": "歌词随音乐逐行高亮",
+        "plain": "只有歌词文字，没有时间轴",
+        "instrumental": "无需查找歌词",
+        "pending": "尚未查找",
+        "none": "暂未找到，会定期重新查找"
+      }
+    },
+    "likes": {
+      "title": "根据你的喜欢推荐",
+      "body": "在艺人页面或音乐库中，点击爱心来喜欢艺人（关注艺人也会自动喜欢）。之后“探索”会推荐相似的艺人。不合口味？点击推荐上的叉号（悬停时显示）即可隐藏，只对你自己生效。",
+      "try": "试试爱心",
+      "dismissed": "已从你的推荐中隐藏"
+    },
+    "playlists": {
+      "title": "导入整个播放列表",
+      "body": "在“探索”的搜索栏旁粘贴 YouTube Music 播放列表的链接：一次性关注其艺人或下载其专辑，或将它保存到音乐库，持续关注新歌曲，并保存为 Jellyfin 可识别的播放列表。"
+    },
+    "charts": {
+      "title": "当下热门",
+      "body": "排行榜页面显示此处关注的各国热门艺人，已在音乐库中的艺人带有勾号。",
+      "bodyAdmin": "在管理面板中关注一个国家的排行榜：其热门艺人会自动为你关注，并随排行榜变化保持更新。所有人都能在排行榜页面看到它。"
+    },
+    "admin": {
+      "title": "管理实例",
+      "body": "管理面板在你的账号菜单中。只有管理员可以删除艺人和专辑，删除时也会从磁盘上移除其文件。",
+      "tabs": {
+        "users": "创建账号、设置角色、重置密码",
+        "charts": "关注其热门艺人的国家",
+        "settings": "注册、计划、下载、歌词、流派等",
+        "backup": "导出或恢复音乐库、用户和设置"
+      }
+    },
+    "done": {
+      "title": "一切就绪",
+      "body": "导览到此结束。你想从哪里开始？",
+      "browse": "在 YouTube Music 上搜索艺人和专辑",
+      "library": "所有已下载的内容",
+      "playlist": "关注播放列表中的艺人，或下载其专辑",
+      "charts": "已关注国家的热门艺人",
+      "admin": "用户、计划、设置和备份"
+    }
+  },
+  "errorBoundary": {
+    "title": "出错了",
+    "description": "页面遇到了意外错误。重新加载通常可以解决；报告问题时，下方的详细信息会有帮助。",
+    "details": "错误详情",
+    "reload": "重新加载页面",
+    "home": "前往首页"
+  },
+  "exclusion": {
+    "badge": "已排除",
+    "artistDeleted": "已从音乐库删除：任何排行榜或播放列表都不会把该艺人带回来。关注即可恢复。",
+    "artistUnfollowed": "已取消关注：任何排行榜或播放列表都不会再关注该艺人。关注即可恢复。",
+    "album": "已从音乐库删除：任何同步、排行榜或播放列表都不会再下载它。下载即可恢复。"
+  }
+}

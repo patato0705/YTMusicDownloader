@@ -13,5 +13,5 @@
 - [ ] Commit messages are `type: what changes`
 - [ ] A new or changed API route is in the `ACCESS` table (`backend/tests/test_access.py`)
 - [ ] A change to `backend/models.py` comes with a migration
-- [ ] New text is in both `en.json` and `fr.json`
+- [ ] New text is present in all locales
 - [ ] The README says what changed for users (setup, settings, behaviour)

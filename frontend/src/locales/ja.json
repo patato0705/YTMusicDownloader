@@ -1,0 +1,988 @@
+{
+  "common": {
+    "unknownArtist": "不明なアーティスト",
+    "untitled": "タイトルなし",
+    "loading": "読み込み中…",
+    "error": "エラー",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "save": "保存",
+    "delete": "削除",
+    "close": "閉じる",
+    "clear": "クリア",
+    "back": "戻る",
+    "or": "または",
+    "all": "すべて",
+    "searchPlaceholder": "検索…",
+    "ytmusicUnavailable": "YouTube Music が応答していません。しばらくしてからもう一度お試しください。",
+    "serverUnreachable": "サーバーに接続できません。再起動中の可能性があります。しばらくしてからもう一度お試しください。"
+  },
+  "mediaCard": {
+    "type": {
+      "album": "アルバム",
+      "ep": "EP",
+      "single": "シングル",
+      "track": "曲"
+    },
+    "status": {
+      "downloaded": "保存済み",
+      "inLibrary": "ライブラリ内",
+      "downloading": "ダウンロード中",
+      "queued": "待機中",
+      "paused": "一時停止",
+      "failed": "失敗"
+    }
+  },
+  "auth": {
+    "showPassword": "パスワードを表示",
+    "hidePassword": "パスワードを隠す",
+    "login": {
+      "title": "ログイン",
+      "subtitle": "アカウントにログイン",
+      "username": "ユーザー名",
+      "password": "パスワード",
+      "button": "ログイン",
+      "loading": "ログイン中…",
+      "noAccount": "アカウントをお持ちでないですか？",
+      "register": "こちらで登録",
+      "sso": "{name} でログイン",
+      "ssoErrors": {
+        "denied": "プロバイダー側でログインがキャンセルされました。",
+        "not_allowed": "このアカウントにはアクセス権がありません。管理者にアクセスを依頼してください。",
+        "inactive": "このアカウントは無効になっています。管理者に連絡してください。",
+        "unavailable": "現在ログインプロバイダーに接続できません。後でもう一度お試しください。",
+        "failed": "ログインに失敗しました。もう一度お試しください。何度も起きる場合は管理者に連絡してください。"
+      }
+    },
+    "register": {
+      "title": "アカウント作成",
+      "subtitle": "音楽ライブラリに参加",
+      "username": "ユーザー名",
+      "password": "パスワード",
+      "confirmPassword": "パスワード（確認）",
+      "button": "アカウントを作成",
+      "loading": "アカウントを作成中…",
+      "hasAccount": "すでにアカウントをお持ちですか？",
+      "login": "こちらでログイン",
+      "usernameHint": "ユーザー名は 3〜64 文字にしてください",
+      "disabled": {
+        "title": "登録は無効です",
+        "message": "現在、一般登録は無効になっています。アクセスするには管理者に連絡してください。",
+        "goToLogin": "ログインへ"
+      }
+    },
+    "logout": "ログアウト",
+    "changePassword": {
+      "title": "パスワードの変更",
+      "subtitle": "新しいパスワードを設定してください",
+      "current": "現在のパスワード",
+      "new": "新しいパスワード",
+      "confirm": "新しいパスワード（確認）",
+      "button": "パスワードを変更",
+      "required": "パスワードの変更が必要です",
+      "temporaryWarning": "一時パスワード（初期の管理者パスワード、または管理者が設定したもの）でログインしています。続けるには自分のパスワードを設定してください。",
+      "tips": {
+        "title": "パスワード選びのヒント",
+        "length": "パスワードは 8 文字以上にしてください",
+        "mix": "英字・数字・記号を組み合わせることをおすすめします",
+        "unique": "サイトごとに異なるパスワードを使いましょう。"
+      }
+    },
+    "errors": {
+      "usernameRequired": "ユーザー名は必須です",
+      "passwordRequired": "パスワードは必須です",
+      "currentPasswordRequired": "現在のパスワードは必須です",
+      "newPasswordRequired": "新しいパスワードは必須です",
+      "confirmPasswordRequired": "パスワードを確認してください",
+      "invalidCredentials": "ユーザー名またはパスワードが正しくありません",
+      "passwordMismatch": "パスワードが一致しません",
+      "passwordTooShort": "パスワードは 8 文字以上にしてください",
+      "passwordTooLong": "パスワードは 72 文字以内にしてください（日本語、アクセント記号、絵文字を含むとさらに短くなります）",
+      "usernameTooShort": "ユーザー名は 3 文字以上にしてください",
+      "usernameTooLong": "ユーザー名は 64 文字以内にしてください",
+      "usernameInvalidChars": "ユーザー名に使えるのは英字、数字、ハイフン、アンダースコアのみです",
+      "usernameInvalid": "ユーザー名が無効です",
+      "passwordInvalid": "パスワードが無効です",
+      "registrationFailed": "登録に失敗しました",
+      "changePasswordFailed": "パスワードを変更できませんでした",
+      "currentPasswordIncorrect": "現在のパスワードが正しくありません",
+      "loginFailed": "ログインに失敗しました。もう一度お試しください。",
+      "usernameTaken": "このユーザー名はすでに使われています",
+      "tooManyAttempts": "失敗した試行が多すぎます。{minutes} 分後にもう一度お試しください。"
+    }
+  },
+  "nav": {
+    "home": "ホーム",
+    "browse": "探す",
+    "library": "ライブラリ",
+    "charts": "チャート",
+    "admin": "管理パネル",
+    "main": "メインナビゲーション",
+    "activeJobs": "{count} 件実行中",
+    "rateLimited": "YouTube によるレート制限：{time} までダウンロードを一時停止中",
+    "jobTypes": {
+      "download_track": "曲",
+      "download_lyrics": "歌詞",
+      "sync_artist": "アーティストの同期",
+      "sync_chart": "チャートの同期",
+      "import_album": "アルバムのインポート",
+      "find_video_songs": "MV の曲検索"
+    }
+  },
+  "settings": {
+    "theme": {
+      "light": "ライト",
+      "dark": "ダーク"
+    },
+    "appearance": "外観",
+    "accent": {
+      "label": "アクセントカラー",
+      "colors": {
+        "indigo": "インディゴ",
+        "sky": "スカイ",
+        "teal": "ティール",
+        "orange": "オレンジ",
+        "rose": "ローズ"
+      }
+    },
+    "changeLanguage": "言語を変更"
+  },
+  "home": {
+    "welcomeBack": "おかえりなさい、{name} さん",
+    "inProgress": "進行中",
+    "recentlyAdded": "最近追加",
+    "quickActions": "クイックアクション",
+    "browseDescription": "YouTube Music で新しい音楽を検索",
+    "libraryDescription": "フォロー中のアーティストとアルバムを管理",
+    "playlistDescription": "YouTube Music のプレイリストのアーティストとアルバムをフォロー",
+    "loadingActivity": "最近のアクティビティを読み込み中…",
+    "noActivity": "ライブラリは空です",
+    "noActivityDescription": "まずはお気に入りのアーティストを探してフォローしましょう",
+    "browseMusic": "音楽を探す"
+  },
+  "browse": {
+    "heroSubtitle": "YouTube Music でアーティスト、アルバム、曲を検索してライブラリに追加",
+    "searchInputPlaceholder": "アーティスト、アルバム、曲を検索…",
+    "noResults": "結果が見つかりません",
+    "searchError": "検索エラー",
+    "startSearch": "検索を始めましょう",
+    "startSearchDescription": "アーティスト名、アルバム名、曲名を入力して、YouTube Music で新しい音楽を見つけましょう",
+    "noResultsFor": "「{query}」に一致するものは見つかりませんでした",
+    "tryDifferentKeywords": "別のキーワードを試すか、つづりを確認してください",
+    "sections": {
+      "artists": "アーティスト",
+      "albums": "アルバム",
+      "songs": "曲"
+    },
+    "recommendations": {
+      "title": "あなたへのおすすめ",
+      "subtitle": "いいねしたアーティストに似たアーティスト",
+      "similarTo": "{names} に似ています",
+      "similarToMany": "いいねした {count} 組のアーティストに似ています",
+      "dismiss": "興味なし",
+      "dismissArtist": "興味なし：{name}",
+      "dismissedToast": "{name} は今後おすすめされません",
+      "undo": "元に戻す",
+      "dismissedLink": "非表示（{count}）",
+      "dismissedTitle": "非表示にしたアーティスト",
+      "dismissedDescription": "これらのアーティストはおすすめされません。元に戻すと、いいねしたアーティストに似ている場合に再び表示されます。",
+      "noDismissed": "非表示にしたアーティストはいません",
+      "restore": "元に戻す",
+      "noneLeft": "現在おすすめはありません。もっと多くのアーティストにいいねすると表示されます。",
+      "noLikes": "ライブラリのアーティストに ♥ でいいねすると（フォローしてもいいねされます）、似たアーティストがここに表示されます。",
+      "error": "おすすめを更新できませんでした"
+    }
+  },
+  "artist": {
+    "releaseCount": "{count} 件のリリース",
+    "follow": "フォロー",
+    "unfollow": "フォロー解除",
+    "followArtist": "{name} をフォロー",
+    "unfollowArtist": "{name} のフォローを解除",
+    "followed": "フォロー中",
+    "unfollowTitle": "アーティストのフォロー解除",
+    "unfollowMessage": "新しいリリースはダウンロードされなくなり、チャートやプレイリストが再びこのアーティストをフォローすることもありません（手動でフォローすれば戻せます）。ダウンロード済みのものは残ります。",
+    "like": "いいね",
+    "unlike": "いいねを取り消す",
+    "likeError": "いいねしたアーティストを更新できませんでした",
+    "albums": "アルバム",
+    "singles": "シングルと EP",
+    "noAlbums": "アルバムはまだありません",
+    "noAlbumsDescription": "このアーティストのアルバムはまだデータベースにありません。",
+    "notFound": "アーティストが見つかりません",
+    "delete": "アーティストを削除",
+    "deleteTitle": "アーティストの削除",
+    "deleteMessage": "このアーティストと、関連するすべてのアルバム、曲、ファイルを削除してもよろしいですか？この操作は元に戻せません。チャートやプレイリストで戻ることはありませんが、もう一度フォローすれば戻ります。",
+    "deleted": "アーティストを削除しました",
+    "channelTitle": "アーティストのページではありません",
+    "channelNotice": "これは YouTube チャンネルです。アップロード動画のクレジットは、それを投稿したチャンネルです。フォローできるリリースはありません。",
+    "namesakes": "同じ名前のアーティスト",
+    "noNamesakes": "YouTube Music にこの名前のアーティストはいません。",
+    "notAnArtist": "これはアーティストではなく YouTube チャンネルです。フォローできるものはありません。",
+    "chartFollow": "{charts} のチャートによってフォローされています。しばらくチャートから外れると、チャートはこのアーティストのフォローを解除します（管理パネル > チャートで設定）。いいねするとフォローが維持されます。"
+  },
+  "album": {
+    "album": "アルバム",
+    "downloadError": "ダウンロードエラー：{error}",
+    "trackCount": "{count} 曲",
+    "download": "アルバムをダウンロード",
+    "downloadQueued": "アルバムのダウンロードを追加しました",
+    "downloadQueuedWithArtist": "アルバムのダウンロードを追加しました。アーティストもライブラリに追加されました。",
+    "downloadFailed": "ダウンロードに失敗しました",
+    "deleteAlbum": "アルバムを削除",
+    "deleteTitle": "アルバムの削除",
+    "deleteMessage": "このアルバムと、関連するすべての曲とファイルを削除してもよろしいですか？この操作は元に戻せません。アーティストのフォローは続きますが、同期、チャート、プレイリストがこのアルバムを再びダウンロードすることはありません。手動でダウンロードすれば戻ります。",
+    "deleted": "アルバムを削除しました",
+    "following": "ライブラリ内",
+    "trackList": "曲目リスト",
+    "title": "タイトル",
+    "artist": "アーティスト",
+    "duration": "長さ",
+    "status": "状態",
+    "trackStatus": {
+      "done": "ダウンロード済み",
+      "available": "未ダウンロード",
+      "queued": "待機中",
+      "paused": "一時停止",
+      "downloading": "ダウンロード中",
+      "failed": "失敗",
+      "removed": "削除済み"
+    },
+    "removedKept": "{date} から YouTube Music にありません。ファイルはライブラリに残ります。",
+    "removedNotDownloaded": "{date} から YouTube Music にありません。今後ダウンロードすることはできません。",
+    "retryingAfter": "再試行待ち。エラー：{error}",
+    "pausedUntil": "{time} までダウンロードを一時停止中（YouTube のレート制限）",
+    "retry": "足りない曲を再試行",
+    "retryQueued": "{count} 曲をダウンロード待ちに追加しました",
+    "retryNothing": "再試行するものはありません。すべての曲が保存済みか、すでに待機中です",
+    "retryImport": "アルバムの曲目リストを再取得してから、曲をダウンロードします",
+    "retryFailed": "曲を追加できませんでした",
+    "lyrics": "歌詞",
+    "notDownloadedNote": "未ダウンロード：アルバムをダウンロードすると、歌詞とダウンロード状態が表示されます。",
+    "noTracks": "曲がありません",
+    "noTracksDescription": "このアルバムにはまだ利用できる曲がありません。",
+    "notFound": "アルバムが見つかりません",
+    "removedBadge": "YouTube Music から削除",
+    "removedNote": "{date} から YouTube Music になく、代わりのものもありません。ファイルはライブラリに残りますが、これ以上ダウンロードされることはありません。"
+  },
+  "lyrics": {
+    "open": "歌詞を表示・編集",
+    "saved": "歌詞を保存しました",
+    "clear": "歌詞を削除",
+    "searchLrclib": "LRCLIB で検索",
+    "searchLrclibHint": "アーティスト名とタイトルで lrclib.net を開きます。一致する結果の LRC テキストをコピーして、下に貼り付けてください。",
+    "placeholder": "LRC（同期）または通常の歌詞をここに貼り付け…",
+    "empty": "この曲の歌詞は保存されていません。",
+    "notDownloaded": "音声ファイルがダウンロードされると歌詞を追加できます。",
+    "readOnly": "歌詞を編集できるのはメンバーと管理者のみです。",
+    "formatHint": "[mm:ss.xx] で始まる行は同期歌詞として扱われます。",
+    "willSaveAsSynced": "同期歌詞として保存されます。",
+    "willSaveAsPlain": "通常の歌詞として保存されます。",
+    "willClear": "空のまま保存すると歌詞ファイルが削除され、次回の再試行で再び検索されます。",
+    "instrumental": "LRCLIB ではこの曲はインストゥルメンタルとされています。歌詞はありません。",
+    "instrumentalHint": "LRCLIB ではこの曲はインストゥルメンタルとされているため、再試行されません。上書きするには歌詞を貼り付けてください。",
+    "pendingHint": "まだ検索されていません。音声のダウンロード後、歌詞の処理待ちが回ってきたときに検索されます。",
+    "kind": {
+      "synced": "同期",
+      "plain": "テキスト",
+      "instrumental": "インスト",
+      "pending": "未検索",
+      "none": "なし"
+    }
+  },
+  "library": {
+    "heroSubtitle": "フォロー中のアーティストとアルバムを管理します。ダウンロードを確認し、コレクションを整理しましょう。",
+    "artists": "フォロー中のアーティスト",
+    "albums": "フォロー中のアルバム",
+    "searchPlaceholder": "アーティスト、アルバム、曲…",
+    "view": {
+      "grid": "グリッド表示",
+      "list": "リスト表示"
+    },
+    "columns": {
+      "name": "名前",
+      "artist": "アーティスト",
+      "type": "種類",
+      "year": "年",
+      "tracks": "曲",
+      "albums": "アルバム",
+      "added": "追加日",
+      "followed": "フォロー日",
+      "status": "状態"
+    },
+    "meta": {
+      "albumCount": "{count} 枚のアルバム",
+      "trackCount": "{tracks} 曲"
+    },
+    "emptyTitle": "ライブラリは空です",
+    "emptyDescription": "お気に入りのアーティストを探してフォローし、コレクションを作りましょう！",
+    "noMatches": "一致するものがありません",
+    "noMatchesDescription": "ライブラリに「{query}」に一致するものはありません",
+    "trackMatch": {
+      "one": "「{title}」を含む",
+      "many": "「{title}」ほか一致する {count} 曲を含む",
+      "artistOne": "{album} に「{title}」があります",
+      "artistMany": "「{title}」ほか一致する {count} 曲があります"
+    },
+    "stats": {
+      "artists": "アーティスト",
+      "albums": "アルバム",
+      "tracks": "曲",
+      "diskUsage": "ディスク使用量",
+      "diskUsageShort": "容量",
+      "diskUsageInfo": "ダウンロードした音声ファイルの合計サイズです。歌詞とジャケットは含みません。"
+    },
+    "export": {
+      "button": "ライブラリをエクスポート",
+      "description": "フォロー中のアーティスト、単体のアルバム、チャートの一覧を JSON ファイルでダウンロードします。管理者が別のサーバーにインポートできます。",
+      "failed": "ライブラリをエクスポートできませんでした"
+    },
+    "playlists": "プレイリスト",
+    "noPlaylists": "一致するプレイリストはありません。",
+    "filters": {
+      "button": "フィルター",
+      "buttonActive": "フィルター、{count} 件選択中",
+      "title": "フィルター",
+      "clearAll": "すべてクリア",
+      "clear": "フィルターをクリア",
+      "remove": "フィルターを削除：{label}",
+      "results": "{formatted} 件",
+      "showResults": "{formatted} 件を表示",
+      "noMatchesTitle": "これらのフィルターに一致するものはありません",
+      "noMatchesDescription": "フィルターをいくつか外してみてください。",
+      "noMatchesWithSearch": "「{query}」に一致するもののうち、これらのフィルターに合うものはありません。フィルターをいくつか外してみてください。",
+      "genreSearch": "ジャンルを検索",
+      "noGenreMatch": "一致するジャンルはありません。",
+      "showAllGenres": "{count} 件のジャンルをすべて表示",
+      "showFewerGenres": "表示を減らす",
+      "groups": {
+        "downloads": "ダウンロード",
+        "lyrics": "歌詞",
+        "metadata": "ジャケットとジャンル",
+        "type": "リリースの種類",
+        "decade": "年代",
+        "genre": "ジャンル",
+        "source": "追加のきっかけ",
+        "follow": "アーティストのフォロー",
+        "liked": "いいね",
+        "excluded": "除外"
+      },
+      "options": {
+        "downloads": {
+          "missing": "足りない曲",
+          "failed": "失敗した曲",
+          "active": "進行中"
+        },
+        "lyrics": {
+          "missing": "歌詞なし",
+          "synced": "同期歌詞",
+          "plain": "同期なしの歌詞",
+          "instrumental": "インストゥルメンタル"
+        },
+        "metadata": {
+          "artwork": "ジャケットなし",
+          "genre": "ジャンル不明"
+        },
+        "type": {
+          "album": "アルバム",
+          "single": "シングル",
+          "ep": "EP"
+        },
+        "decade": {
+          "value": "{decade} 年代",
+          "unknown": "年不明"
+        },
+        "source": {
+          "artist": "フォロー中のアーティスト",
+          "playlist": "プレイリスト",
+          "own": "単体でフォロー"
+        },
+        "follow": {
+          "full": "完全フォロー",
+          "light": "一部のみ",
+          "chart": "チャートによるフォロー"
+        },
+        "liked": {
+          "liked": "いいねしたアーティスト"
+        },
+        "excluded": {
+          "excluded": "削除またはフォロー解除"
+        }
+      },
+      "hints": {
+        "missingTracks": "{total} 曲中 {count} 曲が未取得",
+        "failedTracks": "失敗した曲 {count} 曲",
+        "missingLyrics": "歌詞のない曲 {count} 曲",
+        "plainLyrics": "同期なしの歌詞の曲 {count} 曲",
+        "syncedLyrics": "同期歌詞の曲 {count} 曲",
+        "instrumental": "インストゥルメンタル {count} 曲",
+        "noArtwork": "ジャケットなし",
+        "noGenre": "ジャンル不明"
+      }
+    },
+    "sort": {
+      "label": "並べ替え",
+      "button": "{key}で並べ替え、{order}",
+      "orderLabel": "順序",
+      "keys": {
+        "name": "名前",
+        "added": "追加日",
+        "year": "リリース年",
+        "completion": "取得率"
+      },
+      "order": {
+        "name": {
+          "asc": "A → Z",
+          "desc": "Z → A"
+        },
+        "added": {
+          "asc": "古い順",
+          "desc": "新しい順"
+        },
+        "year": {
+          "asc": "古い順",
+          "desc": "新しい順"
+        },
+        "completion": {
+          "asc": "取得率の低い順",
+          "desc": "取得率の高い順"
+        }
+      }
+    },
+    "excluded": {
+      "artistDeleted": "{date} に削除",
+      "artistUnfollowed": "{date} にフォロー解除",
+      "albumDeleted": "{date} に削除",
+      "restore": "{name} を元に戻す",
+      "restoreTitle": "元に戻す：チャート、プレイリスト、同期で再び追加されるようになります。すぐにダウンロードされるものはありません。",
+      "restored": "{name} を元に戻しました。チャート、プレイリスト、同期で再び追加されるようになります",
+      "note": "チャート、プレイリスト、アーティストの同期、バックアップなど、自動では何も戻りません。手動でフォローまたはダウンロードするか、元に戻すボタンを押すと戻ります。",
+      "empty": "ライブラリから除外されているものはありません",
+      "emptyDescription": "削除したアーティストやアルバム、フォローを解除したアーティストがここに表示されます。",
+      "artists": "除外したアーティスト",
+      "albums": "除外したアルバム"
+    }
+  },
+  "charts": {
+    "heroSubtitle": "世界中の注目アーティストを見つけましょう",
+    "errorTitle": "チャートの読み込みエラー",
+    "unavailableTitle": "{countries} を読み込めませんでした",
+    "noCharts": "フォロー中のチャートはありません",
+    "noChartsDescription": "現在追跡中の音楽チャートはありません。各国のチャートをフォローするには管理者に連絡してください。",
+    "noChartsAdminDescription": "管理パネルで国を選ぶと、その国の注目アーティストがここに表示されます。",
+    "followingTopN": "{total} 組中トップ {n} をフォロー中",
+    "followedArtist": "フォロー中のアーティスト",
+    "lastUpdated": "最終更新：{date}",
+    "followChart": "チャートをフォロー",
+    "musicChart": "音楽チャート",
+    "numberOfArtists": "追跡するアーティスト数",
+    "top": "トップ",
+    "storageWarning": "数を増やすと多くのアーティストを追跡できますが、より多くのストレージと同期時間が必要になります",
+    "disabled": "チャート機能は現在無効です。管理者が管理パネルで有効にできます。",
+    "keepWeeks": {
+      "column": "フォロー解除まで",
+      "label": "アーティストのフォローを解除するまでの期間",
+      "never": "解除しない",
+      "weeks": "チャート圏外 {count} 週",
+      "help": "このチャートがフォローしたアーティストは、このチャート（とフォロー中の他のすべてのチャート）から外れてこの期間が過ぎるとフォロー解除されます。ダウンロード済みのファイルは残り、誰かがいいねしていればアーティストは維持されます。"
+    }
+  },
+  "admin": {
+    "subtitle": "アプリの設定とユーザーを管理",
+    "tabs": {
+      "settings": "設定",
+      "charts": "チャート",
+      "users": "ユーザー",
+      "backup": "バックアップ"
+    },
+    "settings": {
+      "save": "設定を保存",
+      "unsaved": "未保存の変更があります",
+      "saved": "設定を保存しました",
+      "saveFailed": "設定を保存できませんでした",
+      "invalidNumber": "「{name}」は {min} 以上の整数にしてください",
+      "invalidNumberRange": "「{name}」は {min} から {max} までの整数にしてください",
+      "default": "リセット",
+      "resetToDefault": "デフォルトに戻す（{value}）",
+      "on": "オン",
+      "off": "オフ",
+      "categories": {
+        "auth": "認証",
+        "download": "ダウンロード",
+        "features": "機能",
+        "scheduler": "スケジューラー",
+        "ytmusic": "YouTube Music"
+      },
+      "options": {
+        "auth": {
+          "oidc_default_role": {
+            "visitor": "閲覧者",
+            "member": "メンバー"
+          }
+        }
+      },
+      "keys": {
+        "auth": {
+          "registration_enabled": {
+            "label": "一般登録",
+            "description": "登録ページから誰でもアカウントを作成できるようにします。"
+          },
+          "login_max_failures_per_ip": {
+            "label": "IP ごとのログイン失敗回数",
+            "description": "期間内に 1 つの IP アドレスから許可される誤ったパスワードの回数です。超えるとブロックされます（IPv6 では 1 つの接続に割り当てられる /64 ネットワーク単位）。0 にするとこのチェックを無効にします。"
+          },
+          "login_max_failures_per_account": {
+            "label": "アカウントごとのログイン失敗回数",
+            "description": "期間内に 1 つのアカウントで許可される誤ったパスワードの回数です。超えると新しいブラウザーからのログインがブロックされます。以前このアカウントにログインした（その後ログアウトしていない）ブラウザーには別枠があるため、持ち主が締め出されることはありません。パスワード変更時の現在のパスワードの誤りも制限します。0 にするとこのチェックを無効にします。"
+          },
+          "login_failure_window_minutes": {
+            "label": "ログイン失敗の記録期間（分）",
+            "description": "失敗したログインを記録しておく期間です。記録が期限切れになると、ブロックされた IP やアカウントは解除されます。"
+          },
+          "oidc_signup_enabled": {
+            "label": "シングルサインオンの新規アカウント",
+            "description": "シングルサインオンで初めてログインしたときにアカウントを作成します。オフの場合、既存のアカウントのみログインできます。ロールがプロバイダーのグループから決まる場合、そのグループのメンバーのみログインできます。グループを抜けた既存アカウントも拒否されます。"
+          },
+          "oidc_default_role": {
+            "label": "シングルサインオンの新規アカウントのロール",
+            "description": "シングルサインオンで作成されたアカウントに付与されます。ロールがプロバイダーのグループから決まり、新規アカウントが許可されている場合は、それらのグループ外のユーザーにも付与されます。"
+          },
+          "oidc_session_hours": {
+            "label": "シングルサインオンのセッション時間（時間）",
+            "description": "シングルサインオンのセッションが、再びプロバイダーを経由する（通常はワンクリック）までの時間です。プロバイダー側でのロール変更や無効化はその時点から反映されるため、パスワードのセッション（7 日間）より短くなっています。"
+          }
+        },
+        "download": {
+          "max_concurrent": {
+            "label": "最大同時ダウンロード数",
+            "description": "YouTube から同時にダウンロードする曲の数です。メタデータと歌詞はすでに並行して取得されており、これはダウンロードのストリームを増やすだけです。1 つの IP からのストリームが増えるほど、レート制限を受ける可能性が高まります。再起動なしで反映され、上限は環境変数 DOWNLOAD_WORKERS です。"
+          },
+          "rate_limit_pause_minutes": {
+            "label": "レート制限時の一時停止",
+            "description": "YouTube にレート制限やボット確認を受けたときに、すべてのダウンロードを停止する時間（分）です。他のワーカーが一時的な制限を BAN にしてしまわないようにします。ダウンロードが再び成功するまで、連続するたびに 2 倍になります（最大 16 倍）。"
+          }
+        },
+        "features": {
+          "lyrics_enabled": {
+            "label": "歌詞のダウンロード",
+            "description": "ダウンロードしたすべての曲の歌詞を自動で LRCLIB から取得します。LRCLIB にない場合は YouTube Music から取得します。"
+          },
+          "synced_lyrics_only": {
+            "label": "同期歌詞のみ",
+            "description": "時間同期された歌詞のみを保存します。通常（同期なし）の歌詞は拒否され、後で再試行されます。"
+          },
+          "genres_enabled": {
+            "label": "ジャンルの検索",
+            "description": "アルバムとアーティストのジャンルを MusicBrainz で検索し（なければ Deezer）、タグと NFO ファイルに書き込みます。オフにすると検索は止まりますが、見つかったジャンルは残ります。"
+          },
+          "charts_enabled": {
+            "label": "チャート",
+            "description": "チャートページとチャートの購読を有効にします。"
+          }
+        },
+        "scheduler": {
+          "artist_sync": {
+            "label": "アーティストの同期",
+            "description": "フォロー中のアーティストの新しいリリースと、ライブラリのアルバムの YouTube Music 上での変更を確認するタイミングです。",
+            "intervalHint": "各アーティストは前回の確認から {count} 時間後に確認されるため、確認は 1 日を通して分散されます。"
+          },
+          "chart_sync": {
+            "label": "チャートの同期",
+            "description": "フォロー中のチャートを再取得し、新たにトップ N に入ったアーティストをフォローするタイミングです。YouTube Music のチャートは毎週しか更新されないため、7 日より短い間隔ではほとんど新しいものは見つかりません。",
+            "intervalHint": "各チャートは前回の同期から {count} 日後に再取得されます。"
+          },
+          "playlist_sync": {
+            "label": "プレイリストの同期",
+            "description": "フォロー中のプレイリストを再スキャンするタイミングです。新しい曲はそのアルバムやアーティストを追加し、M3U ファイルはプレイリストに合わせて更新されます。",
+            "intervalHint": "各プレイリストは前回のスキャンから {count} 時間後に再スキャンされます。"
+          },
+          "lyrics_retry": {
+            "label": "歌詞の再試行",
+            "description": "歌詞がない曲や同期なしの歌詞の曲を再試行するタイミングです。",
+            "intervalHint": "前回から {count} 時間後に再試行します。"
+          },
+          "job_cleanup_days": {
+            "label": "ジョブの保持期間（日）",
+            "description": "これより古い終了済みのジョブ（完了、失敗、キャンセル）は削除されます。"
+          }
+        },
+        "ytmusic": {
+          "language": {
+            "label": "YouTube Music の言語",
+            "description": "YouTube Music から取得するデータ（アーティストの紹介文、アルバムの説明など）の言語です。"
+          }
+        }
+      },
+      "cookies": {
+        "label": "YouTube アカウントの Cookie",
+        "description": "YouTube アカウントにログインしたブラウザーからエクスポートした cookies.txt です（メインではなく使い捨てのアカウントを使ってください）。年齢制限のある曲の取得にのみ使われます。通常のダウンロードやレート制限の回避には使われないため、アカウントへのリクエストはごくわずかです。",
+        "none": "アカウントの Cookie がアップロードされていません。年齢制限のある曲は失敗します。",
+        "present": "アップロード済み：Cookie {count} 個、{date}",
+        "upload": "cookies.txt をアップロード",
+        "replace": "置き換え",
+        "remove": "削除",
+        "uploaded": "アカウントの Cookie を保存しました",
+        "uploadFailed": "cookies.txt ファイルではないようです",
+        "deleted": "アカウントの Cookie を削除しました"
+      },
+      "schedule": {
+        "modeFixed": "時刻指定",
+        "unit_hours": "時間ごと",
+        "unit_days": "日ごと",
+        "every_hours": "{count} 時間ごと",
+        "every_days": "{count} 日ごと",
+        "everyDay": "毎日",
+        "fixedSummary": "{days} の {time}",
+        "nextRun": "次回の実行：{when}",
+        "nextRunAfterSave": "次回の実行は保存後に表示されます。",
+        "noDays": "少なくとも 1 日選んでください。",
+        "timezone": "指定時刻はコンテナーのタイムゾーン（TZ）である {timezone} です。アプリが起動していない時間の実行はスキップされ、後から実行されることはありません。",
+        "invalid": "{name}：スケジュールが不完全です",
+        "intervalRange": "{name}：間隔は {min} から {max} の間にしてください",
+        "timeLabel": "時刻",
+        "daysLabel": "曜日",
+        "modeInterval_hours": "間隔",
+        "modeInterval_days": "間隔"
+      }
+    },
+    "users": {
+      "search": "ユーザーを検索",
+      "showing": "{count} 人中 {shown} 人を表示",
+      "allStatuses": "すべての状態",
+      "allRoles": "すべてのロール",
+      "create": "ユーザーを作成",
+      "username": "ユーザー名",
+      "role": "ロール",
+      "status": "状態",
+      "actions": "操作",
+      "active": "有効",
+      "inactive": "無効",
+      "delete": "削除",
+      "deleteTitle": "ユーザーの削除",
+      "confirmDelete": "ユーザー「{username}」を削除しますか？この操作は元に戻せません。",
+      "resetPassword": "パスワードをリセット",
+      "resetPasswordTitle": "パスワードのリセット",
+      "confirmResetPassword": "「{username}」に一時パスワードを発行しますか？すべての場所でログアウトされ、次回ログイン時に新しいパスワードを設定する必要があります。",
+      "temporaryPasswordTitle": "一時パスワード",
+      "temporaryPasswordMessage": "このパスワードを {username} さんに伝えてください。表示されるのは今だけです。次回ログイン時に新しいパスワードを設定する必要があります。",
+      "temporaryPasswordDone": "完了",
+      "copy": "コピー",
+      "copied": "コピーしました",
+      "ssoBadge": "SSO",
+      "ssoTooltip": "{name} でログイン",
+      "roleFromGroups": "このロールは、ログインプロバイダーでのユーザーのグループから決まります",
+      "roleFromGroupsShort": "プロバイダーのグループから",
+      "noResults": "ユーザーが見つかりません",
+      "created": "ユーザーを作成しました",
+      "deleted": "ユーザーを削除しました",
+      "activated": "ユーザーを有効にしました",
+      "deactivated": "ユーザーを無効にしました",
+      "roleUpdated": "ロールを更新しました",
+      "roles": {
+        "visitor": "閲覧者",
+        "member": "メンバー",
+        "administrator": "管理者"
+      },
+      "roleInfo": {
+        "title": "各ロールでできること",
+        "visitor": "閲覧のみ（新規アカウントのデフォルト）。ライブラリ、アーティスト、アルバム、チャート、歌詞を見られますが、何も変更できません。",
+        "member": "閲覧者ができることに加えて、アーティストのフォローとフォロー解除、アルバムのダウンロード、歌詞の追加・編集・削除ができます。",
+        "administrator": "メンバーができることに加えて、アルバムとアーティストの削除、管理パネル（ユーザー、チャートの購読、アプリの設定）の管理ができます。"
+      }
+    },
+    "charts": {
+      "selectCountry": "国を選択…",
+      "followChart": "チャートをフォロー",
+      "previewTop": "トップ {n} アーティストのプレビュー",
+      "unfollowChart": "フォロー解除",
+      "syncNow": "今すぐ同期",
+      "syncDisabledHint": "同期するにはチャートを有効にしてください",
+      "preview": "プレビュー",
+      "hidePreview": "隠す",
+      "previewFollowing": "{total} 組中トップ {n} のアーティストをフォロー中。フォロー中のアーティストにはチェックが付いています。",
+      "apply": "適用",
+      "enable": "有効にする",
+      "disable": "無効にする",
+      "currentSubscriptions": "現在のチャートの購読",
+      "country": "国",
+      "topArtists": "トップアーティスト",
+      "status": "状態",
+      "lastSynced": "最終同期",
+      "actions": "操作",
+      "enabled": "有効",
+      "disabled": "無効",
+      "neverSynced": "未同期",
+      "noSubscriptions": "フォロー中のチャートはまだありません",
+      "followed": "チャートをフォローしました",
+      "unfollowed": "チャートのフォローを解除しました",
+      "updated": "チャートを更新しました",
+      "enabledToast": "チャートの同期を有効にしました",
+      "disabledToast": "チャートの同期を無効にしました",
+      "syncQueued": "チャートの同期を追加しました",
+      "confirm": {
+        "unfollowTitle": "チャートのフォロー解除",
+        "unfollow": "{country} のチャートのフォローを解除しますか？このチャートからフォローしたアーティストはフォローされたままです。",
+        "disableTitle": "チャートの無効化",
+        "disable": "{country} のチャートを無効にしますか？再同期されなくなり、チャートページにも表示されなくなります。フォロー中のアーティストには影響しません。",
+        "enableTitle": "チャートの有効化",
+        "enable": "{country} のチャートを有効にしますか？定期的に再同期され、チャートページに再び表示されます。",
+        "topNTitle": "トップアーティスト数の変更",
+        "topNIncrease": "{country} のチャートでフォローするアーティストを、トップ {from} からトップ {to} に変更しますか？すぐに同期が追加され、増えた分のアーティストはすべてのディスコグラフィとともにフォローされます。",
+        "topNDecrease": "{country} のチャートでフォローするアーティストを、トップ {from} からトップ {to} に変更しますか？すでにフォロー中のアーティストはフォローされたままです。",
+        "syncTitle": "チャートの同期",
+        "sync": "{country} のチャートを今すぐ同期しますか？トップ {n} のうちまだフォローしていないアーティストが、すべてのディスコグラフィとともにフォローされます。"
+      }
+    },
+    "backup": {
+      "sections": {
+        "library": "ライブラリ",
+        "catalog": "カタログ",
+        "users": "ユーザー",
+        "settings": "設定"
+      },
+      "export": {
+        "title": "バックアップのエクスポート",
+        "description": "このサーバーの状態を JSON ファイルでダウンロードします。音楽ファイル自体はデータフォルダーにあります。移行する場合は、このバックアップと一緒にコピーしてください。",
+        "options": {
+          "library": {
+            "label": "ライブラリ",
+            "description": "フォロー中のアーティストと単体のアルバムです。インポートすると、新しいサーバーがそれらを再びフォローして音楽をダウンロードします。"
+          },
+          "charts": {
+            "label": "チャート",
+            "description": "フォロー中のチャートです。インポートすると、新しいサーバーがそれらを再びフォローし、トップアーティストの自動フォローを続けます。"
+          },
+          "catalog": {
+            "label": "カタログ",
+            "description": "データフォルダー（音楽ファイル）も新しいサーバーにコピーする場合にのみ役立ちます。インポート時にすでにあるファイルが認識され、すべてを再ダウンロードせずに済みます。それ以外の場合はオフのままで構いません。"
+          },
+          "users": {
+            "label": "ユーザー",
+            "description": "ユーザーアカウント、ロール、パスワードのハッシュと、各ユーザーのいいねしたアーティストと非表示にしたおすすめです。新しいサーバーでも全員が同じパスワードを使えます。"
+          },
+          "settings": {
+            "label": "設定",
+            "description": "アプリの設定（スケジューラー、ダウンロード、機能フラグ）です。"
+          }
+        },
+        "usersWarning": "このファイルにはパスワードのハッシュが含まれます。外部に漏れないよう管理してください。",
+        "button": "バックアップをダウンロード",
+        "failed": "バックアップをエクスポートできませんでした"
+      },
+      "import": {
+        "title": "インポート",
+        "description": "バックアップを復元するか、他の人のライブラリのエクスポートをインポートします。このサーバーにすでにあるものは変更されません。足りないアーティスト、アルバム、チャートがフォローされてダウンロードが追加され、既存のユーザーが上書きされることはありません。",
+        "choose": "ファイルを選択",
+        "previewing": "分析中…",
+        "previewTitle": "プレビュー：まだ何も適用されていません",
+        "resultTitle": "インポートを適用しました",
+        "confirm": "インポートを確定",
+        "done": "インポートが完了しました。ダウンロードはバックグラウンドで実行中です。",
+        "failed": "インポートに失敗しました",
+        "errors": {
+          "invalid_json": "このファイルは有効な JSON ではありません。",
+          "not_export_file": "このファイルはこのアプリのエクスポートではありません。"
+        }
+      },
+      "summary": {
+        "artistsFollowed": "フォローするアーティスト",
+        "artistsExisting": "フォロー済みのアーティスト",
+        "albumsQueued": "ダウンロードするアルバム",
+        "albumsCovered": "アーティストの同期で処理されるアルバム",
+        "albumsExisting": "ライブラリにあるアルバム",
+        "chartsCreated": "フォローするチャート",
+        "chartsExisting": "フォロー済みのチャート",
+        "chartsSkipped": "スキップしたチャート",
+        "playlistsAdded": "追加するプレイリスト",
+        "catalogRows": "カタログの行（アーティスト / アルバム / 曲）",
+        "tracksOnDisk": "ディスク上で見つかった曲",
+        "tracksToDownload": "ダウンロードする曲",
+        "usersCreated": "作成するユーザー",
+        "usersSkipped": "スキップしたユーザー（既存）",
+        "likesAdded": "追加するいいねしたアーティスト",
+        "dismissedAdded": "追加する非表示のおすすめ",
+        "settingsApplied": "適用する設定",
+        "settingsIgnored": "無視した設定（不明）",
+        "albumsToImport": "再取得するアルバム（曲またはジャケットが不足）",
+        "exclusionsAdded": "追加した除外",
+        "artistsExcluded": "除外したアーティスト（除外中）",
+        "albumsExcluded": "除外したアルバム（除外中）"
+      },
+      "warnings": {
+        "charts_disabled": "このサーバーではチャートが無効なため、チャートの購読はスキップされました。",
+        "settings_ignored": "このバージョンでは不明な設定があったため、無視されました。",
+        "invalid_setting": "無効な値の設定があったため、無視されました。",
+        "users_skipped": "一部のユーザーはすでに存在します。アカウントはそのままで、いいねしたアーティストと非表示にしたおすすめのみ追加されました。",
+        "likes_skipped": "いいねしたアーティストの一部がこのライブラリにないため、スキップされました。",
+        "invalid_chart": "チャートの購読を作成できませんでした。",
+        "administrators_created": "このファイルは管理者アカウントを作成します。作成者はそのパスワードを知っています。出どころが信頼できる場合のみインポートしてください。"
+      }
+    }
+  },
+  "playlist": {
+    "title": "プレイリストをインポート",
+    "subtitle": "YouTube Music のプレイリストの URL を貼り付けて、アーティストやアルバムを見つけてフォロー",
+    "whereLinkTitle": "リンクはどこ？",
+    "whereLinkBody": "YouTube Music でプレイリストを開き、共有 › リンクをコピー を選びます。music.youtube.com/playlist?list=… のような形式です",
+    "urlPlaceholder": "YouTube Music のプレイリストの URL を貼り付け…",
+    "untitled": "プレイリスト",
+    "loadPlaylist": "プレイリストを読み込む",
+    "invalidUrl": "YouTube Music のプレイリストのリンクまたは ID ではありません",
+    "artists": "アーティスト",
+    "albums": "アルバム",
+    "trackCount": "{count} 曲",
+    "summary": {
+      "tracks": "プレイリストに {count} 曲",
+      "artists": "{count} 組のアーティスト",
+      "albums": "{count} 枚のアルバム"
+    },
+    "followMainArtists": "メインアーティストをフォロー",
+    "followAll": "すべてのアーティストをフォロー",
+    "mainArtist": "メイン",
+    "secondaryArtist": "参加",
+    "downloadAll": "すべてのアルバムをダウンロード",
+    "followingProgress": "フォロー中 {current} / {total}…",
+    "downloadingProgress": "ダウンロード中 {current} / {total}…",
+    "followComplete": "すべてのアーティストをフォローしました",
+    "downloadComplete": "すべてのアルバムをダウンロード待ちに追加しました",
+    "followed": "フォロー中",
+    "downloaded": "待機中",
+    "emptyPlaylist": "空のプレイリスト",
+    "emptyPlaylistDescription": "このプレイリストには曲がありません",
+    "noArtists": "このプレイリストにフォローできるアーティストはいません",
+    "noAlbums": "このプレイリストにダウンロードできるアルバムはありません",
+    "partialSuccess": "{total} 件中 {succeeded} 件成功、{failed} 件失敗",
+    "importFromPlaylist": "プレイリストからインポート",
+    "trackView": "曲",
+    "unavailable": "このプレイリストを読み込めません。存在しないか、非公開か、YouTube Music が応答していません。",
+    "skippedNote": "{count} 曲は追加できません",
+    "skippedUploads": "アップロード動画（{count}）：曲ではありません。クレジットはアーティストではなく、投稿した YouTube チャンネルです。",
+    "skippedNoSong": "アルバムなし（{count}）：YouTube Music に曲がない動画です。",
+    "songsPending": "{count} 本の MV の曲を検索中…",
+    "skippedNoArtist": "アーティストのクレジットなし（{count}）",
+    "options": {
+      "addTitle": "プレイリストをライブラリに追加",
+      "editTitle": "プレイリストのオプション",
+      "bringIn": "曲から追加するもの",
+      "albums": "曲のアルバム",
+      "albumsDescription": "各曲のアルバム全体をダウンロードします。",
+      "artists": "曲のアーティスト",
+      "artistsDescription": "各曲のメインアーティストをフォローし、そのすべてのリリースをダウンロードします。",
+      "follow": "フォローを続ける",
+      "followOn": "プレイリストの同期スケジュールで再スキャンされます。新しい曲はそのアルバムやアーティストを追加し、プレイリストから削除された曲は M3U からも外れます。",
+      "followOff": "一度だけ追加：その後のプレイリストの変更は無視されます。",
+      "m3u": "M3U ファイル",
+      "m3uDescription": "Jellyfin などのプレーヤー向けに、音楽フォルダーの Playlists/ に書き出されます。曲はダウンロードされるたびに追加されます。",
+      "needOne": "少なくとも 1 つをオンにしてください。M3U ファイルなしで一度だけダウンロードする場合は、プレイリストの下のボタンを使ってください。",
+      "switchToArtists": "プレイリストのすべての曲のメインアーティストがフォローされます。",
+      "switchToAlbums": "すでにフォロー中のアーティストはフォローされたままです。今後は、曲からそのアルバムが追加されます。",
+      "add": "追加",
+      "addButton": "ライブラリに追加",
+      "addHint": "フォローするか、M3U プレイリストとして保存",
+      "editButton": "オプション",
+      "remove": "削除",
+      "removeTitle": "プレイリストの削除",
+      "removeMessage": "プレイリストとその M3U ファイルがライブラリから削除されます。音楽は残ります。",
+      "added": "プレイリストを追加しました。曲を取り込んでいます",
+      "saved": "プレイリストを更新しました",
+      "removed": "プレイリストを削除しました"
+    },
+    "status": {
+      "followed": "フォロー中",
+      "once": "一度だけ",
+      "available": "{songs} 曲中 {available} 曲がライブラリにあります",
+      "skipped": "{count} 件スキップ",
+      "lastScan": "最終スキャン：{when}",
+      "scanning": "スキャン中…",
+      "lastError": "前回のスキャンに失敗しました：{error}",
+      "syncNow": "今すぐ同期",
+      "syncQueued": "スキャンを追加しました"
+    },
+    "excludedSkipped": "除外したアーティストまたはアルバム {count} 件を除きました。",
+    "excludedNote": "除外：ライブラリで削除またはフォロー解除したものです。上のボタンでは対象外になり、各項目のボタンで元に戻せます。"
+  },
+  "onboarding": {
+    "label": "クイックツアー",
+    "step": "{current} / {total}",
+    "goTo": "ステップ {current} / {total}",
+    "skip": "スキップ",
+    "previous": "戻る",
+    "next": "次へ",
+    "finish": "始める",
+    "welcome": {
+      "title": "ようこそ、{name} さん",
+      "body": "見落としがちな機能も含めて、できることを簡単にご紹介します。まずは、アプリをお好みに設定しましょう：",
+      "bodyVisitor": "簡単にご案内します。このアカウントではライブラリの閲覧、歌詞の表示、チャートの確認ができます。音楽を追加できるようにするには管理者に依頼してください。まずは、アプリをお好みに設定しましょう：",
+      "language": "言語",
+      "theme": "テーマ",
+      "note": "このブラウザーに保存されます。上部のバー、またはスマートフォンではアカウントメニューからいつでも変更できます。"
+    },
+    "follow": {
+      "title": "アーティストをフォローするか、アルバムを 1 枚だけ",
+      "body": "アーティストをフォローすると、これまでのすべてのリリースと、今後の新しいリリースがダウンロードされます。アルバム 1 枚だけなら、そのページの「アルバムをダウンロード」でそのアルバムだけを取得できます。"
+    },
+    "activity": {
+      "title": "ダウンロードの状況",
+      "body": "音楽のダウンロード中は、上部のバーに実行中のジョブの数が表示されます。カーソルを合わせるかタップすると詳細が見られます。YouTube に制限された場合は、赤いバッジでダウンロードの一時停止をお知らせします。再開は自動です。"
+    },
+    "lyrics": {
+      "title": "すべての曲に歌詞を",
+      "body": "アルバムのページでは、「歌詞」列にダウンロード済みの各曲の歌詞の状態が表示されます。バッジをクリックすると歌詞を読めます。",
+      "bodyEditor": "アルバムのページでは、「歌詞」列にダウンロード済みの各曲の歌詞の状態が表示されます。バッジをクリックすると歌詞を読んだり、貼り付けて手動で修正したりできます。",
+      "kinds": {
+        "synced": "音楽に合わせて行がハイライトされます",
+        "plain": "タイミングのない歌詞のテキスト",
+        "instrumental": "探す歌詞はありません",
+        "pending": "まだ検索されていません",
+        "none": "まだ見つかっていません。定期的に再検索されます"
+      }
+    },
+    "likes": {
+      "title": "いいねからのおすすめ",
+      "body": "アーティストのページやライブラリで、ハートを押してアーティストにいいねしましょう（フォローしてもいいねされます）。すると「探す」で似たアーティストがおすすめされます。好みでなければ、おすすめの ✕（カーソルを合わせると表示）で非表示にできます。非表示はあなただけに適用されます。",
+      "try": "ハートを試す",
+      "dismissed": "おすすめから非表示にしました"
+    },
+    "playlists": {
+      "title": "プレイリストをまるごと取り込む",
+      "body": "「探す」の検索バーの横に YouTube Music のプレイリストのリンクを貼り付けると、そのアーティストをフォローしたり、アルバムをまとめてダウンロードしたりできます。ライブラリに保存すれば、新しい曲の追加を追跡し、Jellyfin が認識するプレイリストとして保存されます。"
+    },
+    "charts": {
+      "title": "いま話題の音楽",
+      "body": "チャートページには、ここでフォロー中の国のトップアーティストが表示されます。すでにライブラリにあるアーティストにはチェックが付きます。",
+      "bodyAdmin": "管理パネルで国のチャートをフォローすると、そのトップアーティストが自動でフォローされ、チャートの変化に合わせて更新されます。全員がチャートページで見られます。"
+    },
+    "admin": {
+      "title": "サーバーの運用",
+      "body": "管理パネルはアカウントメニューにあります。アーティストやアルバムを削除できるのは管理者のみで、削除するとファイルもディスクから消去されます。",
+      "tabs": {
+        "users": "アカウントの作成、ロールの設定、パスワードのリセット",
+        "charts": "トップアーティストをフォローする国",
+        "settings": "登録、スケジュール、ダウンロード、歌詞、ジャンルなど",
+        "backup": "ライブラリ、ユーザー、設定のエクスポートと復元"
+      }
+    },
+    "done": {
+      "title": "準備完了です",
+      "body": "ツアーは以上です。どこから始めますか？",
+      "browse": "YouTube Music でアーティストやアルバムを検索",
+      "library": "ダウンロードしたすべてのもの",
+      "playlist": "プレイリストのアーティストをフォロー、またはアルバムをダウンロード",
+      "charts": "フォロー中の国のトップアーティスト",
+      "admin": "ユーザー、スケジュール、設定、バックアップ"
+    }
+  },
+  "errorBoundary": {
+    "title": "問題が発生しました",
+    "description": "ページで予期しないエラーが発生しました。通常は再読み込みで解決します。報告の際は以下の詳細が役立ちます。",
+    "details": "エラーの詳細",
+    "reload": "ページを再読み込み",
+    "home": "ホームページへ"
+  },
+  "exclusion": {
+    "badge": "除外",
+    "artistDeleted": "ライブラリから削除済み：チャートやプレイリストでこのアーティストが戻ることはありません。フォローすれば戻ります。",
+    "artistUnfollowed": "フォロー解除済み：チャートやプレイリストがこのアーティストを再びフォローすることはありません。フォローすれば戻ります。",
+    "album": "ライブラリから削除済み：同期、チャート、プレイリストで再びダウンロードされることはありません。ダウンロードすれば戻ります。"
+  }
+}

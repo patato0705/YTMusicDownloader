@@ -66,7 +66,7 @@ It runs as a single Docker container, has a web UI for desktop and phone, and is
 
 **Nice to use**
 
-- Light and dark theme, five accent colours, English and French, a short welcome tour, and a layout that works on a phone (it can be added to the home screen).
+- Light and dark theme, five accent colours, seven languages (English, French, Spanish, Portuguese, Russian, Japanese and Chinese), a short welcome tour, and a layout that works on a phone (it can be added to the home screen).
 
 ## Screenshots
 

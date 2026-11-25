@@ -1,5 +1,6 @@
 const colors = require('tailwindcss/colors');
 const plugin = require('tailwindcss/plugin');
+const defaultTheme = require('tailwindcss/defaultTheme');
 // The accent colours offered in the appearance menu; the first is the default
 const ACCENTS = require('./src/config/accents.json');
 
@@ -57,6 +58,11 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+      // Flag emoji first: that font only has flags (src/index.css), so every
+      // other character falls through to the system fonts
+      fontFamily: {
+        sans: ['"Twemoji Country Flags"', ...defaultTheme.fontFamily.sans],
+      },
       // Theme colours, defined per mode in src/index.css
       colors: {
         // The one brand hue, in both themes, picked by each viewer (ThemeContext).
