@@ -26,11 +26,12 @@ updates:
       actions:
         patterns: ["*"]
 
-  # backend/requirements.txt. Only the == pins move: yt-dlp is unpinned on
-  # purpose (the entrypoint updates it at startup), and urllib3's ">=" floor
-  # stays as written while new releases still meet it.
+  # backend/requirements.txt, and the test tools in
+  # backend/tests/requirements.txt (ruff, pytest). Only the == pins move:
+  # yt-dlp is unpinned on purpose (the entrypoint updates it at startup), and
+  # urllib3's ">=" floor stays as written while new releases still meet it.
   - package-ecosystem: pip
-    directory: /backend
+    directories: [/backend, /backend/tests]
     schedule:
       interval: weekly
     cooldown:
@@ -62,10 +63,12 @@ updates:
       frontend:
         update-types: [minor, patch]
 
-  # The Dockerfile's images. Python and Node only get patch-level updates
-  # here: a new Python or Node version also means changing the versions CI
-  # tests with (python-version and node-version in ci.yml), so that's done by
-  # hand, in one commit.
+  # The Dockerfile's images, all pinned by digest. ffmpeg and uv move to
+  # newer releases. Python and Node keep their version (3.14, 24) and only
+  # get a new digest when it's rebuilt with fixes: a new Python or Node
+  # version also changes the versions CI tests with (python-version and
+  # node-version in ci.yml), which Dependabot can't edit, so it's done by
+  # hand, in one commit (the ignore rules below).
   - package-ecosystem: docker
     directory: /
     schedule:

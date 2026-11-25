@@ -26,8 +26,8 @@ npm test
 npm run build      # includes the type check
 
 # backend, from the repository root (Linux or macOS)
-pip install -r backend/requirements.txt pytest ruff
-ruff check --select E9,F backend
+pip install -r backend/requirements.txt -r backend/tests/requirements.txt
+ruff check --select E9,F --target-version py314 backend
 python -m pytest backend/tests
 
 # the Docker image, from the repository root (Docker, curl and jq)
