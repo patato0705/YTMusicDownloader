@@ -149,7 +149,7 @@ function TrackThumb({ track }: { track: PlaylistTrack }) {
     <Artwork
       src={getImageUrl(track.cover)}
       kind="album"
-      className="w-8 h-8 rounded flex-shrink-0"
+      className="w-8 h-8 rounded-sm shrink-0"
     />
   );
 }
@@ -173,14 +173,14 @@ function ExpandableRow({ expanded, onToggle, children, action, tracks }: Expanda
         onClick={onToggle}
         className="flex items-start sm:items-center gap-4 px-4 md:px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer select-none"
       >
-        <Icon name="chevronRight" className={`w-4 h-4 flex-shrink-0 mt-1 sm:mt-0 text-muted-foreground transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
+        <Icon name="chevronRight" className={`w-4 h-4 shrink-0 mt-1 sm:mt-0 text-muted-foreground transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
         <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
           <div className="flex-1 min-w-0">{children}</div>
           {action}
         </div>
       </div>
       {expanded && (
-        <div className="bg-slate-50/50 dark:bg-white/[0.02] border-t border-slate-200/50 dark:border-white/5">
+        <div className="bg-slate-50/50 dark:bg-white/2 border-t border-slate-200/50 dark:border-white/5">
           {tracks}
         </div>
       )}
@@ -498,12 +498,12 @@ export default function PlaylistImport(): JSX.Element {
     groupTracks.map((track, idx) => (
       <div key={`${groupId}-${track.id}-${idx}`} className="flex items-center gap-3 px-4 md:px-6 pl-12 md:pl-14 py-2 text-sm">
         <TrackThumb track={track} />
-        <div className="flex-[3] min-w-0">
+        <div className="flex-3 min-w-0">
           <p className="truncate text-foreground">{track.title}</p>
           <p className="sm:hidden text-xs text-muted-foreground truncate mt-0.5">{detail(track)}</p>
         </div>
-        <span className="hidden sm:flex flex-[2] min-w-0 truncate text-muted-foreground">{detail(track)}</span>
-        <span className="flex-shrink-0 text-muted-foreground font-mono text-xs">{duration(track)}</span>
+        <span className="hidden sm:flex flex-2 min-w-0 truncate text-muted-foreground">{detail(track)}</span>
+        <span className="shrink-0 text-muted-foreground font-mono text-xs">{duration(track)}</span>
       </div>
     ));
 
@@ -539,7 +539,7 @@ export default function PlaylistImport(): JSX.Element {
   const listClass = 'glass rounded-2xl overflow-hidden';
   // Left out of the bulk buttons; its own button still brings it back
   const excludedPill = (
-    <span className="flex-shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border border-dashed border-slate-400/50 dark:border-white/20 text-muted-foreground">
+    <span className="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border border-dashed border-slate-400/50 dark:border-white/20 text-muted-foreground">
       {t('exclusion.badge')}
     </span>
   );
@@ -562,7 +562,7 @@ export default function PlaylistImport(): JSX.Element {
           placeholder={t('playlist.urlPlaceholder')}
           aria-label={t('playlist.urlPlaceholder')}
           disabled={loading || isBulkRunning}
-          className="flex-1 px-5 py-3.5 rounded-xl bg-white/60 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 transition-all duration-300 disabled:opacity-50"
+          className="flex-1 px-5 py-3.5 rounded-xl bg-white/60 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-accent-500 transition-all duration-300 disabled:opacity-50"
         />
         <Button onClick={handleLoad} isLoading={loading} disabled={!url.trim() || isBulkRunning} variant="primary" size="lg">
           {t('playlist.loadPlaylist')}
@@ -576,21 +576,21 @@ export default function PlaylistImport(): JSX.Element {
       {!loading && view && tracks.length > 0 && (
         <>
           {/* Playlist summary */}
-          <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-6 md:p-8 border-gradient shadow-sm">
+          <div className="bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-3xl p-6 md:p-8 border-gradient shadow-xs">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               {/* The card's width, not its longest line's (a long skipped title) */}
               <div className="flex items-center gap-4 min-w-0 self-stretch sm:flex-1">
                 <Artwork
                   src={getImageUrl(view.thumbnail)}
                   kind="playlist"
-                  className="w-24 h-24 rounded-2xl shadow-lg flex-shrink-0"
+                  className="w-24 h-24 rounded-2xl shadow-lg shrink-0"
                 />
 
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl font-bold mb-1 text-foreground break-words">
+                  <h2 className="text-2xl font-bold mb-1 text-foreground wrap-break-word">
                     {view.title || t('playlist.untitled')}
                   </h2>
-                  {view.author && <p className="text-sm text-muted-foreground mb-1 break-words">{view.author}</p>}
+                  {view.author && <p className="text-sm text-muted-foreground mb-1 wrap-break-word">{view.author}</p>}
                   <p className="text-muted-foreground">
                     {[
                       t('playlist.summary.tracks', { count: tracks.length }),
@@ -619,14 +619,14 @@ export default function PlaylistImport(): JSX.Element {
               </div>
 
               {/* In the library: how it's added; otherwise the button to add it */}
-              <div className="sm:ml-auto flex flex-col items-start sm:items-end gap-2 flex-shrink-0">
+              <div className="sm:ml-auto flex flex-col items-start sm:items-end gap-2 shrink-0">
                 {saved ? (
                   <>
                     <PlaylistBadges saved={saved} className="sm:justify-end" />
                     <p className="text-xs text-muted-foreground">{playlistStats(saved)}</p>
                     {/* In full: the library card only has room for two lines */}
                     {saved.last_error && !saved.syncing && (
-                      <p className="text-xs text-red-600 dark:text-red-400 break-words max-w-sm sm:text-right">
+                      <p className="text-xs text-red-600 dark:text-red-400 wrap-break-word max-w-sm sm:text-right">
                         {t('playlist.status.lastError', { error: saved.last_error })}
                       </p>
                     )}
@@ -734,7 +734,7 @@ export default function PlaylistImport(): JSX.Element {
                           </Link>
                           {/* Same rule as "Follow main artists": first artist on at least one track */}
                           <span
-                            className={`flex-shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border ${
+                            className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border ${
                               isMain
                                 ? 'bg-accent-500/10 text-accent-700 border-accent-500/30 dark:text-accent-400'
                                 : 'border-slate-300/70 dark:border-white/10 text-muted-foreground'
@@ -804,9 +804,9 @@ export default function PlaylistImport(): JSX.Element {
             <div className={listClass}>
               <div className="hidden sm:flex items-center gap-3 px-4 md:px-6 py-3 bg-slate-100/50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs font-semibold text-muted-foreground">
                 <span className="w-8" />
-                <span className="flex-[3] min-w-0">{t('album.title')}</span>
-                <span className="flex-[2] min-w-0">{t('album.artist')}</span>
-                <span className="flex-[2] min-w-0">{t('album.album')}</span>
+                <span className="flex-3 min-w-0">{t('album.title')}</span>
+                <span className="flex-2 min-w-0">{t('album.artist')}</span>
+                <span className="flex-2 min-w-0">{t('album.album')}</span>
                 <span className="w-16 text-right">{t('album.duration')}</span>
               </div>
 
@@ -817,7 +817,7 @@ export default function PlaylistImport(): JSX.Element {
                     className="flex items-center gap-3 px-4 md:px-6 py-2.5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
                   >
                     <TrackThumb track={track} />
-                    <div className="flex-[3] min-w-0">
+                    <div className="flex-3 min-w-0">
                       <p className="font-semibold text-foreground truncate">{track.title}</p>
                       {/* Phones: artist and album under the title */}
                       <p className="sm:hidden text-xs text-muted-foreground truncate mt-0.5">
@@ -825,10 +825,10 @@ export default function PlaylistImport(): JSX.Element {
                         {track.album?.name && <>{' · '}{albumLink(track.album)}</>}
                       </p>
                     </div>
-                    <span className="hidden sm:flex flex-[2] min-w-0 truncate text-sm text-muted-foreground">
+                    <span className="hidden sm:flex flex-2 min-w-0 truncate text-sm text-muted-foreground">
                       {artistLinks(track.artists)}
                     </span>
-                    <span className="hidden sm:flex flex-[2] min-w-0 truncate text-sm text-muted-foreground">
+                    <span className="hidden sm:flex flex-2 min-w-0 truncate text-sm text-muted-foreground">
                       {albumLink(track.album)}
                     </span>
                     <span className="w-16 text-right text-sm text-muted-foreground font-mono">{duration(track)}</span>

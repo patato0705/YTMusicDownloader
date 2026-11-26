@@ -114,8 +114,8 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({ content, label, classN
         aria-expanded={open}
         className={
           children
-            ? `focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:focus-visible:ring-accent-600 ${className}`
-            : `inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-accent-600 dark:hover:text-accent-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 transition-colors ${className}`
+            ? `focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 dark:focus-visible:ring-accent-600 ${className}`
+            : `inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-accent-600 dark:hover:text-accent-400 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 transition-colors ${className}`
         }
       >
         {children ?? <Icon name="info" className="w-4 h-4" />}

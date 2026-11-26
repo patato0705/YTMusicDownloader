@@ -40,7 +40,7 @@ export const MediaList: React.FC<MediaListProps> = ({ kind, children, showStatus
 
   return (
     <div className={`glass rounded-2xl overflow-hidden ${className}`}>
-      <div className="hidden lg:flex items-center gap-4 px-4 py-2 border-b border-slate-200/60 dark:border-white/10 bg-slate-50/60 dark:bg-white/[0.03]">
+      <div className="hidden lg:flex items-center gap-4 px-4 py-2 border-b border-slate-200/60 dark:border-white/10 bg-slate-50/60 dark:bg-white/3">
         {/* Spacer matching the thumbnail column */}
         <div className="w-12 shrink-0" />
         <div className={`flex-1 min-w-0 ${HEADER_CELL}`}>{t('library.columns.name')}</div>
@@ -230,7 +230,7 @@ export const MediaRow: React.FC<MediaRowProps> = ({
           <div className={`${COLUMNS.status} flex items-center gap-2`}>
             {mediaStatus && (
               <>
-                <StatusPip status={mediaStatus} className="shadow-sm ring-2 ring-white dark:ring-zinc-900" />
+                <StatusPip status={mediaStatus} className="shadow-xs ring-2 ring-white dark:ring-zinc-900" />
                 <span className="hidden lg:inline text-xs font-medium text-muted-foreground truncate">
                   {t(statusLabelKey(mediaStatus))}
                 </span>

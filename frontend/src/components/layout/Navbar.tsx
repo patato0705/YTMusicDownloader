@@ -96,9 +96,9 @@ export function Navbar(): JSX.Element {
       {isAuthenticated && (
         <nav
           aria-label={t('nav.main')}
-          className="md:hidden fixed inset-x-0 bottom-0 z-50 glass-chrome !border-x-0 !border-b-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+          className="md:hidden fixed inset-x-0 bottom-0 z-50 glass-chrome border-x-0! border-b-0! pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
         >
-          <div className="flex h-[var(--tab-bar-height)]">
+          <div className="flex h-(--tab-bar-height)">
             {navLinks.map((link) => {
               const active = location.pathname === link.to;
               return (
@@ -106,7 +106,7 @@ export function Navbar(): JSX.Element {
                   key={link.to}
                   to={link.to}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors outline-none focus-visible:bg-accent-500/10 ${
+                  className={`flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors outline-hidden focus-visible:bg-accent-500/10 ${
                     active ? 'text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-zinc-400'
                   }`}
                 >

@@ -39,7 +39,7 @@ const SyncError: React.FC<{ error: string }> = ({ error }) => {
       onClick={() => setOpen((value) => !value)}
       aria-expanded={open}
       title={error}
-      className={`mt-1 block max-w-xs text-left text-xs text-red-600 dark:text-red-400 ${open ? 'whitespace-normal break-words' : 'truncate'}`}
+      className={`mt-1 block max-w-xs text-left text-xs text-red-600 dark:text-red-400 ${open ? 'whitespace-normal wrap-break-word' : 'truncate'}`}
     >
       <InlineWarning />{error}
     </button>
@@ -420,7 +420,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                                   if (e.key === 'Enter') requestTopNChange(sub);
                                   if (e.key === 'Escape') clearTopNDraft(sub.country_code);
                                 }}
-                                className={`w-20 px-3 py-2 glass rounded-xl text-foreground text-center focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 disabled:opacity-50 ${
+                                className={`w-20 px-3 py-2 glass rounded-xl text-foreground text-center focus:outline-hidden focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 disabled:opacity-50 ${
                                   draftValue === null
                                     ? 'border border-red-500 dark:border-red-500'
                                     : ''
@@ -507,7 +507,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                           </td>
                         </tr>
                         {expanded?.chart && (
-                          <tr className="bg-slate-50/60 dark:bg-white/[0.03]">
+                          <tr className="bg-slate-50/60 dark:bg-white/3">
                             <td colSpan={6} className="px-6 py-4">
                               <p className="text-sm text-muted-foreground mb-3">
                                 {t('admin.charts.previewFollowing', {

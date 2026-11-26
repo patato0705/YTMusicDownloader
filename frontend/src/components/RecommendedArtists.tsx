@@ -147,7 +147,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
       <div className="space-y-12">
         {fallback}
         <section>
-          <SectionHeader className="!mb-2">{t('browse.recommendations.title')}</SectionHeader>
+          <SectionHeader className="mb-2!">{t('browse.recommendations.title')}</SectionHeader>
           <p className="text-sm text-muted-foreground">{t('browse.recommendations.noLikes')}</p>
         </section>
       </div>
@@ -156,7 +156,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
 
   return (
     <section>
-      <SectionHeader className="!mb-2">{t('browse.recommendations.title')}</SectionHeader>
+      <SectionHeader className="mb-2!">{t('browse.recommendations.title')}</SectionHeader>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-6">
         <p className="text-sm text-muted-foreground">{t('browse.recommendations.subtitle')}</p>
         {canEdit && dismissedCount > 0 && (
@@ -203,7 +203,7 @@ export const RecommendedArtists: React.FC<RecommendedArtistsProps> = ({ fallback
                     onClick={() => dismiss(rec)}
                     aria-label={t('browse.recommendations.dismissArtist', { name: rec.name })}
                     title={t('browse.recommendations.dismiss')}
-                    className="flex w-7 h-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
+                    className="flex w-7 h-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500/70 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
                   >
                     <Icon name="close" strokeWidth={2.5} className="w-4 h-4" />
                   </button>
@@ -258,12 +258,12 @@ const SimilarToModal: React.FC<{ recommendation: RecommendedArtist; onClose: () 
               <Link
                 to={artistPath(artist.id)}
                 onClick={onClose}
-                className="flex items-center gap-3 rounded-2xl p-2 hover:bg-slate-100/60 dark:hover:bg-white/5 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 transition-colors"
+                className="flex items-center gap-3 rounded-2xl p-2 hover:bg-slate-100/60 dark:hover:bg-white/5 outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500/70 transition-colors"
               >
                 <Artwork
                   src={getImageUrl(artist.thumbnail)}
                   kind="artist"
-                  className="w-11 h-11 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
+                  className="w-11 h-11 shrink-0 rounded-full overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
                 />
                 <span className="font-medium text-foreground truncate">{artist.name}</span>
               </Link>
@@ -323,7 +323,7 @@ const DismissedArtistsModal: React.FC<DismissedArtistsModalProps> = ({ onClose, 
                   <Artwork
                     src={getImageUrl(artist.thumbnail)}
                     kind="artist"
-                    className="w-11 h-11 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
+                    className="w-11 h-11 shrink-0 rounded-full overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
                   />
                   <span className="font-medium text-foreground truncate">{artist.name}</span>
                 </Link>

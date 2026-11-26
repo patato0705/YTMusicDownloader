@@ -15,7 +15,7 @@ interface PageHeaderProps {
 
 /** A page's title card: compact, so the page's content starts on the first screen */
 export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, icon, actions, className = '' }) => (
-  <header className={`flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl glass bg-gradient-to-r from-accent-500/10 to-transparent p-5 md:p-7 ${className}`}>
+  <header className={`flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl glass bg-linear-to-r from-accent-500/10 to-transparent p-5 md:p-7 ${className}`}>
     <div className="flex items-center gap-4 min-w-0">
       {icon && (
         <div className="flex shrink-0 items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-xl bg-accent-500/15 text-accent-600 dark:text-accent-400">

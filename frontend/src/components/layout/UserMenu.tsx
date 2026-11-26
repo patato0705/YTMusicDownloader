@@ -73,7 +73,7 @@ export const UserMenu: React.FC = () => {
         aria-expanded={open}
         className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 transition-all duration-300 group"
       >
-        <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${ROLE_GRADIENTS[user.role]} flex items-center justify-center text-white font-semibold shadow-lg group-hover:scale-110 transition-transform`}>
+        <div className={`w-8 h-8 rounded-full bg-linear-to-br ${ROLE_GRADIENTS[user.role]} flex items-center justify-center text-white font-semibold shadow-lg group-hover:scale-110 transition-transform`}>
           {initial}
         </div>
         <div className="hidden sm:max-md:block lg:block text-left">
@@ -88,12 +88,12 @@ export const UserMenu: React.FC = () => {
           {/* User info */}
           <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10">
             <div className="flex items-center gap-3">
-              <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${ROLE_GRADIENTS[user.role]} flex items-center justify-center text-white font-bold text-xl shadow-lg flex-shrink-0`}>
+              <div className={`w-14 h-14 rounded-full bg-linear-to-br ${ROLE_GRADIENTS[user.role]} flex items-center justify-center text-white font-bold text-xl shadow-lg shrink-0`}>
                 {initial}
               </div>
               <div className="flex-1 min-w-0 flex items-center gap-2">
                 <div className="font-semibold text-foreground truncate">{user.username}</div>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-medium rounded-full ${ROLE_COLORS[user.role]} flex-shrink-0`}>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-medium rounded-full ${ROLE_COLORS[user.role]} shrink-0`}>
                   <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
                   {roleName}
                 </span>
@@ -128,7 +128,7 @@ export const UserMenu: React.FC = () => {
                 icon="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
                 label={t('nav.admin')}
                 onClick={() => go('/admin')}
-                iconClassName="bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-lg"
+                iconClassName="bg-linear-to-br from-purple-500 to-pink-600 text-white shadow-lg"
                 className="hover:bg-slate-100 dark:hover:bg-white/10"
               />
             )}

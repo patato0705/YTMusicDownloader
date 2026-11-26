@@ -37,7 +37,7 @@ interface ErrorBannerProps {
 export const ErrorBanner: React.FC<ErrorBannerProps> = ({ title, children, className = '' }) => (
   <div
     role="alert"
-    className={`bg-red-500/10 dark:bg-red-500/5 backdrop-blur-sm rounded-2xl border border-red-500/20 ${title ? 'p-6' : 'p-4'} ${className}`}
+    className={`bg-red-500/10 dark:bg-red-500/5 backdrop-blur-xs rounded-2xl border border-red-500/20 ${title ? 'p-6' : 'p-4'} ${className}`}
   >
     <div className="flex items-center gap-3">
       <Icon name="warning" className={`shrink-0 text-red-600 dark:text-red-400 ${title ? 'w-6 h-6' : 'w-5 h-5'}`} />
@@ -65,8 +65,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, children })
     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent-100 dark:bg-accent-950/50 text-accent-600 dark:text-accent-400 mb-5">
       <Icon name={icon} className="w-8 h-8" />
     </div>
-    {/* break-words: an unbroken link or search fits narrow screens */}
-    <h2 className="text-2xl font-bold mb-3 text-foreground break-words">{title}</h2>
-    {children && <div className="text-muted-foreground max-w-md mx-auto space-y-6 break-words">{children}</div>}
+    {/* wrap-break-word: an unbroken link or search fits narrow screens */}
+    <h2 className="text-2xl font-bold mb-3 text-foreground wrap-break-word">{title}</h2>
+    {children && <div className="text-muted-foreground max-w-md mx-auto space-y-6 wrap-break-word">{children}</div>}
   </div>
 );

@@ -76,7 +76,7 @@ export default function ChangePassword(): JSX.Element {
   return (
     <AuthLayout title={t('auth.changePassword.title')} subtitle={t('auth.changePassword.subtitle')}>
       {forced && (
-        <div className="mb-6 bg-yellow-500/10 dark:bg-yellow-500/5 backdrop-blur-sm rounded-2xl p-5 border border-yellow-500/30">
+        <div className="mb-6 bg-yellow-500/10 dark:bg-yellow-500/5 backdrop-blur-xs rounded-2xl p-5 border border-yellow-500/30">
           <div className="flex items-start gap-3">
             <Icon name="warning" className="w-6 h-6 shrink-0" />
             <div>

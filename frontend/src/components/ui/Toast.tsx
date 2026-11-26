@@ -44,7 +44,7 @@ export const Toast: React.FC<ToastProps> = ({
   };
 
   return (
-    <div role="status" className="fixed top-[calc(6rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] z-[100]">
+    <div role="status" className="fixed top-[calc(6rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] z-100">
       <div className={`glass rounded-2xl p-4 border ${colors[type]} min-w-[300px] max-w-md`}>
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${

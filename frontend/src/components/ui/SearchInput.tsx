@@ -27,7 +27,7 @@ const sizeClasses = {
 /** Right padding by number of trailing controls (none, one, spinner + clear) */
 const rightPadding = {
   sm: ['pr-4', 'pr-9', 'pr-16'],
-  md: ['pr-4', 'pr-11', 'pr-[4.5rem]'],
+  md: ['pr-4', 'pr-11', 'pr-18'],
   lg: ['pr-16', 'pr-16', 'pr-24'],
 };
 
@@ -86,19 +86,19 @@ export const SearchInput: React.FC<SearchInputProps> = ({
         onFocus={onFocus}
         placeholder={label}
         autoFocus={autoFocus}
-        className={`w-full ${sizeClasses[size]} ${rightPadding[size][trailingCount]} glass rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 focus:border-transparent transition-all duration-300 ${size === 'lg' ? 'shadow-lg' : ''} ${inputClassName}`}
+        className={`w-full ${sizeClasses[size]} ${rightPadding[size][trailingCount]} glass rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 focus:border-transparent transition-all duration-300 ${size === 'lg' ? 'shadow-lg' : ''} ${inputClassName}`}
         aria-label={label}
       />
 
       {/* Search icon */}
       <div className={`absolute inset-y-0 left-0 ${iconPadding[size]} flex items-center pointer-events-none z-10`}>
-        <Icon name="search" strokeWidth={2.5} className={`${iconSizes[size]} text-accent-500 dark:text-accent-700 drop-shadow-sm`} />
+        <Icon name="search" strokeWidth={2.5} className={`${iconSizes[size]} text-accent-500 dark:text-accent-700 drop-shadow-xs`} />
       </div>
 
       {/* Loading spinner and clear button */}
       {trailingCount > 0 && (
         <div className={`absolute inset-y-0 right-0 ${trailingPadding[size]} flex items-center gap-1 z-10`}>
-          {loading && <Spinner size="sm" className="!w-5 !h-5 text-accent-600 dark:text-accent-500" />}
+          {loading && <Spinner size="sm" className="w-5! h-5! text-accent-600 dark:text-accent-500" />}
           {value && (
             <button
               type="button"

@@ -47,7 +47,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   return (
     <Modal onClose={onCancel} dismissible={!isLoading} labelledBy={titleId}>
       <div className="flex items-start gap-4 mb-6">
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${COLORS[variant]}`}>
+        <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${COLORS[variant]}`}>
           <Icon name={ICONS[variant]} className="w-6 h-6" />
         </div>
         <div className="flex-1 min-w-0">

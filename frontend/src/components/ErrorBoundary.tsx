@@ -23,7 +23,7 @@ function ErrorScreen({ error }: { error: Error }): JSX.Element {
 
       <div className="relative max-w-3xl w-full glass rounded-2xl p-8 md:p-12">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-red-100 to-orange-100 dark:from-red-950/40 dark:to-orange-950/40 mb-6">
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-linear-to-br from-red-100 to-orange-100 dark:from-red-950/40 dark:to-orange-950/40 mb-6">
             <Icon name="warning" className="w-10 h-10 text-red-600 dark:text-red-400" />
           </div>
           <h1 className="text-4xl font-bold mb-3 text-foreground">
@@ -38,7 +38,7 @@ function ErrorScreen({ error }: { error: Error }): JSX.Element {
           <summary className="cursor-pointer font-semibold text-foreground mb-3 hover:text-accent-600 dark:hover:text-accent-400 transition-colors">
             {t('errorBoundary.details')}
           </summary>
-          <p className="font-mono text-sm text-foreground break-words mb-3">{error.message}</p>
+          <p className="font-mono text-sm text-foreground wrap-break-word mb-3">{error.message}</p>
           {error.stack && (
             <pre className="p-3 bg-slate-100 dark:bg-zinc-900 rounded-lg text-xs overflow-x-auto max-h-64 border border-slate-200 dark:border-white/10">
               {error.stack}

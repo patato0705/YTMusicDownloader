@@ -4,7 +4,7 @@ import { Icon } from './icons';
 
 /** Classes of a form's text and password inputs, outlined in red while `error` is set */
 export function inputClass(error?: string): string {
-  return `w-full px-4 py-3 glass rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+  return `w-full px-4 py-3 glass rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 ${
     error
       ? 'focus:ring-red-500 dark:focus:ring-red-600 border-red-500/50'
       : 'focus:ring-accent-500 dark:focus:ring-accent-600'

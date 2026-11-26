@@ -57,7 +57,7 @@ export const useScheduleSummary = () => {
 };
 
 const inputClass =
-  'px-3 py-2 glass rounded-xl border text-foreground focus:outline-none focus:ring-2 ' +
+  'px-3 py-2 glass rounded-xl border text-foreground focus:outline-hidden focus:ring-2 ' +
   'focus:ring-accent-500 dark:focus:ring-accent-600';
 const borderClass = (invalid: boolean) =>
   invalid ? 'border-red-500 dark:border-red-500' : '';
@@ -109,7 +109,7 @@ export const ScheduleControls: React.FC<ScheduleControlsProps> = ({ value, onCha
             { value: 'fixed', label: t('admin.settings.schedule.modeFixed') },
           ]}
           // min-w-0: gives way on the narrowest phones rather than pushing the row off screen
-          className="w-36 min-w-0 !py-2"
+          className="w-36 min-w-0 py-2!"
         />
         {value.mode === 'interval' ? (
           <>

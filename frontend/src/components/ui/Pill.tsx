@@ -21,7 +21,7 @@ interface PillProps {
 
 /** Small rounded badge with an icon: the track status and lyrics columns */
 export const Pill: React.FC<PillProps> = ({ tone, icon, strokeWidth = 2, iconClassName = '', label, title, labelClassName = '', onClick, className = '' }) => {
-  const classes = `inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium whitespace-nowrap rounded-full border backdrop-blur-sm ${tone} ${className}`;
+  const classes = `inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium whitespace-nowrap rounded-full border backdrop-blur-xs ${tone} ${className}`;
   const content = (
     <>
       <svg className={`w-3 h-3 shrink-0 ${iconClassName}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -36,7 +36,7 @@ export const Pill: React.FC<PillProps> = ({ tone, icon, strokeWidth = 2, iconCla
       type="button"
       onClick={onClick}
       title={title}
-      className={`${classes} hover:ring-2 hover:ring-accent-500/40 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 transition-shadow`}
+      className={`${classes} hover:ring-2 hover:ring-accent-500/40 focus:outline-hidden focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 transition-shadow`}
     >
       {content}
     </button>

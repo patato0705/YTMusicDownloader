@@ -77,7 +77,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
                   <Artwork
                     src={getImageUrl(p.thumbnail)}
                     kind="playlist"
-                    className="w-16 h-16 rounded-xl flex-shrink-0 overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
+                    className="w-16 h-16 rounded-xl shrink-0 overflow-hidden ring-1 ring-slate-900/5 dark:ring-white/10"
                   />
                   <div className="min-w-0 space-y-1">
                     <p className="font-semibold text-foreground truncate group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">
@@ -90,7 +90,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
                     </p>
                     {p.syncing ? (
                       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        <Spinner size="sm" className="!w-3 !h-3" /> {t('playlist.status.scanning')}
+                        <Spinner size="sm" className="w-3! h-3!" /> {t('playlist.status.scanning')}
                       </p>
                     ) : scan ? (
                       <p className="text-xs text-muted-foreground">{scan}</p>
@@ -104,7 +104,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
                 </Link>
 
                 {canModify && (
-                  <div className="flex gap-2 sm:flex-shrink-0">
+                  <div className="flex gap-2 sm:shrink-0">
                     {p.followed && (
                       <Button
                         variant="secondary"

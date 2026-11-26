@@ -54,7 +54,7 @@ export const atLeast = (role: Role, min: Role): boolean => ROLES.indexOf(role) >
  * only a picture (the text says it all), so screen readers skip it.
  */
 const Stage: React.FC<{ children: React.ReactNode; className?: string; decorative?: boolean }> = ({ children, className = '', decorative = false }) => (
-  <div aria-hidden={decorative || undefined} className={`mb-6 rounded-2xl bg-slate-100/80 dark:bg-white/[0.04] border border-slate-200/70 dark:border-white/10 px-4 py-5 sm:px-6 ${className}`}>
+  <div aria-hidden={decorative || undefined} className={`mb-6 rounded-2xl bg-slate-100/80 dark:bg-white/4 border border-slate-200/70 dark:border-white/10 px-4 py-5 sm:px-6 ${className}`}>
     {children}
   </div>
 );
@@ -108,7 +108,7 @@ const Preferences: React.FC = () => {
               title={language.name}
               className={`flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 rounded-lg transition-all ${
                 locale === language.code
-                  ? 'bg-white dark:bg-white/15 text-foreground shadow-sm'
+                  ? 'bg-white dark:bg-white/15 text-foreground shadow-xs'
                   : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
               }`}
             >
@@ -145,7 +145,7 @@ const FollowVisual: React.FC = () => {
     <Stage className="space-y-4">
       <div className="flex items-center gap-3">
         <Artwork kind="artist" className="w-11 h-11 shrink-0 rounded-full" />
-        <TextBar className="flex-1 max-w-[6rem]" />
+        <TextBar className="flex-1 max-w-24" />
         <span className="flex-1" />
         <Spotlight rounded="rounded-[1.1rem]" active={!tried.follow}>
           <Button
@@ -164,7 +164,7 @@ const FollowVisual: React.FC = () => {
       </div>
       <div className="flex items-center gap-3">
         <Artwork kind="album" className="w-11 h-11 shrink-0 rounded-lg" />
-        <TextBar className="flex-1 max-w-[5rem]" />
+        <TextBar className="flex-1 max-w-20" />
         <span className="flex-1" />
         <Spotlight rounded="rounded-[1.1rem]" active={!tried.download}>
           <Button
@@ -199,7 +199,7 @@ const ActivityVisual: React.FC = () => {
         <Spotlight rounded="rounded-2xl">
           <JobsBadge count={12} byType={{ download_track: 9, download_lyrics: 3 }} gap={10} />
         </Spotlight>
-        <span aria-hidden="true" className="ml-2 w-8 h-8 rounded-full bg-gradient-to-br from-accent-500 to-accent-600 shadow-lg" />
+        <span aria-hidden="true" className="ml-2 w-8 h-8 rounded-full bg-linear-to-br from-accent-500 to-accent-600 shadow-lg" />
       </div>
     </Stage>
   );
@@ -240,7 +240,7 @@ const LikesVisual: React.FC = () => {
     <Stage>
       <div className="flex items-center gap-3">
         <Artwork kind="artist" className="w-11 h-11 shrink-0 rounded-full" />
-        <TextBar className="flex-1 max-w-[6rem]" />
+        <TextBar className="flex-1 max-w-24" />
         <span className="flex-1" />
         <Spotlight rounded="rounded-full" active={!liked}>
           <button
@@ -249,7 +249,7 @@ const LikesVisual: React.FC = () => {
             aria-pressed={liked}
             aria-label={t('onboarding.likes.try')}
             title={t('onboarding.likes.try')}
-            className="w-10 h-10 flex items-center justify-center rounded-full border border-slate-200 dark:border-white/10 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 transition-colors"
+            className="w-10 h-10 flex items-center justify-center rounded-full border border-slate-200 dark:border-white/10 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500/70 transition-colors"
           >
             <HeartIcon filled={liked} className={`w-5 h-5 ${liked ? 'text-rose-500' : ''}`} />
           </button>
@@ -266,13 +266,13 @@ const LikesVisual: React.FC = () => {
         className={`transition-opacity duration-500 ${liked ? 'opacity-100' : 'opacity-35 pointer-events-none'}`}
       >
         {dismissed ? (
-          <div className="flex items-center justify-between gap-3 rounded-2xl px-4 h-[4.25rem] border border-dashed border-slate-300 dark:border-white/15 text-sm text-muted-foreground animate-fade-in motion-reduce:animate-none">
+          <div className="flex items-center justify-between gap-3 rounded-2xl px-4 h-17 border border-dashed border-slate-300 dark:border-white/15 text-sm text-muted-foreground animate-fade-in motion-reduce:animate-none">
             <span className="min-w-0 truncate">{t('onboarding.likes.dismissed')}</span>
             <button
               type="button"
               tabIndex={liked ? undefined : -1}
               onClick={() => setDismissed(false)}
-              className="shrink-0 font-medium text-accent-600 dark:text-accent-400 hover:underline underline-offset-4 rounded outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+              className="shrink-0 font-medium text-accent-600 dark:text-accent-400 hover:underline underline-offset-4 rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
             >
               {t('browse.recommendations.undo')}
             </button>
@@ -291,7 +291,7 @@ const LikesVisual: React.FC = () => {
               onClick={() => setDismissed(true)}
               aria-label={t('browse.recommendations.dismiss')}
               title={t('browse.recommendations.dismiss')}
-              className="flex w-7 h-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
+              className="flex w-7 h-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 transition-all outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500/70 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
             >
               <Icon name="close" strokeWidth={2.5} className="w-4 h-4" />
             </button>
@@ -383,7 +383,7 @@ const AdminVisual: React.FC<{ chartsEnabled: boolean }> = ({ chartsEnabled }) =>
             type="button"
             onClick={() => setActive(id)}
             aria-pressed={id === active}
-            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl text-xs font-medium transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-xl text-xs font-medium transition-all duration-300 outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 ${
               id === active
                 ? 'bg-accent-600 text-white shadow-lg'
                 : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
@@ -419,7 +419,7 @@ const DoneVisual: React.FC<VisualProps & { chartsEnabled: boolean }> = ({ role, 
           {...card}
           onClick={close}
           // An odd one out takes the whole last row rather than leave a hole
-          className={`!p-4 ${i === cards.length - 1 && cards.length % 2 ? 'sm:col-span-2' : ''}`}
+          className={`p-4! ${i === cards.length - 1 && cards.length % 2 ? 'sm:col-span-2' : ''}`}
         />
       ))}
     </div>

@@ -122,7 +122,7 @@ function RestoreButton({ label, title, loading, onClick, compact = false }: {
       disabled={loading}
       aria-label={label}
       title={title}
-      className={`flex items-center justify-center rounded-full transition-colors outline-none disabled:cursor-wait ${
+      className={`flex items-center justify-center rounded-full transition-colors outline-hidden disabled:cursor-wait ${
         compact
           ? 'w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent-500/70'
           : 'w-9 h-9 shadow-md ring-2 ring-white dark:ring-zinc-900 bg-white text-slate-700 hover:bg-accent-600 hover:text-white dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-accent-600 focus-visible:ring-accent-500/70'
