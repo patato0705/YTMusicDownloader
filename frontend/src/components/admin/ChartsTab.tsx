@@ -423,7 +423,7 @@ export const ChartsTab: React.FC<AdminTabProps> = ({ onToast }) => {
                                 className={`w-20 px-3 py-2 glass rounded-xl text-foreground text-center focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 disabled:opacity-50 ${
                                   draftValue === null
                                     ? 'border border-red-500 dark:border-red-500'
-                                    : 'border-slate-200 dark:border-white/10'
+                                    : ''
                                 }`}
                               />
                               {draftDirty && (

@@ -62,7 +62,7 @@ export const TemporaryPasswordDialog: React.FC<TemporaryPasswordDialogProps> = (
           readOnly
           value={password}
           onFocus={(e) => e.target.select()}
-          className="flex-1 min-w-0 px-4 py-3 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground font-mono text-center focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600"
+          className="flex-1 min-w-0 px-4 py-3 glass rounded-xl text-foreground font-mono text-center focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600"
         />
         <Button onClick={copy} variant="outline">
           {copied ? t('admin.users.copied') : t('admin.users.copy')}

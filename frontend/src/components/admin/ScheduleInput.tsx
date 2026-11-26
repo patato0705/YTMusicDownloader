@@ -60,7 +60,7 @@ const inputClass =
   'px-3 py-2 glass rounded-xl border text-foreground focus:outline-none focus:ring-2 ' +
   'focus:ring-accent-500 dark:focus:ring-accent-600';
 const borderClass = (invalid: boolean) =>
-  invalid ? 'border-red-500 dark:border-red-500' : 'border-slate-200 dark:border-white/10';
+  invalid ? 'border-red-500 dark:border-red-500' : '';
 
 interface ScheduleControlsProps {
   value: Schedule;

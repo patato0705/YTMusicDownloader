@@ -21,7 +21,7 @@ function ErrorScreen({ error }: { error: Error }): JSX.Element {
     <div className="min-h-screen flex items-center justify-center px-4">
       <PageBackground />
 
-      <div className="relative max-w-3xl w-full glass rounded-2xl shadow-2xl p-8 md:p-12">
+      <div className="relative max-w-3xl w-full glass rounded-2xl p-8 md:p-12">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-red-100 to-orange-100 dark:from-red-950/40 dark:to-orange-950/40 mb-6">
             <Icon name="warning" className="w-10 h-10 text-red-600 dark:text-red-400" />

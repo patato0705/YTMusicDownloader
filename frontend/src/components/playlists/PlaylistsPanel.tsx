@@ -68,7 +68,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ playlists, onCha
             return (
               <li
                 key={p.id}
-                className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10 flex flex-col sm:flex-row sm:items-center gap-4"
+                className="glass rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4"
               >
                 <Link
                   to={`/playlist-import?url=${encodeURIComponent(p.id)}`}

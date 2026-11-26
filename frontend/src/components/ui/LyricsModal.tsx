@@ -109,7 +109,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
         href={lrclibSearchUrl(track)}
         target="_blank"
         rel="noopener noreferrer"
-        className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10 flex items-center gap-3 mb-4 shrink-0 hover:border-accent-500/40 transition-colors group"
+        className="glass rounded-2xl p-4 flex items-center gap-3 mb-4 shrink-0 hover:border-accent-500/40 transition-colors group"
       >
         <Icon name="search" className="w-6 h-6" />
         <div className="min-w-0 flex-1">

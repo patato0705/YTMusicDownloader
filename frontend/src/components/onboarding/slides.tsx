@@ -192,7 +192,7 @@ const ActivityVisual: React.FC = () => {
   const [pausedUntil] = useState(() => new Date(Date.now() + 10 * 60_000).toISOString());
   return (
     <Stage className="flex justify-center">
-      <div className="glass-chrome rounded-2xl shadow-lg flex items-center gap-2.5 h-14 px-4">
+      <div className="glass-chrome rounded-2xl flex items-center gap-2.5 h-14 px-4">
         <Spotlight rounded="rounded-2xl">
           <RateLimitBadge until={pausedUntil} gap={10} />
         </Spotlight>

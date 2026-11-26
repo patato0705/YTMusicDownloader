@@ -213,7 +213,7 @@ export const SortControl: React.FC<SortControlProps> = ({ sort, onChange, classN
           role="menu"
           aria-label={t('library.sort.label')}
           onKeyDown={onMenuKeyDown}
-          className={`absolute z-40 w-64 glass-chrome rounded-2xl shadow-2xl py-2 ${dropdown.menuMotion}`}
+          className={`absolute z-40 w-64 glass-chrome rounded-2xl py-2 ${dropdown.menuMotion}`}
           style={dropdown.menuStyle}
         >
           <MenuHeading>{t('library.sort.label')}</MenuHeading>
@@ -541,7 +541,7 @@ export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
           aria-labelledby={titleId}
           tabIndex={-1}
           onKeyDown={keepTabInside}
-          className={`absolute z-40 w-[44rem] glass-chrome rounded-2xl shadow-2xl flex flex-col overflow-hidden outline-none ${dropdown.menuMotion}`}
+          className={`absolute z-40 w-[44rem] glass-chrome rounded-2xl flex flex-col overflow-hidden outline-none ${dropdown.menuMotion}`}
           style={dropdown.menuStyle}
         >
           <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-slate-200/70 dark:border-white/10">

@@ -50,9 +50,7 @@ export function Navbar(): JSX.Element {
       }`}>
         <div className="max-w-[1600px] mx-auto">
           <div
-            className={`glass-chrome rounded-2xl shadow-xl transition-all duration-300 ${
-              scrolled ? 'shadow-2xl' : ''
-            }`}
+            className="glass-chrome rounded-2xl transition-all duration-300"
           >
             <div className="px-4 sm:px-6">
               <div className="flex items-center justify-between h-16">

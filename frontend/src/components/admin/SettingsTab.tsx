@@ -311,7 +311,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                         className={`w-24 px-3 py-2 glass rounded-xl text-foreground text-center focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 ${
                           invalidIntSetting(setting)
                             ? 'border border-red-500 dark:border-red-500'
-                            : 'border-slate-200 dark:border-white/10'
+                            : ''
                         }`}
                       />
                     ) : Array.isArray(setting.allowed_values) && setting.allowed_values.length > 0 ? (
@@ -329,7 +329,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
                         type="text"
                         value={editedSettings[setting.key] ?? ''}
                         onChange={(e) => handleSettingChange(setting.key, e.target.value, setting.type)}
-                        className="w-48 px-3 py-2 glass rounded-xl border-slate-200 dark:border-white/10 text-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600"
+                        className="w-48 px-3 py-2 glass rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600"
                       />
                     )}
                   </div>
@@ -385,7 +385,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onToast, onSaved }) =>
 
         {/* Stays in view while anything is unsaved (above the phone tab bar) */}
         {dirty && (
-          <div className="sticky bottom-[calc(var(--tab-bar-height)+env(safe-area-inset-bottom)+0.5rem)] md:bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 glass-chrome rounded-2xl px-4 py-3 shadow-lg">
+          <div className="sticky bottom-[calc(var(--tab-bar-height)+env(safe-area-inset-bottom)+0.5rem)] md:bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 glass-chrome rounded-2xl px-4 py-3">
             <span className="text-sm font-medium text-foreground">{t('admin.settings.unsaved')}</span>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={discardChanges} disabled={saveLoading}>

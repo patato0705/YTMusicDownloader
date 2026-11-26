@@ -536,7 +536,7 @@ export default function PlaylistImport(): JSX.Element {
   // the first it has instead of none
   const shownFilter: PlaylistFilterType = tabs.some((tab) => tab.id === activeFilter) ? activeFilter : tabs[0].id;
 
-  const listClass = 'glass rounded-2xl overflow-hidden shadow-sm';
+  const listClass = 'glass rounded-2xl overflow-hidden';
   // Left out of the bulk buttons; its own button still brings it back
   const excludedPill = (
     <span className="flex-shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border border-dashed border-slate-400/50 dark:border-white/20 text-muted-foreground">
