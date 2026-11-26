@@ -45,7 +45,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ?.setAttribute('content', theme === 'dark' ? '#09090b' : '#f8fafc');
   }, [theme]);
 
-  // The --accent-* variables under this attribute (tailwind.config.cjs)
+  // The --accent-* variables under this attribute (src/config/accent-plugin.cjs)
   useEffect(() => {
     document.documentElement.dataset.accent = accent;
   }, [accent]);

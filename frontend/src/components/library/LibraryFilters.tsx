@@ -147,7 +147,7 @@ const MenuItem: React.FC<MenuItemProps> = ({ checked, icon, onClick, children })
     role="menuitemradio"
     aria-checked={checked}
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-4 py-2 text-sm text-left transition-colors hover:bg-slate-100 dark:hover:bg-white/5 focus:outline-none focus-visible:bg-slate-100 dark:focus-visible:bg-white/10 ${
+    className={`w-full flex items-center gap-3 px-4 py-2 text-sm text-left transition-colors hover:bg-slate-100 dark:hover:bg-white/5 focus:outline-hidden focus-visible:bg-slate-100 dark:focus-visible:bg-white/10 ${
       checked ? 'font-medium text-accent-700 dark:text-accent-300' : 'text-foreground'
     }`}
   >
@@ -194,8 +194,8 @@ export const SortControl: React.FC<SortControlProps> = ({ sort, onChange, classN
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t('library.sort.button', { key: keyLabel, order: currentOrder })}
-        className={`flex items-center gap-3 glass rounded-2xl pl-3.5 pr-3 py-1.5 text-left transition-colors duration-200 hover:bg-slate-100 dark:hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
-          open ? '!border-accent-500/50' : ''
+        className={`flex items-center gap-3 glass rounded-2xl pl-3.5 pr-3 py-1.5 text-left transition-colors duration-200 hover:bg-slate-100 dark:hover:bg-white/5 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 ${
+          open ? 'border-accent-500/50!' : ''
         } ${className}`}
       >
         <Icon name={orderIcon(sort.order)} className="w-5 h-5 shrink-0 text-accent-600 dark:text-accent-400" />
@@ -213,7 +213,7 @@ export const SortControl: React.FC<SortControlProps> = ({ sort, onChange, classN
           role="menu"
           aria-label={t('library.sort.label')}
           onKeyDown={onMenuKeyDown}
-          className={`absolute z-40 w-64 glass-chrome rounded-2xl shadow-2xl py-2 ${dropdown.menuMotion}`}
+          className={`absolute z-40 w-64 glass-chrome rounded-2xl py-2 ${dropdown.menuMotion}`}
           style={dropdown.menuStyle}
         >
           <MenuHeading>{t('library.sort.label')}</MenuHeading>
@@ -262,9 +262,9 @@ const SortOptions: React.FC<Omit<SortControlProps, 'className'>> = ({ sort, onCh
               role="radio"
               aria-checked={selected}
               onClick={() => onChange({ ...sort, order })}
-              className={`flex-1 min-w-0 min-h-10 flex items-center justify-center gap-2 px-3 rounded-xl text-sm font-medium transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
+              className={`flex-1 min-w-0 min-h-10 flex items-center justify-center gap-2 px-3 rounded-xl text-sm font-medium transition-colors duration-200 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 ${
                 selected
-                  ? 'bg-white dark:bg-white/15 text-accent-700 dark:text-white shadow-sm'
+                  ? 'bg-white dark:bg-white/15 text-accent-700 dark:text-white shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -306,9 +306,9 @@ const OptionChip: React.FC<OptionChipProps> = ({ label, count, selected, radio =
       aria-pressed={radio ? undefined : selected}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 min-h-10 md:min-h-8 px-3 rounded-full border text-sm transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`inline-flex items-center gap-1.5 min-h-10 md:min-h-8 px-3 rounded-full border text-sm transition-colors duration-200 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40 disabled:cursor-not-allowed ${
         selected
-          ? 'bg-accent-600 border-accent-600 text-white shadow-sm hover:bg-accent-700'
+          ? 'bg-accent-600 border-accent-600 text-white shadow-xs hover:bg-accent-700'
           : 'border-slate-200 dark:border-white/10 text-foreground hover:bg-slate-100 dark:hover:bg-white/5 disabled:hover:bg-transparent'
       }`}
     >
@@ -381,7 +381,7 @@ const GenreOptions: React.FC<Omit<GroupOptionsProps, 'group'>> = ({ options, pic
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
-          className="text-sm font-medium text-accent-600 dark:text-accent-400 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 rounded"
+          className="text-sm font-medium text-accent-600 dark:text-accent-400 hover:underline focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 rounded-sm"
         >
           {expanded ? t('library.filters.showFewerGenres') : t('library.filters.showAllGenres', { count: options.length })}
         </button>
@@ -503,7 +503,7 @@ export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
     <button
       type="button"
       onClick={onClear}
-      className="shrink-0 text-sm font-medium text-accent-600 dark:text-accent-400 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 rounded"
+      className="shrink-0 text-sm font-medium text-accent-600 dark:text-accent-400 hover:underline focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 rounded-sm"
     >
       {t('library.filters.clearAll')}
     </button>
@@ -518,9 +518,9 @@ export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
         aria-haspopup="dialog"
         aria-expanded={dropdown.open}
         aria-label={active > 0 ? t('library.filters.buttonActive', { count: active }) : t('library.filters.button')}
-        className={`shrink-0 flex items-center justify-center gap-2 glass rounded-2xl px-3.5 md:px-4 text-sm font-medium transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
+        className={`shrink-0 flex items-center justify-center gap-2 glass rounded-2xl px-3.5 md:px-4 text-sm font-medium transition-colors duration-200 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 ${
           active > 0 || dropdown.open
-            ? 'text-accent-700 dark:text-accent-300 !border-accent-500/50'
+            ? 'text-accent-700 dark:text-accent-300 border-accent-500/50!'
             : 'text-foreground hover:bg-slate-100 dark:hover:bg-white/5'
         }`}
       >
@@ -541,7 +541,7 @@ export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
           aria-labelledby={titleId}
           tabIndex={-1}
           onKeyDown={keepTabInside}
-          className={`absolute z-40 w-[44rem] glass-chrome rounded-2xl shadow-2xl flex flex-col overflow-hidden outline-none ${dropdown.menuMotion}`}
+          className={`absolute z-40 w-176 glass-chrome rounded-2xl flex flex-col overflow-hidden outline-hidden ${dropdown.menuMotion}`}
           style={dropdown.menuStyle}
         >
           <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-slate-200/70 dark:border-white/10">
@@ -590,7 +590,7 @@ export const LibraryFilterControl: React.FC<LibraryFilterControlProps> = ({
                 <Button variant="secondary" onClick={onClear} disabled={active === 0} className="flex-1">
                   {t('library.filters.clearAll')}
                 </Button>
-                <Button variant="primary" onClick={close} className="flex-[2] tabular-nums">
+                <Button variant="primary" onClick={close} className="flex-2 tabular-nums">
                   {t('library.filters.showResults', { count: resultCount, formatted: formatNumber(resultCount, formatLocale) })}
                 </Button>
               </div>
@@ -630,7 +630,7 @@ export const ActiveFilters: React.FC<ActiveFiltersProps> = ({ filters, onToggle,
               type="button"
               onClick={() => onToggle(group, value)}
               aria-label={t('library.filters.remove', { label })}
-              className="shrink-0 inline-flex items-center gap-1.5 min-h-9 pl-3 pr-2 rounded-full border border-accent-500/30 bg-accent-500/10 text-sm font-medium text-accent-700 dark:text-accent-300 transition-colors hover:bg-accent-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+              className="shrink-0 inline-flex items-center gap-1.5 min-h-9 pl-3 pr-2 rounded-full border border-accent-500/30 bg-accent-500/10 text-sm font-medium text-accent-700 dark:text-accent-300 transition-colors hover:bg-accent-500/20 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
             >
               {label}
               <Icon name="close" strokeWidth={2.5} className="w-3.5 h-3.5 opacity-70" />
@@ -640,7 +640,7 @@ export const ActiveFilters: React.FC<ActiveFiltersProps> = ({ filters, onToggle,
         <button
           type="button"
           onClick={onClear}
-          className="shrink-0 min-h-9 px-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 rounded"
+          className="shrink-0 min-h-9 px-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 rounded-sm"
         >
           {t('library.filters.clearAll')}
         </button>

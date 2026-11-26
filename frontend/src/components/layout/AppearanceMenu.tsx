@@ -57,7 +57,7 @@ export const ThemeSwitch: React.FC<{ className?: string }> = ({ className = '' }
           aria-pressed={theme === option}
           className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
             theme === option
-              ? 'bg-white dark:bg-white/15 text-foreground shadow-sm'
+              ? 'bg-white dark:bg-white/15 text-foreground shadow-xs'
               : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
           }`}
         >
@@ -90,7 +90,7 @@ export const AppearanceMenu: React.FC = () => {
       </button>
 
       {mounted && createPortal(
-        <div ref={menuRef} className={`fixed w-64 glass-chrome rounded-2xl shadow-xl p-3 z-[60] space-y-3 ${menuMotion}`} style={menuStyle}>
+        <div ref={menuRef} className={`fixed w-64 glass-chrome rounded-2xl p-3 z-60 space-y-3 ${menuMotion}`} style={menuStyle}>
           <ThemeSwitch />
           <div>
             <div className="px-1 mb-2 text-xs font-medium text-muted-foreground">{t('settings.accent.label')}</div>

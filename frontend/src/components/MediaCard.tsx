@@ -113,7 +113,7 @@ export const CardLink: React.FC<{ to?: string; onClick?: () => void; label: stri
   label,
   className = '',
 }) => {
-  const classes = `absolute inset-0 outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 ${className}`;
+  const classes = `absolute inset-0 outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500/70 ${className}`;
   return to ? (
     <Link to={to} onClick={onClick} aria-label={label} className={classes} />
   ) : (
@@ -121,7 +121,7 @@ export const CardLink: React.FC<{ to?: string; onClick?: () => void; label: stri
   );
 };
 
-const SUBTITLE_CONTROL = 'relative z-10 pointer-events-auto cursor-pointer rounded-sm outline-none hover:text-accent-600 dark:hover:text-accent-400 hover:underline focus-visible:underline focus-visible:text-accent-600 dark:focus-visible:text-accent-400 transition-colors';
+const SUBTITLE_CONTROL = 'relative z-10 pointer-events-auto cursor-pointer rounded-xs outline-hidden hover:text-accent-600 dark:hover:text-accent-400 hover:underline focus-visible:underline focus-visible:text-accent-600 dark:focus-visible:text-accent-400 transition-colors';
 
 /** A link inside a card / row (e.g. the artist under an album), above its CardLink */
 export const SubtitleLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, children }) => (
@@ -194,7 +194,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         {/* Artwork: the badges live outside the clipping box so they survive the round shape */}
         <div className="relative mb-3">
           <div
-            className={`relative aspect-square overflow-hidden bg-slate-200 dark:bg-zinc-800 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 transition-shadow duration-300 group-hover:shadow-xl group-hover:shadow-accent-500/10 ${shape}`}
+            className={`relative aspect-square overflow-hidden bg-slate-200 dark:bg-zinc-800 shadow-xs ring-1 ring-slate-900/5 dark:ring-white/10 transition-shadow duration-300 group-hover:shadow-xl group-hover:shadow-accent-500/10 ${shape}`}
           >
             <Artwork
               src={thumbnail}
@@ -203,7 +203,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
             />
 
             {/* Subtle darkening on hover, keeps the status pip readable */}
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/50 via-black/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
           </div>
 
           {mediaStatus && !isArtist && (

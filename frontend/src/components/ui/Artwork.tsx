@@ -43,7 +43,7 @@ export const Artwork: React.FC<ArtworkProps> = ({
       {imageSrc ? (
         !loaded && (
           <div
-            className="absolute inset-0 -translate-x-full animate-artwork-shimmer bg-gradient-to-r from-transparent via-white/50 dark:via-white/[0.06] to-transparent motion-reduce:hidden"
+            className="absolute inset-0 -translate-x-full animate-artwork-shimmer bg-linear-to-r from-transparent via-white/50 dark:via-white/6 to-transparent motion-reduce:hidden"
             aria-hidden="true"
           />
         )

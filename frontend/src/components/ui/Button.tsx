@@ -2,7 +2,7 @@
 import React from 'react';
 import { Spinner } from './Spinner';
 
-const BASE = 'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+const BASE = 'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-300 focus:outline-hidden focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
 /** danger: the final confirm of a destructive action; subtleDanger: the button that opens that confirm */
 const VARIANTS = {

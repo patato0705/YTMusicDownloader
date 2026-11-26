@@ -121,7 +121,7 @@ const Tour: React.FC<TourProps> = ({ role, name, features, onClose }) => {
             aria-hidden={!active}
             // Hidden at once: visibility is inherited and animatable, so a
             // control with transition-all inside would stay up for its duration
-            className={`[grid-area:1/1] min-w-0 ${active ? 'animate-fade-in motion-reduce:animate-none' : 'invisible [&_*]:!transition-none'}`}
+            className={`[grid-area:1/1] min-w-0 ${active ? 'animate-fade-in motion-reduce:animate-none' : 'invisible **:transition-none!'}`}
           >
             {!slide.controls && <Visual role={role} close={close} />}
             <h2 className="text-xl sm:text-2xl font-bold text-foreground">{t(slide.title, { name })}</h2>
@@ -145,7 +145,7 @@ const Tour: React.FC<TourProps> = ({ role, name, features, onClose }) => {
             onClick={() => go(i)}
             aria-label={t('onboarding.goTo', { current: i + 1, total })}
             aria-current={i === index ? 'step' : undefined}
-            className="p-1.5 group rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+            className="p-1.5 group rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
           >
             <span
               className={`block h-2 rounded-full transition-all duration-300 ${

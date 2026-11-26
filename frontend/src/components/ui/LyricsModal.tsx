@@ -109,7 +109,7 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
         href={lrclibSearchUrl(track)}
         target="_blank"
         rel="noopener noreferrer"
-        className="glass rounded-2xl p-4 border border-slate-200/50 dark:border-white/10 flex items-center gap-3 mb-4 shrink-0 hover:border-accent-500/40 transition-colors group"
+        className="glass rounded-2xl p-4 flex items-center gap-3 mb-4 shrink-0 hover:border-accent-500/40 transition-colors group"
       >
         <Icon name="search" className="w-6 h-6" />
         <div className="min-w-0 flex-1">
@@ -134,9 +134,9 @@ export const LyricsModal: React.FC<LyricsModalProps> = ({ track, canEdit, onClos
             readOnly={!isEditing}
             spellCheck={false}
             placeholder={isEditing ? t('lyrics.placeholder') : instrumental ? t('lyrics.instrumental') : t('lyrics.empty')}
-            className="flex-1 min-h-[16rem] [@media(max-height:500px)]:min-h-[6rem] w-full resize-none rounded-2xl p-4 font-mono text-sm leading-relaxed bg-white/60 dark:bg-black/30 border border-slate-200/50 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 read-only:opacity-80"
+            className="flex-1 min-h-64 [@media(max-height:500px)]:min-h-24 w-full resize-none rounded-2xl p-4 font-mono text-sm leading-relaxed bg-white/60 dark:bg-black/30 border border-slate-200/50 dark:border-white/10 text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 read-only:opacity-80"
           />
-          <div className="flex items-center justify-between gap-3 mt-2 px-1 min-h-[1.25rem]">
+          <div className="flex items-center justify-between gap-3 mt-2 px-1 min-h-5">
             <p className="text-xs text-muted-foreground">
               {!editable
                 ? t('lyrics.notDownloaded')

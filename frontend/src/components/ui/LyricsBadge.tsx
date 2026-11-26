@@ -50,7 +50,7 @@ export const LyricsBadge: React.FC<LyricsBadgeProps> = ({ kind, pending = false,
   const label = t(`lyrics.kind.${key}`);
   // Icon only: the kind moves to the hover text, above what clicking does
   const iconOnlyProps = iconOnly
-    ? { labelClassName: 'sr-only', className: '!px-1.5', title: title ? `${label}
+    ? { labelClassName: 'sr-only', className: 'px-1.5!', title: title ? `${label}
 ${title}` : label }
     : { title };
   return <Pill {...KINDS[key]} label={label} onClick={onClick} {...iconOnlyProps} />;

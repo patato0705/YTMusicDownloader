@@ -39,5 +39,5 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, childre
 
 /** The glass card holding an auth page's form */
 export const AuthCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <div className={`glass rounded-3xl p-8 md:p-10 border-gradient shadow-2xl ${className}`}>{children}</div>
+  <div className={`glass rounded-3xl p-8 md:p-10 border-gradient ${className}`}>{children}</div>
 );

@@ -58,12 +58,12 @@ export const QuickFollowButton: React.FC<QuickFollowButtonProps> = ({ artistId, 
         aria-label={label}
         aria-pressed={followed}
         title={followed ? t('artist.followed') : t('artist.follow')}
-        className={`flex w-9 h-9 items-center justify-center rounded-full shadow-md ring-2 ring-white dark:ring-zinc-900 transition-all outline-none focus-visible:ring-accent-500/70 disabled:cursor-wait ${
+        className={`flex w-9 h-9 items-center justify-center rounded-full shadow-md ring-2 ring-white dark:ring-zinc-900 transition-all outline-hidden focus-visible:ring-accent-500/70 disabled:cursor-wait ${
           followed
             ? 'bg-accent-600 text-white hover:bg-accent-700'
             // Shown on hover where there is one, like the dismiss button
             : 'bg-white text-slate-700 hover:bg-accent-600 hover:text-white dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-accent-600 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100'
-        } ${loading ? '!opacity-100' : ''}`}
+        } ${loading ? 'opacity-100!' : ''}`}
       >
         {loading ? (
           <Spinner size="sm" />

@@ -179,7 +179,7 @@ const OptionRow: React.FC<{
       <p className="text-sm font-semibold text-foreground">{label}</p>
       <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
     </div>
-    <ToggleSwitch checked={checked} onChange={onChange} ariaLabel={label} className="flex-shrink-0 mt-0.5" />
+    <ToggleSwitch checked={checked} onChange={onChange} ariaLabel={label} className="shrink-0 mt-0.5" />
   </div>
 );
 
