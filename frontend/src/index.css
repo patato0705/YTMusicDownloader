@@ -1,10 +1,79 @@
 /* src/index.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* The --accent-* variables, one set per accent (src/config/accent-plugin.cjs) */
+@plugin "./config/accent-plugin.cjs";
+
+/* Dark mode follows the .dark class on <html> (ThemeContext), not the system */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Flag emoji first: that font only has flags (@font-face below), so every
+     other character falls through to the system fonts */
+  --font-sans: "Twemoji Country Flags", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* Light theme: slate. The dark theme's values are under .dark below. */
+  --color-background: rgb(248 250 252);         /* slate-50 */
+  --color-foreground: rgb(15 23 42);            /* slate-900 */
+  --color-muted-foreground: rgb(100 116 139);   /* slate-500 */
+  --color-border: rgb(226 232 240);             /* slate-200 */
+
+  /* A light band sweeping over an artwork tile while its image loads */
+  --animate-artwork-shimmer: artwork-shimmer 1.6s ease-in-out infinite;
+  @keyframes artwork-shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* A bottom sheet coming up from under the screen's edge */
+  --animate-sheet-up: sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  @keyframes sheet-up {
+    0% { transform: translateY(100%); }
+    100% { transform: translateY(0); }
+  }
+
+  --animate-fade-in: fade-in 0.28s ease-out;
+  @keyframes fade-in {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  /* A menu growing out of its button (useDropdown sets the origin) */
+  --animate-menu-in: menu-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  @keyframes menu-in {
+    0% { opacity: 0; transform: scale(0.95); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+
+  /* As long as EXIT_MS in useDropdown, and holding its end until the menu goes */
+  --animate-menu-out: menu-out 0.11s ease-in forwards;
+  @keyframes menu-out {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
+
+/* The one brand hue, in both themes, picked by each viewer (ThemeContext).
+   Red stays reserved for deleting and errors. Inline: the utilities read
+   --accent-* where they're used, so a swatch with its own data-accent shows
+   its own hue instead of the root's. */
+@theme inline {
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent-800: var(--accent-800);
+  --color-accent-900: var(--accent-900);
+  --color-accent-950: var(--accent-950);
+}
 
 /* Country flag emoji (Twemoji, CC-BY-4.0), first in the sans font stack
-   (tailwind.config.cjs). Chrome and Edge on Windows have no flags and draw
+   (@theme above). Chrome and Edge on Windows have no flags and draw
    "FR" instead; this font draws them the same on every system. unicode-range
    limits it to the flag characters, and the browser only downloads it for a
    page that shows one. Bundled and served by the app: the CSP allows no
@@ -19,28 +88,24 @@
 
 @layer base {
   :root {
-    /* Light theme: slate, with the accent picked in the appearance menu */
-    --color-background: 248 250 252;         /* slate-50 */
-    --color-foreground: 15 23 42;            /* slate-900 */
-    --color-muted-foreground: 100 116 139;   /* slate-500 */
-    --color-border: 226 232 240;             /* slate-200 */
-
-    /* The accent, for inline styles (e.g. the chart slider) */
-    --color-accent: theme(colors.accent.500);
     /* The phone tab bar's height (Navbar), cleared by main and sticky bars */
     --tab-bar-height: 4.25rem;
   }
 
   .dark {
     /* Dark theme: deep blacks, same accent as light */
-    --color-background: 9 9 11;              /* zinc-950 */
-    --color-foreground: 250 250 250;         /* zinc-50 */
-    --color-muted-foreground: 161 161 170;   /* zinc-400 */
-    --color-border: 39 39 42;                /* zinc-800 */
+    --color-background: rgb(9 9 11);              /* zinc-950 */
+    --color-foreground: rgb(250 250 250);         /* zinc-50 */
+    --color-muted-foreground: rgb(161 161 170);   /* zinc-400 */
+    --color-border: rgb(39 39 42);                /* zinc-800 */
   }
 
-  * {
-    @apply border-border;
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
   }
 
   /* Both html and body: mobile browsers paint the letterbox / overscroll
@@ -58,6 +123,21 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
+  /* A pointer on buttons, and grey placeholders, as before Tailwind 4 */
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  :disabled {
+    cursor: default;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af;
+  }
+
   /* Edge's own reveal button would sit next to PasswordInput's toggle */
   input::-ms-reveal,
   input::-ms-clear {
@@ -65,83 +145,67 @@
   }
 }
 
-@layer utilities {
-  /* Gradient text */
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-accent-600 to-accent-500;
-  }
+/* Gradient text */
+@utility text-gradient {
+  @apply bg-clip-text text-transparent bg-linear-to-r from-accent-600 to-accent-500;
 
-  /* Dark mode gradient text */
-  .dark .text-gradient {
+  @variant dark {
     @apply from-accent-400 to-accent-300;
   }
+}
 
-  /* Glassmorphism - Light mode defaults */
-  .glass {
-    @apply bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-sm;
+/* Glassmorphism: white in light mode, darker and subtle in dark mode */
+@utility glass {
+  @apply bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-xs;
+
+  @variant dark {
+    @apply bg-white/5 border-white/10 shadow-none;
   }
+}
 
-  /* Dark mode glass - darker, subtle */
-  .dark .glass {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-none;
-  }
+/* Floating chrome (navbar, tab bar, menus): any content can scroll under it,
+   so dark mode needs a dark tint as dense as light mode's white one */
+@utility glass-chrome {
+  @apply bg-white/80 backdrop-blur-2xl backdrop-saturate-150 border border-slate-200/60 shadow-xs;
 
-  /* Floating chrome (navbar, tab bar, menus): any content can scroll under it,
-     so dark mode needs a dark tint as dense as light mode's white one */
-  .glass-chrome {
-    @apply bg-white/80 backdrop-blur-2xl backdrop-saturate-150 border border-slate-200/60 shadow-sm;
-  }
-
-  .dark .glass-chrome {
+  @variant dark {
     @apply bg-zinc-900/80 border-white/10 shadow-none;
   }
+}
 
-  /* Gradient backgrounds - Light mode defaults */
-  .bg-gradient-radial {
-    background: radial-gradient(
-      circle at top right,
-      theme(colors.accent.500 / 10%) 0%,
-      transparent 50%
-    );
+/* Gradient backgrounds */
+@utility bg-gradient-radial {
+  background: radial-gradient(circle at top right, --alpha(var(--accent-500) / 10%) 0%, transparent 50%);
+
+  @variant dark {
+    background: radial-gradient(circle at top right, --alpha(var(--accent-500) / 14%) 0%, transparent 50%);
   }
+}
 
-  .bg-grid {
+@utility bg-grid {
+  background-image:
+    linear-gradient(--alpha(var(--accent-500) / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, --alpha(var(--accent-500) / 4%) 1px, transparent 1px);
+  background-size: 50px 50px;
+
+  @variant dark {
     background-image:
-      linear-gradient(theme(colors.accent.500 / 4%) 1px, transparent 1px),
-      linear-gradient(90deg, theme(colors.accent.500 / 4%) 1px, transparent 1px);
-    background-size: 50px 50px;
+      linear-gradient(--alpha(var(--accent-400) / 4%) 1px, transparent 1px),
+      linear-gradient(90deg, --alpha(var(--accent-400) / 4%) 1px, transparent 1px);
   }
+}
 
-  .border-gradient {
-    border: 1px solid transparent;
-    background:
-      linear-gradient(rgb(255, 255, 255), rgb(255, 255, 255)) padding-box,
-      linear-gradient(135deg, theme(colors.accent.500), theme(colors.accent.400)) border-box;
-  }
+@utility border-gradient {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(rgb(255, 255, 255), rgb(255, 255, 255)) padding-box,
+    linear-gradient(135deg, var(--accent-500), var(--accent-400)) border-box;
 
-  /* Dark mode gradient backgrounds */
-  .dark .bg-gradient-radial {
-    background: radial-gradient(
-      circle at top right,
-      theme(colors.accent.500 / 14%) 0%,
-      transparent 50%
-    );
-  }
-
-  .dark .bg-grid {
-    background-image:
-      linear-gradient(theme(colors.accent.400 / 4%) 1px, transparent 1px),
-      linear-gradient(90deg, theme(colors.accent.400 / 4%) 1px, transparent 1px);
-    background-size: 50px 50px;
-  }
-
-  .dark .border-gradient {
-    border: 1px solid transparent;
+  @variant dark {
     background:
       linear-gradient(rgb(24, 24, 27), rgb(24, 24, 27)) padding-box,
-      linear-gradient(135deg, theme(colors.accent.600), theme(colors.accent.500), theme(colors.accent.400)) border-box;
+      linear-gradient(135deg, var(--accent-600), var(--accent-500), var(--accent-400)) border-box;
   }
-
 }
 
 /* Scrollbar styling - Light mode default */
@@ -198,7 +262,7 @@
 /* Thin scrollbar for inner scrolling areas (chart grid, browse artist row) */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: theme(colors.accent.500 / 30%) transparent;
+  scrollbar-color: --alpha(var(--accent-500) / 30%) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -210,22 +274,22 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: theme(colors.accent.500 / 30%);
+  background-color: --alpha(var(--accent-500) / 30%);
   border-radius: 10px;
 }
 
 .dark .custom-scrollbar {
-  scrollbar-color: theme(colors.accent.400 / 30%) transparent;
+  scrollbar-color: --alpha(var(--accent-400) / 30%) transparent;
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: theme(colors.accent.400 / 30%);
+  background-color: --alpha(var(--accent-400) / 30%);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: theme(colors.accent.500 / 50%);
+  background-color: --alpha(var(--accent-500) / 50%);
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: theme(colors.accent.400 / 50%);
+  background-color: --alpha(var(--accent-400) / 50%);
 }

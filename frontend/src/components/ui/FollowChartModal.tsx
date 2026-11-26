@@ -81,7 +81,7 @@ export const FollowChartModal: React.FC<FollowChartModalProps> = ({ country, onC
               onChange={(e) => setTopNArtists(parseInt(e.target.value))}
               className="w-full h-2 rounded-full appearance-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, var(--color-accent) 0%, var(--color-accent) ${sliderPercent}%, rgb(var(--color-border)) ${sliderPercent}%, rgb(var(--color-border)) 100%)`,
+                background: `linear-gradient(to right, var(--accent-500) 0%, var(--accent-500) ${sliderPercent}%, var(--color-border) ${sliderPercent}%, var(--color-border) 100%)`,
               }}
             />
             <div className="flex justify-between mt-1.5 text-xs text-muted-foreground">
