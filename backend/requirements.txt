@@ -14,7 +14,7 @@
 # wants, "deno" a deno binary from PyPI -- so the three always move together.
 # Without them the `web` client is skipped: some formats go missing and
 # age-restricted videos fail even with valid account cookies.
-fastapi==0.163.2
+fastapi==0.165.0
 uvicorn[standard]==0.54.0
 ytmusicapi==1.12.4
 yt-dlp[default,deno]
@@ -25,7 +25,7 @@ urllib3>=2.8.0
 SQLAlchemy==2.1.9
 # Database schema upgrades (backend/migrations/)
 alembic==1.20.1
-pydantic==2.14.3
+pydantic==2.14.4
 httpx==0.28.1
 bcrypt==5.0.0
 PyJWT==2.15.1
