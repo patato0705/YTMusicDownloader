@@ -17,7 +17,7 @@ import * as adminApi from '../../api/admin';
 import * as authApi from '../../api/auth';
 import { ROLES } from '../../api/auth';
 import type { AuthConfig, Role, User } from '../../api/auth';
-import { ROLE_COLORS } from '../../config/roles';
+import { ROLE_COLORS, ROLE_TEXT_COLORS } from '../../config/roles';
 import { apiErrorMessage } from '../../utils';
 import { AdminTabShell } from './AdminTabShell';
 import type { AdminTabProps } from './AdminTabShell';
@@ -302,7 +302,7 @@ export const UsersTab: React.FC<AdminTabProps> = ({ onToast }) => {
                             options={roleOptions}
                             ariaLabel={t('admin.users.role')}
                             disabled={u.id === user?.id || (u.is_oidc && !!authConfig?.oidc_roles_from_groups)}
-                            className={`text-xs font-medium ${ROLE_COLORS[u.role]} border-0 py-1`}
+                            className={`text-xs font-medium ${ROLE_TEXT_COLORS[u.role]}`}
                           />
                         </span>
                         {/* Visible, not only in the tooltip: phones never show one */}

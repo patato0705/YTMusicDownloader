@@ -134,7 +134,7 @@ export const Modal: React.FC<ModalProps> = ({
         aria-modal="true"
         aria-labelledby={title ? titleId : labelledBy}
         tabIndex={-1}
-        className={`relative w-full shadow-2xl outline-hidden ${
+        className={`relative w-full outline-hidden ${
           sheet
             ? 'glass-chrome border-x-0! border-b-0! rounded-t-3xl max-h-[85dvh] overflow-hidden flex flex-col animate-sheet-up motion-reduce:animate-none'
             : `glass rounded-3xl p-6 sm:p-8 ${WIDTHS[size]} max-h-[calc(100dvh-2rem)] overflow-y-auto border-gradient`

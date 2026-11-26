@@ -86,7 +86,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
         onFocus={onFocus}
         placeholder={label}
         autoFocus={autoFocus}
-        className={`w-full ${sizeClasses[size]} ${rightPadding[size][trailingCount]} glass rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 focus:border-transparent transition-all duration-300 ${size === 'lg' ? 'shadow-lg' : ''} ${inputClassName}`}
+        className={`w-full ${sizeClasses[size]} ${rightPadding[size][trailingCount]} glass rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-600 focus:border-transparent transition-all duration-300 ${inputClassName}`}
         aria-label={label}
       />
 
